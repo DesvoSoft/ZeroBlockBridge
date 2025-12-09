@@ -1,8 +1,8 @@
-# 🚀 MC-Tunnel Manager
+# 🚀 Zero Block Bridge
 
-**One-click Minecraft Server Management with Built-in Tunneling**
+**Minecraft Server Management with Built-in Tunneling**
 
-MC-Tunnel Manager is a lightweight desktop application that simplifies Minecraft server creation and management. No terminal commands, no port forwarding hassles—just click and play.
+Zero Block Bridge is a lightweight desktop application that simplifies Minecraft server creation and management. No terminal commands, no port forwarding hassles—just click and play.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

@@ -1,0 +1,231 @@
+import customtkinter as ctk
+import os
+import psutil
+
+class ServerWizard(ctk.CTkToplevel):
+    def __init__(self, parent, on_complete_callback):
+        super().__init__(parent)
+        self.title("Create New Server - Zero Block Bridge")
+        self.geometry("600x500")
+        self.resizable(False, False)
+        
+        self.on_complete_callback = on_complete_callback
+        self.current_step = 1
+        self.total_steps = 5
+        
+        # Data storage
+        self.wizard_data = {
+            "name": "",
+            "type": "Vanilla",
+            "version": "1.21.1",
+            "ram": 2048,
+            "seed": "",
+            "game_mode": "survival",
+            "difficulty": "normal",
+            "location": "default"
+        }
+        
+        # Layout
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=0) # Header
+        self.grid_rowconfigure(1, weight=1) # Content
+        self.grid_rowconfigure(2, weight=0) # Footer
+        
+        # Header
+        self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0)
+        self.header_frame.grid(row=0, column=0, sticky="ew")
+        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 5", font=ctk.CTkFont(size=14))
+        self.lbl_step.pack(side="left", padx=20, pady=10)
+        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Server Details", font=ctk.CTkFont(size=16, weight="bold"))
+        self.lbl_title.pack(side="right", padx=20, pady=10)
+        
+        # Content Frame
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
+        
+        # Footer
+        self.footer_frame = ctk.CTkFrame(self, height=60, corner_radius=0)
+        self.footer_frame.grid(row=2, column=0, sticky="ew")
+        
+        self.btn_back = ctk.CTkButton(self.footer_frame, text="Back", command=self.go_back, state="disabled")
+        self.btn_back.pack(side="left", padx=20, pady=15)
+        
+        self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next)
+        self.btn_next.pack(side="right", padx=20, pady=15)
+        
+        # Initialize Step 1
+        self.show_step_1()
+        
+        # Make modal
+        self.transient(parent)
+        self.grab_set()
+        
+    def update_header(self, title):
+        self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps}")
+        self.lbl_title.configure(text=title)
+        
+        if self.current_step == 1:
+            self.btn_back.configure(state="disabled")
+        else:
+            self.btn_back.configure(state="normal")
+            
+        if self.current_step == self.total_steps:
+            self.btn_next.configure(text="Create Server", fg_color="green", hover_color="darkgreen")
+        else:
+            self.btn_next.configure(text="Next", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
+
+    def clear_content(self):
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+
+    # --- Steps ---
+    
+    def show_step_1(self):
+        self.clear_content()
+        self.update_header("Server Type & Name")
+        
+        # Name
+        ctk.CTkLabel(self.content_frame, text="Server Name:").pack(anchor="w", pady=(0, 5))
+        self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server")
+        self.entry_name.pack(fill="x", pady=(0, 20))
+        if self.wizard_data["name"]:
+            self.entry_name.insert(0, self.wizard_data["name"])
+            
+        # Type
+        ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
+        self.var_type = ctk.StringVar(value=self.wizard_data["type"])
+        
+        self.rb_vanilla = ctk.CTkRadioButton(self.content_frame, text="Vanilla 1.21.1 (Official)", 
+                                            variable=self.var_type, value="Vanilla")
+        self.rb_vanilla.pack(anchor="w", pady=5)
+        
+        self.rb_fabric = ctk.CTkRadioButton(self.content_frame, text="Fabric 1.20.1 (Modded)", 
+                                           variable=self.var_type, value="Fabric")
+        self.rb_fabric.pack(anchor="w", pady=5)
+        
+    def show_step_2(self):
+        self.clear_content()
+        self.update_header("Performance (RAM)")
+        
+        # RAM Slider
+        total_ram = psutil.virtual_memory().total / (1024 * 1024) # MB
+        max_slider = min(16384, total_ram - 1024) # Leave 1GB for OS
+        
+        ctk.CTkLabel(self.content_frame, text=f"RAM Allocation (MB):").pack(anchor="w", pady=(0, 5))
+        
+        self.lbl_ram_value = ctk.CTkLabel(self.content_frame, text=f"{self.wizard_data['ram']} MB")
+        self.lbl_ram_value.pack(anchor="w")
+        
+        self.slider_ram = ctk.CTkSlider(self.content_frame, from_=512, to=max_slider, number_of_steps=100,
+                                       command=self.update_ram_label)
+        self.slider_ram.set(self.wizard_data["ram"])
+        self.slider_ram.pack(fill="x", pady=(0, 20))
+        
+        # Recommendations
+        rec_frame = ctk.CTkFrame(self.content_frame)
+        rec_frame.pack(fill="x", pady=10)
+        ctk.CTkLabel(rec_frame, text="Recommendations:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(rec_frame, text="• Vanilla: 2048 - 4096 MB").pack(anchor="w", padx=10)
+        ctk.CTkLabel(rec_frame, text="• Modded (Fabric): 6144 - 8192 MB").pack(anchor="w", padx=10)
+        
+    def update_ram_label(self, value):
+        self.lbl_ram_value.configure(text=f"{int(value)} MB")
+        self.wizard_data["ram"] = int(value)
+
+    def show_step_3(self):
+        self.clear_content()
+        self.update_header("World Settings")
+        
+        # Seed
+        ctk.CTkLabel(self.content_frame, text="World Seed (Optional):").pack(anchor="w", pady=(0, 5))
+        self.entry_seed = ctk.CTkEntry(self.content_frame, placeholder_text="Leave empty for random")
+        self.entry_seed.pack(fill="x", pady=(0, 20))
+        if self.wizard_data["seed"]:
+            self.entry_seed.insert(0, self.wizard_data["seed"])
+            
+        # Game Mode
+        ctk.CTkLabel(self.content_frame, text="Default Game Mode:").pack(anchor="w", pady=(0, 5))
+        self.combo_gamemode = ctk.CTkComboBox(self.content_frame, values=["survival", "creative", "adventure", "spectator"])
+        self.combo_gamemode.set(self.wizard_data["game_mode"])
+        self.combo_gamemode.pack(fill="x", pady=(0, 20))
+        
+        # Difficulty
+        ctk.CTkLabel(self.content_frame, text="Difficulty:").pack(anchor="w", pady=(0, 5))
+        self.combo_difficulty = ctk.CTkComboBox(self.content_frame, values=["peaceful", "easy", "normal", "hard"])
+        self.combo_difficulty.set(self.wizard_data["difficulty"])
+        self.combo_difficulty.pack(fill="x", pady=(0, 20))
+
+    def show_step_4(self):
+        self.clear_content()
+        self.update_header("Storage Location")
+        
+        ctk.CTkLabel(self.content_frame, text="Save Location:").pack(anchor="w", pady=(0, 5))
+        
+        self.lbl_location = ctk.CTkLabel(self.content_frame, text=f"servers/{self.wizard_data['name']}/", 
+                                        fg_color="gray20", corner_radius=6, padx=10, pady=5)
+        self.lbl_location.pack(fill="x", pady=(0, 20))
+        
+        ctk.CTkLabel(self.content_frame, text="Note: Custom locations coming soon.", text_color="gray").pack(anchor="w")
+
+    def show_step_5(self):
+        self.clear_content()
+        self.update_header("Review & Create")
+        
+        summary = (
+            f"Server Name: {self.wizard_data['name']}\n"
+            f"Type: {self.wizard_data['type']} {self.wizard_data['version']}\n"
+            f"RAM: {self.wizard_data['ram']} MB\n"
+            f"Seed: {self.wizard_data['seed'] or 'Random'}\n"
+            f"Game Mode: {self.wizard_data['game_mode']}\n"
+            f"Difficulty: {self.wizard_data['difficulty']}\n"
+            f"Location: servers/{self.wizard_data['name']}/"
+        )
+        
+        ctk.CTkLabel(self.content_frame, text="Please review your settings:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
+        
+        lbl_summary = ctk.CTkLabel(self.content_frame, text=summary, justify="left", anchor="w", 
+                                  fg_color="gray20", corner_radius=6, padx=15, pady=15)
+        lbl_summary.pack(fill="x")
+
+    # --- Navigation ---
+    
+    def go_next(self):
+        # Save data from current step
+        if self.current_step == 1:
+            name = self.entry_name.get().strip()
+            if not name:
+                # Simple validation
+                self.entry_name.configure(border_color="red")
+                return
+            self.wizard_data["name"] = name
+            self.wizard_data["type"] = self.var_type.get()
+            self.wizard_data["version"] = "1.21.1" if self.wizard_data["type"] == "Vanilla" else "1.20.1"
+            
+        elif self.current_step == 2:
+            # RAM already updated via callback
+            pass
+            
+        elif self.current_step == 3:
+            self.wizard_data["seed"] = self.entry_seed.get().strip()
+            self.wizard_data["game_mode"] = self.combo_gamemode.get()
+            self.wizard_data["difficulty"] = self.combo_difficulty.get()
+            
+        elif self.current_step == 5:
+            # Finish
+            self.on_complete_callback(self.wizard_data)
+            self.destroy()
+            return
+
+        self.current_step += 1
+        self.show_step()
+        
+    def go_back(self):
+        self.current_step -= 1
+        self.show_step()
+        
+    def show_step(self):
+        if self.current_step == 1: self.show_step_1()
+        elif self.current_step == 2: self.show_step_2()
+        elif self.current_step == 3: self.show_step_3()
+        elif self.current_step == 4: self.show_step_4()
+        elif self.current_step == 5: self.show_step_5()

@@ -163,10 +163,20 @@ def install_fabric(server_name, mc_version, progress_callback=None):
 class ServerRunner:
     def __init__(self, server_name, ram_allocation, console_callback):
         self.server_name = server_name
-        self.ram_allocation = ram_allocation
         self.console_callback = console_callback
         self.process = None
         self.running = False
+
+        # Try to load RAM from metadata
+        try:
+            with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
+                meta = json.load(f)
+                if "ram" in meta:
+                    self.ram_allocation = f"{meta['ram']}M"
+                else:
+                    self.ram_allocation = ram_allocation
+        except:
+            self.ram_allocation = ram_allocation
 
     def start(self):
         if self.running:
@@ -263,3 +273,58 @@ def check_eula(server_name):
     with open(eula_path, "r") as f:
         content = f.read()
         return "eula=true" in content
+
+def load_server_properties(server_name):
+    """Reads server.properties into a dict."""
+    props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
+    properties = {}
+    
+    if not os.path.exists(props_path):
+        return properties
+        
+    with open(props_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    properties[key.strip()] = value.strip()
+    return properties
+
+def save_server_properties(server_name, new_properties):
+    """Updates server.properties while preserving comments/order if possible."""
+    props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
+    
+    if not os.path.exists(props_path):
+        # Create new
+        with open(props_path, "w") as f:
+            for k, v in new_properties.items():
+                f.write(f"{k}={v}\n")
+        return
+
+    # Read existing lines to preserve comments
+    with open(props_path, "r") as f:
+        lines = f.readlines()
+        
+    updated_keys = set()
+    new_lines = []
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in new_properties:
+                new_lines.append(f"{key}={new_properties[key]}\n")
+                updated_keys.add(key)
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+            
+    # Append new keys that weren't in the file
+    for k, v in new_properties.items():
+        if k not in updated_keys:
+            new_lines.append(f"{k}={v}\n")
+            
+    with open(props_path, "w") as f:
+        f.writelines(new_lines)

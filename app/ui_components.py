@@ -46,11 +46,20 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.grab_set()
         
     def update_progress(self, val, status_text=None):
-        self.progress_bar.set(val)
-        if status_text:
-            self.label.configure(text=status_text)
-        self.update_idletasks()
+        try:
+            self.progress_bar.set(val)
+            if status_text:
+                self.label.configure(text=status_text)
+            self.update_idletasks()
+        except Exception:
+            pass
         
     def close(self):
-        self.grab_release()
-        self.destroy()
+        try:
+            self.grab_release()
+            self.withdraw()
+            # Delay destroy to prevent race condition with CTk internal callbacks
+            # if the window is closed too quickly after creation.
+            self.after(500, self.destroy)
+        except Exception:
+            pass

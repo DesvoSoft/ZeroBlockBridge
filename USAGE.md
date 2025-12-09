@@ -1,6 +1,6 @@
-# MC-Tunnel Manager - User Guide
+# Zero Block Bridge - User Guide
 
-Complete guide to using MC-Tunnel Manager for creating and managing Minecraft servers with built-in tunneling.
+Complete guide to using Zero Block Bridge for creating and managing Minecraft servers with built-in tunneling.
 
 ---
 
@@ -20,7 +20,7 @@ Complete guide to using MC-Tunnel Manager for creating and managing Minecraft se
 
 ### Prerequisites
 
-Before running MC-Tunnel Manager, ensure you have:
+Before running Zero Block Bridge, ensure you have:
 
 1. **Python 3.10 or higher**
 
@@ -52,9 +52,9 @@ Before running MC-Tunnel Manager, ensure you have:
 
 ### First Launch
 
-When you first launch MC-Tunnel Manager:
+When you first launch Zero Block Bridge:
 
-1. The application window opens with the title **"MC-Tunnel Manager (MVP)"**
+1. The application window opens with the title **"Zero Block Bridge (MVP)"**
 2. **Java version** is displayed in the top-right corner:
    - ✅ Green text shows "Java: version-info" if Java is detected
    - ❌ Red text shows "Java NOT FOUND" if Java is missing
@@ -222,7 +222,7 @@ Once the tunnel is online:
 
 ## 📊 Console Logs
 
-MC-Tunnel Manager features **separate log tabs** for better organization:
+Zero Block Bridge features **separate log tabs** for better organization:
 
 ### Server Log Tab
 

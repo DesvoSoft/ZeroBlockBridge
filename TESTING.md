@@ -1,6 +1,6 @@
-# MC-Tunnel Manager - Testing Guide
+# Zero Block Bridge - Testing Guide
 
-Comprehensive testing procedures for validating all features of MC-Tunnel Manager.
+Comprehensive testing procedures for validating all features of Zero Block Bridge.
 
 ---
 
@@ -16,7 +16,7 @@ Comprehensive testing procedures for validating all features of MC-Tunnel Manage
 
 **Expected Results:**
 
-- [ ] Window opens with title "MC-Tunnel Manager (MVP)"
+- [ ] Window opens with title "Zero Block Bridge (MVP)"
 - [ ] Java version appears in top-right corner
   - Green text "Java: version-info" (if installed)
   - Red text "Java NOT FOUND" (if not installed)

@@ -29,6 +29,7 @@ class PlayitManager:
         self.running = False
         self.binary_path = self._get_binary_path()
         self.claim_url_detected = False
+        self.current_address = None
 
     def _get_binary_path(self):
         system = platform.system()
@@ -94,6 +95,7 @@ class PlayitManager:
             return
 
         self.claim_url_detected = False
+        self.current_address = None
 
         if not self.ensure_binary():
             self.console_callback("[Debug] Binary check failed.")
@@ -149,6 +151,7 @@ class PlayitManager:
         
         # We manually set running to False just in case, though reader thread does it too
         self.running = False
+        self.current_address = None
         self.status_callback("Offline", None)
 
     def reset(self):
@@ -168,8 +171,19 @@ class PlayitManager:
             )
             self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
             self.claim_url_detected = False # Reset this too
+            self.current_address = None
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
+
+    SPAM_LOGS = [
+        "tunnel running",
+        "udp channel requires auth",
+        "udp session details received",
+        "send KeepAlive",
+        "agent registered details",
+        "authenticate control last_pong",
+        "session expired reason=SessionNotSetup"
+    ]
 
     def _read_output(self):
         """Reads stdout from the process character by character (binary)."""
@@ -196,7 +210,12 @@ class PlayitManager:
                         if line:
                             # Remove ANSI escape codes
                             clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
-                            self.console_callback(f"[Playit] {clean_line}")
+                            
+                            # Filter spam
+                            is_spam = any(s in clean_line for s in self.SPAM_LOGS)
+                            if not is_spam or "ERROR" in clean_line:
+                                self.console_callback(f"[Playit] {clean_line}")
+                                
                             self._parse_line(clean_line)
                         buffer = bytearray()
                 else:
@@ -207,6 +226,7 @@ class PlayitManager:
         finally:
             self.running = False
             self.process = None
+            self.current_address = None
             self.status_callback("Offline", None)
             self.console_callback("[Playit] Agent process exited.")
 
@@ -222,9 +242,40 @@ class PlayitManager:
                 self.claim_callback(url)
 
         # 2. Check for Tunnel Address
-        # Pattern: looks for .ply.gg domains
-        # This might match the mapping log
-        addr_match = re.search(r"([a-z0-9-]+\.ply\.gg)", line)
+        # Pattern: looks for .ply.gg domains OR IP addresses in specific contexts
+        # Log examples:
+        # "tunnel_addr: 209.25.140.1:5525"
+        # "trying to establish tunnel connection addr=..."
+        
+        # Priority 1: .ply.gg domain (most user friendly)
+        domain_match = re.search(r"([a-z0-9-]+\.ply\.gg)", line)
+        if domain_match:
+            address = domain_match.group(1)
+            self.current_address = address
+            self.status_callback("Online", address)
+            return
+
+        # Priority 2: IP Address from "tunnel_addr: IP:PORT"
+        ip_match = re.search(r"tunnel_addr:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)", line)
+        if ip_match:
+            address = ip_match.group(1)
+            self.current_address = address
+            self.status_callback("Online", address)
+            return
+
+        # Priority 3: "tunnel running" confirmation (fallback if no IP found yet)
+        if "tunnel running" in line:
+            # Only set to "Check Console" if we haven't found a real address yet.
+            # We can check this by seeing if we've already called the callback with a real address?
+            # Or better, let's just assume if we are here, we might have missed it or it's a reconnect.
+            # But to avoid overwriting a valid IP with "Check Console", we should be careful.
+            # Let's add a class-level flag or just check if we have a stored address?
+            # Simpler: The UI label text isn't available here.
+            # We can add a self.current_address to track it.
+            if not getattr(self, "current_address", None):
+                 self.status_callback("Online", "Check Console")
+            return
+
         # 3. Check for Errors
         if "AgentDisabledOverLimit" in line:
             self.status_callback("Error", None)

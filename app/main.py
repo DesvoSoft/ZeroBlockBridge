@@ -9,7 +9,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
 from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric, ServerRunner
+import app.logic as logic
 from app.playit_manager import PlayitManager
+from app.server_wizard import ServerWizard
+from app.server_properties_editor import ServerPropertiesEditor
 import webbrowser
 
 ctk.set_appearance_mode("Dark")
@@ -19,7 +22,7 @@ class MCTunnelApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("MC-Tunnel Manager (MVP)")
+        self.title("Zero Block Bridge")
         self.geometry("900x600")
         
         self.server_runner = None
@@ -39,7 +42,7 @@ class MCTunnelApp(ctk.CTk):
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(4, weight=1) # Spacer
 
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="MC-Tunnel", font=ctk.CTkFont(size=20, weight="bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=ctk.CTkFont(size=20, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
         self.btn_create_server = ctk.CTkButton(self.sidebar_frame, text="Create Server", command=self.create_server_dialog)
@@ -78,15 +81,19 @@ class MCTunnelApp(ctk.CTk):
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.controls_frame.pack(pady=5)
 
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="Start Server", state="disabled", command=self.start_server_action, fg_color="green", hover_color="darkgreen")
-        self.btn_start.pack(side="left", padx=10)
+        # Server Controls Toolbar
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶ Start", state="disabled", command=self.start_server_action, fg_color="green", hover_color="darkgreen", width=100)
+        self.btn_start.pack(side="left", padx=5)
 
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="Stop Server", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred")
-        self.btn_stop.pack(side="left", padx=10)
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■ Stop", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred", width=100)
+        self.btn_stop.pack(side="left", padx=5)
+
+        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙ Properties", command=self.edit_server_properties, state="disabled", width=100)
+        self.btn_edit_properties.pack(side="left", padx=5)
 
         # --- Playit Tunnel Controls ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(pady=5, fill="x")
+        self.tunnel_frame.pack(pady=10, fill="x")
 
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color="gray")
         self.lbl_tunnel_status.pack(side="left", padx=20)
@@ -94,17 +101,21 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_public_ip = ctk.CTkLabel(self.tunnel_frame, text="Public IP: N/A", font=("Roboto", 12, "bold"))
         self.lbl_public_ip.pack(side="left", padx=20)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_frame, text="Start Tunnel", command=self.start_tunnel, width=100)
-        self.btn_tunnel_start.pack(side="right", padx=10)
-        
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_frame, text="Stop Tunnel", command=self.stop_tunnel, state="disabled", fg_color="red", width=100)
-        self.btn_tunnel_stop.pack(side="right", padx=10)
+        # Tunnel Toolbar
+        self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
+        self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_claim = ctk.CTkButton(self.tunnel_frame, text="Link Account", command=self.open_claim_url, fg_color="orange", width=100)
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶ Start Tunnel", command=self.start_tunnel, width=120)
+        self.btn_tunnel_start.pack(side="left", padx=5)
+        
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■ Stop Tunnel", command=self.stop_tunnel, state="disabled", fg_color="red", width=120)
+        self.btn_tunnel_stop.pack(side="left", padx=5)
+
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self.open_claim_url, fg_color="orange", width=80)
         # Don't pack it yet, only show when needed
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_frame, text="Reset Agent", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=80)
-        self.btn_reset.pack(side="right", padx=10)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻ Reset", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=80)
+        self.btn_reset.pack(side="left", padx=5)
 
 
         # Console Tabs
@@ -166,6 +177,27 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.configure(state="normal")
         self.btn_stop.configure(state="disabled") # Initially disabled until started
         self.server_console.log(f"[UI] Selected server: {server_name}")
+        
+        # Update UI state
+        if self.server_runner and self.server_runner.running and self.server_runner.server_name == server_name:
+            self.btn_start.configure(state="disabled")
+            self.btn_stop.configure(state="normal")
+            self.lbl_status.configure(text=f"Status: Running {server_name}", text_color="green")
+            self.btn_edit_properties.configure(state="disabled")
+        else:
+            self.btn_start.configure(state="normal")
+            self.btn_stop.configure(state="disabled")
+            self.lbl_status.configure(text="Status: Idle", text_color="white")
+            self.btn_edit_properties.configure(state="normal")
+
+    def edit_server_properties(self):
+        if not self.current_server:
+            return
+        if self.server_runner and self.server_runner.running:
+            self.server_console.log("[Error] Stop the server before editing properties.")
+            return
+        
+        ServerPropertiesEditor(self, self.current_server, logic)
 
     def update_console(self, text):
         """Thread-safe server console update."""
@@ -203,66 +235,57 @@ class MCTunnelApp(ctk.CTk):
             self.server_runner = None
 
     def create_server_dialog(self):
-        dialog = ctk.CTkInputDialog(text="Enter Server Name:", title="Create Server")
-        server_name = dialog.get_input()
-        
-        if server_name:
-            # Check if exists
-            if os.path.exists(os.path.join(SERVERS_DIR, server_name)):
-                self.server_console.log(f"[Error] Server '{server_name}' already exists.")
-                return
+        # Open the new wizard
+        ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
-            self.choose_server_type(server_name)
-
-    def choose_server_type(self, server_name):
-        """Dialog to choose between Vanilla and Fabric."""
-        type_dialog = ctk.CTkInputDialog(
-            text="Enter server type:\n1 = Vanilla 1.21.1\n2 = Fabric 1.20.1",
-            title="Choose Server Type"
-        )
-        choice = type_dialog.get_input()
+    def on_wizard_complete(self, config):
+        # Callback from wizard
+        name = config["name"]
+        srv_type = config["type"]
+        version = config["version"]
+        ram = config["ram"]
+        seed = config["seed"]
+        game_mode = config["game_mode"]
+        difficulty = config["difficulty"]
         
-        if choice == "1":
-            self.start_download(server_name, "Vanilla", "1.21.1")
-        elif choice == "2":
-            self.start_download(server_name, "Fabric", "1.20.1")
-        else:
-            self.server_console.log("[Error] Invalid choice.")
+        # Check if server exists
+        if os.path.exists(os.path.join(SERVERS_DIR, name)):
+            self.server_console.log(f"[Error] Server '{name}' already exists.")
+            return
 
-    def start_download(self, server_name, server_type, version):
-        progress_dialog = DownloadProgressDialog(self, title=f"Installing {server_name}...")
+        # Start download thread
+        threading.Thread(target=self.start_download_process, args=(name, srv_type, version, ram, seed, game_mode, difficulty), daemon=True).start()
+
+    def start_download_process(self, name, srv_type, version, ram, seed, game_mode, difficulty):
+        # Schedule UI update on main thread
+        self.after(0, lambda: self.show_progress_dialog(name, srv_type, version, ram, seed, game_mode, difficulty))
+
+    def show_progress_dialog(self, name, srv_type, version, ram, seed, game_mode, difficulty):
+        dialog = DownloadProgressDialog(self, title=f"Installing {name}...")
         
-        def _download_thread():
+        def run_install():
             try:
-                self.server_console.log(f"[System] Downloading server: {server_name}...")
-                
-                # Callback for progress
-                def _progress(val):
-                    progress_dialog.update_progress(val, f"Installing: {int(val*100)}%")
-
-                # Install based on type
-                if server_type == "Vanilla":
-                    jar_path = download_server(server_name, "Vanilla", version, progress_callback=_progress)
-                elif server_type == "Fabric":
-                    jar_path = install_fabric(server_name, version, progress_callback=_progress)
-                
-                if jar_path:
-                    self.server_console.log("[System] Download complete.")
-                    progress_dialog.update_progress(1.0, "Generating EULA...")
-                    
-                    accept_eula(server_name)
-                    self.server_console.log("[System] EULA accepted.")
-                    
-                    self.after(0, lambda: self._on_download_complete(progress_dialog))
+                if srv_type == "Vanilla":
+                    self.server_console.log(f"[System] Downloading Vanilla {version}...")
+                    success = logic.download_server(name, srv_type, version, dialog.update_progress)
                 else:
-                    self.server_console.log("[Error] Download failed.")
-                    self.after(0, progress_dialog.close)
+                    self.server_console.log(f"[System] Installing Fabric {version}...")
+                    success = logic.install_fabric(name, version, dialog.update_progress)
+                
+                if success:
+                    # Apply settings (RAM, Seed, Game Mode, Difficulty)
+                    logic.apply_server_settings(name, ram, seed, game_mode, difficulty)
                     
+                    self.server_console.log(f"[System] Server '{name}' created successfully.")
+                    self.after(0, lambda: self._on_download_complete(dialog))
+                else:
+                    self.server_console.log(f"[Error] Failed to create server '{name}'.")
+                    self.after(0, dialog.close)
             except Exception as e:
-                self.server_console.log(f"[Error] {e}")
-                self.after(0, progress_dialog.close)
-
-        threading.Thread(target=_download_thread, daemon=True).start()
+                self.server_console.log(f"[Error] Installation failed: {e}")
+                self.after(0, dialog.close)
+                
+        threading.Thread(target=run_install, daemon=True).start()
 
     def _on_download_complete(self, dialog):
         dialog.close()
