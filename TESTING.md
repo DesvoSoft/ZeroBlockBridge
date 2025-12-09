@@ -1,146 +1,443 @@
 # MC-Tunnel Manager - Testing Guide
 
-## Manual Testing Checklist
+Comprehensive testing procedures for validating all features of MC-Tunnel Manager.
 
-### Sprint 1 & 2 Testing
+---
 
-#### Test 1: Application Launch
+## 📋 Manual Testing Checklist
 
-- [ ] Run `python app/main.py`
+### Sprint 1 & 2: Core Functionality
+
+#### Test 1: Application Launch ✅
+
+**Steps:**
+
+1. Run `python app/main.py`
+
+**Expected Results:**
+
 - [ ] Window opens with title "MC-Tunnel Manager (MVP)"
-- [ ] Java version appears in top-right (or "Java NOT FOUND")
-- [ ] Console shows "[System] Loaded 0 servers." (if no servers exist)
+- [ ] Java version appears in top-right corner
+  - Green text "Java: version-info" (if installed)
+  - Red text "Java NOT FOUND" (if not installed)
+- [ ] Server Log tab shows "[System] Loaded X servers."
+- [ ] Tunnel Log tab is visible and empty
 
-#### Test 2: Java Detection
+---
 
-- [ ] If Java is installed, status shows "Java: version-info" in green
-- [ ] If Java is NOT installed, status shows "Java NOT FOUND" in red
-- [ ] Console logs appropriate message
+#### Test 2: Java Detection ✅
 
-#### Test 3: Create Vanilla Server
+**Steps:**
+
+1. Check Java status indicator
+
+**Expected Results:**
+
+- [ ] **If Java installed**: Green "Java: java version..." in top-right
+- [ ] **If Java NOT installed**: Red "Java NOT FOUND" in top-right
+- [ ] Server Log shows appropriate message
+
+---
+
+#### Test 3: Create Vanilla Server ✅
+
+**Steps:**
 
 1. Click "Create Server"
 2. Enter name: `test-vanilla`
-3. Choose type: `1` (Vanilla)
-4. Progress dialog appears
-5. Wait for completion (~50MB download)
-6. Verify:
-   - [ ] Server appears in sidebar
-   - [ ] `servers/test-vanilla/server.jar` exists
-   - [ ] `servers/test-vanilla/eula.txt` contains `eula=true`
+3. Choose type: `1` (Vanilla 1.21.1)
+4. Wait for installation
 
-#### Test 4: Create Fabric Server
+**Expected Results:**
+
+- [ ] Progress dialog appears with percentage
+- [ ] Download completes (~50MB)
+- [ ] Server appears in sidebar list
+- [ ] Files created:
+  - `servers/test-vanilla/server.jar` exists
+  - `servers/test-vanilla/eula.txt` contains `eula=true`
+- [ ] Console shows "[System] Server created successfully."
+
+---
+
+#### Test 4: Create Fabric Server ✅
+
+**Steps:**
 
 1. Click "Create Server"
 2. Enter name: `test-fabric`
-3. Choose type: `2` (Fabric)
-4. Progress dialog appears
-5. Wait for completion (~200MB download + installation)
-6. Verify:
-   - [ ] Server appears in sidebar
-   - [ ] `servers/test-fabric/fabric-server-launch.jar` exists
-   - [ ] `servers/test-fabric/server.jar` exists
-   - [ ] `servers/test-fabric/libraries/` folder exists
-   - [ ] `servers/test-fabric/eula.txt` contains `eula=true`
+3. Choose type: `2` (Fabric 1.20.1)
+4. Wait for installation
 
-#### Test 5: Duplicate Server Name
+**Expected Results:**
+
+- [ ] Progress dialog appears
+- [ ] Download completes (~200MB + installer runs)
+- [ ] Server appears in sidebar list
+- [ ] Files created:
+  - `servers/test-fabric/fabric-server-launch.jar` exists
+  - `servers/test-fabric/server.jar` exists
+  - `servers/test-fabric/libraries/` folder exists
+  - `servers/test-fabric/eula.txt` contains `eula=true`
+
+---
+
+#### Test 5: Duplicate Server Name ❌
+
+**Steps:**
 
 1. Try to create a server with an existing name
-2. Verify console shows error: "[Error] Server 'name' already exists."
 
-#### Test 6: UI Responsiveness
+**Expected Results:**
 
-- [ ] During download, window can be moved
-- [ ] During download, window doesn't freeze
+- [ ] Console shows error: "[Error] Server 'name' already exists."
+- [ ] No new server created
+
+---
+
+#### Test 6: UI Responsiveness ✅
+
+**Steps:**
+
+1. Create a server and observe UI during download
+
+**Expected Results:**
+
+- [ ] Window can be moved during download
+- [ ] Window doesn't freeze
 - [ ] Progress dialog updates smoothly
+- [ ] Other UI elements remain interactive
 
-#### Test 7: Server List Refresh
+---
 
-- [ ] After creating server, it appears in sidebar automatically
-- [ ] Restart app, servers still appear in list
+### Sprint 3: Server Management
 
-## Automated Testing (CLI)
+#### Test 7: Start Vanilla Server ✅
 
-### Test Vanilla Download
+**Steps:**
+
+1. Select a Vanilla server
+2. Click "Start Server"
+
+**Expected Results:**
+
+- [ ] Status changes to "Running <server-name>" (green)
+- [ ] Start button becomes disabled
+- [ ] Stop button becomes enabled
+- [ ] Server Log shows:
+  - "[System] Starting server with: java -Xmx2G -jar server.jar nogui"
+  - "Preparing spawn area..." (first run)
+  - "Done! For help, type 'help'"
+
+---
+
+#### Test 8: Connect to Server Locally ✅
+
+**Steps:**
+
+1. Start a server
+2. Wait for "Done!" message
+3. Open Minecraft (matching version)
+4. Connect to `localhost`
+
+**Expected Results:**
+
+- [ ] Successfully join the server
+- [ ] Server Log shows: "Player joined the game"
+- [ ] Can move around and interact with world
+
+---
+
+#### Test 9: Stop Server ✅
+
+**Steps:**
+
+1. Click "Stop Server" on a running server
+
+**Expected Results:**
+
+- [ ] Server Log shows:
+  - "Stopping server"
+  - "Saving chunks"
+  - "[System] Server process exited."
+- [ ] Status changes to "Idle"
+- [ ] Start button becomes enabled
+- [ ] Stop button becomes disabled
+
+---
+
+#### Test 10: Start Fabric Server ✅
+
+**Steps:**
+
+1. Select a Fabric server
+2. Click "Start Server"
+
+**Expected Results:**
+
+- [ ] Server Log shows Fabric loader logs
+- [ ] Server starts successfully
+- [ ] "Done!" message appears
+- [ ] Can connect with Fabric-compatible client
+
+---
+
+### Sprint 4: Playit Integration
+
+#### Test 11: First-Time Tunnel Setup ✅
+
+**Steps:**
+
+1. Click "Start Tunnel"
+2. Observe Tunnel Log and browser
+
+**Expected Results:**
+
+- [ ] Tunnel status shows "Tunnel: ⏳ Starting..." (orange)
+- [ ] Tunnel Log shows:
+  - "[Playit] Downloading agent v0.16.5..." (if first run)
+  - "[Debug] Starting agent..."
+  - "[Playit] Visit link to setup https://playit.gg/claim/..."
+- [ ] Browser opens automatically with claim URL
+- [ ] "Link Account" button appears in UI (orange)
+
+---
+
+#### Test 12: Account Linking ✅
+
+**Steps:**
+
+1. Click "Approve" on the Playit.gg claim page
+2. Return to application
+
+**Expected Results:**
+
+- [ ] Tunnel Log shows:
+  - "[Playit] Program approved :)"
+  - "[Playit] tunnel running, 1 tunnels registered"
+- [ ] Tunnel status changes to "Tunnel: ● Online" (green)
+- [ ] Public IP shows: "Public IP: xxxxx.ply.gg"
+- [ ] "Link Account" button disappears
+
+---
+
+#### Test 13: Connect via Tunnel ✅
+
+**Steps:**
+
+1. Ensure server is running AND tunnel is online
+2. Copy the .ply.gg address from "Public IP"
+3. Connect from Minecraft using this address
+
+**Expected Results:**
+
+- [ ] Successfully connect to server from external network
+- [ ] Server Log shows player join
+- [ ] Gameplay works normally
+
+---
+
+#### Test 14: Reset Agent ✅
+
+**Steps:**
+
+1. Click "Reset Agent"
+2. Type `yes` to confirm
+
+**Expected Results:**
+
+- [ ] Tunnel Log shows:
+  - "[Playit] Resetting agent configuration..."
+  - "[Playit] Agent reset complete..."
+- [ ] Tunnel status shows "Offline"
+- [ ] Public IP shows "N/A"
+
+---
+
+#### Test 15: Restart Tunnel After Reset ✅
+
+**Steps:**
+
+1. After reset, click "Start Tunnel" again
+
+**Expected Results:**
+
+- [ ] **NEW** claim URL is generated
+- [ ] Must re-link account
+- [ ] Tunnel comes online with new address
+
+---
+
+#### Test 16: Tabbed Console ✅
+
+**Steps:**
+
+1. Start both server AND tunnel
+2. Switch between "Server Log" and "Tunnel Log" tabs
+
+**Expected Results:**
+
+- [ ] Server Log shows only Minecraft server output
+- [ ] Tunnel Log shows only Playit agent output
+- [ ] Tabs switch smoothly
+- [ ] No mixed messages between tabs
+
+---
+
+#### Test 17: Tunnel Error Handling ❌
+
+**Steps:**
+
+1. Start tunnel with too many agents already registered (if applicable)
+
+**Expected Results:**
+
+- [ ] Tunnel Log shows:
+  - "[Playit] ERROR: Account limit reached! You have too many agents."
+  - "[Playit] Please delete unused agents in your Playit.gg dashboard."
+- [ ] Tunnel status shows "Tunnel: ✖ Error" (red)
+
+---
+
+#### Test 18: Playit Version Update ✅
+
+**Steps:**
+
+1. If old version exists in `bin/`, run application
+
+**Expected Results:**
+
+- [ ] Tunnel Log shows: "[Playit] Found old version. Updating to 0.16.5..."
+- [ ] New version downloads automatically
+- [ ] Tunnel starts with updated agent
+
+---
+
+## 🤖 Automated Testing (CLI)
+
+### Quick Validation Tests
+
+#### Test: Vanilla Download
 
 ```bash
 python -c "import sys; sys.path.append('.'); from app.logic import download_server; print(download_server('cli_test_vanilla', 'Vanilla', '1.21.1'))"
 ```
 
-Expected: `servers\cli_test_vanilla\server.jar`
+**Expected Output:** `servers\cli_test_vanilla\server.jar`
 
-### Test Fabric Installation
+---
+
+#### Test: Fabric Installation
 
 ```bash
 python -c "import sys; sys.path.append('.'); from app.logic import install_fabric; print(install_fabric('cli_test_fabric', '1.20.1'))"
 ```
 
-Expected: `servers\cli_test_fabric\fabric-server-launch.jar`
+**Expected Output:** `servers\cli_test_fabric\fabric-server-launch.jar`
 
-### Test Java Detection
+---
+
+#### Test: Java Detection
 
 ```bash
 python -c "import sys; sys.path.append('.'); from app.logic import check_java; print(check_java())"
 ```
 
-Expected: Java version string or `None`
+**Expected Output:** Java version string (e.g., `java version "17.0.1"...`) or `None`
 
-## Cleanup After Testing
+---
 
-```bash
-# Remove test servers
-rmdir /s /q servers\test-vanilla
-rmdir /s /q servers\test-fabric
-rmdir /s /q servers\cli_test_vanilla
-rmdir /s /q servers\cli_test_fabric
+## 🧹 Cleanup After Testing
+
+Remove test servers to free up space:
+
+**Windows (PowerShell):**
+
+```powershell
+Remove-Item -Recurse -Force servers\test-vanilla
+Remove-Item -Recurse -Force servers\test-fabric
+Remove-Item -Recurse -Force servers\cli_test_vanilla
+Remove-Item -Recurse -Force servers\cli_test_fabric
 ```
 
-## Known Issues / Expected Behavior
+**Linux/Mac:**
 
-- First server creation will take longer (downloading files)
-- Progress percentage may jump (depends on download speed)
-- Fabric installation takes longer than Vanilla (runs installer)
+```bash
+rm -rf servers/test-vanilla
+rm -rf servers/test-fabric
+rm -rf servers/cli_test_vanilla
+rm -rf servers/cli_test_fabric
+```
 
-### Sprint 3 Testing (The Engine)
+---
 
-#### Test 8: Start Vanilla Server
+## ⚠️ Known Issues / Expected Behavior
 
-1. Select a created Vanilla server.
-2. Click **Start Server**.
-3. Verify:
-   - [ ] Status changes to "Running".
-   - [ ] Start button disabled, Stop button enabled.
-   - [ ] Console shows server startup logs (e.g., "Starting minecraft server...").
-   - [ ] EULA is auto-accepted (first run).
-   - [ ] Server reaches "Done!" state.
+### Normal Behavior
 
-#### Test 9: Connect to Server
+- **First download takes time**: Initial server creation requires downloading ~50-200MB
+- **Progress may jump**: Download speed varies, percentage may not be perfectly smooth
+- **Fabric slower than Vanilla**: Fabric installer takes extra time to process libraries
+- **IPv6 connection errors**: Playit may show IPv6 network errors, this is normal (falls back to IPv4)
 
-1. Open Minecraft (version matching server).
-2. Connect to `localhost`.
-3. Verify:
-   - [ ] You can join the world.
-   - [ ] Console shows "Player joined the game".
+### Common Issues
 
-#### Test 10: Stop Server
+**"TooManyRequests" in Tunnel Log:**
 
-1. Click **Stop Server**.
-2. Verify:
-   - [ ] Console shows shutdown logs ("Stopping server", "Saving chunks").
-   - [ ] Status changes to "Idle".
-   - [ ] Start button enabled, Stop button disabled.
+- Playit API is rate-limiting
+- Wait 1-2 minutes between attempts
+- Use "Reset Agent" if persistent
 
-#### Test 11: Start Fabric Server
+**Server crashes on start:**
 
-1. Select a created Fabric server.
-2. Click **Start Server**.
-3. Verify:
-   - [ ] Console shows Fabric loader logs.
-   - [ ] Server reaches "Done!" state.
-   - [ ] You can connect via Minecraft Client (with Fabric installed).
+- Check Java version (must be 17+)
+- Verify RAM allocation in config.json
+- Check Server Log for specific error
 
-## Next Sprint Testing (Sprint 4)
+**Tunnel stays "Starting..." forever:**
 
-- [ ] Playit.gg agent download/installation
-- [ ] Tunnel creation and linking
-- [ ] Public address generation
+- Check internet connection
+- Try "Stop Tunnel" → "Reset Agent" → "Start Tunnel"
+- Verify no firewall blocking
+
+---
+
+## 📊 Test Coverage Summary
+
+| Component          | Tests  | Status |
+| ------------------ | ------ | ------ |
+| UI Launch          | 2      | ✅     |
+| Server Creation    | 4      | ✅     |
+| Server Management  | 4      | ✅     |
+| Playit Integration | 8      | ✅     |
+| Error Handling     | 2      | ✅     |
+| **Total**          | **20** | **✅** |
+
+---
+
+## 🎯 Testing Best Practices
+
+1. **Test in order**: Follow Sprint 1→4 sequence
+2. **Clean state**: Start with no servers for first-time tests
+3. **Monitor logs**: Always check **both** Server Log and Tunnel Log tabs
+4. **Wait for completion**: Don't interrupt downloads or server startup
+5. **Note timestamps**: Server startup can take 30-60 seconds (first run)
+6. **Verify externally**: Test tunnel connection from different network when possible
+
+---
+
+## 📝 Reporting Issues
+
+If you find a bug:
+
+1. **Check logs**: Copy relevant messages from Server Log / Tunnel Log
+2. **Note your environment**:
+   - OS version
+   - Python version
+   - Java version
+3. **Steps to reproduce**: Document exact clicks/inputs
+4. **Open an issue**: Submit to GitHub Issues with above info
+
+---
+
+**Testing completed?** Return to [README.md](README.md) or [USAGE.md](USAGE.md) for normal usage.

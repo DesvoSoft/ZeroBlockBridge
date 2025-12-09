@@ -1,59 +1,202 @@
-# MC-Tunnel Manager (MVP)
+# 🚀 MC-Tunnel Manager
 
-**Role:** Product Owner  
-**Target:** MVP (Fase 1)
+**One-click Minecraft Server Management with Built-in Tunneling**
 
-## 1. Visión del Producto
+MC-Tunnel Manager is a lightweight desktop application that simplifies Minecraft server creation and management. No terminal commands, no port forwarding hassles—just click and play.
 
-Crear una aplicación de escritorio ligera en **Python** que democratice la creación de servidores de Minecraft. El objetivo es abstraer la complejidad de la terminal (`java -jar...`) y la red (Port Forwarding) en una interfaz gráfica moderna "One-Click", utilizando **Playit.gg** como backbone de conectividad.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 2. Stack Tecnológico
+---
 
-- **Lenguaje Core:** Python 3.10+
-- **GUI Framework:** `CustomTkinter`
-- **Networking:** `requests` (Descargas), `playit.gg` (Túnel)
-- **Concurrencia:** `threading`, `subprocess`
+## ✨ Features
 
-## 3. Arquitectura
+- **🎮 One-Click Server Creation**: Download and configure Vanilla or Fabric servers automatically
+- **🖥️ Modern GUI**: Clean, intuitive interface built with CustomTkinter
+- **🌐 Built-in Tunneling**: Integrated Playit.gg support for easy multiplayer without port forwarding
+- **📊 Separate Log Streams**: Dedicated tabs for Server and Tunnel logs
+- **⚡ Live Console Output**: Real-time monitoring of server activity
+- **🔄 Auto-Update**: Automatic Playit agent updates to the latest version
+- **🛠️ Easy Management**: Start, stop, and reset servers with a single click
+- **📦 Multi-Version Support**:
+  - Vanilla 1.21.1
+  - Fabric 1.20.1
 
-### Estructura de Directorios
+---
 
-```text
-/MC-Manager-App
-│
-├── /app                 # Source Code
-│   ├── main.py          # Entry Point
-│   ├── ui_components.py # Custom Widgets
-│   └── logic.py         # Backend Logic
-│
-├── /bin                 # External Binaries
-│   ├── /playit          # Playit Agent
-│   └── /java            # (Optional) Portable JDK
-│
-├── /servers             # Server Instances
-│   └── /server_01       # Instance Data
-│
-└── config.json          # Global Config
+## 📸 Screenshots
+
+> **Note**: Screenshots coming soon! The application features a dark-themed interface with:
+>
+> - Server list sidebar
+> - Control panel with status indicators
+> - Tabbed console (Server Log / Tunnel Log)
+> - Tunnel management with one-click setup
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.10+** ([Download](https://www.python.org/downloads/))
+- **Java 17+** for running Minecraft servers ([Download](https://adoptium.net/))
+
+### Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/yourusername/MCTunnel.git
+   cd MCTunnel
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   pip install customtkinter requests
+   ```
+
+3. **Run the application**
+   ```bash
+   python app/main.py
+   ```
+
+---
+
+## 📖 Usage
+
+### Creating Your First Server
+
+1. **Launch** the application
+2. Click **"Create Server"**
+3. Enter a server name
+4. Choose server type:
+   - `1` = Vanilla 1.21.1
+   - `2` = Fabric 1.20.1
+5. Wait for installation to complete
+6. Select your server from the sidebar and click **"Start Server"**
+
+### Setting Up Online Play (Tunneling)
+
+1. Click **"Start Tunnel"** in the tunnel controls
+2. A browser window will open with your claim URL
+3. Link the agent to your Playit.gg account
+4. Copy the public IP address shown in the UI
+5. Share this IP with friends to join your server
+
+For detailed usage instructions, see **[USAGE.md](USAGE.md)**.
+
+---
+
+## 🏗️ Architecture
+
+### Project Structure
+
+```
+MCTunnel/
+├── app/
+│   ├── main.py              # Application entry point
+│   ├── ui_components.py     # Custom UI widgets
+│   ├── logic.py             # Server management logic
+│   └── playit_manager.py    # Playit.gg integration
+├── bin/                     # Playit agent binary (auto-downloaded)
+├── config/                  # Playit configuration
+├── servers/                 # Server instances
+│   └── <server-name>/       # Individual server files
+├── config.json              # Application settings
+└── README.md
 ```
 
-## 4. Desarrollo (Sprints)
+### Tech Stack
 
-- [x] **Sprint 1:** Esqueleto (UI & Config)
-- [x] **Sprint 2:** Gestión de Archivos y Descargas
-- [x] **Sprint 3:** El Motor (Minecraft Process)
-- [ ] **Sprint 4:** El Túnel (Integración Playit.gg)
+- **Language**: Python 3.10+
+- **GUI Framework**: CustomTkinter (modern themed widgets)
+- **Networking**:
+  - `requests` for HTTP downloads
+  - Playit.gg agent (v0.16.5) for tunneling
+- **Concurrency**: `threading` for non-blocking operations
+- **Process Management**: `subprocess` for server control
 
-## 5. Ejecución
+---
 
-```bash
-# Instalar dependencias
-pip install customtkinter requests
+## 🎯 Roadmap
 
-# Ejecutar
-python app/main.py
-```
+### Completed ✅
 
-## 6. Documentación
+- [x] Sprint 1: UI Framework & Configuration
+- [x] Sprint 2: File Management & Downloads
+- [x] Sprint 3: Server Process Management
+- [x] Sprint 4: Playit.gg Integration
 
-- **[USAGE.md](USAGE.md)**: Guía de usuario completa
-- **[TESTING.md](TESTING.md)**: Instrucciones de prueba y verificación
+### Future Enhancements 🚧
+
+- [ ] Custom server.properties editor
+- [ ] Mod manager for Fabric servers
+- [ ] Server backup/restore
+- [ ] Multiple tunnel profiles
+- [ ] Plugin management for Bukkit/Spigot
+- [ ] Resource pack hosting
+- [ ] Player whitelist management
+
+---
+
+## 🐛 Troubleshooting
+
+### "Java NOT FOUND" Error
+
+Install Java 17 or later:
+
+- [Adoptium (Recommended)](https://adoptium.net/)
+- [Oracle Java](https://www.oracle.com/java/technologies/downloads/)
+
+### Playit Agent Errors
+
+**AgentDisabledOverLimit**: You have too many agents registered. Delete unused agents in your [Playit.gg dashboard](https://playit.gg/account/agents).
+
+**Connection Issues**: Click "Reset Agent" to clear the configuration and start fresh.
+
+### Server Won't Start
+
+- Verify Java is installed and in PATH
+- Check console logs for specific errors
+- Ensure server port (default 25565) isn't already in use
+
+For more troubleshooting, see **[TESTING.md](TESTING.md)**.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Playit.gg](https://playit.gg/) for the tunneling service
+- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) for the modern UI framework
+- The Minecraft community for inspiration
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/MCTunnel/issues)
+- **Documentation**: See [USAGE.md](USAGE.md) and [TESTING.md](TESTING.md)
+
+---
+
+**Made with ❤️ by DesvoSoft**
