@@ -117,6 +117,37 @@ class MCTunnelApp(ctk.CTk):
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻ Reset", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=80)
         self.btn_reset.pack(side="left", padx=5)
 
+        # --- Management Controls (Backups & Scheduler) ---
+        self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.management_frame.pack(pady=5, fill="x")
+        
+        # Scheduler Section
+        self.scheduler_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
+        self.scheduler_frame.pack(side="left", padx=20)
+        
+        self.lbl_scheduler = ctk.CTkLabel(self.scheduler_frame, text="Auto-Restart:", font=("Roboto", 12, "bold"))
+        self.lbl_scheduler.pack(side="left", padx=5)
+        
+        self.var_scheduler_enabled = ctk.BooleanVar()
+        self.chk_scheduler = ctk.CTkCheckBox(self.scheduler_frame, text="Enable", variable=self.var_scheduler_enabled, command=self.save_scheduler_dashboard)
+        self.chk_scheduler.pack(side="left", padx=5)
+        
+        self.entry_scheduler_interval = ctk.CTkEntry(self.scheduler_frame, width=50, placeholder_text="6")
+        self.entry_scheduler_interval.pack(side="left", padx=5)
+        self.entry_scheduler_interval.bind("<Return>", lambda e: self.save_scheduler_dashboard())
+        
+        ctk.CTkLabel(self.scheduler_frame, text="h").pack(side="left")
+
+        # Backup Section
+        self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
+        self.backup_frame.pack(side="right", padx=20)
+        
+        self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last Backup: None", text_color="gray")
+        self.lbl_last_backup.pack(side="left", padx=10)
+        
+        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, width=100, fg_color="#2B719E")
+        self.btn_quick_backup.pack(side="left", padx=5)
+
 
         # Console Tabs
         self.console_tabs = ctk.CTkTabview(self.main_frame)
@@ -136,6 +167,56 @@ class MCTunnelApp(ctk.CTk):
         # --- Initialization ---
         self.check_java_startup()
         self.load_servers()
+        self.start_scheduler()
+
+    def start_scheduler(self):
+        """Starts the background scheduler thread."""
+        def _scheduler_loop():
+            import time
+            while True:
+                time.sleep(60) # Check every minute
+                
+                if self.server_runner and self.server_runner.running and self.current_server:
+                    scheduler = logic.Scheduler(self.current_server)
+                    if scheduler.check_due():
+                        self.server_console.log("[System] Scheduled restart due. Initiating sequence...")
+                        self.restart_server_sequence()
+                        scheduler.update_last_run() # Update immediately to prevent double trigger
+        
+        threading.Thread(target=_scheduler_loop, daemon=True).start()
+
+    def restart_server_sequence(self):
+        """Handles the automated restart sequence."""
+        def _restart():
+            # 1. Warn players
+            if self.server_runner and self.server_runner.process:
+                try:
+                    self.server_console.log("[System] Broadcasting restart warning...")
+                    self.server_runner.process.stdin.write("say Server restarting in 10 seconds for scheduled maintenance!\n")
+                    self.server_runner.process.stdin.flush()
+                except:
+                    pass
+            
+            import time
+            time.sleep(10)
+            
+            # 2. Stop Server
+            self.after(0, self.stop_server_action)
+            
+            # Wait for it to actually stop
+            timeout = 30
+            while timeout > 0:
+                if not self.server_runner: # stop_server_action sets it to None
+                    break
+                time.sleep(1)
+                timeout -= 1
+            
+            time.sleep(5) # Cooldown
+            
+            # 3. Start Server
+            self.after(0, self.start_server_action)
+            
+        threading.Thread(target=_restart, daemon=True).start()
 
     def check_java_startup(self):
         """Checks Java version in a separate thread to not block UI."""
@@ -189,6 +270,66 @@ class MCTunnelApp(ctk.CTk):
             self.btn_stop.configure(state="disabled")
             self.lbl_status.configure(text="Status: Idle", text_color="white")
             self.btn_edit_properties.configure(state="normal")
+        
+        self.update_management_ui()
+
+    def update_management_ui(self):
+        """Updates the management dashboard with current server info."""
+        if not self.current_server:
+            return
+            
+        # Scheduler
+        scheduler = logic.Scheduler(self.current_server)
+        schedule = scheduler.get_schedule()
+        
+        if schedule:
+            self.var_scheduler_enabled.set(True)
+            if schedule["type"] == "interval":
+                self.entry_scheduler_interval.delete(0, "end")
+                self.entry_scheduler_interval.insert(0, str(schedule["interval_hours"]))
+        else:
+            self.var_scheduler_enabled.set(False)
+            
+        # Backups
+        backup_manager = logic.BackupManager(self.current_server)
+        backups = backup_manager.list_backups()
+        if backups:
+            latest = backups[0] # Sorted desc
+            self.lbl_last_backup.configure(text=f"Last: {latest['date']}")
+        else:
+            self.lbl_last_backup.configure(text="Last Backup: None")
+
+    def save_scheduler_dashboard(self):
+        if not self.current_server:
+            return
+            
+        enabled = self.var_scheduler_enabled.get()
+        interval = 6
+        try:
+            interval = int(self.entry_scheduler_interval.get())
+        except:
+            pass
+            
+        scheduler = logic.Scheduler(self.current_server)
+        scheduler.set_restart_schedule(enabled, interval)
+        self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
+
+    def quick_backup_action(self):
+        if not self.current_server:
+            return
+            
+        self.server_console.log("[System] Creating backup...")
+        
+        def _run():
+            manager = logic.BackupManager(self.current_server)
+            path = manager.create_backup()
+            if path:
+                self.server_console.log(f"[System] Backup created: {os.path.basename(path)}")
+                self.after(0, self.update_management_ui)
+            else:
+                self.server_console.log("[Error] Backup failed.")
+                
+        threading.Thread(target=_run, daemon=True).start()
 
     def edit_server_properties(self):
         if not self.current_server:
@@ -198,6 +339,8 @@ class MCTunnelApp(ctk.CTk):
             return
         
         ServerPropertiesEditor(self, self.current_server, logic)
+        # Refresh UI after close in case they changed settings there
+        # We can't easily hook into close, but the dashboard updates on select/actions.
 
     def update_console(self, text):
         """Thread-safe server console update."""

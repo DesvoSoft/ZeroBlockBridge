@@ -328,3 +328,156 @@ def save_server_properties(server_name, new_properties):
             
     with open(props_path, "w") as f:
         f.writelines(new_lines)
+
+import datetime
+import zipfile
+
+class BackupManager:
+    def __init__(self, server_name):
+        self.server_name = server_name
+        self.server_path = os.path.join(SERVERS_DIR, server_name)
+        self.backup_dir = os.path.join("backups", server_name)
+        
+        if not os.path.exists(self.backup_dir):
+            os.makedirs(self.backup_dir)
+
+    def create_backup(self):
+        """Creates a zip backup of the server directory."""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        backup_filename = f"{timestamp}.zip"
+        backup_path = os.path.join(self.backup_dir, backup_filename)
+        
+        try:
+            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(self.server_path):
+                    # Exclude backups folder if it's somehow inside (shouldn't be, but safety first)
+                    if "backups" in root:
+                        continue
+                        
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Archive name relative to server root
+                        arcname = os.path.relpath(file_path, self.server_path)
+                        zipf.write(file_path, arcname)
+            return backup_path
+        except Exception as e:
+            print(f"Backup failed: {e}")
+            return None
+
+    def list_backups(self):
+        """Returns a list of dicts with backup info."""
+        backups = []
+        if not os.path.exists(self.backup_dir):
+            return backups
+            
+        for filename in os.listdir(self.backup_dir):
+            if filename.endswith(".zip"):
+                path = os.path.join(self.backup_dir, filename)
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                backups.append({
+                    "name": filename,
+                    "path": path,
+                    "size": f"{size_mb:.2f} MB",
+                    "date": filename.replace(".zip", "")
+                })
+        # Sort by date desc
+        backups.sort(key=lambda x: x["name"], reverse=True)
+        return backups
+
+    def restore_backup(self, backup_path):
+        """Restores a backup, wiping the current server directory first."""
+        if not os.path.exists(backup_path):
+            return False
+            
+        # Safety: Create a temp backup of current state? 
+        # For now, let's just wipe and restore.
+        
+        try:
+            # 1. Clear server directory
+            for item in os.listdir(self.server_path):
+                item_path = os.path.join(self.server_path, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+            
+            # 2. Extract backup
+            with zipfile.ZipFile(backup_path, 'r') as zipf:
+                zipf.extractall(self.server_path)
+                
+            return True
+        except Exception as e:
+            print(f"Restore failed: {e}")
+            return False
+
+class Scheduler:
+    def __init__(self, server_name):
+        self.server_name = server_name
+        self.server_path = os.path.join(SERVERS_DIR, server_name)
+        self.metadata_path = os.path.join(self.server_path, "metadata.json")
+        
+    def _load_metadata(self):
+        if not os.path.exists(self.metadata_path):
+            return {}
+        try:
+            with open(self.metadata_path, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+
+    def _save_metadata(self, data):
+        with open(self.metadata_path, "w") as f:
+            json.dump(data, f)
+
+    def set_restart_schedule(self, enabled, interval_hours=None):
+        """
+        Sets the restart schedule.
+        enabled: bool
+        interval_hours: int (e.g., 6, 12, 24)
+        """
+        data = self._load_metadata()
+        
+        if not enabled:
+            if "scheduler" in data:
+                del data["scheduler"]
+        else:
+            data["scheduler"] = {
+                "type": "interval",
+                "interval_hours": interval_hours,
+                "last_run": datetime.datetime.now().isoformat() # Reset timer on set
+            }
+            
+        self._save_metadata(data)
+
+    def get_schedule(self):
+        data = self._load_metadata()
+        return data.get("scheduler", None)
+
+    def check_due(self):
+        """Checks if a restart is due. Returns True if yes."""
+        data = self._load_metadata()
+        scheduler = data.get("scheduler")
+        
+        if not scheduler:
+            return False
+            
+        if scheduler["type"] == "interval":
+            last_run_str = scheduler.get("last_run")
+            if not last_run_str:
+                # First run?
+                self.update_last_run()
+                return False
+                
+            last_run = datetime.datetime.fromisoformat(last_run_str)
+            interval = datetime.timedelta(hours=scheduler["interval_hours"])
+            
+            if datetime.datetime.now() >= last_run + interval:
+                return True
+                
+        return False
+
+    def update_last_run(self):
+        data = self._load_metadata()
+        if "scheduler" in data:
+            data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
+            self._save_metadata(data)
