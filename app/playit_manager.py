@@ -78,14 +78,15 @@ class PlayitManager:
         
         try:
             # Run in the config directory so playit.toml is stored there
+            # We'll try to disable colors if playit supports a flag, but for now just run it.
             self.process = subprocess.Popen(
                 [self.binary_path],
                 cwd=os.path.abspath(CONFIG_DIR),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
+                text=False, # Binary mode to avoid buffering
+                bufsize=0   # Unbuffered
             )
             self.running = True
             self.status_callback("Starting...", None)
@@ -116,18 +117,35 @@ class PlayitManager:
         self.status_callback("Offline", None)
 
     def _read_output(self):
-        """Reads stdout from the process and parses it."""
+        """Reads stdout from the process character by character (binary)."""
         try:
+            buffer = bytearray()
             while self.running and self.process:
-                line = self.process.stdout.readline()
-                if not line:
+                # Read 1 byte
+                byte = self.process.stdout.read(1)
+                if not byte:
                     break
                 
-                line = line.strip()
-                if line:
-                    # Log everything to console for debug
-                    self.console_callback(f"[Playit] {line}")
-                    self._parse_line(line)
+                # DEBUG: Print raw byte to see if we get anything
+                # sys.stdout.write(str(byte)) 
+                # self.console_callback(f"[Debug] {byte}") 
+                
+                if byte == b'\n' or byte == b'\r':
+                    if buffer:
+                        try:
+                            line = buffer.decode('utf-8', errors='replace').strip()
+                        except:
+                            line = ""
+                            
+                        if line:
+                            # Remove ANSI escape codes
+                            clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
+                            self.console_callback(f"[Playit] {clean_line}")
+                            self._parse_line(clean_line)
+                        buffer = bytearray()
+                else:
+                    buffer.extend(byte)
+                    
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:

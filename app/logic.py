@@ -221,9 +221,23 @@ class ServerRunner:
             if self.process.stdin:
                 self.process.stdin.write("stop\n")
                 self.process.stdin.flush()
+            
+            # Wait for graceful exit (up to 10 seconds)
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.console_callback("[System] Server unresponsive, force killing...")
+                self.process.kill()
+                self.process.wait()
+                
         except Exception as e:
-            self.console_callback(f"[Error] Failed to send stop command: {e}")
-            # Force kill if needed? For now just let it be.
+            self.console_callback(f"[Error] Failed to stop server: {e}")
+            # Ensure it's dead if an error occurred during stop
+            if self.process:
+                try:
+                    self.process.kill()
+                except:
+                    pass
 
     def _read_output(self):
         """Reads stdout from the process and sends it to the callback."""

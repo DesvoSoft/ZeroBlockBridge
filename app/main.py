@@ -292,7 +292,17 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, _show_dialog)
 
 
+    def on_close(self):
+        """Handles app closure to ensure subprocesses are killed."""
+        if self.server_runner:
+            self.server_runner.stop()
+        if self.playit_manager:
+            self.playit_manager.stop()
+        self.destroy()
+        sys.exit(0)
+
 if __name__ == "__main__":
     app = MCTunnelApp()
+    app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
 
