@@ -9,22 +9,22 @@ MC-Tunnel Manager is a lightweight desktop application that simplifies Minecraft
 
 ---
 
-## ✨ Features
+## Features
 
-- **🎮 One-Click Server Creation**: Download and configure Vanilla or Fabric servers automatically
-- **🖥️ Modern GUI**: Clean, intuitive interface built with CustomTkinter
-- **🌐 Built-in Tunneling**: Integrated Playit.gg support for easy multiplayer without port forwarding
-- **📊 Separate Log Streams**: Dedicated tabs for Server and Tunnel logs
-- **⚡ Live Console Output**: Real-time monitoring of server activity
-- **🔄 Auto-Update**: Automatic Playit agent updates to the latest version
-- **🛠️ Easy Management**: Start, stop, and reset servers with a single click
-- **📦 Multi-Version Support**:
+- ** One-Click Server Creation**: Download and configure Vanilla or Fabric servers automatically
+- ** Modern GUI**: Clean, intuitive interface built with CustomTkinter
+- ** Built-in Tunneling**: Integrated Playit.gg support for easy multiplayer without port forwarding
+- ** Separate Log Streams**: Dedicated tabs for Server and Tunnel logs
+- ** Live Console Output**: Real-time monitoring of server activity
+- ** Auto-Update**: Automatic Playit agent updates to the latest version
+- ** Easy Management**: Start, stop, and reset servers with a single click
+- ** Multi-Version Support**:
   - Vanilla 1.21.1
   - Fabric 1.20.1
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 > **Note**: Screenshots coming soon! The application features a dark-themed interface with:
 >
@@ -35,7 +35,7 @@ MC-Tunnel Manager is a lightweight desktop application that simplifies Minecraft
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -64,7 +64,7 @@ MC-Tunnel Manager is a lightweight desktop application that simplifies Minecraft
 
 ---
 
-## 📖 Usage
+## Usage
 
 ### Creating Your First Server
 
@@ -89,7 +89,7 @@ For detailed usage instructions, see **[USAGE.md](USAGE.md)**.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Project Structure
 
@@ -120,7 +120,7 @@ MCTunnel/
 
 ---
 
-## 🎯 Roadmap
+## Roadmap
 
 ### Completed ✅
 
@@ -136,12 +136,12 @@ MCTunnel/
 - [ ] Server backup/restore
 - [ ] Multiple tunnel profiles
 - [ ] Plugin management for Bukkit/Spigot
-- [ ] Resource pack hosting
 - [ ] Player whitelist management
+- [ ] Resource pack hosting
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "Java NOT FOUND" Error
 
@@ -166,7 +166,7 @@ For more troubleshooting, see **[TESTING.md](TESTING.md)**.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -178,13 +178,13 @@ Contributions are welcome! Please:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Playit.gg](https://playit.gg/) for the tunneling service
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) for the modern UI framework
@@ -192,7 +192,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
+## Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/MCTunnel/issues)
 - **Documentation**: See [USAGE.md](USAGE.md) and [TESTING.md](TESTING.md)
