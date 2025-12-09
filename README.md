@@ -1,6 +1,6 @@
 # MC-Tunnel Manager (MVP)
 
-**Role:** Tech Lead / Product Owner  
+**Role:** Product Owner  
 **Target:** MVP (Fase 1)
 
 ## 1. Visión del Producto

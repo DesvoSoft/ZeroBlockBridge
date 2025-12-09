@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
 from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric, ServerRunner
+from app.playit_manager import PlayitManager
+import webbrowser
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -22,6 +24,8 @@ class MCTunnelApp(ctk.CTk):
         
         self.server_runner = None
         self.current_server = None
+        self.playit_manager = PlayitManager(self.update_console, self.update_playit_status, self.on_playit_claim)
+
         
         # Grid layout
         self.grid_columnconfigure(0, weight=1) # Sidebar
@@ -77,6 +81,23 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_stop = ctk.CTkButton(self.controls_frame, text="Stop Server", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred")
         self.btn_stop.pack(side="left", padx=10)
+
+        # --- Playit Tunnel Controls ---
+        self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.tunnel_frame.pack(pady=5, fill="x")
+
+        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color="gray")
+        self.lbl_tunnel_status.pack(side="left", padx=20)
+
+        self.lbl_public_ip = ctk.CTkLabel(self.tunnel_frame, text="Public IP: N/A", font=("Roboto", 12, "bold"))
+        self.lbl_public_ip.pack(side="left", padx=20)
+
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_frame, text="Start Tunnel", command=self.start_tunnel, width=100)
+        self.btn_tunnel_start.pack(side="right", padx=10)
+        
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_frame, text="Stop Tunnel", command=self.stop_tunnel, state="disabled", fg_color="red", width=100)
+        self.btn_tunnel_stop.pack(side="right", padx=10)
+
 
         # Console
         self.console = ConsoleWidget(self.main_frame)
@@ -224,6 +245,52 @@ class MCTunnelApp(ctk.CTk):
         dialog.close()
         self.load_servers()
         self.console.log("[System] Server created successfully.")
+
+    # --- Playit Integration ---
+    def start_tunnel(self):
+        self.btn_tunnel_start.configure(state="disabled")
+        self.btn_tunnel_stop.configure(state="normal")
+        threading.Thread(target=self.playit_manager.start, daemon=True).start()
+
+    def stop_tunnel(self):
+        self.playit_manager.stop()
+        self.btn_tunnel_start.configure(state="normal")
+        self.btn_tunnel_stop.configure(state="disabled")
+
+    def update_playit_status(self, status, ip):
+        """Callback from PlayitManager."""
+        def _update():
+            color = "green" if status == "Online" else "gray"
+            if status == "Error": color = "red"
+            
+            self.lbl_tunnel_status.configure(text=f"Tunnel: {status}", text_color=color)
+            if ip:
+                self.lbl_public_ip.configure(text=f"Public IP: {ip}")
+            else:
+                self.lbl_public_ip.configure(text="Public IP: N/A")
+                
+            if status == "Offline":
+                self.btn_tunnel_start.configure(state="normal")
+                self.btn_tunnel_stop.configure(state="disabled")
+
+        self.after(0, _update)
+
+    def on_playit_claim(self, url):
+        """Callback when a claim URL is detected."""
+        def _show_dialog():
+            dialog = ctk.CTkInputDialog(text=f"Playit requires setup!\nCopy this URL or click OK to open:\n{url}", title="Link Playit Account")
+            # We can't easily make a clickable link in a standard dialog, so we'll just open it if they click OK
+            # Or we could use a custom dialog. For MVP, let's open it automatically or ask.
+            
+            # Better UX: Open browser automatically? Or just log it?
+            # The user prompt said: "muestra un diálogo emergente ... invitando al usuario a hacer clic"
+            
+            # Let's try to open it
+            webbrowser.open(url)
+            self.console.log(f"[UI] Opened claim URL in browser: {url}")
+            
+        self.after(0, _show_dialog)
+
 
 if __name__ == "__main__":
     app = MCTunnelApp()
