@@ -1,6 +1,6 @@
 # MC-Tunnel Manager (MVP)
 
-**Role:** Tech Lead / Product Owner
+**Role:** Tech Lead / Product Owner  
 **Target:** MVP (Fase 1)
 
 ## 1. Visión del Producto
@@ -39,7 +39,7 @@ Crear una aplicación de escritorio ligera en **Python** que democratice la crea
 ## 4. Desarrollo (Sprints)
 
 - [x] **Sprint 1:** Esqueleto (UI & Config)
-- [ ] **Sprint 2:** Gestión de Archivos y Descargas
+- [x] **Sprint 2:** Gestión de Archivos y Descargas
 - [ ] **Sprint 3:** El Motor (Minecraft Process)
 - [ ] **Sprint 4:** El Túnel (Integración Playit.gg)
 
@@ -52,3 +52,8 @@ pip install customtkinter requests
 # Ejecutar
 python app/main.py
 ```
+
+## 6. Documentación
+
+- **[USAGE.md](USAGE.md)**: Guía de usuario completa
+- **[TESTING.md](TESTING.md)**: Instrucciones de prueba y verificación

@@ -7,7 +7,7 @@ import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR
+from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -114,9 +114,24 @@ class MCTunnelApp(ctk.CTk):
                 self.console.log(f"[Error] Server '{server_name}' already exists.")
                 return
 
-            self.start_download(server_name)
+            self.choose_server_type(server_name)
 
-    def start_download(self, server_name):
+    def choose_server_type(self, server_name):
+        """Dialog to choose between Vanilla and Fabric."""
+        type_dialog = ctk.CTkInputDialog(
+            text="Enter server type:\n1 = Vanilla 1.21.1\n2 = Fabric 1.20.1",
+            title="Choose Server Type"
+        )
+        choice = type_dialog.get_input()
+        
+        if choice == "1":
+            self.start_download(server_name, "Vanilla", "1.21.1")
+        elif choice == "2":
+            self.start_download(server_name, "Fabric", "1.20.1")
+        else:
+            self.console.log("[Error] Invalid choice.")
+
+    def start_download(self, server_name, server_type, version):
         progress_dialog = DownloadProgressDialog(self, title=f"Installing {server_name}...")
         
         def _download_thread():
@@ -125,10 +140,13 @@ class MCTunnelApp(ctk.CTk):
                 
                 # Callback for progress
                 def _progress(val):
-                    progress_dialog.update_progress(val, f"Downloading: {int(val*100)}%")
+                    progress_dialog.update_progress(val, f"Installing: {int(val*100)}%")
 
-                # Download Vanilla 1.21.1
-                jar_path = download_server(server_name, "Vanilla", "1.21.1", progress_callback=_progress)
+                # Install based on type
+                if server_type == "Vanilla":
+                    jar_path = download_server(server_name, "Vanilla", version, progress_callback=_progress)
+                elif server_type == "Fabric":
+                    jar_path = install_fabric(server_name, version, progress_callback=_progress)
                 
                 if jar_path:
                     self.console.log("[System] Download complete.")

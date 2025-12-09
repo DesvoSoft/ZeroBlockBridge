@@ -15,7 +15,7 @@ SERVER_URLS = {
         "1.21.1": "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar"
     },
     "Fabric": {
-        # Placeholder for Fabric if needed later
+        "1.20.1": "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
     }
 }
 
@@ -117,4 +117,45 @@ def accept_eula(server_name):
     
     with open(eula_path, "w") as f:
         f.write("eula=true\n")
+
+def install_fabric(server_name, mc_version, progress_callback=None):
+    """
+    Downloads Fabric Installer and runs it to generate server files.
+    """
+    server_path = create_server_directory(server_name)
+    installer_url = SERVER_URLS["Fabric"]["1.20.1"] # Hardcoded for now based on input
+    installer_path = os.path.join(server_path, "fabric-installer.jar")
+    
+    # 1. Download Installer
+    try:
+        if progress_callback: progress_callback(0.1)
+        response = requests.get(installer_url, stream=True)
+        response.raise_for_status()
+        with open(installer_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        if progress_callback: progress_callback(0.3)
+    except Exception as e:
+        print(f"Fabric download failed: {e}")
+        return None
+
+    # 2. Run Installer
+    # java -jar fabric-installer.jar server -mcversion 1.20.1 -downloadMinecraft
+    cmd = [
+        "java", "-jar", "fabric-installer.jar", 
+        "server", "-mcversion", mc_version, "-downloadMinecraft"
+    ]
+    
+    try:
+        if progress_callback: progress_callback(0.5)
+        # Run in the server directory
+        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True)
+        if progress_callback: progress_callback(0.9)
+        
+        # Cleanup installer? Maybe keep it.
+        return os.path.join(server_path, "fabric-server-launch.jar")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Fabric install failed: {e}")
+        return None
 
