@@ -6,8 +6,9 @@ import threading
 # Add parent directory to path so we can import app modules if running from inside app/
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric
+from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric, ServerRunner
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -18,6 +19,9 @@ class MCTunnelApp(ctk.CTk):
 
         self.title("MC-Tunnel Manager (MVP)")
         self.geometry("900x600")
+        
+        self.server_runner = None
+        self.current_server = None
         
         # Grid layout
         self.grid_columnconfigure(0, weight=1) # Sidebar
@@ -45,7 +49,7 @@ class MCTunnelApp(ctk.CTk):
         # --- Right Side (Console & Status) ---
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
-        self.main_frame.grid_rowconfigure(1, weight=1)
+        self.main_frame.grid_rowconfigure(2, weight=1) # Console gets weight
         self.main_frame.grid_columnconfigure(0, weight=1)
 
         # Header / Status Bar
@@ -58,9 +62,25 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_java_ver = ctk.CTkLabel(self.status_frame, text="Checking Java...", text_color="gray")
         self.lbl_java_ver.pack(side="right", padx=20)
 
+        # Dashboard / Controls (Initially hidden/empty)
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100)
+        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        
+        self.lbl_dash_title = ctk.CTkLabel(self.dashboard_frame, text="Select a server", font=("Roboto", 18, "bold"))
+        self.lbl_dash_title.pack(pady=10)
+
+        self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.controls_frame.pack(pady=5)
+
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="Start Server", state="disabled", command=self.start_server_action, fg_color="green", hover_color="darkgreen")
+        self.btn_start.pack(side="left", padx=10)
+
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="Stop Server", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred")
+        self.btn_stop.pack(side="left", padx=10)
+
         # Console
         self.console = ConsoleWidget(self.main_frame)
-        self.console.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        self.console.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
 
         # --- Initialization ---
         self.check_java_startup()
@@ -101,8 +121,42 @@ class MCTunnelApp(ctk.CTk):
         self.console.log(f"[System] Loaded {len(servers)} servers.")
 
     def on_server_select(self, server_name):
+        self.current_server = server_name
+        self.lbl_dash_title.configure(text=f"Server: {server_name}")
+        self.btn_start.configure(state="normal")
+        self.btn_stop.configure(state="disabled") # Initially disabled until started
         self.console.log(f"[UI] Selected server: {server_name}")
-        # TODO: Load server details
+
+    def update_console(self, text):
+        """Thread-safe console update."""
+        self.after(0, lambda: self.console.log(text))
+
+    def start_server_action(self):
+        if not self.current_server:
+            return
+        
+        if self.server_runner and self.server_runner.running:
+            self.console.log("[Error] A server is already running.")
+            return
+
+        # Get RAM from config or default
+        config = load_config()
+        ram = config.get("ram_allocation", "2G")
+
+        self.server_runner = ServerRunner(self.current_server, ram, self.update_console)
+        self.server_runner.start()
+        
+        self.btn_start.configure(state="disabled")
+        self.btn_stop.configure(state="normal")
+        self.lbl_status.configure(text=f"Status: Running {self.current_server}", text_color="green")
+
+    def stop_server_action(self):
+        if self.server_runner:
+            self.server_runner.stop()
+            self.btn_start.configure(state="normal")
+            self.btn_stop.configure(state="disabled")
+            self.lbl_status.configure(text="Status: Idle", text_color="white")
+            self.server_runner = None
 
     def create_server_dialog(self):
         dialog = ctk.CTkInputDialog(text="Enter Server Name:", title="Create Server")
@@ -174,3 +228,4 @@ class MCTunnelApp(ctk.CTk):
 if __name__ == "__main__":
     app = MCTunnelApp()
     app.mainloop()
+

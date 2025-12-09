@@ -101,11 +101,46 @@ rmdir /s /q servers\cli_test_fabric
 - Progress percentage may jump (depends on download speed)
 - Fabric installation takes longer than Vanilla (runs installer)
 
-## Next Sprint Testing (Sprint 3)
+### Sprint 3 Testing (The Engine)
 
-Once Sprint 3 is complete, test:
+#### Test 8: Start Vanilla Server
 
-- [ ] Start button launches server
-- [ ] Server logs appear in console
-- [ ] Stop button terminates server
-- [ ] Server status updates correctly
+1. Select a created Vanilla server.
+2. Click **Start Server**.
+3. Verify:
+   - [ ] Status changes to "Running".
+   - [ ] Start button disabled, Stop button enabled.
+   - [ ] Console shows server startup logs (e.g., "Starting minecraft server...").
+   - [ ] EULA is auto-accepted (first run).
+   - [ ] Server reaches "Done!" state.
+
+#### Test 9: Connect to Server
+
+1. Open Minecraft (version matching server).
+2. Connect to `localhost`.
+3. Verify:
+   - [ ] You can join the world.
+   - [ ] Console shows "Player joined the game".
+
+#### Test 10: Stop Server
+
+1. Click **Stop Server**.
+2. Verify:
+   - [ ] Console shows shutdown logs ("Stopping server", "Saving chunks").
+   - [ ] Status changes to "Idle".
+   - [ ] Start button enabled, Stop button disabled.
+
+#### Test 11: Start Fabric Server
+
+1. Select a created Fabric server.
+2. Click **Start Server**.
+3. Verify:
+   - [ ] Console shows Fabric loader logs.
+   - [ ] Server reaches "Done!" state.
+   - [ ] You can connect via Minecraft Client (with Fabric installed).
+
+## Next Sprint Testing (Sprint 4)
+
+- [ ] Playit.gg agent download/installation
+- [ ] Tunnel creation and linking
+- [ ] Public address generation

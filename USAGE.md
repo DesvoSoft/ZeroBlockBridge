@@ -44,13 +44,27 @@ The application will:
 - **Vanilla**: `servers/<name>/server.jar` + `eula.txt`
 - **Fabric**: `servers/<name>/fabric-server-launch.jar` + `server.jar` + `libraries/` + `eula.txt`
 
-## Next Steps (After Sprint 3)
+## Managing Servers
 
-Once Sprint 3 is complete, you'll be able to:
+Once a server is created, you can control it from the dashboard:
 
-- Start/Stop servers from the UI
-- View server logs in the console
-- Configure RAM allocation
+1. **Select a Server**: Click on the server name in the sidebar list.
+2. **Start Server**:
+   - Click the green **Start Server** button.
+   - The status will change to "Running".
+   - The console at the bottom will display the server logs in real-time.
+3. **Stop Server**:
+   - Click the red **Stop Server** button.
+   - The server will save chunks and shut down gracefully.
+   - Wait for the "Server process exited" message in the console.
+
+### Console
+
+The console window displays the standard output of the Minecraft server. You can use this to monitor server activity, errors, and player connections.
+
+## Next Steps (After Sprint 4)
+
+- **Sprint 4:** Tunnel Integration (Playit.gg) - This will allow you to share your server with friends without port forwarding.
 
 ## Troubleshooting
 

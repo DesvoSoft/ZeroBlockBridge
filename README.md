@@ -40,7 +40,7 @@ Crear una aplicación de escritorio ligera en **Python** que democratice la crea
 
 - [x] **Sprint 1:** Esqueleto (UI & Config)
 - [x] **Sprint 2:** Gestión de Archivos y Descargas
-- [ ] **Sprint 3:** El Motor (Minecraft Process)
+- [x] **Sprint 3:** El Motor (Minecraft Process)
 - [ ] **Sprint 4:** El Túnel (Integración Playit.gg)
 
 ## 5. Ejecución

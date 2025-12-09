@@ -35,11 +35,16 @@ env/
 *~
 .DS_Store
 
-# Project Specific
+# Project Specific - Root
 /servers/          # Server instances (keep local only)
-/bin/playit/       # Downloaded playit binaries
-/bin/java/         # Portable JDK (if used)
+/bin/              # External binaries (playit, java)
 config.json        # User configuration (contains local paths)
+
+# Project Specific - App Directory (if run from app/)
+app/servers/
+app/config.json
+app/__pycache__/
+app/bin/
 
 # Logs
 *.log
@@ -48,11 +53,6 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
-
-# Testing
-/servers/test-*
-/servers/*test*
-/servers/cli_*
 
 # Local Jar Backups
 mc jar files (fabric and vanilla)/

@@ -159,3 +159,93 @@ def install_fabric(server_name, mc_version, progress_callback=None):
         print(f"Fabric install failed: {e}")
         return None
 
+
+class ServerRunner:
+    def __init__(self, server_name, ram_allocation, console_callback):
+        self.server_name = server_name
+        self.ram_allocation = ram_allocation
+        self.console_callback = console_callback
+        self.process = None
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+        
+        server_path = os.path.join(SERVERS_DIR, self.server_name)
+        
+        # Check/Accept EULA
+        if not check_eula(self.server_name):
+            accept_eula(self.server_name)
+            self.console_callback("[System] EULA auto-accepted.")
+
+        # Determine jar file
+        # Priority: fabric-server-launch.jar -> server.jar
+        jar_file = "server.jar"
+        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
+            jar_file = "fabric-server-launch.jar"
+        
+        if not os.path.exists(os.path.join(server_path, jar_file)):
+            self.console_callback(f"[Error] Server jar not found: {jar_file}")
+            return
+
+        cmd = ["java", f"-Xmx{self.ram_allocation}", "-jar", jar_file, "nogui"]
+        
+        self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
+        
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                cwd=server_path,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            self.running = True
+            
+            # Start output reader thread
+            threading.Thread(target=self._read_output, daemon=True).start()
+            
+        except Exception as e:
+            self.console_callback(f"[Error] Failed to start server: {e}")
+            self.running = False
+
+    def stop(self):
+        if not self.running or not self.process:
+            return
+
+        self.console_callback("[System] Stopping server...")
+        try:
+            if self.process.stdin:
+                self.process.stdin.write("stop\n")
+                self.process.stdin.flush()
+        except Exception as e:
+            self.console_callback(f"[Error] Failed to send stop command: {e}")
+            # Force kill if needed? For now just let it be.
+
+    def _read_output(self):
+        """Reads stdout from the process and sends it to the callback."""
+        if not self.process:
+            return
+
+        for line in self.process.stdout:
+            self.console_callback(line.strip())
+        
+        self.process.wait()
+        self.running = False
+        self.process = None
+        self.console_callback("[System] Server process exited.")
+
+def check_eula(server_name):
+    """Checks if eula.txt exists and is true."""
+    server_path = os.path.join(SERVERS_DIR, server_name)
+    eula_path = os.path.join(server_path, "eula.txt")
+    
+    if not os.path.exists(eula_path):
+        return False
+        
+    with open(eula_path, "r") as f:
+        content = f.read()
+        return "eula=true" in content
