@@ -82,14 +82,17 @@ class MCTunnelApp(ctk.CTk):
         self.controls_frame.pack(pady=5)
 
         # Server Controls Toolbar
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶ Start", state="disabled", command=self.start_server_action, fg_color="green", hover_color="darkgreen", width=100)
-        self.btn_start.pack(side="left", padx=5)
+        self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800", text_color="black", width=100, font=("Roboto", 12, "bold"))
+        self.btn_start_all.pack(side="left", padx=5)
+        
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color="green", hover_color="darkgreen", width=40)
+        self.btn_start.pack(side="left", padx=2)
 
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■ Stop", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred", width=100)
-        self.btn_stop.pack(side="left", padx=5)
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color="red", hover_color="darkred", text_color="black", width=40)
+        self.btn_stop.pack(side="left", padx=2)
 
-        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙ Properties", command=self.edit_server_properties, state="disabled", width=100)
-        self.btn_edit_properties.pack(side="left", padx=5)
+        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=40)
+        self.btn_edit_properties.pack(side="left", padx=2)
 
         # --- Playit Tunnel Controls ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
@@ -105,29 +108,83 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶ Start Tunnel", command=self.start_tunnel, width=120)
-        self.btn_tunnel_start.pack(side="left", padx=5)
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=40)
+        self.btn_tunnel_start.pack(side="left", padx=2)
         
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■ Stop Tunnel", command=self.stop_tunnel, state="disabled", fg_color="red", width=120)
-        self.btn_tunnel_stop.pack(side="left", padx=5)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color="red", hover_color="darkred", text_color="black", width=40)
+        self.btn_tunnel_stop.pack(side="left", padx=2)
 
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self.open_claim_url, fg_color="orange", width=80)
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗", command=self.open_claim_url, fg_color="orange", width=40)
         # Don't pack it yet, only show when needed
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻ Reset", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=80)
-        self.btn_reset.pack(side="left", padx=5)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=40)
+        self.btn_reset.pack(side="left", padx=2)
+
+        # --- Management Controls (Backups & Scheduler) ---
+        self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.management_frame.pack(pady=5, fill="x")
+        
+        # Scheduler Section
+        scheduler_container = ctk.CTkFrame(self.management_frame, fg_color="transparent")
+        scheduler_container.pack(side="left", padx=20)
+        
+        self.lbl_scheduler = ctk.CTkLabel(scheduler_container, text="Auto-Restart:", font=("Roboto", 12, "bold"))
+        self.lbl_scheduler.grid(row=0, column=0, padx=5, sticky="w", columnspan=3)
+        
+        self.var_scheduler_enabled = ctk.BooleanVar()
+        self.chk_scheduler = ctk.CTkCheckBox(scheduler_container, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs)
+        self.chk_scheduler.grid(row=1, column=0, padx=5)
+        
+        self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode)
+        self.combo_schedule_mode.grid(row=1, column=1, padx=5)
+        self.combo_schedule_mode.set("Interval")
+        
+        # Interval inputs (shown by default)
+        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text="6")
+        self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
+        
+        self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
+        self.lbl_interval_unit.grid(row=1, column=3, padx=2)
+        
+        # Time inputs (hidden by default)
+        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text="03:00")
+        
+        # Apply button
+        self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=60, command=self.save_scheduler_dashboard, fg_color="#2B719E")
+        self.btn_apply_schedule.grid(row=1, column=4, padx=5)
+
+
+        # Backup Section
+        self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
+        self.backup_frame.pack(side="right", padx=20)
+        
+        self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last Backup: None", text_color="gray")
+        self.lbl_last_backup.pack(side="left", padx=10)
+        
+        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, width=100, fg_color="#2B719E")
+        self.btn_quick_backup.pack(side="left", padx=5)
 
 
         # Console Tabs
         self.console_tabs = ctk.CTkTabview(self.main_frame)
         self.console_tabs.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
         
-        self.console_tabs.add("Server Log")
+        self.console_tabs.add("Console")
         self.console_tabs.add("Tunnel Log")
         
         # Server Console
-        self.server_console = ConsoleWidget(self.console_tabs.tab("Server Log"))
+        self.server_console = ConsoleWidget(self.console_tabs.tab("Console"))
         self.server_console.pack(fill="both", expand=True)
+        
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40)
+        self.console_input_frame.pack(fill="x", pady=(5, 0))
+        
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...")
+        self.entry_console.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.entry_console.bind("<Return>", self.send_server_command)
+        
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=60, command=self.send_server_command)
+        self.btn_send.pack(side="right")
         
         # Tunnel Console
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
@@ -136,6 +193,152 @@ class MCTunnelApp(ctk.CTk):
         # --- Initialization ---
         self.check_java_startup()
         self.load_servers()
+        self.restart_warnings_sent = set()  # Track which warnings have been sent
+        self.start_scheduler()
+
+    def start_scheduler(self):
+        """Starts the background scheduler thread."""
+        def _scheduler_loop():
+            import time
+            import datetime
+            
+            while True:
+                time.sleep(30)  # Check every 30 seconds for better warning accuracy
+                
+                if self.server_runner and self.server_runner.running and self.current_server:
+                    scheduler = logic.Scheduler(self.current_server)
+                    schedule = scheduler.get_schedule()
+                    
+                    if not schedule:
+                        continue
+                    
+                    now = datetime.datetime.now()
+                    remaining = None
+                    
+                    # Calculate time remaining based on schedule type
+                    if schedule["type"] == "interval":
+                        last_run_str = schedule.get("last_run")
+                        if not last_run_str:
+                            continue
+                            
+                        last_run = datetime.datetime.fromisoformat(last_run_str)
+                        interval = datetime.timedelta(hours=schedule["interval_hours"])
+                        next_restart = last_run + interval
+                        remaining = (next_restart - now).total_seconds()
+                        
+                    elif schedule["type"] == "time":
+                        # Time-based schedule - calculate to today's target time
+                        restart_time_str = schedule["restart_time"]
+                        hour, minute = map(int, restart_time_str.split(":"))
+                        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        
+                        # Calculate seconds until target time TODAY
+                        # If negative, we've passed it (will be caught by check_due)
+                        remaining = (target_time - now).total_seconds()
+                    
+                    if remaining is None:
+                        continue
+                    
+                    # Send warnings at specific intervals (only if future restart)
+                    if remaining > 0:
+                        if remaining <= 3660 and remaining > 3600 and '1h' not in self.restart_warnings_sent:
+                            self.send_restart_warning("Server will restart in 1 hour!")
+                            self.restart_warnings_sent.add('1h')
+                        elif remaining <= 1860 and remaining > 1800 and '30m' not in self.restart_warnings_sent:
+                            self.send_restart_warning("Server will restart in 30 minutes!")
+                            self.restart_warnings_sent.add('30m')
+                        elif remaining <= 960 and remaining > 900 and '15m' not in self.restart_warnings_sent:
+                            self.send_restart_warning("Server will restart in 15 minutes!")
+                            self.restart_warnings_sent.add('15m')
+                        elif remaining <= 65 and remaining > 60 and '1m' not in self.restart_warnings_sent:
+                            self.send_restart_warning("Server will restart in 1 minute!")
+                            self.restart_warnings_sent.add('1m')
+                    
+                    # Check if restart is due (uses logic.py check_due which handles both types)
+                    if scheduler.check_due():
+                        self.server_console.log("[System] Scheduled restart due. Initiating final countdown...")
+                        self.restart_server_sequence()
+                        scheduler.update_last_run()
+                        self.restart_warnings_sent.clear()  # Reset for next cycle
+        
+        threading.Thread(target=_scheduler_loop, daemon=True).start()
+
+    def send_restart_warning(self, message):
+        """Sends a restart warning to players."""
+        if self.server_runner and self.server_runner.process:
+            try:
+                self.server_console.log(f"[System] {message}")
+                self.server_runner.process.stdin.write(f"say {message}\n")
+                self.server_runner.process.stdin.flush()
+            except:
+                pass
+
+    def restart_server_sequence(self):
+        """Handles the automated restart sequence with final countdown."""
+        def _restart():
+            import time
+            
+            # Final 5-second countdown
+            for i in [5, 4, 3, 2]:
+                if self.server_runner and self.server_runner.process:
+                    try:
+                        self.server_console.log(f"[System] Restarting in {i}...")
+                        self.server_runner.process.stdin.write(f"say Restarting in {i}...\n")
+                        self.server_runner.process.stdin.flush()
+                    except:
+                        pass
+                time.sleep(1)
+            
+            # Final message
+            if self.server_runner and self.server_runner.process:
+                try:
+                    self.server_console.log("[System] Restarting NOW!")
+                    self.server_runner.process.stdin.write("say Restarting NOW!\n")
+                    self.server_runner.process.stdin.flush()
+                except:
+                    pass
+            
+            time.sleep(1)
+            
+            # Stop Server
+            self.after(0, self.stop_server_action)
+            
+            # Wait for it to actually stop
+            timeout = 30
+            while timeout > 0:
+                if not self.server_runner:
+                    break
+                time.sleep(1)
+                timeout -= 1
+            
+            time.sleep(5)  # Cooldown
+            
+            # Start Server
+            self.after(0, self.start_server_action)
+            
+            # Wait for server to start
+            time.sleep(10)
+            
+            # Check if restart was successful
+            if self.server_runner and self.server_runner.running:
+                self.server_console.log("[System] ✓ Scheduled restart completed successfully! Server is back online.")
+            else:
+                self.server_console.log("[System] ✗ ERROR: Server failed to restart automatically. Please check logs and start manually.")
+            
+        threading.Thread(target=_restart, daemon=True).start()
+
+
+    def send_server_command(self, event=None):
+        if not self.server_runner or not self.server_runner.running:
+            self.server_console.log("[UI] Server is not running.")
+            return
+            
+        cmd = self.entry_console.get()
+        if not cmd:
+            return
+            
+        self.server_runner.send_command(cmd)
+        self.entry_console.delete(0, "end")
 
     def check_java_startup(self):
         """Checks Java version in a separate thread to not block UI."""
@@ -175,20 +378,135 @@ class MCTunnelApp(ctk.CTk):
         self.current_server = server_name
         self.lbl_dash_title.configure(text=f"Server: {server_name}")
         self.btn_start.configure(state="normal")
+        self.btn_start_all.configure(state="normal")
         self.btn_stop.configure(state="disabled") # Initially disabled until started
         self.server_console.log(f"[UI] Selected server: {server_name}")
         
         # Update UI state
         if self.server_runner and self.server_runner.running and self.server_runner.server_name == server_name:
             self.btn_start.configure(state="disabled")
+            self.btn_start_all.configure(state="disabled")
             self.btn_stop.configure(state="normal")
             self.lbl_status.configure(text=f"Status: Running {server_name}", text_color="green")
             self.btn_edit_properties.configure(state="disabled")
         else:
             self.btn_start.configure(state="normal")
+            self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
             self.lbl_status.configure(text="Status: Idle", text_color="white")
             self.btn_edit_properties.configure(state="normal")
+        
+        self.update_management_ui()
+
+    def start_all_action(self):
+        """Start both server and tunnel with one click."""
+        if not self.current_server:
+            return
+        
+        # Start server first
+        self.start_server_action()
+        
+        # Wait a moment then start tunnel
+        import time
+        threading.Thread(target=lambda: (time.sleep(2), self.after(0, self.start_tunnel)), daemon=True).start()
+        
+        self.server_console.log("[System] Starting server and tunnel...")
+
+    def update_management_ui(self):
+        """Updates the management dashboard with current server info."""
+        if not self.current_server:
+            return
+            
+        # Scheduler
+        scheduler = logic.Scheduler(self.current_server)
+        schedule = scheduler.get_schedule()
+        
+        if schedule:
+            self.var_scheduler_enabled.set(True)
+            if schedule["type"] == "interval":
+                self.combo_schedule_mode.set("Interval")
+                self.entry_scheduler_interval.delete(0, "end")
+                self.entry_scheduler_interval.insert(0, str(schedule["interval_hours"]))
+                self.toggle_schedule_mode("Interval")
+            elif schedule["type"] == "time":
+                self.combo_schedule_mode.set("Daily Time")
+                self.entry_restart_time.delete(0, "end")
+                self.entry_restart_time.insert(0, schedule["restart_time"])
+                self.toggle_schedule_mode("Daily Time")
+        else:
+            self.var_scheduler_enabled.set(False)
+        self.toggle_scheduler_inputs()
+            
+        # Backups
+        backup_manager = logic.BackupManager(self.current_server)
+        backups = backup_manager.list_backups()
+        if backups:
+            latest = backups[0] # Sorted desc
+            self.lbl_last_backup.configure(text=f"Last: {latest['date']}")
+        else:
+            self.lbl_last_backup.configure(text="Last Backup: None")
+
+    def toggle_scheduler_inputs(self):
+        """Enable/disable scheduler inputs based on checkbox."""
+        enabled = self.var_scheduler_enabled.get()
+        state = "normal" if enabled else "disabled"
+        self.combo_schedule_mode.configure(state=state)
+        self.entry_scheduler_interval.configure(state=state)
+        self.entry_restart_time.configure(state=state)
+        self.btn_apply_schedule.configure(state=state)
+
+    def toggle_schedule_mode(self, mode=None):
+        """Switch between interval and time-based scheduling."""
+        if mode is None:
+            mode = self.combo_schedule_mode.get()
+        
+        if mode == "Interval":
+            self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
+            self.lbl_interval_unit.grid(row=1, column=3, padx=2)
+            self.entry_restart_time.grid_forget()
+        else:  # Daily Time
+            self.entry_scheduler_interval.grid_forget()
+            self.lbl_interval_unit.grid_forget()
+            self.entry_restart_time.grid(row=1, column=2, padx=2, columnspan=2)
+
+    def save_scheduler_dashboard(self):
+        if not self.current_server:
+            return
+            
+        enabled = self.var_scheduler_enabled.get()
+        mode = self.combo_schedule_mode.get()
+        
+        scheduler = logic.Scheduler(self.current_server)
+        
+        if mode == "Interval":
+            interval = 6
+            try:
+                interval = int(self.entry_scheduler_interval.get())
+            except:
+                pass
+            scheduler.set_restart_schedule(enabled, interval_hours=interval)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
+        else:  # Daily Time
+            restart_time = self.entry_restart_time.get() or "03:00"
+            scheduler.set_restart_schedule(enabled, restart_time=restart_time)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time})")
+
+    def quick_backup_action(self):
+        if not self.current_server:
+            return
+            
+        self.server_console.log("[System] Creating backup...")
+        
+        def _run():
+            manager = logic.BackupManager(self.current_server)
+            path = manager.create_backup()
+            if path:
+                self.server_console.log(f"[System] Backup created: {os.path.basename(path)}")
+                self.after(0, self.update_management_ui)
+            else:
+                self.server_console.log("[Error] Backup failed.")
+                
+        threading.Thread(target=_run, daemon=True).start()
 
     def edit_server_properties(self):
         if not self.current_server:
@@ -198,6 +516,8 @@ class MCTunnelApp(ctk.CTk):
             return
         
         ServerPropertiesEditor(self, self.current_server, logic)
+        # Refresh UI after close in case they changed settings there
+        # We can't easily hook into close, but the dashboard updates on select/actions.
 
     def update_console(self, text):
         """Thread-safe server console update."""
@@ -223,6 +543,7 @@ class MCTunnelApp(ctk.CTk):
         self.server_runner.start()
         
         self.btn_start.configure(state="disabled")
+        self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
         self.lbl_status.configure(text=f"Status: Running {self.current_server}", text_color="green")
 
@@ -230,6 +551,7 @@ class MCTunnelApp(ctk.CTk):
         if self.server_runner:
             self.server_runner.stop()
             self.btn_start.configure(state="normal")
+            self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
             self.lbl_status.configure(text="Status: Idle", text_color="white")
             self.server_runner = None

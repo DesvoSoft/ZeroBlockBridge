@@ -1,46 +1,70 @@
 # 🚀 Zero Block Bridge
 
-**Minecraft Server Management with Built-in Tunneling**
+**Minecraft Server Management with Built-in Tunneling, Backups & Automation**
 
-Zero Block Bridge is a lightweight desktop application that simplifies Minecraft server creation and management. No terminal commands, no port forwarding hassles—just click and play.
+Zero Block Bridge is a feature-rich desktop application that simplifies Minecraft server creation and management. Create servers with a wizard, automate restarts, manage backups, and share with friends—no terminal commands or port forwarding required.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Java 17+](https://img.shields.io/badge/java-17+-orange.svg)](https://adoptium.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## Features
+## ✨ Features
 
-- ** One-Click Server Creation**: Download and configure Vanilla or Fabric servers automatically
-- ** Modern GUI**: Clean, intuitive interface built with CustomTkinter
-- ** Built-in Tunneling**: Integrated Playit.gg support for easy multiplayer without port forwarding
-- ** Separate Log Streams**: Dedicated tabs for Server and Tunnel logs
-- ** Live Console Output**: Real-time monitoring of server activity
-- ** Auto-Update**: Automatic Playit agent updates to the latest version
-- ** Easy Management**: Start, stop, and reset servers with a single click
-- ** Multi-Version Support**:
-  - Vanilla 1.21.1
-  - Fabric 1.20.1
+### Server Management
+
+- **📝 5-Step Creation Wizard**: Name, type, RAM, world settings, and review
+- **🎮 Multi-Version Support**: Vanilla 1.21.1 and Fabric 1.20.1
+- **⚡ Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max)
+- **🎛️ Server Properties Editor**: Tabbed interface for all settings
+- **💻 Integrated Console**: Send commands directly from the app
+- **📊 Live Monitoring**: Real-time server and tunnel logs in separate tabs
+
+### Automation & Backups
+
+- **💾 One-Click Backups**: Create and restore ZIP backups instantly
+- **⏰ Scheduled Restarts**:
+  - Interval mode (every X hours)
+  - Daily time mode (specific time like 03:00)
+  - Multi-stage warnings (1h, 30m, 15m, 1m, countdown)
+  - Automatic success/error notifications
+- **🔄 Auto-Management**: Set it and forget it with automated restarts + backups
+
+### Tunneling & Sharing
+
+- **🌐 Built-in Playit.gg Integration**: No port forwarding needed
+- **🔗 One-Click Tunnel Setup**: Auto-opens claim link in browser
+- **📍 Public IP Display**: Share `.ply.gg` address with friends
+- **🔄 Auto-Update**: Agent stays up to date automatically
+
+### Developer Experience
+
+- **🎨 Modern GUI**: Clean dark theme built with CustomTkinter
+- **Java 24 Support**: Fully compatible with latest Java versions
+- **🛡️ Error Handling**: Comprehensive validation and user feedback
+- **📁 Organized Structure**: Dedicated folders for each server
 
 ---
 
-## Screenshots
+## 🖼️ Interface Overview
 
-> **Note**: Screenshots coming soon! The application features a dark-themed interface with:
->
-> - Server list sidebar
-> - Control panel with status indicators
-> - Tabbed console (Server Log / Tunnel Log)
-> - Tunnel management with one-click setup
+The application features:
+
+- **Sidebar**: Server list with selection
+- **Dashboard**: Server/tunnel controls, auto-restart settings, quick backup
+- **Tabbed Console**: Separate logs for Server and Tunnel output
+- **Console Input**: Send server commands directly from the UI
+- **Properties Editor**: 6 tabs (General, World, Network, Advanced, Backups, Automation)
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Python 3.10+** ([Download](https://www.python.org/downloads/))
-- **Java 17+** for running Minecraft servers ([Download](https://adoptium.net/))
+- **Java 17+** (Java 24 fully supported) ([Download](https://adoptium.net/))
 
 ### Installation
 
@@ -54,7 +78,7 @@ Zero Block Bridge is a lightweight desktop application that simplifies Minecraft
 2. **Install dependencies**
 
    ```bash
-   pip install customtkinter requests
+   pip install customtkinter requests psutil
    ```
 
 3. **Run the application**
@@ -62,141 +86,163 @@ Zero Block Bridge is a lightweight desktop application that simplifies Minecraft
    python app/main.py
    ```
 
----
+### First Server
 
-## Usage
-
-### Creating Your First Server
-
-1. **Launch** the application
-2. Click **"Create Server"**
-3. Enter a server name
-4. Choose server type:
-   - `1` = Vanilla 1.21.1
-   - `2` = Fabric 1.20.1
-5. Wait for installation to complete
-6. Select your server from the sidebar and click **"Start Server"**
-
-### Setting Up Online Play (Tunneling)
-
-1. Click **"Start Tunnel"** in the tunnel controls
-2. A browser window will open with your claim URL
-3. Link the agent to your Playit.gg account
-4. Copy the public IP address shown in the UI
-5. Share this IP with friends to join your server
-
-For detailed usage instructions, see **[USAGE.md](USAGE.md)**.
+1. Click **"Create Server"** in the sidebar
+2. Follow the 5-step wizard:
+   - Name your server
+   - Choose Vanilla or Fabric
+   - Set RAM allocation
+   - Configure world settings
+   - Review and create
+3. Select the server from the list
+4. Click **"▶ Start"**
+5. **Optional**: Enable tunneling to play with friends online
 
 ---
 
-## Architecture
+## 📖 Documentation
 
-### Project Structure
+- **[USAGE.md](USAGE.md)** - Complete user guide with all features
+- **[TESTING.md](TESTING.md)** - Test cases and verification steps
+
+---
+
+## 🎯 Key Features Explained
+
+### Server Creation Wizard
+
+The wizard guides you through:
+
+1. **Type & Name**: Choose Vanilla/Fabric and name your server
+2. **RAM**: Use slider or type exact MB value (with validation)
+3. **World Settings**: Seed, game mode, difficulty
+4. **Location**: View save location (custom paths coming soon)
+5. **Review**: Confirm all settings before creation
+
+### Automated Restarts
+
+Configure from the dashboard or properties editor:
+
+- **Interval Mode**: Restart every 1, 6, 12, or 24 hours
+- **Daily Time Mode**: Restart at specific time (e.g., 03:00 for 3AM)
+- **Warnings**: Players get in-game notifications starting 1 hour before
+- **Final Countdown**: 5-4-3-2-1 second countdown before restart
+- **Auto-Recovery**: Success/error messages after restart completes
+
+### Backups
+
+- **Create**: Dashboard button or Properties → Backups tab
+- **Format**: ZIP archives with timestamp (`backup_YYYYMMDD_HHMMSS.zip`)
+- **Restore**: Select backup in properties editor (wipes current server!)
+- **Storage**: `servers/<server-name>/backups/`
+
+### Console Commands
+
+Send any Minecraft command:
+
+```
+say Hello everyone!
+op PlayerName
+gamemode creative PlayerName
+weather clear
+whitelist add PlayerName
+```
+
+Commands appear in the log with `>` prefix and execute immediately.
+
+---
+
+## 🏗️ Project Structure
 
 ```
 MCTunnel/
 ├── app/
-│   ├── main.py              # Application entry point
-│   ├── ui_components.py     # Custom UI widgets
-│   ├── logic.py             # Server management logic
-│   └── playit_manager.py    # Playit.gg integration
-├── bin/                     # Playit agent binary (auto-downloaded)
-├── config/                  # Playit configuration
-├── servers/                 # Server instances
-│   └── <server-name>/       # Individual server files
-├── config.json              # Application settings
-└── README.md
+│   ├── main.py                    # Main application & UI
+│   ├── logic.py                   # Server/backup/scheduler logic
+│   ├── server_wizard.py           # 5-step creation wizard
+│   ├── server_properties_editor.py # Properties editor UI
+│   ├── playit_manager.py          # Tunneling integration
+│   └── ui_components.py           # Reusable UI widgets
+│
+├── servers/                       # Created servers
+│   └── <server-name>/
+│       ├── server.jar / fabric-server-launch.jar
+│       ├── server.properties
+│       ├── world/
+│       ├── backups/
+│       └── metadata.json          # Scheduler config
+│
+├── bin/                           # Auto-managed
+│   └── playit.exe
+│
+├── config/                        # Playit config
+│
+├── USAGE.md                       # User guide
+├── TESTING.md                     # Test documentation
+└── README.md                      # This file
 ```
 
-### Tech Stack
+---
 
-- **Language**: Python 3.10+
-- **GUI Framework**: CustomTkinter (modern themed widgets)
-- **Networking**:
-  - `requests` for HTTP downloads
-  - Playit.gg agent (v0.16.5) for tunneling
-- **Concurrency**: `threading` for non-blocking operations
-- **Process Management**: `subprocess` for server control
+## 🛠️ Technical Details
+
+### Supported Versions
+
+- **Vanilla**: 1.21.1 (latest official release)
+- **Fabric**: 1.20.1 (with Fabric Loader 0.18.1)
+
+### System Requirements
+
+- **OS**: Windows, macOS, Linux
+- **Python**: 3.10 or higher
+- **Java**: 17 minimum, 24 fully supported
+- **RAM**: 2GB minimum (4GB+ recommended for modded)
+- **Disk**: ~500MB per server + world size
+
+### Dependencies
+
+```
+customtkinter>=5.0.0    # Modern UI framework
+requests>=2.31.0        # HTTP operations
+psutil>=5.9.0           # System info (RAM detection)
+```
 
 ---
 
-## Roadmap
+## 🤝 Contributing
 
-### Completed ✅
+Contributions are welcome! Areas for improvement:
 
-- [x] Sprint 1: UI Framework & Configuration
-- [x] Sprint 2: File Management & Downloads
-- [x] Sprint 3: Server Process Management
-- [x] Sprint 4: Playit.gg Integration
-
-### Future Enhancements 🚧
-
-- [ ] Custom server.properties editor
-- [ ] Mod manager for Fabric servers
-- [ ] Server backup/restore
-- [ ] Multiple tunnel profiles
-- [ ] Plugin management for Bukkit/Spigot
-- [ ] Player whitelist management
-- [ ] Resource pack hosting
+- Additional server versions (Paper, Purpur, etc.)
+  -More automation options (scheduled backups, auto-updates)
+- Custom storage locations
+- Multi-server simultaneous operation
+- Plugin/mod management UI
 
 ---
 
-## Troubleshooting
-
-### "Java NOT FOUND" Error
-
-Install Java 17 or later:
-
-- [Adoptium (Recommended)](https://adoptium.net/)
-- [Oracle Java](https://www.oracle.com/java/technologies/downloads/)
-
-### Playit Agent Errors
-
-**AgentDisabledOverLimit**: You have too many agents registered. Delete unused agents in your [Playit.gg dashboard](https://playit.gg/account/agents).
-
-**Connection Issues**: Click "Reset Agent" to clear the configuration and start fresh.
-
-### Server Won't Start
-
-- Verify Java is installed and in PATH
-- Check console logs for specific errors
-- Ensure server port (default 25565) isn't already in use
-
-For more troubleshooting, see **[TESTING.md](TESTING.md)**.
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- [Playit.gg](https://playit.gg/) for the tunneling service
-- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) for the modern UI framework
-- The Minecraft community for inspiration
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/MCTunnel/issues)
-- **Documentation**: See [USAGE.md](USAGE.md) and [TESTING.md](TESTING.md)
+- **CustomTkinter**: Modern UI framework by Tom Schimansky
+- **Playit.gg**: Free tunneling service for easy multiplayer
+- **Minecraft/Mojang**: For creating an amazing game
+- **Fabric**: Lightweight modding platform
 
 ---
 
-**Made with ❤️ by DesvoSoft**
+## 📞 Support
+
+- **Documentation**: See [USAGE.md](USAGE.md) for detailed instructions
+- **Issues**: Report bugs or request features via GitHub Issues
+- **Discussions**: Share your server setups and get help from the community
+
+---
+
+**Made with ❤️ for the Minecraft community**

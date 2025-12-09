@@ -199,7 +199,16 @@ class ServerRunner:
             self.console_callback(f"[Error] Server jar not found: {jar_file}")
             return
 
-        cmd = ["java", f"-Xmx{self.ram_allocation}", "-jar", jar_file, "nogui"]
+        # Build command with Java 24+ compatibility flags
+        cmd = [
+            "java",
+            f"-Xmx{self.ram_allocation}",
+            "--enable-native-access=ALL-UNNAMED",  # Fix restricted method warnings
+            "-Dorg.lwjgl.util.NoChecks=true",       # Reduce LWJGL warnings
+            "-jar",
+            jar_file,
+            "nogui"
+        ]
         
         self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
         
@@ -248,6 +257,18 @@ class ServerRunner:
                     self.process.kill()
                 except:
                     pass
+
+    def send_command(self, command):
+        """Sends a command to the server stdin."""
+        if not self.running or not self.process or not self.process.stdin:
+            return
+            
+        try:
+            self.console_callback(f"> {command}")
+            self.process.stdin.write(command + "\n")
+            self.process.stdin.flush()
+        except Exception as e:
+            self.console_callback(f"[Error] Failed to send command: {e}")
 
     def _read_output(self):
         """Reads stdout from the process and sends it to the callback."""
@@ -328,3 +349,191 @@ def save_server_properties(server_name, new_properties):
             
     with open(props_path, "w") as f:
         f.writelines(new_lines)
+
+import datetime
+import zipfile
+
+class BackupManager:
+    def __init__(self, server_name):
+        self.server_name = server_name
+        self.server_path = os.path.join(SERVERS_DIR, server_name)
+        self.backup_dir = os.path.join("backups", server_name)
+        
+        if not os.path.exists(self.backup_dir):
+            os.makedirs(self.backup_dir)
+
+    def create_backup(self):
+        """Creates a zip backup of the server directory."""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        backup_filename = f"{timestamp}.zip"
+        backup_path = os.path.join(self.backup_dir, backup_filename)
+        
+        try:
+            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(self.server_path):
+                    # Exclude backups folder if it's somehow inside (shouldn't be, but safety first)
+                    if "backups" in root:
+                        continue
+                        
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Archive name relative to server root
+                        arcname = os.path.relpath(file_path, self.server_path)
+                        zipf.write(file_path, arcname)
+            return backup_path
+        except Exception as e:
+            print(f"Backup failed: {e}")
+            return None
+
+    def list_backups(self):
+        """Returns a list of dicts with backup info."""
+        backups = []
+        if not os.path.exists(self.backup_dir):
+            return backups
+            
+        for filename in os.listdir(self.backup_dir):
+            if filename.endswith(".zip"):
+                path = os.path.join(self.backup_dir, filename)
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                backups.append({
+                    "name": filename,
+                    "path": path,
+                    "size": f"{size_mb:.2f} MB",
+                    "date": filename.replace(".zip", "")
+                })
+        # Sort by date desc
+        backups.sort(key=lambda x: x["name"], reverse=True)
+        return backups
+
+    def restore_backup(self, backup_path):
+        """Restores a backup, wiping the current server directory first."""
+        if not os.path.exists(backup_path):
+            return False
+            
+        # Safety: Create a temp backup of current state? 
+        # For now, let's just wipe and restore.
+        
+        try:
+            # 1. Clear server directory
+            for item in os.listdir(self.server_path):
+                item_path = os.path.join(self.server_path, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+            
+            # 2. Extract backup
+            with zipfile.ZipFile(backup_path, 'r') as zipf:
+                zipf.extractall(self.server_path)
+                
+            return True
+        except Exception as e:
+            print(f"Restore failed: {e}")
+            return False
+
+class Scheduler:
+    def __init__(self, server_name):
+        self.server_name = server_name
+        self.server_path = os.path.join(SERVERS_DIR, server_name)
+        self.metadata_path = os.path.join(self.server_path, "metadata.json")
+        
+    def _load_metadata(self):
+        if not os.path.exists(self.metadata_path):
+            return {}
+        try:
+            with open(self.metadata_path, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+
+    def _save_metadata(self, data):
+        with open(self.metadata_path, "w") as f:
+            json.dump(data, f)
+
+    def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None):
+        """
+        Sets the restart schedule.
+        enabled: bool
+        interval_hours: int (e.g., 6, 12, 24) for interval mode
+        restart_time: str (e.g., "03:00") for time mode
+        """
+        data = self._load_metadata()
+        
+        if not enabled:
+            if "scheduler" in data:
+                del data["scheduler"]
+        else:
+            if restart_time:
+                # Time-based schedule
+                data["scheduler"] = {
+                    "type": "time",
+                    "restart_time": restart_time,
+                    "last_run": None  # Will be set after first restart
+                }
+            else:
+               # Interval-based schedule
+                data["scheduler"] = {
+                    "type": "interval",
+                    "interval_hours": interval_hours,
+                    "last_run": datetime.datetime.now().isoformat()
+                }
+            
+        self._save_metadata(data)
+
+    def get_schedule(self):
+        data = self._load_metadata()
+        return data.get("scheduler", None)
+
+    def check_due(self):
+        """Checks if a restart is due. Returns True if yes."""
+        data = self._load_metadata()
+        scheduler = data.get("scheduler")
+        
+        if not scheduler:
+            return False
+            
+        if scheduler["type"] == "interval":
+            last_run_str = scheduler.get("last_run")
+            if not last_run_str:
+                self.update_last_run()
+                return False
+                
+            last_run = datetime.datetime.fromisoformat(last_run_str)
+            interval = datetime.timedelta(hours=scheduler["interval_hours"])
+            
+            if datetime.datetime.now() >= last_run + interval:
+                return True
+                
+        elif scheduler["type"] == "time":
+            # Time-based restart (e.g., daily at 03:00)
+            restart_time_str = scheduler["restart_time"]  # "HH:MM"
+            last_run_str = scheduler.get("last_run")
+            
+            # Parse target time for today
+            hour, minute = map(int, restart_time_str.split(":"))
+            now = datetime.datetime.now()
+            target_time_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # Check if we've already restarted today
+            if last_run_str:
+                last_run = datetime.datetime.fromisoformat(last_run_str)
+                # If last restart was today and within 5 minutes of target, don't restart again
+                if last_run.date() == now.date():
+                    time_since_last = (now - last_run).total_seconds()
+                    if time_since_last < 300:  # 5 minutes
+                        return False
+            
+            # Check if we're within the 2-minute window around target time
+            time_diff = (now - target_time_today).total_seconds()
+            # Trigger if we're past the target time but within 2 minutes
+            if 0 <= time_diff < 120:
+                return True
+
+        return False
+
+    def update_last_run(self):
+        data = self._load_metadata()
+        if "scheduler" in data:
+            data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
+            self._save_metadata(data)
+
