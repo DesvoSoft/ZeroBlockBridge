@@ -28,6 +28,7 @@ class PlayitManager:
         self.process = None
         self.running = False
         self.binary_path = self._get_binary_path()
+        self.claim_url_detected = False
 
     def _get_binary_path(self):
         system = platform.system()
@@ -65,31 +66,41 @@ class PlayitManager:
     def start(self):
         """Starts the playit agent subprocess."""
         if self.running:
+            self.console_callback("[Debug] Agent already running.")
             return
 
+        self.claim_url_detected = False
+
         if not self.ensure_binary():
+            self.console_callback("[Debug] Binary check failed.")
             return
 
         # Ensure config directory exists
         if not os.path.exists(CONFIG_DIR):
             os.makedirs(CONFIG_DIR)
 
-        self.console_callback("[Playit] Starting tunnel agent...")
+        self.console_callback(f"[Debug] Starting agent from: {self.binary_path}")
+        self.console_callback(f"[Debug] CWD: {os.path.abspath(CONFIG_DIR)}")
         
         try:
             # Run in the config directory so playit.toml is stored there
-            # We'll try to disable colors if playit supports a flag, but for now just run it.
+            # Set RUST_LOG to force output
+            env = os.environ.copy()
+            env["RUST_LOG"] = "info"
+            
             self.process = subprocess.Popen(
-                [self.binary_path],
+                [self.binary_path, "--stdout"],
                 cwd=os.path.abspath(CONFIG_DIR),
-                stdin=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=False, # Binary mode to avoid buffering
-                bufsize=0   # Unbuffered
+                text=False, 
+                bufsize=0,
+                env=env
             )
             self.running = True
             self.status_callback("Starting...", None)
+            self.console_callback(f"[Debug] Process started with PID: {self.process.pid}")
             
             # Start the output reader thread
             threading.Thread(target=self._read_output, daemon=True).start()
@@ -118,17 +129,18 @@ class PlayitManager:
 
     def _read_output(self):
         """Reads stdout from the process character by character (binary)."""
+        self.console_callback("[Debug] Output reader thread started.")
         try:
             buffer = bytearray()
             while self.running and self.process:
                 # Read 1 byte
+                # self.console_callback("[Debug] Waiting for byte...") # Too spammy?
                 byte = self.process.stdout.read(1)
                 if not byte:
+                    self.console_callback("[Debug] EOF received.")
                     break
                 
-                # DEBUG: Print raw byte to see if we get anything
-                # sys.stdout.write(str(byte)) 
-                # self.console_callback(f"[Debug] {byte}") 
+                # self.console_callback(f"[Debug] Byte: {byte}") # Very spammy but useful if stuck
                 
                 if byte == b'\n' or byte == b'\r':
                     if buffer:
@@ -161,7 +173,9 @@ class PlayitManager:
         claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
         if claim_match:
             url = claim_match.group(1)
-            self.claim_callback(url)
+            if not self.claim_url_detected:
+                self.claim_url_detected = True
+                self.claim_callback(url)
 
         # 2. Check for Tunnel Address
         # Pattern: looks for .ply.gg domains
