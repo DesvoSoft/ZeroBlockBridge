@@ -122,21 +122,32 @@ class MCTunnelApp(ctk.CTk):
         self.management_frame.pack(pady=5, fill="x")
         
         # Scheduler Section
-        self.scheduler_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
-        self.scheduler_frame.pack(side="left", padx=20)
+        scheduler_container = ctk.CTkFrame(self.management_frame, fg_color="transparent")
+        scheduler_container.pack(side="left", padx=20)
         
-        self.lbl_scheduler = ctk.CTkLabel(self.scheduler_frame, text="Auto-Restart:", font=("Roboto", 12, "bold"))
-        self.lbl_scheduler.pack(side="left", padx=5)
+        self.lbl_scheduler = ctk.CTkLabel(scheduler_container, text="Auto-Restart:", font=("Roboto", 12, "bold"))
+        self.lbl_scheduler.grid(row=0, column=0, padx=5, sticky="w", columnspan=3)
         
         self.var_scheduler_enabled = ctk.BooleanVar()
-        self.chk_scheduler = ctk.CTkCheckBox(self.scheduler_frame, text="Enable", variable=self.var_scheduler_enabled, command=self.save_scheduler_dashboard)
-        self.chk_scheduler.pack(side="left", padx=5)
+        self.chk_scheduler = ctk.CTkCheckBox(scheduler_container, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs)
+        self.chk_scheduler.grid(row=1, column=0, padx=5)
         
-        self.entry_scheduler_interval = ctk.CTkEntry(self.scheduler_frame, width=50, placeholder_text="6")
-        self.entry_scheduler_interval.pack(side="left", padx=5)
+        self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode)
+        self.combo_schedule_mode.grid(row=1, column=1, padx=5)
+        self.combo_schedule_mode.set("Interval")
+        
+        # Interval inputs (shown by default)
+        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text="6")
+        self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
         self.entry_scheduler_interval.bind("<Return>", lambda e: self.save_scheduler_dashboard())
         
-        ctk.CTkLabel(self.scheduler_frame, text="h").pack(side="left")
+        self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
+        self.lbl_interval_unit.grid(row=1, column=3, padx=2)
+        
+        # Time inputs (hidden by default)
+        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text="03:00")
+        
+
 
         # Backup Section
         self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
@@ -160,6 +171,16 @@ class MCTunnelApp(ctk.CTk):
         self.server_console = ConsoleWidget(self.console_tabs.tab("Server Log"))
         self.server_console.pack(fill="both", expand=True)
         
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Server Log"), height=40)
+        self.console_input_frame.pack(fill="x", pady=(5, 0))
+        
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...")
+        self.entry_console.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.entry_console.bind("<Return>", self.send_server_command)
+        
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=60, command=self.send_server_command)
+        self.btn_send.pack(side="right")
+        
         # Tunnel Console
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
         self.tunnel_console.pack(fill="both", expand=True)
@@ -167,56 +188,151 @@ class MCTunnelApp(ctk.CTk):
         # --- Initialization ---
         self.check_java_startup()
         self.load_servers()
+        self.restart_warnings_sent = set()  # Track which warnings have been sent
         self.start_scheduler()
 
     def start_scheduler(self):
         """Starts the background scheduler thread."""
         def _scheduler_loop():
             import time
+            import datetime
+            
             while True:
-                time.sleep(60) # Check every minute
+                time.sleep(30)  # Check every 30 seconds for better warning accuracy
                 
                 if self.server_runner and self.server_runner.running and self.current_server:
                     scheduler = logic.Scheduler(self.current_server)
-                    if scheduler.check_due():
-                        self.server_console.log("[System] Scheduled restart due. Initiating sequence...")
+                    schedule = scheduler.get_schedule()
+                    
+                    if not schedule:
+                        continue
+                    
+                    now = datetime.datetime.now()
+                    remaining = None
+                    
+                    # Calculate time remaining based on schedule type
+                    if schedule["type"] == "interval":
+                        last_run_str = schedule.get("last_run")
+                        if not last_run_str:
+                            continue
+                            
+                        last_run = datetime.datetime.fromisoformat(last_run_str)
+                        interval = datetime.timedelta(hours=schedule["interval_hours"])
+                        next_restart = last_run + interval
+                        remaining = (next_restart - now).total_seconds()
+                        
+                    elif schedule["type"] == "time":
+                        # Time-based schedule
+                        restart_time_str = schedule["restart_time"]
+                        hour, minute = map(int, restart_time_str.split(":"))
+                        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        
+                        # If target time passed today, it's for tomorrow
+                        if target_time <= now:
+                            target_time += datetime.timedelta(days=1)
+                        
+                        remaining = (target_time - now).total_seconds()
+                    
+                    if remaining is None or remaining < 0:
+                        continue
+                    
+                    # Send warnings at specific intervals
+                    if remaining <= 3660 and remaining > 3600 and '1h' not in self.restart_warnings_sent:
+                        self.send_restart_warning("Server will restart in 1 hour!")
+                        self.restart_warnings_sent.add('1h')
+                    elif remaining <= 1860 and remaining > 1800 and '30m' not in self.restart_warnings_sent:
+                        self.send_restart_warning("Server will restart in 30 minutes!")
+                        self.restart_warnings_sent.add('30m')
+                    elif remaining <= 960 and remaining > 900 and '15m' not in self.restart_warnings_sent:
+                        self.send_restart_warning("Server will restart in 15 minutes!")
+                        self.restart_warnings_sent.add('15m')
+                    elif remaining <= 65 and remaining > 60 and '1m' not in self.restart_warnings_sent:
+                        self.send_restart_warning("Server will restart in 1 minute!")
+                        self.restart_warnings_sent.add('1m')
+                    elif remaining <= 0:
+                        self.server_console.log("[System] Scheduled restart due. Initiating final countdown...")
                         self.restart_server_sequence()
-                        scheduler.update_last_run() # Update immediately to prevent double trigger
+                        scheduler.update_last_run()
+                        self.restart_warnings_sent.clear()  # Reset for next cycle
         
         threading.Thread(target=_scheduler_loop, daemon=True).start()
 
+    def send_restart_warning(self, message):
+        """Sends a restart warning to players."""
+        if self.server_runner and self.server_runner.process:
+            try:
+                self.server_console.log(f"[System] {message}")
+                self.server_runner.process.stdin.write(f"say {message}\n")
+                self.server_runner.process.stdin.flush()
+            except:
+                pass
+
     def restart_server_sequence(self):
-        """Handles the automated restart sequence."""
+        """Handles the automated restart sequence with final countdown."""
         def _restart():
-            # 1. Warn players
+            import time
+            
+            # Final 5-second countdown
+            for i in [5, 4, 3, 2]:
+                if self.server_runner and self.server_runner.process:
+                    try:
+                        self.server_console.log(f"[System] Restarting in {i}...")
+                        self.server_runner.process.stdin.write(f"say Restarting in {i}...\n")
+                        self.server_runner.process.stdin.flush()
+                    except:
+                        pass
+                time.sleep(1)
+            
+            # Final message
             if self.server_runner and self.server_runner.process:
                 try:
-                    self.server_console.log("[System] Broadcasting restart warning...")
-                    self.server_runner.process.stdin.write("say Server restarting in 10 seconds for scheduled maintenance!\n")
+                    self.server_console.log("[System] Restarting NOW!")
+                    self.server_runner.process.stdin.write("say Restarting NOW!\n")
                     self.server_runner.process.stdin.flush()
                 except:
                     pass
             
-            import time
-            time.sleep(10)
+            time.sleep(1)
             
-            # 2. Stop Server
+            # Stop Server
             self.after(0, self.stop_server_action)
             
             # Wait for it to actually stop
             timeout = 30
             while timeout > 0:
-                if not self.server_runner: # stop_server_action sets it to None
+                if not self.server_runner:
                     break
                 time.sleep(1)
                 timeout -= 1
             
-            time.sleep(5) # Cooldown
+            time.sleep(5)  # Cooldown
             
-            # 3. Start Server
+            # Start Server
             self.after(0, self.start_server_action)
             
+            # Wait for server to start
+            time.sleep(10)
+            
+            # Check if restart was successful
+            if self.server_runner and self.server_runner.running:
+                self.server_console.log("[System] ✓ Scheduled restart completed successfully! Server is back online.")
+            else:
+                self.server_console.log("[System] ✗ ERROR: Server failed to restart automatically. Please check logs and start manually.")
+            
         threading.Thread(target=_restart, daemon=True).start()
+
+
+    def send_server_command(self, event=None):
+        if not self.server_runner or not self.server_runner.running:
+            self.server_console.log("[UI] Server is not running.")
+            return
+            
+        cmd = self.entry_console.get()
+        if not cmd:
+            return
+            
+        self.server_runner.send_command(cmd)
+        self.entry_console.delete(0, "end")
 
     def check_java_startup(self):
         """Checks Java version in a separate thread to not block UI."""
@@ -285,10 +401,18 @@ class MCTunnelApp(ctk.CTk):
         if schedule:
             self.var_scheduler_enabled.set(True)
             if schedule["type"] == "interval":
+                self.combo_schedule_mode.set("Interval")
                 self.entry_scheduler_interval.delete(0, "end")
                 self.entry_scheduler_interval.insert(0, str(schedule["interval_hours"]))
+                self.toggle_schedule_mode("Interval")
+            elif schedule["type"] == "time":
+                self.combo_schedule_mode.set("Daily Time")
+                self.entry_restart_time.delete(0, "end")
+                self.entry_restart_time.insert(0, schedule["restart_time"])
+                self.toggle_schedule_mode("Daily Time")
         else:
             self.var_scheduler_enabled.set(False)
+        self.toggle_scheduler_inputs()
             
         # Backups
         backup_manager = logic.BackupManager(self.current_server)
@@ -299,20 +423,51 @@ class MCTunnelApp(ctk.CTk):
         else:
             self.lbl_last_backup.configure(text="Last Backup: None")
 
+    def toggle_scheduler_inputs(self):
+        """Enable/disable scheduler inputs based on checkbox."""
+        enabled = self.var_scheduler_enabled.get()
+        state = "normal" if enabled else "disabled"
+        self.combo_schedule_mode.configure(state=state)
+        self.entry_scheduler_interval.configure(state=state)
+        self.entry_restart_time.configure(state=state)
+        if enabled:
+            self.save_scheduler_dashboard()
+
+    def toggle_schedule_mode(self, mode=None):
+        """Switch between interval and time-based scheduling."""
+        if mode is None:
+            mode = self.combo_schedule_mode.get()
+        
+        if mode == "Interval":
+            self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
+            self.lbl_interval_unit.grid(row=1, column=3, padx=2)
+            self.entry_restart_time.grid_forget()
+        else:  # Daily Time
+            self.entry_scheduler_interval.grid_forget()
+            self.lbl_interval_unit.grid_forget()
+            self.entry_restart_time.grid(row=1, column=2, padx=2, columnspan=2)
+
     def save_scheduler_dashboard(self):
         if not self.current_server:
             return
             
         enabled = self.var_scheduler_enabled.get()
-        interval = 6
-        try:
-            interval = int(self.entry_scheduler_interval.get())
-        except:
-            pass
-            
+        mode = self.combo_schedule_mode.get()
+        
         scheduler = logic.Scheduler(self.current_server)
-        scheduler.set_restart_schedule(enabled, interval)
-        self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
+        
+        if mode == "Interval":
+            interval = 6
+            try:
+                interval = int(self.entry_scheduler_interval.get())
+            except:
+                pass
+            scheduler.set_restart_schedule(enabled, interval_hours=interval)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
+        else:  # Daily Time
+            restart_time = self.entry_restart_time.get() or "03:00"
+            scheduler.set_restart_schedule(enabled, restart_time=restart_time)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time})")
 
     def quick_backup_action(self):
         if not self.current_server:

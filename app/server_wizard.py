@@ -113,13 +113,26 @@ class ServerWizard(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.content_frame, text=f"RAM Allocation (MB):").pack(anchor="w", pady=(0, 5))
         
-        self.lbl_ram_value = ctk.CTkLabel(self.content_frame, text=f"{self.wizard_data['ram']} MB")
-        self.lbl_ram_value.pack(anchor="w")
+        # Manual entry and slider in same row
+        input_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        input_frame.pack(fill="x", pady=(0, 10))
+        
+        self.entry_ram = ctk.CTkEntry(input_frame, width=100, placeholder_text="MB")
+        self.entry_ram.pack(side="left", padx=(0, 10))
+        self.entry_ram.insert(0, str(self.wizard_data['ram']))
+        self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
+        
+        self.lbl_ram_value = ctk.CTkLabel(input_frame, text=f"or use slider")
+        self.lbl_ram_value.pack(side="left")
         
         self.slider_ram = ctk.CTkSlider(self.content_frame, from_=512, to=max_slider, number_of_steps=100,
                                        command=self.update_ram_label)
         self.slider_ram.set(self.wizard_data["ram"])
         self.slider_ram.pack(fill="x", pady=(0, 20))
+        
+        # Validation label
+        self.lbl_ram_error = ctk.CTkLabel(self.content_frame, text="", text_color="red")
+        self.lbl_ram_error.pack(anchor="w")
         
         # Recommendations
         rec_frame = ctk.CTkFrame(self.content_frame)
@@ -128,9 +141,31 @@ class ServerWizard(ctk.CTkToplevel):
         ctk.CTkLabel(rec_frame, text="• Vanilla: 2048 - 4096 MB").pack(anchor="w", padx=10)
         ctk.CTkLabel(rec_frame, text="• Modded (Fabric): 6144 - 8192 MB").pack(anchor="w", padx=10)
         
+    def update_ram_from_entry(self, event=None):
+        try:
+            value = int(self.entry_ram.get())
+            total_ram = psutil.virtual_memory().total / (1024 * 1024)
+            max_ram = min(16384, total_ram - 1024)
+            
+            if value < 512:
+                self.lbl_ram_error.configure(text="⚠ Minimum: 512 MB")
+                return
+            elif value > max_ram:
+                self.lbl_ram_error.configure(text=f"⚠ Maximum: {int(max_ram)} MB")
+                return
+            else:
+                self.lbl_ram_error.configure(text="")
+                self.wizard_data["ram"] = value
+                self.slider_ram.set(value)
+        except ValueError:
+            if self.entry_ram.get():  # Only show error if not empty
+                self.lbl_ram_error.configure(text="⚠ Enter a valid number")
+        
     def update_ram_label(self, value):
-        self.lbl_ram_value.configure(text=f"{int(value)} MB")
         self.wizard_data["ram"] = int(value)
+        self.entry_ram.delete(0, "end")
+        self.entry_ram.insert(0, str(int(value)))
+        self.lbl_ram_error.configure(text="")
 
     def show_step_3(self):
         self.clear_content()

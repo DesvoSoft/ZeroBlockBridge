@@ -199,7 +199,16 @@ class ServerRunner:
             self.console_callback(f"[Error] Server jar not found: {jar_file}")
             return
 
-        cmd = ["java", f"-Xmx{self.ram_allocation}", "-jar", jar_file, "nogui"]
+        # Build command with Java 24+ compatibility flags
+        cmd = [
+            "java",
+            f"-Xmx{self.ram_allocation}",
+            "--enable-native-access=ALL-UNNAMED",  # Fix restricted method warnings
+            "-Dorg.lwjgl.util.NoChecks=true",       # Reduce LWJGL warnings
+            "-jar",
+            jar_file,
+            "nogui"
+        ]
         
         self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
         
@@ -248,6 +257,18 @@ class ServerRunner:
                     self.process.kill()
                 except:
                     pass
+
+    def send_command(self, command):
+        """Sends a command to the server stdin."""
+        if not self.running or not self.process or not self.process.stdin:
+            return
+            
+        try:
+            self.console_callback(f"> {command}")
+            self.process.stdin.write(command + "\n")
+            self.process.stdin.flush()
+        except Exception as e:
+            self.console_callback(f"[Error] Failed to send command: {e}")
 
     def _read_output(self):
         """Reads stdout from the process and sends it to the callback."""
@@ -429,11 +450,12 @@ class Scheduler:
         with open(self.metadata_path, "w") as f:
             json.dump(data, f)
 
-    def set_restart_schedule(self, enabled, interval_hours=None):
+    def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None):
         """
         Sets the restart schedule.
         enabled: bool
-        interval_hours: int (e.g., 6, 12, 24)
+        interval_hours: int (e.g., 6, 12, 24) for interval mode
+        restart_time: str (e.g., "03:00") for time mode
         """
         data = self._load_metadata()
         
@@ -441,11 +463,20 @@ class Scheduler:
             if "scheduler" in data:
                 del data["scheduler"]
         else:
-            data["scheduler"] = {
-                "type": "interval",
-                "interval_hours": interval_hours,
-                "last_run": datetime.datetime.now().isoformat() # Reset timer on set
-            }
+            if restart_time:
+                # Time-based schedule
+                data["scheduler"] = {
+                    "type": "time",
+                    "restart_time": restart_time,
+                    "last_run": None  # Will be set after first restart
+                }
+            else:
+               # Interval-based schedule
+                data["scheduler"] = {
+                    "type": "interval",
+                    "interval_hours": interval_hours,
+                    "last_run": datetime.datetime.now().isoformat()
+                }
             
         self._save_metadata(data)
 
@@ -464,7 +495,6 @@ class Scheduler:
         if scheduler["type"] == "interval":
             last_run_str = scheduler.get("last_run")
             if not last_run_str:
-                # First run?
                 self.update_last_run()
                 return False
                 
@@ -474,6 +504,32 @@ class Scheduler:
             if datetime.datetime.now() >= last_run + interval:
                 return True
                 
+        elif scheduler["type"] == "time":
+            # Time-based restart (e.g., daily at 03:00)
+            restart_time_str = scheduler["restart_time"]  # "HH:MM"
+            last_run_str = scheduler.get("last_run")
+            
+            # Parse target time
+            hour, minute = map(int, restart_time_str.split(":"))
+            now = datetime.datetime.now()
+            target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If target time has passed today, set to tomorrow
+            if target_time <= now:
+                target_time += datetime.timedelta(days=1)
+            
+            # Check if we haven't restarted today at this time yet
+            if last_run_str:
+                last_run = datetime.datetime.fromisoformat(last_run_str)
+                # Only restart if it's been at least 23 hours since last restart (prevent double triggers)
+                if (now - last_run).total_seconds() < 23 * 3600:
+                    return False
+            
+            # Check if it's time
+            # Allow 2-minute window to catch the restart time
+            if abs((target_time - now).total_seconds()) < 120:
+                return True
+
         return False
 
     def update_last_run(self):
@@ -481,3 +537,4 @@ class Scheduler:
         if "scheduler" in data:
             data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
             self._save_metadata(data)
+
