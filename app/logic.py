@@ -509,25 +509,24 @@ class Scheduler:
             restart_time_str = scheduler["restart_time"]  # "HH:MM"
             last_run_str = scheduler.get("last_run")
             
-            # Parse target time
+            # Parse target time for today
             hour, minute = map(int, restart_time_str.split(":"))
             now = datetime.datetime.now()
-            target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            target_time_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             
-            # If target time has passed today, set to tomorrow
-            if target_time <= now:
-                target_time += datetime.timedelta(days=1)
-            
-            # Check if we haven't restarted today at this time yet
+            # Check if we've already restarted today
             if last_run_str:
                 last_run = datetime.datetime.fromisoformat(last_run_str)
-                # Only restart if it's been at least 23 hours since last restart (prevent double triggers)
-                if (now - last_run).total_seconds() < 23 * 3600:
-                    return False
+                # If last restart was today and within 5 minutes of target, don't restart again
+                if last_run.date() == now.date():
+                    time_since_last = (now - last_run).total_seconds()
+                    if time_since_last < 300:  # 5 minutes
+                        return False
             
-            # Check if it's time
-            # Allow 2-minute window to catch the restart time
-            if abs((target_time - now).total_seconds()) < 120:
+            # Check if we're within the 2-minute window around target time
+            time_diff = (now - target_time_today).total_seconds()
+            # Trigger if we're past the target time but within 2 minutes
+            if 0 <= time_diff < 120:
                 return True
 
         return False

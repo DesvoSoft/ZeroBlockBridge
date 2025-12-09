@@ -1,6 +1,6 @@
 # Zero Block Bridge - User Guide
 
-Complete guide to using Zero Block Bridge for creating and managing Minecraft servers with built-in tunneling.
+Complete guide to using Zero Block Bridge for creating and managing Minecraft servers with built-in tunneling, backups, and automated restarts.
 
 ---
 
@@ -10,6 +10,9 @@ Complete guide to using Zero Block Bridge for creating and managing Minecraft se
 - [Getting Started](#getting-started)
 - [Creating Servers](#creating-servers)
 - [Managing Servers](#managing-servers)
+- [Server Console Commands](#server-console-commands)
+- [Automated Backups](#automated-backups)
+- [Scheduled Restarts](#scheduled-restarts)
 - [Setting Up Tunneling](#setting-up-tunneling)
 - [Console Logs](#console-logs)
 - [Troubleshooting](#troubleshooting)
@@ -27,9 +30,9 @@ Before running Zero Block Bridge, ensure you have:
    - Download from [python.org](https://www.python.org/downloads/)
    - During installation, check "Add Python to PATH"
 
-2. **Java 17 or higher**
+2. **Java 17 or higher** (Java 24 fully supported)
    - Required for running Minecraft servers
-   - Download from [Adoptium](https://adoptium.net/) (recommended) or [Oracle](https://www.oracle.com/java/technologies/downloads/)
+   - Download from [Adoptium](https://adoptium.net/) (recommended) or[ Oracle](https://www.oracle.com/java/technologies/downloads/)
 
 ### Setup Steps
 
@@ -38,7 +41,7 @@ Before running Zero Block Bridge, ensure you have:
 2. **Install Python dependencies:**
 
    ```bash
-   pip install customtkinter requests
+   pip install customtkinter requests psutil
    ```
 
 3. **Run the application:**
@@ -54,7 +57,7 @@ Before running Zero Block Bridge, ensure you have:
 
 When you first launch Zero Block Bridge:
 
-1. The application window opens with the title **"Zero Block Bridge (MVP)"**
+1. The application window opens with the title **"Zero Block Bridge"**
 2. **Java version** is displayed in the top-right corner:
    - ✅ Green text shows "Java: version-info" if Java is detected
    - ❌ Red text shows "Java NOT FOUND" if Java is missing
@@ -65,125 +68,226 @@ When you first launch Zero Block Bridge:
 
 ## 🎮 Creating Servers
 
-### Step-by-Step Instructions
+### Server Creation Wizard
+
+Zero Block Bridge features a comprehensive 5-step wizard:
 
 1. **Click** the **"Create Server"** button in the sidebar
 
-2. **Enter a server name** when prompted
+2. **Step 1: Server Type & Name**
 
-   - Use alphanumeric characters (e.g., "survival-world", "creative-server")
-   - Avoid special characters or spaces
+   - Enter a unique server name (alphanumeric, no spaces)
+   - Choose between:
+     - **Vanilla 1.21.1** (Official Minecraft server)
+     - **Fabric 1.20.1** (Modded server platform)
 
-3. **Choose server type** by entering:
+3. **Step 2: Performance (RAM)**
 
-   - `1` for **Vanilla 1.21.1** (Official Minecraft server)
-   - `2` for **Fabric 1.20.1** (Modded server platform)
+   - **Slider**: Drag to allocate RAM (512MB - system max)
+   - **Manual Entry**: Type exact MB value
+   - Recommendations:
+     - Vanilla: 2048 - 4096 MB
+     - Fabric/Modded: 6144 - 8192 MB
 
-4. **Wait for installation**
+4. **Step 3: World Settings**
 
-   - Progress dialog shows download and installation status
-   - **Vanilla**: ~50MB download (~1-2 minutes)
-   - **Fabric**: ~200MB download + installation (~3-5 minutes)
+   - **World Seed**: Optional seed for world generation
+   - **Game Mode**: survival, creative, adventure, or spectator
+   - **Difficulty**: peaceful, easy, normal, or hard
 
-5. **Server appears** in the sidebar when complete
+5. **Step 4: Storage Location**
 
-### What Gets Created
+   - Shows where server will be saved (`servers/<name>/`)
+   - Custom locations coming soon
 
-After successful installation, you'll find:
+6. **Step 5: Review & Create**
+   - Review all settings
+   - Click "Create Server" to begin installation
 
-**For Vanilla 1.21.1:**
+### Installation Process
 
-```
-servers/<server-name>/
-├── server.jar          # Server executable
-├── eula.txt            # EULA acceptance (auto-accepted)
-└── world/              # Created after first run
-```
-
-**For Fabric 1.20.1:**
-
-```
-servers/<server-name>/
-├── fabric-server-launch.jar    # Fabric launcher
-├── server.jar                   # Minecraft server
-├── libraries/                   # Fabric dependencies
-├── eula.txt                     # EULA acceptance (auto-accepted)
-└── mods/                        # Mod folder (created on first run)
-```
+- **Vanilla**: ~50MB download (~1-2 minutes)
+- **Fabric**: ~200MB download + installation (~3-5 minutes)
+- Progress dialog shows real-time status
+- EULA is automatically accepted
+- Server properties are configured with wizard settings
 
 ---
 
 ## 🎛️ Managing Servers
 
+### Dashboard Controls
+
+When you select a server, the dashboard shows:
+
+**Server Controls:**
+
+- ▶ **Start** - Launch the server
+- ■ **Stop** - Gracefully shut down
+- ⚙ **Properties** - Edit server.properties
+
+**Auto-Restart:**
+
+- Checkbox to enable/disable
+- Mode selector: "Interval" or "Daily Time"
+- **Interval Mode**: Restart every X hours (enter number + "Apply")
+- **Daily Time Mode**: Restart at specific time (enter HH:MM + "Apply")
+- **Apply** button - Save changes without toggling
+
+**Backups:**
+
+- Shows last backup date/time
+- **✚ Backup Now** - Create instant backup
+
 ### Starting a Server
 
 1. **Select** a server from the sidebar list
-2. The dashboard updates to show the selected server name
-3. **Click** the green **"Start Server"** button
-4. **Monitor** the Server Log tab for startup progress:
-   - "Starting minecraft server..."
-   - World generation (first run only)
-   - "Done!" when ready
-
-**Status Indicators:**
-
-- Status bar shows **"Running <server-name>"** in green
-- Start button becomes disabled
-- Stop button becomes enabled
+2. **Click** the green **"Start Server"** button
+3. **Monitor** the Server Log tab for startup progress
+4. Status bar shows **"Running <server-name>"** in green
 
 ### Stopping a Server
 
 1. **Click** the red **"Stop Server"** button
-2. Watch the console for shutdown sequence:
-   - "Stopping server"
-   - "Saving chunks"
-   - "Server process exited"
+2. Watch console for shutdown sequence
 3. Status returns to **"Idle"**
 
-### Connecting to Your Server
+### Editing Properties
 
-**Local Play (Same Computer):**
+1. **Click** the **"⚙ Properties"** button (server must be stopped)
+2. Navigate through tabs:
+   - **General**: MOTD, max players, game mode, difficulty
+   - **World**: Seed, level type, spawn settings, view distance
+   - **Network**: Port, whitelist, RCON, online mode
+   - **Advanced**: All other properties
+   - **Backups**: Manage backups (see below)
+   - **Automation**: Configure scheduled restarts (see below)
+3. **Click "Save"** to apply changes
 
-1. Open Minecraft (matching version)
-2. Multiplayer → Direct Connect
-3. Server Address: `localhost`
+---
 
-**LAN Play (Same Network):**
+## 💻 Server Console Commands
 
-1. Find your local IP address
-2. Share `<your-ip>:25565` with friends on your network
+### Sending Commands
 
-**Internet Play:**
-See [Setting Up Tunneling](#setting-up-tunneling) below.
+At the bottom of the **Server Log** tab:
+
+1. Type any Minecraft server command in the input field
+2. Press **Enter** or click **"Send"**
+3. Command is executed on the server
+
+**Example Commands:**
+
+```
+say Hello everyone!
+op PlayerName
+gamemode creative PlayerName
+weather clear
+time set day
+list
+whitelist add PlayerName
+```
+
+**Note**: Server must be running to send commands.
+
+---
+
+## 💾 Automated Backups
+
+### Creating Backups
+
+**From Dashboard:**
+
+- Click **"✚ Backup Now"** for instant backup
+
+**From Properties Editor:**
+
+1. Open server properties (server must be stopped)
+2. Go to **"Backups"** tab
+3. Click **"Create Backup"**
+
+### Restoring Backups
+
+1. Open **Properties → Backups** tab
+2. Select a backup from the list (shows date and size)
+3. Click **"Restore Selected"**
+4. **WARNING**: This wipes the current server folder!
+
+### Backup Storage
+
+- Stored in `servers/<server-name>/backups/`
+- Format: `backup_YYYYMMDD_HHMMSS.zip`
+- Contains entire server directory
+
+---
+
+## ⏰ Scheduled Restarts
+
+### Configuring Auto-Restart
+
+**From Dashboard:**
+
+1. Check the **Auto-Restart** checkbox
+2. Select mode:
+   - **Interval**: Restart every X hours
+   - **Daily Time**: Restart at specific time (24-hour format)
+3. Enter value:
+
+- Interval: Number of hours (e.g., "6")
+- Daily Time: HH:MM format (e.g., "03:00" for 3:00 AM)
+
+4. Click **"Apply"** to save
+
+**From Properties Editor:**
+
+1. Open **Properties → Automation** tab
+2. Enable "Automated Restarts"
+3. Configure interval or time
+4. Save properties
+
+### Restart Warnings
+
+Players receive in-game warnings at:
+
+- **1 hour** before restart
+- **30 minutes** before restart
+- **15 minutes** before restart
+- **1 minute** before restart
+- **Final countdown**: 5, 4, 3, 2 seconds
+- "Restarting NOW!"
+
+### Restart Process
+
+1. Warnings sent to players via `/say` command
+2. Final countdown (5-4-3-2)
+3. Server stops gracefully
+4. 5-second cooldown
+5. Server automatically restarts
+6. Console shows success/error message
 
 ---
 
 ## 🌐 Setting Up Tunneling
 
-Tunneling allows friends from anywhere to connect to your server without port forwarding.
-
 ### Starting the Tunnel
 
-1. **Click** the **"Start Tunnel"** button in the tunnel controls section
-
+1. **Click** the **"▶ Start Tunnel"** button
 2. **Watch the Tunnel Log** tab for:
-
    ```
    [Playit] Downloading agent v0.16.5...
    [Playit] Starting agent...
    [Playit] Visit link to setup https://playit.gg/claim/...
    ```
-
 3. **Browser opens automatically** with the claim URL
-   - If it doesn't open, click the **"Link Account"** button that appears
+   - If it doesn't, click the **"🔗 Link"** button
 
 ### Linking Your Account
 
 1. **Sign in** to Playit.gg (or create a free account)
-2. **Click "Approve"** to link this agent to your account
+2. **Click "Approve"** to link this agent
 3. **Return to the application**
 
-The tunnel will automatically complete setup:
+The tunnel completes setup automatically:
 
 ```
 [Playit] Program approved :)
@@ -192,166 +296,122 @@ The tunnel will automatically complete setup:
 
 ### Getting Your Public IP
 
-Once the tunnel is online:
-
-- **Status indicator**: Changes to **"Tunnel: ● Online"** (green)
-- **Public IP**: Displayed as **"Public IP: your-address.ply.gg"**
+- **Status indicator**: "Tunnel: ● Online" (green)
+- **Public IP**: "Public IP: your-address.ply.gg"
 - **Share this address** with friends to join your server
 
-### Troubleshooting Tunnel Issues
+### Tunnel Controls
 
-**AgentDisabledOverLimit Error:**
-
-- You have too many agents registered on your Playit account
-- Delete unused agents at [Playit.gg Dashboard](https://playit.gg/account/agents)
-
-**Connection Errors / Stuck Tunnel:**
-
-1. Click **"Stop Tunnel"**
-2. Click **"Reset Agent"**
-3. Type `yes` to confirm
-4. Click **"Start Tunnel"** again
-
-**Claim URL Not Appearing:**
-
-- Check the **Tunnel Log** tab for error messages
-- Ensure your internet connection is stable
-- Try restarting the application
+- **■ Stop Tunnel** - Disconnect tunnel
+- **↻ Reset** - Clear agent data (requires confirmation)
+- **🔗 Link** - Reopen claim URL in browser
 
 ---
 
 ## 📊 Console Logs
 
-Zero Block Bridge features **separate log tabs** for better organization:
-
 ### Server Log Tab
 
-Displays output from your Minecraft server:
+Displays your Minecraft server output:
 
 - Server startup messages
 - Player join/leave events
+- Commands you send
 - World saving events
-- Error messages and warnings
-- Plugin/mod loading (Fabric servers)
+- Error messages
+- Automated restart warnings
 
-**Example messages:**
+**Example:**
 
 ```
-[System] Starting server with: java -Xmx2G -jar server.jar nogui
-[Server] Preparing spawn area: 97%
+[System] Starting server with: java -Xmx6543M...
 [Server] Done! For help, type "help"
-[Server] Player123 joined the game
+> say Hello from the console!
+[System] Server will restart in 1 minute!
 ```
 
 ### Tunnel Log Tab
 
-Displays output from the Playit agent:
+Displays Playit agent output:
 
-- Agent download and update status
+- Agent download status
 - Tunnel connection status
 - Public IP assignment
 - Authentication messages
 - Error diagnostics
 
-**Example messages:**
-
-```
-[Playit] Downloading agent v0.16.5...
-[Playit] tunnel running, 1 tunnels registered
-[UI] Opened claim URL in browser: https://playit.gg/claim/...
-```
-
-**Switching Tabs:**
-Click on the tab name to switch between Server Log and Tunnel Log views.
-
 ---
 
 ## 🔧 Troubleshooting
 
-### Java Issues
+### Java Warnings (Java 24)
 
-**"Java NOT FOUND" in red:**
+Modern Java versions show deprecation warnings. These are suppressed automatically with compatibility flags:
 
-1. Install Java 17+ from [Adoptium](https://adoptium.net/)
-2. Restart the application
-3. Verify green "Java: ..." indicator appears
+- `--enable-native-access=ALL-UNNAMED`
+- `-Dorg.lwjgl.util.NoChecks=true`
 
-**Server crashes immediately:**
+### Server Won't Start
 
-- Check Server Log for specific errors
-- Verify you have enough RAM (at least 2GB free)
-- Update Java to the latest version
+- Check **Server Log** for specific errors
+- Verify sufficient RAM is available
+- Ensure Java 17+ is installed
+- Check server.properties for invalid values
 
-### Server Creation Issues
+### Backup/Restore Errors
 
-**"Server 'name' already exists" error:**
+- Server must be stopped before restoring
+- Ensure sufficient disk space
+- Check file permissions in servers/ directory
 
-- Choose a different name, or
-- Delete the existing server folder in `servers/`
+### Scheduled Restart Issues
 
-**Download fails:**
+- Server must be running for restart to trigger
+- Check **metadata.json** in server folder for schedule settings
+- Warnings appear in console before restart
+- Success/error message shown after restart completes
 
-- Check internet connection
-- Verify firewall isn't blocking Python
-- Try again (network might be temporarily down)
+### Tunnel Issues
 
-### Playit Tunnel Issues
+**AgentDisabledOverLimit:**
 
-**"TooManyRequests" errors:**
+- Delete unused agents at [Playit.gg Dashboard](https://playit.gg/account/agents)
 
-- Playit API is rate-limiting your requests
-- Wait 1-2 minutes and try again
-- If persistent, try "Reset Agent"
+**Connection Errors:**
 
-**Tunnel shows "Online" but friends can't connect:**
-
-1. Verify your **Minecraft server is running** (separate from tunnel)
-2. Give friends the **exact .ply.gg address** (not localhost)
-3. Ensure server version matches client version
-4. Check server is listening on default port (25565)
-
-### General Issues
-
-**Application won't start:**
-
-- Verify Python dependencies: `pip install customtkinter requests`
-- Run from terminal to see error messages
-- Check Python version: `python --version` (should be 3.10+)
-
-**UI freezes or crashes:**
-
-- Close and restart the application
-- Check console for error messages
-- Ensure no other instance is running
+1. Click "Stop Tunnel"
+2. Click "Reset Agent" (confirm with "yes")
+3. Click "Start Tunnel" again
 
 ---
 
-## 📁 File Structure Reference
-
-Understanding where things are stored:
+## 📁 File Structure
 
 ```
 MCTunnel/
-├── app/                    # Application code
+├── app/
 │   ├── main.py
 │   ├── logic.py
 │   ├── playit_manager.py
+│   ├── server_wizard.py
+│   ├── server_properties_editor.py
 │   └── ui_components.py
 │
-├── servers/                # Your server instances
-│   ├── survival-world/     # Example server
-│   │   ├── server.jar
-│   │   ├── world/
-│   │   └── server.properties
-│   └── creative-server/    # Another server
+├── servers/
+│   └── <server-name>/
+│       ├── server.jar / fabric-server-launch.jar
+│       ├── server.properties
+│       ├── world/
+│       ├── backups/
+│       │   └── backup_YYYYMMDD_HHMMSS.zip
+│       └── metadata.json    # Scheduler settings
 │
-├── bin/                    # Playit agent (auto-managed)
-│   └── playit.exe
+├── bin/
+│   └── playit.exe           # Auto-downloaded
 │
-├── config/                 # Playit configuration
-│   └── (auto-generated)
+├── config/
+│   └── (playit config)
 │
-├── config.json             # App settings (RAM, etc.)
 └── README.md
 ```
 
@@ -359,22 +419,20 @@ MCTunnel/
 
 ## 🎯 Quick Tips
 
-- **RAM Allocation**: Default is 2GB. Edit `config.json` to change: `"ram_allocation": "4G"`
-- **Multiple Servers**: Create as many as you want! Each is independent.
-- **Switching Servers**: Stop one before starting another (or run on different ports)
-- **Server Files**: Found in `servers/<name>/` - add mods here for Fabric
-- **Config Editing**: Edit `server.properties` in server folder for advanced settings
-- **Backups**: Copy entire `servers/<name>/` folder to back up a world
+- **Multiple Servers**: Create unlimited servers, each fully independent
+- **Server Files**: Access in `servers/<name>/` - add mods to `mods/` for Fabric
+- **Automated Management**: Set up backups + scheduled restarts for hands-free operation
+- **Console Commands**: Send any server command directly from the app
+- **RAM Tuning**: Adjust per-server in wizard or via editing server folder
 
 ---
 
 ## 📚 Additional Resources
 
 - **Main README**: [README.md](README.md) - Project overview
-- **Testing Guide**: [TESTING.md](TESTING.md) - Test cases and verification
-- **Playit.gg Docs**: [docs.playit.gg](https://docs.playit.gg/) - Advanced tunneling
+- **Playit.gg Docs**: [docs.playit.gg](https://docs.playit.gg/) -Advanced tunneling
 - **Minecraft Wiki**: [minecraft.wiki](https://minecraft.wiki/) - Server configuration
 
 ---
 
-**Need help?** Open an issue on GitHub or check the [TESTING.md](TESTING.md) guide for validation steps.
+**Need help?** Check the console logs for detailed error messages, or refer to the troubleshooting sections above.
