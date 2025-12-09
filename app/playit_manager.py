@@ -10,7 +10,7 @@ import time
 # Constants
 BIN_DIR = "bin"
 CONFIG_DIR = "config"
-PLAYIT_VERSION = "0.15.26"
+PLAYIT_VERSION = "0.16.5"
 URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-x86_64-signed.exe"
 URL_LINUX = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-linux-amd64"
 
@@ -37,15 +37,39 @@ class PlayitManager:
         return os.path.abspath(os.path.join(BIN_DIR, filename))
 
     def ensure_binary(self):
-        """Downloads the playit binary if it doesn't exist."""
+        """Downloads the playit binary if it doesn't exist or is outdated."""
         if not os.path.exists(BIN_DIR):
             os.makedirs(BIN_DIR)
         
         if os.path.exists(self.binary_path):
-            return True
+            # Check version
+            try:
+                # Run playit version
+                result = subprocess.run(
+                    [self.binary_path, "version"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                # Output format example: "playit (v0.15.26): ..." or just "v0.15.26"
+                # Let's just check if the target version string is in the output
+                if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
+                    self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
+                    os.remove(self.binary_path)
+                else:
+                    return True
+            except Exception as e:
+                self.console_callback(f"[Playit] Version check failed ({e}). Redownloading...")
+                try:
+                    os.remove(self.binary_path)
+                except:
+                    pass
+
+        if os.path.exists(self.binary_path):
+             return True
 
         url = URL_WINDOWS if platform.system() == "Windows" else URL_LINUX
-        self.console_callback(f"[Playit] Downloading agent from {url}...")
+        self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
         
         try:
             response = requests.get(url, stream=True)
@@ -127,6 +151,26 @@ class PlayitManager:
         self.running = False
         self.status_callback("Offline", None)
 
+    def reset(self):
+        """Resets the playit agent configuration (clears secret)."""
+        self.stop()
+        
+        self.console_callback("[Playit] Resetting agent configuration...")
+        try:
+            # Run playit reset
+            # We use subprocess.run because we want it to finish before we do anything else
+            subprocess.run(
+                [self.binary_path, "reset"],
+                cwd=os.path.abspath(CONFIG_DIR),
+                check=False, # Don't crash if it fails, just log
+                capture_output=True,
+                text=True
+            )
+            self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
+            self.claim_url_detected = False # Reset this too
+        except Exception as e:
+            self.console_callback(f"[Playit] Reset failed: {e}")
+
     def _read_output(self):
         """Reads stdout from the process character by character (binary)."""
         self.console_callback("[Debug] Output reader thread started.")
@@ -181,6 +225,14 @@ class PlayitManager:
         # Pattern: looks for .ply.gg domains
         # This might match the mapping log
         addr_match = re.search(r"([a-z0-9-]+\.ply\.gg)", line)
-        if addr_match:
-            address = addr_match.group(1)
-            self.status_callback("Online", address)
+        # 3. Check for Errors
+        if "AgentDisabledOverLimit" in line:
+            self.status_callback("Error", None)
+            self.console_callback("[Playit] ERROR: Account limit reached! You have too many agents.")
+            self.console_callback("[Playit] Please delete unused agents in your Playit.gg dashboard.")
+            
+        if "AgentVersionTooOld" in line:
+             self.console_callback("[Playit] ERROR: Agent version too old. Restarting to update...")
+             # The ensure_binary check on next start should handle this, but we can force it here if we want
+             # For now, just logging it is enough as the user will likely restart or we can trigger a restart
+

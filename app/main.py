@@ -24,7 +24,9 @@ class MCTunnelApp(ctk.CTk):
         
         self.server_runner = None
         self.current_server = None
-        self.playit_manager = PlayitManager(self.update_console, self.update_playit_status, self.on_playit_claim)
+        self.server_runner = None
+        self.current_server = None
+        self.playit_manager = PlayitManager(self.update_tunnel_console, self.update_playit_status, self.on_playit_claim)
 
         
         # Grid layout
@@ -98,10 +100,27 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_frame, text="Stop Tunnel", command=self.stop_tunnel, state="disabled", fg_color="red", width=100)
         self.btn_tunnel_stop.pack(side="right", padx=10)
 
+        self.btn_claim = ctk.CTkButton(self.tunnel_frame, text="Link Account", command=self.open_claim_url, fg_color="orange", width=100)
+        # Don't pack it yet, only show when needed
 
-        # Console
-        self.console = ConsoleWidget(self.main_frame)
-        self.console.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        self.btn_reset = ctk.CTkButton(self.tunnel_frame, text="Reset Agent", command=self.reset_tunnel, fg_color="gray", hover_color="darkgray", width=80)
+        self.btn_reset.pack(side="right", padx=10)
+
+
+        # Console Tabs
+        self.console_tabs = ctk.CTkTabview(self.main_frame)
+        self.console_tabs.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        
+        self.console_tabs.add("Server Log")
+        self.console_tabs.add("Tunnel Log")
+        
+        # Server Console
+        self.server_console = ConsoleWidget(self.console_tabs.tab("Server Log"))
+        self.server_console.pack(fill="both", expand=True)
+        
+        # Tunnel Console
+        self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
+        self.tunnel_console.pack(fill="both", expand=True)
 
         # --- Initialization ---
         self.check_java_startup()
@@ -113,10 +132,10 @@ class MCTunnelApp(ctk.CTk):
             version = check_java()
             if version:
                 self.lbl_java_ver.configure(text=f"Java: {version}", text_color="green")
-                self.console.log(f"[System] Found Java: {version}")
+                self.server_console.log(f"[System] Found Java: {version}")
             else:
                 self.lbl_java_ver.configure(text="Java NOT FOUND", text_color="red")
-                self.console.log("[System] CRITICAL: Java not found! Please install Java 17+.")
+                self.server_console.log("[System] CRITICAL: Java not found! Please install Java 17+.")
                 # In a real app, show a popup here as per MDD
         
         threading.Thread(target=_check, daemon=True).start()
@@ -139,25 +158,29 @@ class MCTunnelApp(ctk.CTk):
                 item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select)
                 item.pack(fill="x", padx=5, pady=5)
         
-        self.console.log(f"[System] Loaded {len(servers)} servers.")
+        self.server_console.log(f"[System] Loaded {len(servers)} servers.")
 
     def on_server_select(self, server_name):
         self.current_server = server_name
         self.lbl_dash_title.configure(text=f"Server: {server_name}")
         self.btn_start.configure(state="normal")
         self.btn_stop.configure(state="disabled") # Initially disabled until started
-        self.console.log(f"[UI] Selected server: {server_name}")
+        self.server_console.log(f"[UI] Selected server: {server_name}")
 
     def update_console(self, text):
-        """Thread-safe console update."""
-        self.after(0, lambda: self.console.log(text))
+        """Thread-safe server console update."""
+        self.after(0, lambda: self.server_console.log(text))
+
+    def update_tunnel_console(self, text):
+        """Thread-safe tunnel console update."""
+        self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
         if not self.current_server:
             return
         
         if self.server_runner and self.server_runner.running:
-            self.console.log("[Error] A server is already running.")
+            self.server_console.log("[Error] A server is already running.")
             return
 
         # Get RAM from config or default
@@ -186,7 +209,7 @@ class MCTunnelApp(ctk.CTk):
         if server_name:
             # Check if exists
             if os.path.exists(os.path.join(SERVERS_DIR, server_name)):
-                self.console.log(f"[Error] Server '{server_name}' already exists.")
+                self.server_console.log(f"[Error] Server '{server_name}' already exists.")
                 return
 
             self.choose_server_type(server_name)
@@ -204,14 +227,14 @@ class MCTunnelApp(ctk.CTk):
         elif choice == "2":
             self.start_download(server_name, "Fabric", "1.20.1")
         else:
-            self.console.log("[Error] Invalid choice.")
+            self.server_console.log("[Error] Invalid choice.")
 
     def start_download(self, server_name, server_type, version):
         progress_dialog = DownloadProgressDialog(self, title=f"Installing {server_name}...")
         
         def _download_thread():
             try:
-                self.console.log(f"[System] Downloading server: {server_name}...")
+                self.server_console.log(f"[System] Downloading server: {server_name}...")
                 
                 # Callback for progress
                 def _progress(val):
@@ -224,19 +247,19 @@ class MCTunnelApp(ctk.CTk):
                     jar_path = install_fabric(server_name, version, progress_callback=_progress)
                 
                 if jar_path:
-                    self.console.log("[System] Download complete.")
+                    self.server_console.log("[System] Download complete.")
                     progress_dialog.update_progress(1.0, "Generating EULA...")
                     
                     accept_eula(server_name)
-                    self.console.log("[System] EULA accepted.")
+                    self.server_console.log("[System] EULA accepted.")
                     
                     self.after(0, lambda: self._on_download_complete(progress_dialog))
                 else:
-                    self.console.log("[Error] Download failed.")
+                    self.server_console.log("[Error] Download failed.")
                     self.after(0, progress_dialog.close)
                     
             except Exception as e:
-                self.console.log(f"[Error] {e}")
+                self.server_console.log(f"[Error] {e}")
                 self.after(0, progress_dialog.close)
 
         threading.Thread(target=_download_thread, daemon=True).start()
@@ -244,7 +267,7 @@ class MCTunnelApp(ctk.CTk):
     def _on_download_complete(self, dialog):
         dialog.close()
         self.load_servers()
-        self.console.log("[System] Server created successfully.")
+        self.server_console.log("[System] Server created successfully.")
 
     # --- Playit Integration ---
     def start_tunnel(self):
@@ -257,39 +280,60 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
+    def reset_tunnel(self):
+        """Resets the playit agent."""
+        if ctk.CTkInputDialog(text="Type 'yes' to confirm reset:", title="Confirm Reset").get_input() != "yes":
+            return
+            
+        self.playit_manager.reset()
+        self.btn_tunnel_start.configure(state="normal")
+        self.btn_tunnel_stop.configure(state="disabled")
+
     def update_playit_status(self, status, ip):
         """Callback from PlayitManager."""
         def _update():
             color = "green" if status == "Online" else "gray"
-            if status == "Error": color = "red"
+            icon = "●"
+            if status == "Error": 
+                color = "red"
+                icon = "✖"
+            elif status == "Starting...":
+                color = "orange"
+                icon = "⏳"
             
-            self.lbl_tunnel_status.configure(text=f"Tunnel: {status}", text_color=color)
+            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             if ip:
                 self.lbl_public_ip.configure(text=f"Public IP: {ip}")
+                # If online, we probably don't need the claim button anymore
+                self.btn_claim.pack_forget()
             else:
                 self.lbl_public_ip.configure(text="Public IP: N/A")
                 
             if status == "Offline":
                 self.btn_tunnel_start.configure(state="normal")
                 self.btn_tunnel_stop.configure(state="disabled")
+                self.btn_claim.pack_forget() # Hide claim button when stopped
 
         self.after(0, _update)
 
     def on_playit_claim(self, url):
         """Callback when a claim URL is detected."""
-        def _show_dialog():
+        self.claim_url = url
+        
+        def _show_ui():
+            # Show the button
+            self.btn_claim.pack(side="right", padx=10)
+            
+            # Also show dialog/open browser as before
             dialog = ctk.CTkInputDialog(text=f"Playit requires setup!\nCopy this URL or click OK to open:\n{url}", title="Link Playit Account")
-            # We can't easily make a clickable link in a standard dialog, so we'll just open it if they click OK
-            # Or we could use a custom dialog. For MVP, let's open it automatically or ask.
-            
-            # Better UX: Open browser automatically? Or just log it?
-            # The user prompt said: "muestra un diálogo emergente ... invitando al usuario a hacer clic"
-            
-            # Let's try to open it
             webbrowser.open(url)
-            self.console.log(f"[UI] Opened claim URL in browser: {url}")
+            self.tunnel_console.log(f"[UI] Opened claim URL in browser: {url}")
             
-        self.after(0, _show_dialog)
+        self.after(0, _show_ui)
+
+    def open_claim_url(self):
+        if hasattr(self, 'claim_url') and self.claim_url:
+            webbrowser.open(self.claim_url)
 
 
     def on_close(self):
