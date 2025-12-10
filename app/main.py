@@ -14,6 +14,7 @@ from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 import webbrowser
+import winsound  # For sound notifications
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -100,8 +101,8 @@ class MCTunnelApp(ctk.CTk):
         
         self.lbl_status = ctk.CTkLabel(
             self.status_frame, 
-            text="Status: Idle", 
-            font=("Roboto Medium", 16)
+            text="⚪ Idle", 
+            font=("Roboto Medium", 15)
         )
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
@@ -610,6 +611,27 @@ class MCTunnelApp(ctk.CTk):
         
         threading.Thread(target=_check, daemon=True).start()
 
+    def play_notification_sound(self):
+        """Plays a pleasant notification sound on Windows."""
+        try:
+            # Play a nice triple-beep notification
+            threading.Thread(target=self._play_beeps, daemon=True).start()
+        except:
+            pass  # Silently fail if sound doesn't work
+    
+    def _play_beeps(self):
+        """Plays three ascending beeps for notification."""
+        try:
+            import time
+            # Three pleasant ascending beeps
+            winsound.Beep(800, 150)   # First beep: 800Hz, 150ms
+            time.sleep(0.1)
+            winsound.Beep(1000, 150)  # Second beep: 1000Hz, 150ms
+            time.sleep(0.1)
+            winsound.Beep(1200, 200)  # Third beep: 1200Hz, 200ms
+        except:
+            pass
+
     def load_servers(self):
         # Clear existing list
         for widget in self.server_list_frame.winfo_children():
@@ -651,7 +673,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="disabled")
             self.btn_start_all.configure(state="disabled")
             self.btn_stop.configure(state="normal")
-            self.lbl_status.configure(text=f"Status: Running {server_name}", text_color="green")
+            self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
             # Keep server type in info
             server_path = os.path.join(SERVERS_DIR, server_name)
             server_type = "Vanilla"
@@ -663,7 +685,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
-            self.lbl_status.configure(text="Status: Idle", text_color="white")
+            self.lbl_status.configure(text="⚪ Idle", text_color="white")
             # Keep server type in info
             server_path = os.path.join(SERVERS_DIR, server_name)
             server_type = "Vanilla"
@@ -798,6 +820,11 @@ class MCTunnelApp(ctk.CTk):
     def update_console(self, text):
         """Thread-safe server console update."""
         self.after(0, lambda: self.server_console.log(text))
+        
+        # Check if server is ready (Done message)
+        if "Done (" in text and "For help, type" in text:
+            # Server is ready! Play notification sound
+            self.after(0, self.play_notification_sound)
 
     def update_tunnel_console(self, text):
         """Thread-safe tunnel console update."""
@@ -821,7 +848,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.configure(state="disabled")
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
-        self.lbl_status.configure(text=f"Status: Running {self.current_server}", text_color="green")
+        self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
 
     def stop_server_action(self):
         if self.server_runner:
@@ -829,7 +856,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
-            self.lbl_status.configure(text="Status: Idle", text_color="white")
+            self.lbl_status.configure(text="⚪ Idle", text_color="white")
             self.server_runner = None
 
     def create_server_dialog(self):
