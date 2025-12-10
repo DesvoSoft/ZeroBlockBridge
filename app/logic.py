@@ -537,3 +537,32 @@ class Scheduler:
             data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
             self._save_metadata(data)
 
+
+def apply_server_settings(server_name, ram, seed, game_mode, difficulty):
+    """
+    Applies initial server settings after server installation.
+    Creates metadata.json and accepts EULA.
+    Server properties will be configured after first server start.
+    """
+    server_path = os.path.join(SERVERS_DIR, server_name)
+    
+    # 1. Create metadata.json with RAM and other settings
+    metadata = {
+        "ram": ram,
+        "created": datetime.datetime.now().isoformat(),
+        "pending_settings": {
+            "seed": seed,
+            "game_mode": game_mode,
+            "difficulty": difficulty
+        }
+    }
+    metadata_path = os.path.join(server_path, "metadata.json")
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+    
+    # 2. Accept EULA so server can start
+    accept_eula(server_name)
+    
+    # Note: server.properties will be generated on first server start
+    # The pending_settings will be applied by the UI after the server generates the file
+
