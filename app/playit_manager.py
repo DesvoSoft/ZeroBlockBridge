@@ -7,12 +7,7 @@ import requests
 import re
 import time
 
-# Constants
-BIN_DIR = "bin"
-CONFIG_DIR = "config"
-PLAYIT_VERSION = "0.16.5"
-URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-x86_64-signed.exe"
-URL_LINUX = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-linux-amd64"
+from app.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
 
 class PlayitManager:
     def __init__(self, console_callback, status_callback, claim_callback):
@@ -34,20 +29,20 @@ class PlayitManager:
     def _get_binary_path(self):
         system = platform.system()
         filename = "playit.exe" if system == "Windows" else "playit"
-        # Return absolute path to ensure it works regardless of CWD
-        return os.path.abspath(os.path.join(BIN_DIR, filename))
+        # Use pathlib's `/` operator for path joining
+        return (BIN_DIR / filename).resolve()
 
     def ensure_binary(self):
         """Downloads the playit binary if it doesn't exist or is outdated."""
-        if not os.path.exists(BIN_DIR):
-            os.makedirs(BIN_DIR)
+        if not BIN_DIR.exists():
+            BIN_DIR.mkdir(parents=True, exist_ok=True)
         
-        if os.path.exists(self.binary_path):
+        if self.binary_path.exists():
             # Check version
             try:
                 # Run playit version
                 result = subprocess.run(
-                    [self.binary_path, "version"],
+                    [str(self.binary_path), "version"],
                     capture_output=True,
                     text=True,
                     check=False
@@ -66,10 +61,10 @@ class PlayitManager:
                 except:
                     pass
 
-        if os.path.exists(self.binary_path):
+        if self.binary_path.exists():
              return True
 
-        url = URL_WINDOWS if platform.system() == "Windows" else URL_LINUX
+        url = PLAYIT_URL_WINDOWS if platform.system() == "Windows" else PLAYIT_URL_LINUX
         self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
         
         try:
@@ -80,7 +75,7 @@ class PlayitManager:
                     f.write(chunk)
             
             if platform.system() != "Windows":
-                os.chmod(self.binary_path, 0o755)
+                self.binary_path.chmod(0o755)
                 
             self.console_callback("[Playit] Download complete.")
             return True

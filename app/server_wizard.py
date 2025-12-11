@@ -22,6 +22,8 @@ class ServerWizard(ctk.CTkToplevel):
             "seed": "",
             "game_mode": "survival",
             "difficulty": "normal",
+            "view_distance": "10",
+            "simulation_distance": "10",
             "location": "default"
         }
         
@@ -171,24 +173,56 @@ class ServerWizard(ctk.CTkToplevel):
         self.clear_content()
         self.update_header("World Settings")
         
+        # --- Top Row: Seed & Gamemode ---
+        top_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        top_frame.pack(fill="x", expand=True)
+        top_frame.grid_columnconfigure((0, 1), weight=1)
+
         # Seed
-        ctk.CTkLabel(self.content_frame, text="World Seed (Optional):").pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(self.content_frame, placeholder_text="Leave empty for random")
-        self.entry_seed.pack(fill="x", pady=(0, 20))
-        if self.wizard_data["seed"]:
-            self.entry_seed.insert(0, self.wizard_data["seed"])
+        seed_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+        seed_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        ctk.CTkLabel(seed_frame, text="World Seed (Optional):").pack(anchor="w", pady=(0, 5))
+        self.entry_seed = ctk.CTkEntry(seed_frame, placeholder_text="Leave empty for random")
+        self.entry_seed.pack(fill="x")
+        if self.wizard_data["seed"]: self.entry_seed.insert(0, self.wizard_data["seed"])
             
         # Game Mode
-        ctk.CTkLabel(self.content_frame, text="Default Game Mode:").pack(anchor="w", pady=(0, 5))
-        self.combo_gamemode = ctk.CTkComboBox(self.content_frame, values=["survival", "creative", "adventure", "spectator"])
+        gamemode_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+        gamemode_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        ctk.CTkLabel(gamemode_frame, text="Default Game Mode:").pack(anchor="w", pady=(0, 5))
+        self.combo_gamemode = ctk.CTkComboBox(gamemode_frame, values=["survival", "creative", "adventure", "spectator"], state="readonly")
         self.combo_gamemode.set(self.wizard_data["game_mode"])
-        self.combo_gamemode.pack(fill="x", pady=(0, 20))
+        self.combo_gamemode.pack(fill="x")
+
+        # --- Middle Row: Difficulty, View, Sim ---
+        middle_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        middle_frame.pack(fill="x", expand=True, pady=(20, 0))
+        middle_frame.grid_columnconfigure((0, 1, 2), weight=1)
         
         # Difficulty
-        ctk.CTkLabel(self.content_frame, text="Difficulty:").pack(anchor="w", pady=(0, 5))
-        self.combo_difficulty = ctk.CTkComboBox(self.content_frame, values=["peaceful", "easy", "normal", "hard"])
+        difficulty_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
+        difficulty_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        ctk.CTkLabel(difficulty_frame, text="Difficulty:").pack(anchor="w", pady=(0, 5))
+        self.combo_difficulty = ctk.CTkComboBox(difficulty_frame, values=["peaceful", "easy", "normal", "hard"], state="readonly")
         self.combo_difficulty.set(self.wizard_data["difficulty"])
-        self.combo_difficulty.pack(fill="x", pady=(0, 20))
+        self.combo_difficulty.pack(fill="x")
+
+        # View Distance
+        view_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
+        view_dist_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 10))
+        ctk.CTkLabel(view_dist_frame, text="View Distance (chunks):").pack(anchor="w", pady=(0, 5))
+        self.entry_view_distance = ctk.CTkEntry(view_dist_frame, placeholder_text="Default: 10")
+        self.entry_view_distance.pack(fill="x")
+        if self.wizard_data["view_distance"]: self.entry_view_distance.insert(0, self.wizard_data["view_distance"])
+
+        # Simulation Distance
+        sim_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
+        sim_dist_frame.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
+        ctk.CTkLabel(sim_dist_frame, text="Simulation Distance (chunks):").pack(anchor="w", pady=(0, 5))
+        self.entry_sim_distance = ctk.CTkEntry(sim_dist_frame, placeholder_text="Default: 10")
+        self.entry_sim_distance.pack(fill="x")
+        if self.wizard_data["simulation_distance"]: self.entry_sim_distance.insert(0, self.wizard_data["simulation_distance"])
+
 
     def show_step_4(self):
         self.clear_content()
@@ -209,10 +243,12 @@ class ServerWizard(ctk.CTkToplevel):
         summary = (
             f"Server Name: {self.wizard_data['name']}\n"
             f"Type: {self.wizard_data['type']} {self.wizard_data['version']}\n"
-            f"RAM: {self.wizard_data['ram']} MB\n"
-            f"Seed: {self.wizard_data['seed'] or 'Random'}\n"
+            f"RAM: {self.wizard_data['ram']} MB\n\n"
+            f"World Seed: {self.wizard_data['seed'] or 'Random'}\n"
             f"Game Mode: {self.wizard_data['game_mode']}\n"
             f"Difficulty: {self.wizard_data['difficulty']}\n"
+            f"View Distance: {self.wizard_data['view_distance']}\n"
+            f"Simulation Distance: {self.wizard_data['simulation_distance']}\n\n"
             f"Location: servers/{self.wizard_data['name']}/"
         )
         
@@ -244,6 +280,8 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             self.wizard_data["game_mode"] = self.combo_gamemode.get()
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
+            self.wizard_data["view_distance"] = self.entry_view_distance.get().strip() or "10"
+            self.wizard_data["simulation_distance"] = self.entry_sim_distance.get().strip() or "10"
             
         elif self.current_step == 5:
             # Finish
@@ -264,3 +302,4 @@ class ServerWizard(ctk.CTkToplevel):
         elif self.current_step == 3: self.show_step_3()
         elif self.current_step == 4: self.show_step_4()
         elif self.current_step == 5: self.show_step_5()
+

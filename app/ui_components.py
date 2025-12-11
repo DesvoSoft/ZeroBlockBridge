@@ -23,31 +23,37 @@ class ServerListItem(ctk.CTkFrame):
         self.server_name = server_name
         self.on_click = on_click
         
-        # Card-style design with depth and layering
+        # Card-style design
         self.configure(
             corner_radius=15,
-            fg_color=("white", "gray17"),  # Floating card effect
+            fg_color=("white", "gray17"),
             border_width=1,
             border_color=("gray85", "gray25")
         )
         
+        # Configure a 2-column grid
+        self.grid_columnconfigure(0, weight=1)  # Name column expands
+        self.grid_columnconfigure(1, weight=0)  # Button column is fixed
+        
         self.lbl_name = ctk.CTkLabel(
             self, 
             text=server_name, 
-            font=("Roboto Medium", 14)  # Typography hierarchy
+            font=("Roboto Medium", 14),
+            anchor="w"  # Anchor text to the left
         )
-        self.lbl_name.pack(side="left", padx=15, pady=15)  # Increased padding
+        self.lbl_name.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
         
         self.btn_select = ctk.CTkButton(
             self, 
-            text="Select", 
-            width=80, 
-            corner_radius=8,  # Rounded button corners
-            fg_color="royalblue",  # Vibrant primary color
-            hover_color="#3a5ba0",  # Defined hover state
+            text="→", 
+            width=36, 
+            font=("Roboto Medium", 18), # Larger font for icon
+            corner_radius=8,
+            fg_color="royalblue",
+            hover_color="#3a5ba0",
             command=self._on_select
         )
-        self.btn_select.pack(side="right", padx=15, pady=15)  # Increased padding
+        self.btn_select.grid(row=0, column=1, padx=5, pady=15)
         
     def _on_select(self):
         if self.on_click:

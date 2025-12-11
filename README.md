@@ -68,43 +68,45 @@ The application features:
 
 ### Installation
 
-1. **Clone the repository**
+1.  **Clone the repository**
 
-   ```bash
-   git clone https://github.com/yourusername/MCTunnel.git
-   cd MCTunnel
-   ```
+    ```bash
+    git clone https://github.com/yourusername/MCTunnel.git
+    cd MCTunnel
+    ```
 
-2. **Install dependencies**
+2.  **Install dependencies**
 
-   ```bash
-   pip install customtkinter requests psutil
-   ```
+    Create a virtual environment (recommended):
+    ```bash
+    python -m venv venv
+    .\venv\Scripts\activate
+    ```
 
-3. **Run the application**
-   ```bash
-   python app/main.py
-   ```
+    Install dependencies from the `requirements.txt` file:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Run the application**
+    ```bash
+    python app/main.py
+    ```
 
 ### First Server
 
-1. Click **"Create Server"** in the sidebar
-2. Follow the 5-step wizard:
-   - Name your server
-   - Choose Vanilla or Fabric
-   - Set RAM allocation
-   - Configure world settings
-   - Review and create
-3. Select the server from the list
-4. Click **"▶ Start"**
-5. **Optional**: Enable tunneling to play with friends online
+1.  Click **"Create Server"** in the sidebar.
+2.  Follow the 5-step wizard to configure your server.
+3.  Select the server from the list.
+4.  Click **"▶ Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
+5.  **Optional**: Enable tunneling to play with friends online.
 
 ---
 
 ## 📖 Documentation
 
-- **[USAGE.md](USAGE.md)** - Complete user guide with all features
-- **[TESTING.md](TESTING.md)** - Test cases and verification steps
+- **[USAGE.md](docs/USAGE.md)** - Complete user guide with all features
+- **[TESTING.md](docs/TESTING.md)** - Test cases and verification steps
 
 ---
 
@@ -114,21 +116,20 @@ The application features:
 
 The wizard guides you through:
 
-1. **Type & Name**: Choose Vanilla/Fabric and name your server
-2. **RAM**: Use slider or type exact MB value (with validation)
-3. **World Settings**: Seed, game mode, difficulty
-4. **Location**: View save location (custom paths coming soon)
-5. **Review**: Confirm all settings before creation
+1.  **Type & Name**: Choose Vanilla/Fabric and name your server
+2.  **RAM**: Use slider or type exact MB value (with validation)
+3.  **World Settings**: Seed, game mode, difficulty
+4.  **Location**: View save location (custom paths coming soon)
+5.  **Review**: Confirm all settings before creation
 
 ### Automated Restarts
 
 Configure from the dashboard or properties editor:
 
-- **Interval Mode**: Restart every 1, 6, 12, or 24 hours
-- **Daily Time Mode**: Restart at specific time (e.g., 03:00 for 3AM)
-- **Warnings**: Players get in-game notifications starting 1 hour before
-- **Final Countdown**: 5-4-3-2-1 second countdown before restart
-- **Auto-Recovery**: Success/error messages after restart completes
+- **Interval Mode**: Restart every X hours.
+- **Daily Time Mode**: Restart at a specific time (e.g., 03:00 for 3AM).
+- **Warnings**: Players get in-game notifications starting 1 hour before restart.
+- **Final Countdown**: A 5-second countdown is announced in-game before shutdown.
 
 ### Backups
 
@@ -145,8 +146,6 @@ Send any Minecraft command:
 say Hello everyone!
 op PlayerName
 gamemode creative PlayerName
-weather clear
-whitelist add PlayerName
 ```
 
 Commands appear in the log with `>` prefix and execute immediately.
@@ -155,28 +154,32 @@ Commands appear in the log with `>` prefix and execute immediately.
 
 ## 🏗️ Project Structure
 
+The project follows a clean architecture, separating UI, business logic, and services.
+
 ```
 MCTunnel/
 ├── app/
-│   ├── main.py                    # Main application & UI
-│   ├── logic.py                   # Server/backup/scheduler logic
-│   ├── server_wizard.py           # 5-step creation wizard
-│   ├── server_properties_editor.py # Properties editor UI
-│   ├── playit_manager.py          # Tunneling integration
-│   └── ui_components.py           # Reusable UI widgets
+│   ├── main.py                    # Main application, UI layout, and event handling
+│   ├── logic.py                   # Core server logic (start, stop, backup, properties)
+│   ├── constants.py               # Centralized constants (URLs, paths, versions)
+│   ├── scheduler_service.py       # Handles the logic for automated restarts
+│   ├── playit_manager.py          # Manages the playit.gg tunneling agent
+│   ├── server_wizard.py           # UI and logic for the 5-step creation wizard
+│   ├── server_properties_editor.py # UI for the server properties editor
+│   └── ui_components.py           # Reusable UI widgets (console, list items)
 │
-├── servers/                       # Created servers
+├── servers/                       # (Generated) Created servers are stored here
 │   └── <server-name>/
-│       ├── server.jar / fabric-server-launch.jar
+│       ├── server.jar
 │       ├── server.properties
-│       ├── world/
-│       ├── backups/
-│       └── metadata.json          # Scheduler config
+│       └── metadata.json          # Stores RAM allocation, scheduler config, etc.
 │
-├── bin/                           # Auto-managed
-│   └── playit.exe
+├── bin/                           # (Generated) Binaries like the playit agent
 │
-├── config/                        # Playit config
+├── config/                        # (Generated) Playit.gg agent configuration
+│
+├── config.json                    # (Generated) App-level configuration
+├── requirements.txt               # Project dependencies for pip
 │
 ├── USAGE.md                       # User guide
 ├── TESTING.md                     # Test documentation
@@ -202,11 +205,10 @@ MCTunnel/
 
 ### Dependencies
 
-```
-customtkinter>=5.0.0    # Modern UI framework
-requests>=2.31.0        # HTTP operations
-psutil>=5.9.0           # System info (RAM detection)
-```
+All required Python packages are listed in the `requirements.txt` file. The main dependencies are:
+- **customtkinter**: For the modern graphical user interface.
+- **requests**: For downloading server files.
+- **psutil**: For detecting system information like available RAM.
 
 ---
 
@@ -239,7 +241,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Documentation**: See [USAGE.md](USAGE.md) for detailed instructions
+- **Documentation**: See [docs/USAGE.md](docs/USAGE.md) for detailed instructions
 - **Issues**: Report bugs or request features via GitHub Issues
 - **Discussions**: Share your server setups and get help from the community
 

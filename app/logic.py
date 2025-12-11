@@ -7,21 +7,11 @@ import shutil
 import requests
 import threading
 
-CONFIG_PATH = "config.json"
-SERVERS_DIR = "servers"
-
-SERVER_URLS = {
-    "Vanilla": {
-        "1.21.1": "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar"
-    },
-    "Fabric": {
-        "1.20.1": "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
-    }
-}
+from app.constants import APP_CONFIG_PATH, SERVERS_DIR, MINECRAFT_VERSIONS, BACKUPS_DIR
 
 def load_config():
     """Loads the configuration from config.json."""
-    if not os.path.exists(CONFIG_PATH):
+    if not os.path.exists(APP_CONFIG_PATH):
         default_config = {
             "java_path": "auto",
             "ram_allocation": "2G",
@@ -32,14 +22,16 @@ def load_config():
         return default_config
     
     try:
-        with open(CONFIG_PATH, "r") as f:
+        with open(APP_CONFIG_PATH, "r") as f:
             return json.load(f)
     except json.JSONDecodeError:
         return load_config() # Return default if corrupted (or handle better)
 
 def save_config(config):
     """Saves the configuration to config.json."""
-    with open(CONFIG_PATH, "w") as f:
+    # Ensure the parent directory exists
+    APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(APP_CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
 def check_java():
@@ -80,7 +72,7 @@ def download_server(server_name, server_type, version, progress_callback=None):
     Downloads the server jar to the server directory.
     progress_callback: function(float) -> None (0.0 to 1.0)
     """
-    url = SERVER_URLS.get(server_type, {}).get(version)
+    url = MINECRAFT_VERSIONS.get(server_type, {}).get(version)
     if not url:
         raise ValueError(f"URL not found for {server_type} {version}")
 
@@ -123,7 +115,7 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     Downloads Fabric Installer and runs it to generate server files.
     """
     server_path = create_server_directory(server_name)
-    installer_url = SERVER_URLS["Fabric"]["1.20.1"] # Hardcoded for now based on input
+    installer_url = MINECRAFT_VERSIONS["Fabric"]["1.20.1"] # Hardcoded for now based on input
     installer_path = os.path.join(server_path, "fabric-installer.jar")
     
     # 1. Download Installer
@@ -178,19 +170,67 @@ class ServerRunner:
         except:
             self.ram_allocation = ram_allocation
 
+    def _apply_pending_settings(self):
+        """Checks for and applies initial settings from the wizard, creating the properties file if needed."""
+        metadata_path = os.path.join(SERVERS_DIR, self.server_name, "metadata.json")
+        if not os.path.exists(metadata_path):
+            return
+
+        try:
+            with open(metadata_path, "r+") as f:
+                meta = json.load(f)
+                pending = meta.get("pending_settings")
+
+                if not pending or not any(pending.values()):
+                    return
+
+                self.console_callback("[System] Applying initial server settings from wizard...")
+                
+                # Load existing properties or create an empty dictionary
+                props = load_server_properties(self.server_name)
+                
+                # If props is empty, it's the first time, so set defaults
+                if not props:
+                    props["network-compression-threshold"] = "256"
+                    props["sync-chunk-writes"] = "false"
+                    props["entity-broadcast-range-percentage"] = "75"
+                    props["allow-flight"] = "true"
+
+                # Map wizard keys to server.properties keys
+                if pending.get("seed"): props["level-seed"] = pending.get("seed")
+                if pending.get("game_mode"): props["gamemode"] = pending.get("game_mode")
+                if pending.get("difficulty"): props["difficulty"] = pending.get("difficulty")
+                if pending.get("view_distance"): props["view-distance"] = pending.get("view_distance")
+                if pending.get("simulation_distance"): props["simulation-distance"] = pending.get("simulation_distance")
+                
+                # Save the updated properties. This will create the file if it doesn't exist.
+                save_server_properties(self.server_name, props)
+                
+                # Clear pending settings to prevent re-application
+                meta["pending_settings"] = {}
+                f.seek(0)
+                f.truncate()
+                json.dump(meta, f, indent=4)
+                self.console_callback("[System] Initial settings applied successfully.")
+
+        except Exception as e:
+            self.console_callback(f"[Error] Failed to apply pending settings: {e}")
+
     def start(self):
         if self.running:
             return
         
-        server_path = os.path.join(SERVERS_DIR, self.server_name)
+        # Always apply settings before starting. This will create server.properties if it's the first time.
+        self._apply_pending_settings()
         
-        # Check/Accept EULA
+        # Accept EULA if not already accepted.
         if not check_eula(self.server_name):
             accept_eula(self.server_name)
             self.console_callback("[System] EULA auto-accepted.")
 
+        server_path = os.path.join(SERVERS_DIR, self.server_name)
+
         # Determine jar file
-        # Priority: fabric-server-launch.jar -> server.jar
         jar_file = "server.jar"
         if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
             jar_file = "fabric-server-launch.jar"
@@ -203,8 +243,8 @@ class ServerRunner:
         cmd = [
             "java",
             f"-Xmx{self.ram_allocation}",
-            "--enable-native-access=ALL-UNNAMED",  # Fix restricted method warnings
-            "-Dorg.lwjgl.util.NoChecks=true",       # Reduce LWJGL warnings
+            "--enable-native-access=ALL-UNNAMED",
+            "-Dorg.lwjgl.util.NoChecks=true",
             "-jar",
             jar_file,
             "nogui"
@@ -351,33 +391,33 @@ def save_server_properties(server_name, new_properties):
         f.writelines(new_lines)
 
 import datetime
+import datetime
 import zipfile
 
 class BackupManager:
     def __init__(self, server_name):
         self.server_name = server_name
-        self.server_path = os.path.join(SERVERS_DIR, server_name)
-        self.backup_dir = os.path.join("backups", server_name)
+        self.server_path = SERVERS_DIR / server_name
+        self.backup_dir = BACKUPS_DIR / server_name
         
-        if not os.path.exists(self.backup_dir):
-            os.makedirs(self.backup_dir)
+        if not self.backup_dir.exists():
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self):
         """Creates a zip backup of the server directory."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_filename = f"{timestamp}.zip"
-        backup_path = os.path.join(self.backup_dir, backup_filename)
+        backup_path = self.backup_dir / backup_filename
         
         try:
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
-                    # Exclude backups folder if it's somehow inside (shouldn't be, but safety first)
+                    # Exclude backups folder if it's somehow inside
                     if "backups" in root:
                         continue
                         
                     for file in files:
                         file_path = os.path.join(root, file)
-                        # Archive name relative to server root
                         arcname = os.path.relpath(file_path, self.server_path)
                         zipf.write(file_path, arcname)
             return backup_path
@@ -388,39 +428,36 @@ class BackupManager:
     def list_backups(self):
         """Returns a list of dicts with backup info."""
         backups = []
-        if not os.path.exists(self.backup_dir):
+        if not self.backup_dir.exists():
             return backups
             
-        for filename in os.listdir(self.backup_dir):
-            if filename.endswith(".zip"):
-                path = os.path.join(self.backup_dir, filename)
-                size_mb = os.path.getsize(path) / (1024 * 1024)
+        for f in self.backup_dir.iterdir():
+            if f.is_file() and f.suffix == ".zip":
+                size_mb = f.stat().st_size / (1024 * 1024)
                 backups.append({
-                    "name": filename,
-                    "path": path,
+                    "name": f.name,
+                    "path": str(f),
                     "size": f"{size_mb:.2f} MB",
-                    "date": filename.replace(".zip", "")
+                    # Parse and reformat the date string to a more readable format
+                    "date": datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
                 })
-        # Sort by date desc
+        # Sort by name (which is the date) desc
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
 
-    def restore_backup(self, backup_path):
+    def restore_backup(self, backup_path_str):
         """Restores a backup, wiping the current server directory first."""
-        if not os.path.exists(backup_path):
+        backup_path = BACKUPS_DIR / self.server_name / os.path.basename(backup_path_str)
+        if not backup_path.exists():
             return False
             
-        # Safety: Create a temp backup of current state? 
-        # For now, let's just wipe and restore.
-        
         try:
             # 1. Clear server directory
-            for item in os.listdir(self.server_path):
-                item_path = os.path.join(self.server_path, item)
-                if os.path.isfile(item_path) or os.path.islink(item_path):
-                    os.unlink(item_path)
-                elif os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
+            for item in self.server_path.iterdir():
+                if item.is_file() or item.is_symlink():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
             
             # 2. Extract backup
             with zipfile.ZipFile(backup_path, 'r') as zipf:
@@ -538,7 +575,7 @@ class Scheduler:
             self._save_metadata(data)
 
 
-def apply_server_settings(server_name, ram, seed, game_mode, difficulty):
+def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
     """
     Applies initial server settings after server installation.
     Creates metadata.json and accepts EULA.
@@ -553,7 +590,9 @@ def apply_server_settings(server_name, ram, seed, game_mode, difficulty):
         "pending_settings": {
             "seed": seed,
             "game_mode": game_mode,
-            "difficulty": difficulty
+            "difficulty": difficulty,
+            "view_distance": view_distance,
+            "simulation_distance": simulation_distance
         }
     }
     metadata_path = os.path.join(server_path, "metadata.json")

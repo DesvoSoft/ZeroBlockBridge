@@ -8,11 +8,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.logic import load_config, check_java, save_config, download_server, accept_eula, SERVERS_DIR, install_fabric, ServerRunner
+from app.logic import load_config, check_java, save_config, download_server, accept_eula, install_fabric, ServerRunner
 import app.logic as logic
+from app.constants import SERVERS_DIR # Import SERVERS_DIR from constants
 from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
+from app.scheduler_service import SchedulerService
 import webbrowser
 import winsound  # For sound notifications
 
@@ -22,24 +24,41 @@ ctk.set_default_color_theme("blue")
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self._init_window_config()
+        self._init_state_variables()
+        self._init_managers()
+        self._build_layout()
+        self._init_background_services()
 
+    def _init_window_config(self):
+        """Configure window properties."""
         self.title("Zero Block Bridge")
         self.geometry("1000x650")  # Increased default size
         self.minsize(800, 550)  # Minimum window size for usability
-        
-        self.server_runner = None
-        self.current_server = None
-        self.server_runner = None
-        self.current_server = None
-        self.playit_manager = PlayitManager(self.update_tunnel_console, self.update_playit_status, self.on_playit_claim)
-
         
         # Grid layout - Responsive weights
         self.grid_columnconfigure(0, weight=0, minsize=200)  # Sidebar - fixed min width
         self.grid_columnconfigure(1, weight=1)  # Main Content - takes remaining space
         self.grid_rowconfigure(0, weight=1)
 
-        # --- Left Sidebar (Controls & Server List) ---
+    def _init_state_variables(self):
+        """Initialize all state variables."""
+        self.server_runner = None
+        self.current_server = None
+        self.restart_warnings_sent = set()
+        self.claim_url = None
+
+    def _init_managers(self):
+        """Initialize PlayitManager and other services."""
+        self.playit_manager = PlayitManager(self.update_tunnel_console, self.update_playit_status, self.on_playit_claim)
+
+    def _build_layout(self):
+        """Construct entire UI layout."""
+        self._build_sidebar()
+        self._build_main_area()
+    
+    def _build_sidebar(self):
+        """Build left sidebar with server list."""
         self.sidebar_frame = ctk.CTkFrame(
             self, 
             width=200, 
@@ -77,20 +96,26 @@ class MCTunnelApp(ctk.CTk):
         # Scrollable list for servers with card styling
         self.server_list_frame = ctk.CTkScrollableFrame(
             self.sidebar_frame, 
-            label_text="Server List",
+            label_text="",
             corner_radius=10,
             border_width=1,
             border_color=("gray80", "gray25")
         )
         self.server_list_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
-        
-        # --- Right Side (Console & Status) ---
+
+    def _build_main_area(self):
+        """Build main content area."""
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
         self.main_frame.grid_rowconfigure(2, weight=1) # Console gets weight
         self.main_frame.grid_columnconfigure(0, weight=1)
 
-        # Header / Status Bar - Card Style
+        self._build_status_bar()
+        self._build_dashboard()
+        self._build_console_tabs()
+
+    def _build_status_bar(self):
+        """Build the top status bar."""
         self.status_frame = ctk.CTkFrame(
             self.main_frame, 
             height=45,
@@ -101,7 +126,7 @@ class MCTunnelApp(ctk.CTk):
         
         self.lbl_status = ctk.CTkLabel(
             self.status_frame, 
-            text="⚪ Idle", 
+            text="⚪ Offline", 
             font=("Roboto Medium", 15)
         )
         self.lbl_status.pack(side="left", padx=20, pady=8)
@@ -126,7 +151,8 @@ class MCTunnelApp(ctk.CTk):
         )
         self.lbl_java_ver.pack(side="left")
 
-        # Dashboard / Controls - Card Style
+    def _build_dashboard(self):
+        """Build the main dashboard with all controls."""
         self.dashboard_frame = ctk.CTkFrame(
             self.main_frame, 
             height=100,
@@ -145,133 +171,45 @@ class MCTunnelApp(ctk.CTk):
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.controls_frame.pack(pady=6)
 
-        # Server Controls Toolbar - Standardized Buttons
-        self.btn_start_all = ctk.CTkButton(
-            self.controls_frame, 
-            text="▶ Start All", 
-            state="disabled", 
-            command=self.start_all_action, 
-            fg_color="#00AA00", 
-            hover_color="#008800",  
-            width=110, 
-            corner_radius=8,
-            height=36,
-            font=("Roboto Medium", 12)
-        )
+        # Server Controls Toolbar
+        self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
         self.btn_start_all.pack(side="left", padx=5)
         
-        self.btn_start = ctk.CTkButton(
-            self.controls_frame, 
-            text="▶", 
-            state="disabled", 
-            command=self.start_server_action, 
-            fg_color="#22c55e", 
-            hover_color="#16a34a", 
-            width=45,
-            corner_radius=8,
-            height=36
-        )
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color="#22c55e", hover_color="#16a34a", width=45, corner_radius=8, height=36)
         self.btn_start.pack(side="left", padx=2)
 
-        self.btn_stop = ctk.CTkButton(
-            self.controls_frame, 
-            text="■", 
-            state="disabled", 
-            command=self.stop_server_action, 
-            fg_color="#ef4444", 
-            hover_color="#dc2626", 
-            width=45,
-            corner_radius=8,
-            height=36
-        )
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color="#ef4444", hover_color="#dc2626", width=45, corner_radius=8, height=36)
         self.btn_stop.pack(side="left", padx=2)
 
-        self.btn_edit_properties = ctk.CTkButton(
-            self.controls_frame, 
-            text="⚙", 
-            command=self.edit_server_properties, 
-            state="disabled", 
-            width=45,
-            corner_radius=8,
-            height=36,
-            fg_color="#6366f1",
-            hover_color="#4f46e5"
-        )
+        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=45, corner_radius=8, height=36, fg_color="#6366f1", hover_color="#4f46e5")
         self.btn_edit_properties.pack(side="left", padx=2)
 
-        # --- Playit Tunnel Controls ---
+        # Playit Tunnel Controls
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.tunnel_frame.pack(pady=10, fill="x")
 
-        self.lbl_tunnel_status = ctk.CTkLabel(
-            self.tunnel_frame, 
-            text="Tunnel: Offline", 
-            text_color="gray",
-            font=("Roboto", 13)
-        )
+        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color="gray", font=("Roboto", 13))
         self.lbl_tunnel_status.pack(side="left", padx=20)
 
-        self.lbl_public_ip = ctk.CTkLabel(
-            self.tunnel_frame, 
-            text="Public IP: N/A", 
-            font=("Roboto Medium", 12)
-        )
+        self.lbl_public_ip = ctk.CTkLabel(self.tunnel_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
         self.lbl_public_ip.pack(side="left", padx=20)
 
-        # Tunnel Toolbar
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(
-            self.tunnel_toolbar, 
-            text="▶", 
-            command=self.start_tunnel, 
-            width=45,
-            corner_radius=8,
-            height=36,
-            fg_color="#22c55e",
-            hover_color="#16a34a"
-        )
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=8, height=36, fg_color="#22c55e", hover_color="#16a34a")
         self.btn_tunnel_start.pack(side="left", padx=2)
         
-        self.btn_tunnel_stop = ctk.CTkButton(
-            self.tunnel_toolbar, 
-            text="■", 
-            command=self.stop_tunnel, 
-            state="disabled", 
-            fg_color="#ef4444", 
-            hover_color="#dc2626", 
-            width=45,
-            corner_radius=8,
-            height=36
-        )
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color="#ef4444", hover_color="#dc2626", width=45, corner_radius=8, height=36)
         self.btn_tunnel_stop.pack(side="left", padx=2)
 
-        self.btn_claim = ctk.CTkButton(
-            self.tunnel_toolbar, 
-            text="🔗", 
-            command=self.open_claim_url, 
-            fg_color="#f97316", 
-            hover_color="#ea580c",
-            width=45,
-            corner_radius=8,
-            height=36
-        )
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗", command=self.open_claim_url, fg_color="#f97316", hover_color="#ea580c", width=45, corner_radius=8, height=36)
         # Don't pack it yet, only show when needed
 
-        self.btn_reset = ctk.CTkButton(
-            self.tunnel_toolbar, 
-            text="↻", 
-            command=self.reset_tunnel, 
-            fg_color="#6b7280", 
-            hover_color="#4b5563", 
-            width=45,
-            corner_radius=8,
-            height=36
-        )
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="#6b7280", hover_color="#4b5563", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
-        # --- Management Controls (Backups & Scheduler) ---
+        # Management Controls (Backups & Scheduler)
         self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.management_frame.pack(pady=(6, 10), fill="x")
         
@@ -279,81 +217,44 @@ class MCTunnelApp(ctk.CTk):
         scheduler_container = ctk.CTkFrame(self.management_frame, fg_color="transparent")
         scheduler_container.pack(side="left", padx=20)
         
-        self.lbl_scheduler = ctk.CTkLabel(
-            scheduler_container, 
-            text="Auto-Restart:", 
-            font=("Roboto Medium", 12)
-        )
+        self.lbl_scheduler = ctk.CTkLabel(scheduler_container, text="Auto-Restart:", font=("Roboto Medium", 12))
         self.lbl_scheduler.grid(row=0, column=0, padx=5, sticky="w", columnspan=3)
         
         self.var_scheduler_enabled = ctk.BooleanVar()
-        self.chk_scheduler = ctk.CTkCheckBox(
-            scheduler_container, 
-            text="", 
-            variable=self.var_scheduler_enabled, 
-            command=self.toggle_scheduler_inputs,
-            corner_radius=6
-        )
+        self.chk_scheduler = ctk.CTkCheckBox(scheduler_container, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, corner_radius=6)
         self.chk_scheduler.grid(row=1, column=0, padx=5)
         
-        self.combo_schedule_mode = ctk.CTkComboBox(
-            scheduler_container, 
-            values=["Interval", "Daily Time"], 
-            width=100, 
-            command=self.toggle_schedule_mode,
-            corner_radius=8,
-            state="readonly"  # Prevent manual typing
-        )
+        self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode, corner_radius=8, state="readonly")
         self.combo_schedule_mode.grid(row=1, column=1, padx=5)
         self.combo_schedule_mode.set("Interval")
         
-        # Interval inputs (shown by default)
-        self.entry_scheduler_interval = ctk.CTkEntry(
-            scheduler_container, 
-            width=50, 
-            placeholder_text="6",
-            corner_radius=8
-        )
+        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text="6", corner_radius=8)
         self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
         
         self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
         self.lbl_interval_unit.grid(row=1, column=3, padx=2)
         
-        # Time inputs (hidden by default)
-        self.entry_restart_time = ctk.CTkEntry(
-            scheduler_container, 
-            width=60, 
-            placeholder_text="03:00",
-            corner_radius=8
-        )
-        # Bind validation for time format
+        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text="03:00", corner_radius=8)
         self.entry_restart_time.bind("<KeyRelease>", self._format_time_input)
         
-        # Apply button
-        self.btn_apply_schedule = ctk.CTkButton(
-            scheduler_container, 
-            text="Apply", 
-            width=70, 
-            command=self.save_scheduler_dashboard, 
-            fg_color="#3b82f6",
-            hover_color="#2563eb",
-            corner_radius=8,
-            height=32
-        )
+        self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=70, command=self.save_scheduler_dashboard, fg_color="#3b82f6", hover_color="#2563eb", corner_radius=8, height=32)
         self.btn_apply_schedule.grid(row=1, column=4, padx=5)
-
 
         # Backup Section
         self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
-        self.backup_frame.pack(side="right", padx=20)
-        
+        self.backup_frame.pack(side="right", padx=20, fill="x", expand=True)
+        self.backup_frame.grid_columnconfigure(1, weight=1) # Make column 1 expandable
+
+        self.lbl_backup_title = ctk.CTkLabel(self.backup_frame, text="Quick Backup:", font=("Roboto Medium", 12))
+        self.lbl_backup_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=5)
+
         self.lbl_last_backup = ctk.CTkLabel(
             self.backup_frame, 
-            text="Last Backup: None", 
+            text="Last: None", 
             text_color="gray",
             font=("Roboto", 12)
         )
-        self.lbl_last_backup.pack(side="left", padx=10)
+        self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=5, pady=(0, 5))
         
         self.btn_quick_backup = ctk.CTkButton(
             self.backup_frame, 
@@ -365,10 +266,10 @@ class MCTunnelApp(ctk.CTk):
             corner_radius=8,
             height=32
         )
-        self.btn_quick_backup.pack(side="left", padx=5)
+        self.btn_quick_backup.grid(row=1, column=1, sticky="e", padx=5, pady=(0, 5))
 
-
-        # Console Tabs
+    def _build_console_tabs(self):
+        """Build the console and log tabs."""
         self.console_tabs = ctk.CTkTabview(self.main_frame)
         self.console_tabs.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="nsew")
         
@@ -379,110 +280,55 @@ class MCTunnelApp(ctk.CTk):
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"))
         self.server_console.pack(fill="both", expand=True)
         
-        self.console_input_frame = ctk.CTkFrame(
-            self.console_tabs.tab("Console"), 
-            height=40,
-            corner_radius=10,
-            fg_color=("gray95", "gray15")
-        )
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=10, fg_color=("gray95", "gray15"))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
         
-        self.entry_console = ctk.CTkEntry(
-            self.console_input_frame, 
-            placeholder_text="Type command here...",
-            corner_radius=8,
-            height=36
-        )
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=8, height=36)
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
         
-        self.btn_send = ctk.CTkButton(
-            self.console_input_frame, 
-            text="Send", 
-            width=80, 
-            command=self.send_server_command,
-            corner_radius=8,
-            height=36,
-            fg_color="#3b82f6",
-            hover_color="#2563eb"
-        )
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=8, height=36, fg_color="#3b82f6", hover_color="#2563eb")
         self.btn_send.pack(side="right", padx=10, pady=5)
         
         # Tunnel Console
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
         self.tunnel_console.pack(fill="both", expand=True)
 
-        # --- Initialization ---
+    def _init_background_services(self):
+        """Initialize and start background services."""
         self.check_java_startup()
         self.load_servers()
-        self.restart_warnings_sent = set()  # Track which warnings have been sent
         self.start_scheduler()
 
     def start_scheduler(self):
         """Starts the background scheduler thread."""
         def _scheduler_loop():
             import time
-            import datetime
-            
             while True:
-                time.sleep(30)  # Check every 30 seconds for better warning accuracy
+                time.sleep(30)  # Check every 30 seconds
                 
-                if self.server_runner and self.server_runner.running and self.current_server:
-                    scheduler = logic.Scheduler(self.current_server)
-                    schedule = scheduler.get_schedule()
-                    
-                    if not schedule:
-                        continue
-                    
-                    now = datetime.datetime.now()
-                    remaining = None
-                    
-                    # Calculate time remaining based on schedule type
-                    if schedule["type"] == "interval":
-                        last_run_str = schedule.get("last_run")
-                        if not last_run_str:
-                            continue
-                            
-                        last_run = datetime.datetime.fromisoformat(last_run_str)
-                        interval = datetime.timedelta(hours=schedule["interval_hours"])
-                        next_restart = last_run + interval
-                        remaining = (next_restart - now).total_seconds()
-                        
-                    elif schedule["type"] == "time":
-                        # Time-based schedule - calculate to today's target time
-                        restart_time_str = schedule["restart_time"]
-                        hour, minute = map(int, restart_time_str.split(":"))
-                        target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                        
-                        # Calculate seconds until target time TODAY
-                        # If negative, we've passed it (will be caught by check_due)
-                        remaining = (target_time - now).total_seconds()
-                    
-                    if remaining is None:
-                        continue
-                    
-                    # Send warnings at specific intervals (only if future restart)
-                    if remaining > 0:
-                        if remaining <= 3660 and remaining > 3600 and '1h' not in self.restart_warnings_sent:
-                            self.send_restart_warning("Server will restart in 1 hour!")
-                            self.restart_warnings_sent.add('1h')
-                        elif remaining <= 1860 and remaining > 1800 and '30m' not in self.restart_warnings_sent:
-                            self.send_restart_warning("Server will restart in 30 minutes!")
-                            self.restart_warnings_sent.add('30m')
-                        elif remaining <= 960 and remaining > 900 and '15m' not in self.restart_warnings_sent:
-                            self.send_restart_warning("Server will restart in 15 minutes!")
-                            self.restart_warnings_sent.add('15m')
-                        elif remaining <= 65 and remaining > 60 and '1m' not in self.restart_warnings_sent:
-                            self.send_restart_warning("Server will restart in 1 minute!")
-                            self.restart_warnings_sent.add('1m')
-                    
-                    # Check if restart is due (uses logic.py check_due which handles both types)
-                    if scheduler.check_due():
-                        self.server_console.log("[System] Scheduled restart due. Initiating final countdown...")
-                        self.restart_server_sequence()
-                        scheduler.update_last_run()
-                        self.restart_warnings_sent.clear()  # Reset for next cycle
-        
+                if not (self.server_runner and self.server_runner.running and self.current_server):
+                    continue
+
+                service = SchedulerService(self.current_server)
+                status = service.get_status()
+
+                if not status:
+                    continue
+                
+                # Check for warnings
+                key, message = service.get_warning_message(status["remaining_seconds"], self.restart_warnings_sent)
+                if key:
+                    self.send_restart_warning(message)
+                    self.restart_warnings_sent.add(key)
+                
+                # Check if restart is due
+                if status["is_due"]:
+                    self.server_console.log("[System] Scheduled restart due. Initiating final countdown...")
+                    self.restart_server_sequence()
+                    service.scheduler.update_last_run()  # Update last run time
+                    self.restart_warnings_sent.clear()  # Reset for next cycle
+
         threading.Thread(target=_scheduler_loop, daemon=True).start()
 
     def send_restart_warning(self, message):
@@ -685,14 +531,21 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
-            self.lbl_status.configure(text="⚪ Idle", text_color="white")
+            self.lbl_status.configure(text="⚪ Offline", text_color="white")
+            
+            # Only enable edit button if server properties exist
+            props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
+            if os.path.exists(props_path):
+                self.btn_edit_properties.configure(state="normal")
+            else:
+                self.btn_edit_properties.configure(state="disabled")
+
             # Keep server type in info
             server_path = os.path.join(SERVERS_DIR, server_name)
             server_type = "Vanilla"
             if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
                 server_type = "Fabric"
             self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
-            self.btn_edit_properties.configure(state="normal")
         
         self.update_management_ui()
 
@@ -823,7 +676,8 @@ class MCTunnelApp(ctk.CTk):
         
         # Check if server is ready (Done message)
         if "Done (" in text and "For help, type" in text:
-            # Server is ready! Play notification sound
+            # Server is ready! Update status and play notification sound
+            self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
             self.after(0, self.play_notification_sound)
 
     def update_tunnel_console(self, text):
@@ -831,6 +685,7 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
+        self.server_console.log("[Debug] start_server_action called.")
         if not self.current_server:
             return
         
@@ -845,10 +700,11 @@ class MCTunnelApp(ctk.CTk):
         self.server_runner = ServerRunner(self.current_server, ram, self.update_console)
         self.server_runner.start()
         
+        # Update UI to "Starting" state
+        self.lbl_status.configure(text="⏳ Starting...", text_color="orange")
         self.btn_start.configure(state="disabled")
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
-        self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
 
     def stop_server_action(self):
         if self.server_runner:
@@ -856,7 +712,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
-            self.lbl_status.configure(text="⚪ Idle", text_color="white")
+            self.lbl_status.configure(text="⚪ Offline", text_color="white")
             self.server_runner = None
 
     def create_server_dialog(self):
@@ -872,6 +728,8 @@ class MCTunnelApp(ctk.CTk):
         seed = config["seed"]
         game_mode = config["game_mode"]
         difficulty = config["difficulty"]
+        view_distance = config["view_distance"]
+        simulation_distance = config["simulation_distance"]
         
         # Check if server exists
         if os.path.exists(os.path.join(SERVERS_DIR, name)):
@@ -879,13 +737,15 @@ class MCTunnelApp(ctk.CTk):
             return
 
         # Start download thread
-        threading.Thread(target=self.start_download_process, args=(name, srv_type, version, ram, seed, game_mode, difficulty), daemon=True).start()
+        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
+        threading.Thread(target=self.start_download_process, args=args, daemon=True).start()
 
-    def start_download_process(self, name, srv_type, version, ram, seed, game_mode, difficulty):
+    def start_download_process(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
         # Schedule UI update on main thread
-        self.after(0, lambda: self.show_progress_dialog(name, srv_type, version, ram, seed, game_mode, difficulty))
+        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
+        self.after(0, lambda: self.show_progress_dialog(*args))
 
-    def show_progress_dialog(self, name, srv_type, version, ram, seed, game_mode, difficulty):
+    def show_progress_dialog(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
         dialog = DownloadProgressDialog(self, title=f"Installing {name}...")
         
         def run_install():
@@ -899,7 +759,7 @@ class MCTunnelApp(ctk.CTk):
                 
                 if success:
                     # Apply settings (RAM, Seed, Game Mode, Difficulty)
-                    logic.apply_server_settings(name, ram, seed, game_mode, difficulty)
+                    logic.apply_server_settings(name, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
                     
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.after(0, lambda: self._on_download_complete(dialog))

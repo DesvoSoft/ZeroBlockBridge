@@ -160,14 +160,16 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
     def create_widgets(self):
         # Helper to create fields
-        def add_field(parent, key, label_text, widget_type="entry", options=None):
+        def add_field(parent, key, label_text, widget_type="entry", options=None, default_val=None):
             frame = ctk.CTkFrame(parent, fg_color="transparent")
             frame.pack(fill="x", pady=2)
             
-            lbl = ctk.CTkLabel(frame, text=label_text, width=150, anchor="w")
+            lbl = ctk.CTkLabel(frame, text=label_text, width=200, anchor="w")
             lbl.pack(side="left", padx=5)
             
-            val = self.properties.get(key, "")
+            val = self.properties.get(key)
+            if val is None:
+                val = default_val if default_val is not None else ""
             
             if widget_type == "entry":
                 widget = ctk.CTkEntry(frame)
@@ -188,7 +190,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # --- General Tab ---
         add_field(self.frame_general, "motd", "MOTD")
-        add_field(self.frame_general, "max-players", "Max Players")
+        add_field(self.frame_general, "max-players", "Max Players", default_val="20")
         add_field(self.frame_general, "gamemode", "Game Mode", "dropdown", ["survival", "creative", "adventure", "spectator"])
         add_field(self.frame_general, "difficulty", "Difficulty", "dropdown", ["peaceful", "easy", "normal", "hard"])
         add_field(self.frame_general, "hardcore", "Hardcore", "checkbox")
@@ -196,18 +198,19 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         # --- World Tab ---
         add_field(self.frame_world, "level-seed", "Level Seed")
-        add_field(self.frame_world, "level-name", "Level Name")
+        add_field(self.frame_world, "level-name", "Level Name", default_val="world")
         add_field(self.frame_world, "level-type", "Level Type", "dropdown", ["minecraft:normal", "minecraft:flat", "minecraft:large_biomes", "minecraft:amplified"])
         add_field(self.frame_world, "generate-structures", "Gen Structures", "checkbox")
         add_field(self.frame_world, "spawn-npcs", "Spawn NPCs", "checkbox")
         add_field(self.frame_world, "spawn-animals", "Spawn Animals", "checkbox")
         add_field(self.frame_world, "spawn-monsters", "Spawn Monsters", "checkbox")
-        add_field(self.frame_world, "view-distance", "View Distance")
-        add_field(self.frame_world, "simulation-distance", "Sim Distance")
+        add_field(self.frame_world, "view-distance", "View Distance", default_val="10")
+        add_field(self.frame_world, "simulation-distance", "Sim Distance", default_val="10")
 
         # --- Network Tab ---
-        add_field(self.frame_network, "server-port", "Server Port")
+        add_field(self.frame_network, "server-port", "Server Port", default_val="25565")
         add_field(self.frame_network, "server-ip", "Server IP")
+        add_field(self.frame_network, "network-compression-threshold", "Network Compression Threshold", default_val="256")
         add_field(self.frame_network, "white-list", "Whitelist", "checkbox")
         add_field(self.frame_network, "enforce-whitelist", "Enforce Whitelist", "checkbox")
         add_field(self.frame_network, "online-mode", "Online Mode", "checkbox")
