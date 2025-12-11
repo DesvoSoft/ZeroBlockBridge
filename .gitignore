@@ -40,7 +40,7 @@ env/
 /bin/              # External binaries (playit, java)
 config.json        # User configuration (contains local paths)
 
-# Project Specific - App Directory (if run from app/)
+# Project Specific - App Directory
 app/servers/
 app/config.json
 app/__pycache__/
@@ -57,3 +57,13 @@ Thumbs.db
 # Local Jar Backups
 mc jar files (fabric and vanilla)/
 *.jar
+
+# Gemini files
+GEMINI.md
+current_implementation_plan.md
+
+# Server files
+servers/*
+
+# Executable
+Zero Block Bridge.exe
