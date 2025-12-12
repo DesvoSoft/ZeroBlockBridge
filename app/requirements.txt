@@ -3,4 +3,4 @@ darkdetect
 requests
 psutil
 packaging
-playsound
+playsound==1.2.2
