@@ -41,7 +41,19 @@ Before running Zero Block Bridge, ensure you have:
 2. **Install Python dependencies:**
 
    ```bash
-   pip install customtkinter requests psutil
+   pip install customtkinter requests psutil playsound
+   ```
+
+   **Note for Linux users regarding sound notifications:**
+   The application uses the `playsound` library for audio notifications. On some Linux distributions, `playsound` relies on external audio playback tools like `GStreamer` or `mpg123`. If you encounter issues with sound notifications, ensure one of these is installed. For Debian/Ubuntu-based systems, you can install `GStreamer` with:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+   ```
+   Alternatively, `mpg123` can often work as well:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install mpg123
    ```
 
 3. **Run the application:**

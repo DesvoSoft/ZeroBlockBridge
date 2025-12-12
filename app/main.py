@@ -11,12 +11,14 @@ from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDia
 from app.logic import load_config, check_java, save_config, download_server, accept_eula, install_fabric, ServerRunner
 import app.logic as logic
 from app.constants import SERVERS_DIR # Import SERVERS_DIR from constants
+from app.constants import ASSETS_DIR # Import ASSETS_DIR from constants
+from playsound import playsound
 from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 from app.scheduler_service import SchedulerService
 import webbrowser
-import winsound  # For sound notifications
+# import winsound  # For sound notifications
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -183,6 +185,9 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=45, corner_radius=8, height=36, fg_color="#6366f1", hover_color="#4f46e5")
         self.btn_edit_properties.pack(side="left", padx=2)
+
+        self.btn_open_server_folder = ctk.CTkButton(self.controls_frame, text="📂", command=self.open_mods_folder_action, state="disabled", width=45, corner_radius=8, height=36, fg_color="#34d399", hover_color="#10b981")
+        self.btn_open_server_folder.pack(side="left", padx=2)
 
         # Playit Tunnel Controls
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
@@ -458,25 +463,16 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=_check, daemon=True).start()
 
     def play_notification_sound(self):
-        """Plays a pleasant notification sound on Windows."""
+        """Plays a pleasant notification sound using playsound for cross-platform compatibility."""
         try:
-            # Play a nice triple-beep notification
-            threading.Thread(target=self._play_beeps, daemon=True).start()
-        except:
-            pass  # Silently fail if sound doesn't work
-    
-    def _play_beeps(self):
-        """Plays three ascending beeps for notification."""
-        try:
-            import time
-            # Three pleasant ascending beeps
-            winsound.Beep(800, 150)   # First beep: 800Hz, 150ms
-            time.sleep(0.1)
-            winsound.Beep(1000, 150)  # Second beep: 1000Hz, 150ms
-            time.sleep(0.1)
-            winsound.Beep(1200, 200)  # Third beep: 1200Hz, 200ms
-        except:
-            pass
+            sound_path = ASSETS_DIR / "notification.wav"
+            if sound_path.exists():
+                # playsound can block, so run in a separate thread
+                threading.Thread(target=playsound, args=(str(sound_path),), daemon=True).start()
+            else:
+                self.server_console.log(f"[Warning] Notification sound not found at {sound_path}")
+        except Exception as e:
+            self.server_console.log(f"[Error] Failed to play notification sound: {e}")
 
     def load_servers(self):
         # Clear existing list
@@ -527,6 +523,7 @@ class MCTunnelApp(ctk.CTk):
                 server_type = "Fabric"
             self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
             self.btn_edit_properties.configure(state="disabled")
+            self.btn_open_server_folder.configure(state="normal")
         else:
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
@@ -538,7 +535,8 @@ class MCTunnelApp(ctk.CTk):
             if os.path.exists(props_path):
                 self.btn_edit_properties.configure(state="normal")
             else:
-                self.btn_edit_properties.configure(state="disabled")
+                            self.btn_edit_properties.configure(state="disabled")
+                            self.btn_open_server_folder.configure(state="normal") # Enable open server folder button when a server is selected
 
             # Keep server type in info
             server_path = os.path.join(SERVERS_DIR, server_name)
@@ -669,6 +667,20 @@ class MCTunnelApp(ctk.CTk):
         ServerPropertiesEditor(self, self.current_server, logic)
         # Refresh UI after close in case they changed settings there
         # We can't easily hook into close, but the dashboard updates on select/actions.
+
+    def open_mods_folder_action(self):
+        """Opens the main directory for the currently selected server."""
+        if not self.current_server:
+            self.server_console.log("[Error] No server selected to open folder.")
+            return
+
+        server_path = SERVERS_DIR / self.current_server
+        
+        try:
+            webbrowser.open(str(server_path))
+            self.server_console.log(f"[System] Opened server folder for '{self.current_server}': {server_path}")
+        except Exception as e:
+            self.server_console.log(f"[Error] Failed to open server folder for '{self.current_server}': {e}")
 
     def update_console(self, text):
         """Thread-safe server console update."""

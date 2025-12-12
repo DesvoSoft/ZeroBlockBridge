@@ -7,6 +7,7 @@ SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
 BACKUPS_DIR = BASE_DIR / "backups"
+ASSETS_DIR = BASE_DIR / "assets"
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Ruta al config.json principal
 
 # Versiones y URLs para descargas de servidores

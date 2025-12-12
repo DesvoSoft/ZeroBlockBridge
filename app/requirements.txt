@@ -1,0 +1,6 @@
+customtkinter
+darkdetect
+requests
+psutil
+packaging
+playsound
