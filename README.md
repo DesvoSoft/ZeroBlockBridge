@@ -1,4 +1,4 @@
-# 🚀 Zero Block Bridge
+# Zero Block Bridge
 
 **Minecraft Server Management with Built-in Tunneling, Backups & Automation**
 
@@ -10,56 +10,57 @@ Zero Block Bridge is a feature-rich desktop application that simplifies Minecraf
 
 ---
 
-## ✨ Features
+## Features
 
 ### Server Management
 
-- **📝 5-Step Creation Wizard**: Name, type, RAM, world settings, and review
-- **🎮 Multi-Version Support**: Vanilla 1.21.1 and Fabric 1.20.1
-- **⚡ Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max)
-- **🎛️ Server Properties Editor**: Tabbed interface for all settings
-- **💻 Integrated Console**: Send commands directly from the app
-- **📊 Live Monitoring**: Real-time server and tunnel logs in separate tabs
+- **5-Step Creation Wizard**: Name, type, RAM, world settings, and review.
+- **Multi-Version Support**: Vanilla 1.21.1 and Fabric 1.20.1.
+- **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
+- **Server Properties Editor**: Tabbed interface for all settings.
+- **Integrated Console**: Send commands directly from the app.
+- **Live Monitoring**: Real-time server and tunnel logs in separate tabs.
 
 ### Automation & Backups
 
-- **💾 One-Click Backups**: Create and restore ZIP backups instantly
-- **⏰ Scheduled Restarts**:
-  - Interval mode (every X hours)
-  - Daily time mode (specific time like 03:00)
-  - Multi-stage warnings (1h, 30m, 15m, 1m, countdown)
-  - Automatic success/error notifications
-- **🔄 Auto-Management**: Set it and forget it with automated restarts + backups
+- **One-Click Backups**: Create and restore ZIP backups instantly.
+- **Scheduled Restarts**:
+  - Interval mode (every X hours).
+  - Daily time mode (specific time like 03:00).
+  - Multi-stage warnings (1h, 30m, 15m, 1m, countdown).
+  - Automatic success/error notifications.
+- **Auto-Management**: Set it and forget it with automated restarts + backups.
 
 ### Tunneling & Sharing
 
-- **🌐 Built-in Playit.gg Integration**: No port forwarding needed
-- **🔗 One-Click Tunnel Setup**: Auto-opens claim link in browser
-- **📍 Public IP Display**: Share `.ply.gg` address with friends
-- **🔄 Auto-Update**: Agent stays up to date automatically
+- **Built-in Playit.gg Integration**: No port forwarding needed.
+- **One-Click Tunnel Setup**: Auto-opens claim link in browser.
+- **Public IP Display**: Share `.ply.gg` address with friends.
+- **Auto-Update**: Agent stays up to date automatically.
 
 ### Developer Experience
 
-- **🎨 Modern GUI**: Clean dark theme built with CustomTkinter
-- **Java 24 Support**: Fully compatible with latest Java versions
-- **🛡️ Error Handling**: Comprehensive validation and user feedback
-- **📁 Organized Structure**: Dedicated folders for each server
+- **Modern GUI**: Clean dark theme built with CustomTkinter.
+- **Cross-Platform Sound**: Reliable notifications on Windows and Linux.
+- **Java 24 Support**: Fully compatible with latest Java versions.
+- **Error Handling**: Comprehensive validation and user feedback.
+- **Organized Structure**: Dedicated folders for each server.
 
 ---
 
-## 🖼️ Interface Overview
+## Interface Overview
 
 The application features:
 
-- **Sidebar**: Server list with selection
-- **Dashboard**: Server/tunnel controls, auto-restart settings, quick backup
-- **Tabbed Console**: Separate logs for Server and Tunnel output
-- **Console Input**: Send server commands directly from the UI
-- **Properties Editor**: 6 tabs (General, World, Network, Advanced, Backups, Automation)
+- **Sidebar**: Server list with selection.
+- **Dashboard**: Server/tunnel controls, auto-restart settings, quick backup.
+- **Tabbed Console**: Separate logs for Server and Tunnel output.
+- **Console Input**: Send server commands directly from the UI.
+- **Properties Editor**: 6 tabs (General, World, Network, Advanced, Backups, Automation).
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -78,12 +79,14 @@ The application features:
 2.  **Install dependencies**
 
     Create a virtual environment (recommended):
+
     ```bash
     python -m venv venv
     .\venv\Scripts\activate
     ```
 
     Install dependencies from the `requirements.txt` file:
+
     ```bash
     pip install -r requirements.txt
     ```
@@ -98,29 +101,29 @@ The application features:
 1.  Click **"Create Server"** in the sidebar.
 2.  Follow the 5-step wizard to configure your server.
 3.  Select the server from the list.
-4.  Click **"▶ Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
+4.  Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
 5.  **Optional**: Enable tunneling to play with friends online.
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-- **[USAGE.md](docs/USAGE.md)** - Complete user guide with all features
-- **[TESTING.md](docs/TESTING.md)** - Test cases and verification steps
+- **[USAGE.md](docs/USAGE.md)** - Complete user guide with all features.
+- **[TESTING.md](docs/TESTING.md)** - Test cases and verification steps.
 
 ---
 
-## 🎯 Key Features Explained
+## Key Features Explained
 
 ### Server Creation Wizard
 
 The wizard guides you through:
 
-1.  **Type & Name**: Choose Vanilla/Fabric and name your server
-2.  **RAM**: Use slider or type exact MB value (with validation)
-3.  **World Settings**: Seed, game mode, difficulty
-4.  **Location**: View save location (custom paths coming soon)
-5.  **Review**: Confirm all settings before creation
+1.  **Type & Name**: Choose Vanilla/Fabric and name your server.
+2.  **RAM**: Use slider or type exact MB value (with validation).
+3.  **World Settings**: Seed, game mode, difficulty.
+4.  **Location**: View save location (custom paths coming soon).
+5.  **Review**: Confirm all settings before creation.
 
 ### Automated Restarts
 
@@ -133,10 +136,10 @@ Configure from the dashboard or properties editor:
 
 ### Backups
 
-- **Create**: Dashboard button or Properties → Backups tab
-- **Format**: ZIP archives with timestamp (`backup_YYYYMMDD_HHMMSS.zip`)
-- **Restore**: Select backup in properties editor (wipes current server!)
-- **Storage**: `servers/<server-name>/backups/`
+- **Create**: Dashboard button or Properties → Backups tab.
+- **Format**: ZIP archives with timestamp (`backup_YYYYMMDD_HHMMSS.zip`).
+- **Restore**: Select backup in properties editor (wipes current server!).
+- **Storage**: `servers/<server-name>/backups/`.
 
 ### Console Commands
 
@@ -152,16 +155,17 @@ Commands appear in the log with `>` prefix and execute immediately.
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 The project follows a clean architecture, separating UI, business logic, and services.
 
 ```
 MCTunnel/
 ├── app/
-│   ├── main.py                    # Main application, UI layout, and event handling
-│   ├── logic.py                   # Core server logic (start, stop, backup, properties)
-│   ├── constants.py               # Centralized constants (URLs, paths, versions)
+│   ├── main.py                    # Main application, UI layout, and coordination
+│   ├── logic.py                   # Core business logic & Sound Utility
+│   ├── app_config.py              # Centralized configuration and constants
+│   ├── server_events.py           # Event system for server state
 │   ├── scheduler_service.py       # Handles the logic for automated restarts
 │   ├── playit_manager.py          # Manages the playit.gg tunneling agent
 │   ├── server_wizard.py           # UI and logic for the 5-step creation wizard
@@ -188,7 +192,7 @@ MCTunnel/
 
 ---
 
-## 🛠️ Technical Details
+## Technical Details
 
 ### Supported Versions
 
@@ -206,45 +210,46 @@ MCTunnel/
 ### Dependencies
 
 All required Python packages are listed in the `requirements.txt` file. The main dependencies are:
+
 - **customtkinter**: For the modern graphical user interface.
 - **requests**: For downloading server files.
 - **psutil**: For detecting system information like available RAM.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Areas for improvement:
 
 - Additional server versions (Paper, Purpur, etc.)
-  -More automation options (scheduled backups, auto-updates)
+- More automation options (scheduled backups, auto-updates)
 - Custom storage locations
 - Multi-server simultaneous operation
 - Plugin/mod management UI
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- **CustomTkinter**: Modern UI framework by Tom Schimansky
-- **Playit.gg**: Free tunneling service for easy multiplayer
-- **Minecraft/Mojang**: For creating an amazing game
-- **Fabric**: Lightweight modding platform
-
----
-
-## 📞 Support
-
-- **Documentation**: See [docs/USAGE.md](docs/USAGE.md) for detailed instructions
-- **Issues**: Report bugs or request features via GitHub Issues
-- **Discussions**: Share your server setups and get help from the community
+- **CustomTkinter**: Modern UI framework by Tom Schimansky.
+- **Playit.gg**: Free tunneling service for easy multiplayer.
+- **Minecraft/Mojang**: For creating an amazing game.
+- **Fabric**: Lightweight modding platform.
 
 ---
 
-**Made with ❤️ for the Minecraft community**
+## Support
+
+- **Documentation**: See [docs/USAGE.md](docs/USAGE.md) for detailed instructions.
+- **Issues**: Report bugs or request features via GitHub Issues.
+- **Discussions**: Share your server setups and get help from the community.
+
+---
+
+**Made for the Minecraft community**

@@ -1,14 +1,16 @@
 import customtkinter as ctk
+from app.app_config import AppConfig
+
 
 class ConsoleWidget(ctk.CTkTextbox):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(
             state="disabled", 
-            font=("Consolas", 12),
-            fg_color=("gray95", "gray10"),  # Sunken terminal look
+            font=AppConfig.FONT_MONO,
+            fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK),  # Sunken terminal look
             border_width=2,
-            border_color=("gray80", "gray20")
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, "gray20")
         )
         
     def log(self, message):
@@ -26,9 +28,9 @@ class ServerListItem(ctk.CTkFrame):
         # Card-style design
         self.configure(
             corner_radius=15,
-            fg_color=("white", "gray17"),
+            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK),
             border_width=1,
-            border_color=("gray85", "gray25")
+            border_color=("gray85", AppConfig.COLOR_BORDER_DARK)
         )
         
         # Configure a 2-column grid
@@ -38,7 +40,7 @@ class ServerListItem(ctk.CTkFrame):
         self.lbl_name = ctk.CTkLabel(
             self, 
             text=server_name, 
-            font=("Roboto Medium", 14),
+            font=AppConfig.FONT_HEADING_SMALL,
             anchor="w"  # Anchor text to the left
         )
         self.lbl_name.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
@@ -71,7 +73,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.label = ctk.CTkLabel(
             self, 
             text="Starting download...",
-            font=("Roboto", 13)  # Body text typography
+            font=AppConfig.FONT_BODY  # Body text typography
         )
         self.label.pack(pady=(20, 10))
         

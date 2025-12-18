@@ -7,19 +7,20 @@ import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+import webbrowser
+import time
+
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
 from app.logic import load_config, check_java, save_config, download_server, accept_eula, install_fabric, ServerRunner
 import app.logic as logic
-from app.constants import SERVERS_DIR # Import SERVERS_DIR from constants
-from app.constants import ASSETS_DIR # Import ASSETS_DIR from constants
+from app.constants import SERVERS_DIR, ASSETS_DIR
 
 from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 from app.scheduler_service import SchedulerService
 from app.server_events import ServerEvent
-import webbrowser
-# import winsound  # For sound notifications
+from app.app_config import AppConfig
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -35,9 +36,9 @@ class MCTunnelApp(ctk.CTk):
 
     def _init_window_config(self):
         """Configure window properties."""
-        self.title("Zero Block Bridge")
-        self.geometry("1000x650")  # Increased default size
-        self.minsize(800, 550)  # Minimum window size for usability
+        self.title(AppConfig.WINDOW_TITLE)
+        self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
+        self.minsize(AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT)
         
         # Grid layout - Responsive weights
         self.grid_columnconfigure(0, weight=0, minsize=200)  # Sidebar - fixed min width
@@ -66,7 +67,7 @@ class MCTunnelApp(ctk.CTk):
             self, 
             width=200, 
             corner_radius=0,
-            fg_color=("gray92", "gray14")  # Slight distinction from background
+            fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK)
         )
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(3, weight=1)  # Server list gets weight
@@ -75,7 +76,7 @@ class MCTunnelApp(ctk.CTk):
         self.logo_label = ctk.CTkLabel(
             self.sidebar_frame, 
             text="Zero Block\nBridge", 
-            font=("Roboto Medium", 20)  # Typography hierarchy
+            font=AppConfig.FONT_TITLE
         )
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
@@ -92,7 +93,7 @@ class MCTunnelApp(ctk.CTk):
             self.sidebar_frame, 
             text="Your Servers:", 
             anchor="w",
-            font=("Roboto Medium", 13)
+            font=AppConfig.FONT_BODY
         )
         self.lbl_servers.grid(row=2, column=0, padx=20, pady=(10, 0))
 
@@ -102,7 +103,7 @@ class MCTunnelApp(ctk.CTk):
             label_text="",
             corner_radius=10,
             border_width=1,
-            border_color=("gray80", "gray25")
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)
         )
         self.server_list_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
 
@@ -123,7 +124,7 @@ class MCTunnelApp(ctk.CTk):
             self.main_frame, 
             height=45,
             corner_radius=15,
-            fg_color=("white", "gray17")
+            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK)
         )
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=10)
         
@@ -141,16 +142,16 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_server_info = ctk.CTkLabel(
             self.status_right_frame, 
             text="No server selected", 
-            text_color="gray",
-            font=("Roboto", 11)
+            text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
         )
         self.lbl_server_info.pack(side="left", padx=(0, 15))
         
         self.lbl_java_ver = ctk.CTkLabel(
             self.status_right_frame, 
             text="Checking...", 
-            text_color="gray",
-            font=("Roboto", 11)
+            text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
         )
         self.lbl_java_ver.pack(side="left")
 
@@ -160,41 +161,49 @@ class MCTunnelApp(ctk.CTk):
             self.main_frame, 
             height=100,
             corner_radius=15,
-            fg_color=("white", "gray17")
+            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK)
         )
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 10))
         
         self.lbl_dash_title = ctk.CTkLabel(
             self.dashboard_frame, 
             text="Select a server", 
-            font=("Roboto Medium", 18)
+            font=AppConfig.FONT_HEADING
         )
         self.lbl_dash_title.pack(pady=(10, 6))
 
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.controls_frame.pack(pady=6)
+        self._build_server_controls()
 
+        self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.tunnel_frame.pack(pady=10, fill="x")
+        self._build_tunnel_controls()
+
+        self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.management_frame.pack(pady=(6, 10), fill="x")
+        self._build_management_controls()
+
+    def _build_server_controls(self):
         # Server Controls Toolbar
         self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
         self.btn_start_all.pack(side="left", padx=5)
         
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color="#22c55e", hover_color="#16a34a", width=45, corner_radius=8, height=36)
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=8, height=36)
         self.btn_start.pack(side="left", padx=2)
 
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color="#ef4444", hover_color="#dc2626", width=45, corner_radius=8, height=36)
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_stop.pack(side="left", padx=2)
 
-        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=45, corner_radius=8, height=36, fg_color="#6366f1", hover_color="#4f46e5")
+        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
         self.btn_edit_properties.pack(side="left", padx=2)
 
-        self.btn_open_server_folder = ctk.CTkButton(self.controls_frame, text="📂", command=self.open_mods_folder_action, state="disabled", width=45, corner_radius=8, height=36, fg_color="#34d399", hover_color="#10b981")
+        self.btn_open_server_folder = ctk.CTkButton(self.controls_frame, text="📂", command=self.open_mods_folder_action, state="disabled", width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
         self.btn_open_server_folder.pack(side="left", padx=2)
 
+    def _build_tunnel_controls(self):
         # Playit Tunnel Controls
-        self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(pady=10, fill="x")
-
-        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color="gray", font=("Roboto", 13))
+        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
         self.lbl_tunnel_status.pack(side="left", padx=20)
 
         self.lbl_public_ip = ctk.CTkLabel(self.tunnel_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
@@ -203,22 +212,20 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=8, height=36, fg_color="#22c55e", hover_color="#16a34a")
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         self.btn_tunnel_start.pack(side="left", padx=2)
         
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color="#ef4444", hover_color="#dc2626", width=45, corner_radius=8, height=36)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_tunnel_stop.pack(side="left", padx=2)
 
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗", command=self.open_claim_url, fg_color="#f97316", hover_color="#ea580c", width=45, corner_radius=8, height=36)
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=45, corner_radius=8, height=36)
         # Don't pack it yet, only show when needed
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="#6b7280", hover_color="#4b5563", width=45, corner_radius=8, height=36)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
+    def _build_management_controls(self):
         # Management Controls (Backups & Scheduler)
-        self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.management_frame.pack(pady=(6, 10), fill="x")
-        
         # Scheduler Section
         scheduler_container = ctk.CTkFrame(self.management_frame, fg_color="transparent")
         scheduler_container.pack(side="left", padx=20)
@@ -234,16 +241,16 @@ class MCTunnelApp(ctk.CTk):
         self.combo_schedule_mode.grid(row=1, column=1, padx=5)
         self.combo_schedule_mode.set("Interval")
         
-        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text="6", corner_radius=8)
+        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8)
         self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
         
         self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
         self.lbl_interval_unit.grid(row=1, column=3, padx=2)
         
-        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text="03:00", corner_radius=8)
+        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text=AppConfig.DEFAULT_RESTART_TIME, corner_radius=8)
         self.entry_restart_time.bind("<KeyRelease>", self._format_time_input)
         
-        self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=70, command=self.save_scheduler_dashboard, fg_color="#3b82f6", hover_color="#2563eb", corner_radius=8, height=32)
+        self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=70, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
         self.btn_apply_schedule.grid(row=1, column=4, padx=5)
 
         # Backup Section
@@ -257,7 +264,7 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_last_backup = ctk.CTkLabel(
             self.backup_frame, 
             text="Last: None", 
-            text_color="gray",
+            text_color=AppConfig.COLOR_TEXT_GRAY,
             font=("Roboto", 12)
         )
         self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=5, pady=(0, 5))
@@ -267,8 +274,8 @@ class MCTunnelApp(ctk.CTk):
             text="✚ Backup Now", 
             command=self.quick_backup_action, 
             width=120, 
-            fg_color="#3b82f6",
-            hover_color="#2563eb",
+            fg_color=AppConfig.COLOR_BTN_PRIMARY,
+            hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             corner_radius=8,
             height=32
         )
@@ -286,14 +293,14 @@ class MCTunnelApp(ctk.CTk):
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"))
         self.server_console.pack(fill="both", expand=True)
         
-        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=10, fg_color=("gray95", "gray15"))
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=10, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
         
         self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=8, height=36)
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
         
-        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=8, height=36, fg_color="#3b82f6", hover_color="#2563eb")
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         self.btn_send.pack(side="right", padx=10, pady=5)
         
         # Tunnel Console
@@ -309,9 +316,8 @@ class MCTunnelApp(ctk.CTk):
     def start_scheduler(self):
         """Starts the background scheduler thread."""
         def _scheduler_loop():
-            import time
             while True:
-                time.sleep(30)  # Check every 30 seconds
+                time.sleep(AppConfig.SCHEDULER_CHECK_INTERVAL)  # Check every 30 seconds
                 
                 if not (self.server_runner and self.server_runner.running and self.current_server):
                     continue
@@ -350,7 +356,6 @@ class MCTunnelApp(ctk.CTk):
     def restart_server_sequence(self):
         """Handles the automated restart sequence with final countdown."""
         def _restart():
-            import time
             
             # Final 5-second countdown
             for i in [5, 4, 3, 2]:
@@ -378,7 +383,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, self.stop_server_action)
             
             # Wait for it to actually stop
-            timeout = 30
+            timeout = AppConfig.SERVER_STOP_TIMEOUT
             while timeout > 0:
                 if not self.server_runner:
                     break
@@ -391,7 +396,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, self.start_server_action)
             
             # Wait for server to start
-            time.sleep(10)
+            time.sleep(AppConfig.SERVER_START_WAIT)
             
             # Check if restart was successful
             if self.server_runner and self.server_runner.running:
@@ -513,7 +518,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="disabled")
             self.btn_start_all.configure(state="disabled")
             self.btn_stop.configure(state="normal")
-            self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
+            self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE)
             # Keep server type in info
             server_path = os.path.join(SERVERS_DIR, server_name)
             server_type = "Vanilla"
@@ -625,7 +630,7 @@ class MCTunnelApp(ctk.CTk):
         scheduler = logic.Scheduler(self.current_server)
         
         if mode == "Interval":
-            interval = 6
+            interval = AppConfig.DEFAULT_INTERVAL_HOURS
             try:
                 interval = int(self.entry_scheduler_interval.get())
             except:
@@ -633,7 +638,7 @@ class MCTunnelApp(ctk.CTk):
             scheduler.set_restart_schedule(enabled, interval_hours=interval)
             self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
         else:  # Daily Time
-            restart_time = self.entry_restart_time.get() or "03:00"
+            restart_time = self.entry_restart_time.get() or AppConfig.DEFAULT_RESTART_TIME
             scheduler.set_restart_schedule(enabled, restart_time=restart_time)
             self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time})")
 
@@ -709,7 +714,7 @@ class MCTunnelApp(ctk.CTk):
         self.server_runner.start()
         
         # Update UI to "Starting" state
-        self.lbl_status.configure(text="⏳ Starting...", text_color="orange")
+        self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING)
         self.btn_start.configure(state="disabled")
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
@@ -717,11 +722,11 @@ class MCTunnelApp(ctk.CTk):
         return self.server_runner
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color="#22c55e"))
+        self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
         self.after(0, self.play_notification_sound)
 
     def on_server_stopped(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color="white"))
+        self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
         self.after(0, lambda: self.btn_start_all.configure(state="normal"))
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
@@ -733,7 +738,7 @@ class MCTunnelApp(ctk.CTk):
             self.btn_start.configure(state="normal")
             self.btn_start_all.configure(state="normal")
             self.btn_stop.configure(state="disabled")
-            self.lbl_status.configure(text="⚪ Offline", text_color="white")
+            self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE)
             self.server_runner = None
 
     def create_server_dialog(self):
