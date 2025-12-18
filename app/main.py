@@ -12,11 +12,12 @@ from app.logic import load_config, check_java, save_config, download_server, acc
 import app.logic as logic
 from app.constants import SERVERS_DIR # Import SERVERS_DIR from constants
 from app.constants import ASSETS_DIR # Import ASSETS_DIR from constants
-from playsound import playsound
+
 from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 from app.scheduler_service import SchedulerService
+from app.server_events import ServerEvent
 import webbrowser
 # import winsound  # For sound notifications
 
@@ -463,14 +464,11 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=_check, daemon=True).start()
 
     def play_notification_sound(self):
-        """Plays a pleasant notification sound using playsound for cross-platform compatibility."""
+        """Plays a pleasant notification sound using logic.play_sound for cross-platform compatibility."""
         try:
             sound_path = ASSETS_DIR / "notification.wav"
-            if sound_path.exists():
-                # playsound can block, so run in a separate thread
-                threading.Thread(target=playsound, args=(str(sound_path),), daemon=True).start()
-            else:
-                self.server_console.log(f"[Warning] Notification sound not found at {sound_path}")
+            # Run in a separate thread to avoid blocking the UI
+            threading.Thread(target=logic.play_sound, args=(sound_path,), daemon=True).start()
         except Exception as e:
             self.server_console.log(f"[Error] Failed to play notification sound: {e}")
 
@@ -553,13 +551,12 @@ class MCTunnelApp(ctk.CTk):
             return
         
         # Start server first
-        self.start_server_action()
+        runner = self.start_server_action()
         
-        # Wait a moment then start tunnel
-        import time
-        threading.Thread(target=lambda: (time.sleep(2), self.after(0, self.start_tunnel)), daemon=True).start()
-        
-        self.server_console.log("[System] Starting server and tunnel...")
+        if runner:
+            self.server_console.log("[System] Starting server and tunnel (tunnel will start when server is ready)...")
+            # Wait for server to be ready before starting tunnel
+            runner.events.on(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
 
     def update_management_ui(self):
         """Updates the management dashboard with current server info."""
@@ -685,12 +682,6 @@ class MCTunnelApp(ctk.CTk):
     def update_console(self, text):
         """Thread-safe server console update."""
         self.after(0, lambda: self.server_console.log(text))
-        
-        # Check if server is ready (Done message)
-        if "Done (" in text and "For help, type" in text:
-            # Server is ready! Update status and play notification sound
-            self.lbl_status.configure(text="🟢 Running", text_color="#22c55e")
-            self.after(0, self.play_notification_sound)
 
     def update_tunnel_console(self, text):
         """Thread-safe tunnel console update."""
@@ -710,6 +701,11 @@ class MCTunnelApp(ctk.CTk):
         ram = config.get("ram_allocation", "2G")
 
         self.server_runner = ServerRunner(self.current_server, ram, self.update_console)
+        
+        # Register Event Listeners
+        self.server_runner.events.on(ServerEvent.READY, self.on_server_ready)
+        self.server_runner.events.on(ServerEvent.STOPPED, self.on_server_stopped)
+        
         self.server_runner.start()
         
         # Update UI to "Starting" state
@@ -717,6 +713,19 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.configure(state="disabled")
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
+        
+        return self.server_runner
+
+    def on_server_ready(self, data=None):
+        self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color="#22c55e"))
+        self.after(0, self.play_notification_sound)
+
+    def on_server_stopped(self, data=None):
+        self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color="white"))
+        self.after(0, lambda: self.btn_start.configure(state="normal"))
+        self.after(0, lambda: self.btn_start_all.configure(state="normal"))
+        self.after(0, lambda: self.btn_stop.configure(state="disabled"))
+        # self.server_runner = None # Managed by stop action usually, but good for safety
 
     def stop_server_action(self):
         if self.server_runner:

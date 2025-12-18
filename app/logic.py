@@ -6,8 +6,10 @@ import shutil
 import shutil
 import requests
 import threading
+import platform
 
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, MINECRAFT_VERSIONS, BACKUPS_DIR
+from app.server_events import ServerEvent, ServerEventEmitter
 
 def load_config():
     """Loads the configuration from config.json."""
@@ -169,6 +171,8 @@ class ServerRunner:
                     self.ram_allocation = ram_allocation
         except:
             self.ram_allocation = ram_allocation
+            
+        self.events = ServerEventEmitter()
 
     def _apply_pending_settings(self):
         """Checks for and applies initial settings from the wizard, creating the properties file if needed."""
@@ -251,6 +255,7 @@ class ServerRunner:
         ]
         
         self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
+        self.events.emit(ServerEvent.STARTING)
         
         try:
             self.process = subprocess.Popen(
@@ -317,11 +322,15 @@ class ServerRunner:
 
         for line in self.process.stdout:
             self.console_callback(line.strip())
+            
+            if "Done (" in line and "For help, type" in line:
+                self.events.emit(ServerEvent.READY)
         
         self.process.wait()
         self.running = False
         self.process = None
         self.console_callback("[System] Server process exited.")
+        self.events.emit(ServerEvent.STOPPED)
 
 def check_eula(server_name):
     """Checks if eula.txt exists and is true."""
@@ -604,4 +613,60 @@ def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_di
     
     # Note: server.properties will be generated on first server start
     # The pending_settings will be applied by the UI after the server generates the file
+
+
+def play_sound(sound_path):
+    """
+    Plays a sound file in a cross-platform manner.
+    Supports Windows (playsound/winsound) and Linux (paplay/aplay).
+    """
+    if not os.path.exists(sound_path):
+        print(f"[Warning] Sound file not found: {sound_path}")
+        return
+
+    system = platform.system()
+
+    try:
+        if system == "Windows":
+            # Try playsound first, fallback to winsound
+            try:
+                from playsound import playsound
+                playsound(str(sound_path))
+            except Exception as e:
+                print(f"[Debug] playsound failed ({e}), trying winsound...")
+                try:
+                    import winsound
+                    winsound.PlaySound(str(sound_path), winsound.SND_FILENAME)
+                except Exception as ws_e:
+                    print(f"[Error] Windows sound failed: {ws_e}")
+
+        elif system == "Linux":
+            # Try common Linux players
+            # paplay is for PulseAudio (most common)
+            # aplay is for ALSA (fallback)
+            # canberra-gtk-play is for GTK systems
+            players = [
+                ["paplay", str(sound_path)],
+                ["aplay", str(sound_path)],
+                ["canberra-gtk-play", "-f", str(sound_path)],
+                ["mpg123", str(sound_path)]
+            ]
+            
+            success = False
+            for cmd in players:
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True)
+                    success = True
+                    break
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    continue
+            
+            if not success:
+                print("[Warning] No suitable audio player found on Linux (tried paplay, aplay, canberra-gtk-play).")
+
+        else:
+            print(f"[Warning] Sound not supported on {system}")
+
+    except Exception as e:
+        print(f"[Error] Failed to play sound: {e}")
 
