@@ -66,6 +66,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # Make modal
         self.transient(parent)
+        self.wait_visibility()
         self.grab_set()
 
     def setup_backups_tab(self):

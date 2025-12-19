@@ -103,6 +103,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         
         # Make modal
         self.transient(master)
+        self.wait_visibility()
         self.grab_set()
         
     def _on_cancel(self):

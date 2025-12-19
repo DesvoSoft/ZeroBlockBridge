@@ -60,6 +60,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Make modal
         self.transient(parent)
+        self.wait_visibility()
         self.grab_set()
         
     def update_header(self, title):
