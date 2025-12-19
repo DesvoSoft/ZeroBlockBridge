@@ -179,7 +179,12 @@ class PlayitManager:
         "send KeepAlive",
         "agent registered details",
         "authenticate control last_pong",
-        "session expired reason=SessionNotSetup"
+        "session expired reason=SessionNotSetup",
+        "failed to send initial ping error=Os { code: 10051", # IPv6 noise on Windows
+        "failed to send initial ping error=Os { code: 101",   # IPv6 noise on Linux
+        "failed to ping tunnel server",
+        "failed to parse json", # Messy API errors
+        "ReqProtoRegister"
     ]
 
     def _read_output(self):
@@ -244,15 +249,17 @@ class PlayitManager:
         # "tunnel_addr: 209.25.140.1:5525"
         # "trying to establish tunnel connection addr=..."
         
+        # 2. Check for Tunnel Address
         # Priority 1: .ply.gg or .playit.gg domain (most user friendly)
-        domain_match = re.search(r"([a-z0-9-]+\.(?:ply|playit)\.gg)", line)
+        domain_match = re.search(r"([a-z0-9-.]+\.(?:ply|playit)\.gg|[a-z0-9-.]+\.joinmc\.link)", line)
         if domain_match:
-            address = domain_match.group(1)
-            if self.current_address is None and self.on_ready_callback:
-                self.on_ready_callback()
-            self.current_address = address
-            self.status_callback("Online", address)
-            return
+            address = domain_match.group(1).rstrip('.')
+            if "at.ply.gg" not in address:
+                if self.current_address is None and self.on_ready_callback:
+                    self.on_ready_callback()
+                self.current_address = address
+                self.status_callback("Online", address)
+                return
 
         # Priority 2: IP Address from "tunnel_addr: IP:PORT"
         ip_match = re.search(r"tunnel_addr:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)", line)
@@ -266,22 +273,16 @@ class PlayitManager:
 
         # Priority 3: "tunnel running" confirmation (fallback if no IP found yet)
         if "tunnel running" in line:
-            # Only set to "Check Console" if we haven't found a real address yet.
-            # We can check this by seeing if we've already called the callback with a real address?
-            # Or better, let's just assume if we are here, we might have missed it or it's a reconnect.
-            # But to avoid overwriting a valid IP with "Check Console", we should be careful.
-            # Let's add a class-level flag or just check if we have a stored address?
-            # Simpler: The UI label text isn't available here.
-            # We can add a self.current_address to track it.
             if not getattr(self, "current_address", None):
                  self.status_callback("Online", "Check Console")
             return
 
         # 3. Check for Errors
-        if "AgentDisabledOverLimit" in line:
+        if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
             self.status_callback("Error", None)
-            self.console_callback("[Playit] ERROR: Account limit reached! You have too many agents.")
-            self.console_callback("[Playit] Please delete unused agents in your Playit.gg dashboard.")
+            self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
+            self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
+            return
             
         if "AgentVersionTooOld" in line:
              self.console_callback("[Playit] ERROR: Agent version too old. Restarting to update...")

@@ -3,9 +3,21 @@ import os
 import sys
 import threading
 
+# --- Tcl/Tk Fix for Windows Virtual Environments ---
+if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
+    # This helps tkinter find the Tcl/Tk libraries in the base Python installation
+    # when running inside a virtual environment.
+    tcl_dir = os.path.join(sys.base_prefix, "tcl")
+    if os.path.exists(tcl_dir):
+        for d in os.listdir(tcl_dir):
+            if d.startswith("tcl"):
+                os.environ["TCL_LIBRARY"] = os.path.join(tcl_dir, d)
+            if d.startswith("tk"):
+                os.environ["TK_LIBRARY"] = os.path.join(tcl_dir, d)
+# ---------------------------------------------------
+
 # Add parent directory to path so we can import app modules if running from inside app/
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 import webbrowser
 import time
@@ -253,6 +265,11 @@ class MCTunnelApp(ctk.CTk):
         self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode, corner_radius=8, state="readonly")
         self.combo_schedule_mode.grid(row=1, column=1, padx=5)
         self.combo_schedule_mode.set("Interval")
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_schedule_mode._entry.bind("<Button-1>", lambda e: self.combo_schedule_mode._open_dropdown_menu())
+        self.combo_schedule_mode._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_schedule_mode._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_schedule_mode._entry.configure(cursor="arrow")
         
         self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8)
         self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
@@ -837,6 +854,13 @@ class MCTunnelApp(ctk.CTk):
             return
             
         self.playit_manager.reset()
+        
+        # Clear stored DNS
+        config = load_config()
+        if "playit_dns" in config:
+            del config["playit_dns"]
+            save_config(config)
+            
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
@@ -853,8 +877,15 @@ class MCTunnelApp(ctk.CTk):
                 icon = "⏳"
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
-            if ip:
-                self.lbl_public_ip.configure(text=f"Public IP: {ip}")
+            
+            # Use stored DNS if available
+            display_ip = ip
+            config = load_config()
+            if status == "Online" and config.get("playit_dns"):
+                display_ip = config["playit_dns"]
+
+            if display_ip:
+                self.lbl_public_ip.configure(text=f"Public IP: {display_ip}")
                 # If online, we probably don't need the claim button anymore
                 self.btn_claim.pack_forget()
             else:
@@ -872,20 +903,47 @@ class MCTunnelApp(ctk.CTk):
         self.claim_url = url
         
         def _show_ui():
-            # Show the button
+            # Show the button in the dashboard
             self.btn_claim.pack(side="right", padx=10)
             
-            # Also show dialog/open browser as before
-            dialog = ctk.CTkInputDialog(text=f"Playit requires setup!\nCopy this URL or click OK to open:\n{url}", title="Link Playit Account")
-            webbrowser.open(url)
-            self.tunnel_console.log(f"[UI] Opened claim URL in browser: {url}")
+            # 1. Link Account (Auto-open)
+            self.tunnel_console.log(f"[System] Playit setup required: {url}")
+            try:
+                webbrowser.open(url, new=2)
+                self.tunnel_console.log(f"[UI] Attempted to open claim URL in browser.")
+            except Exception as e:
+                self.tunnel_console.log(f"[Error] Failed to auto-open browser: {e}")
+            
+            # 2. Ask for DNS name (Optional)
+            def _ask_dns():
+                dialog = ctk.CTkInputDialog(
+                    text="Playit setup opened in browser!\n\n1. Link your account and create a tunnel.\n2. Assign a domain (e.g. *.ply.gg).\n3. (Optional) Paste that domain here to show it in the dashboard:", 
+                    title="Tunnel DNS Name"
+                )
+                dns_name = dialog.get_input()
+                if dns_name:
+                    dns_name = dns_name.strip().rstrip('.')
+                    config = load_config()
+                    config["playit_dns"] = dns_name
+                    save_config(config)
+                    self.server_console.log(f"[System] Saved Playit DNS: {dns_name}")
+                    # Update label immediately if online
+                    if self.playit_manager.current_address:
+                        self.lbl_public_ip.configure(text=f"Public IP: {dns_name}")
+                else:
+                    self.server_console.log("[System] DNS entry skipped.")
+            
+            self.after(1000, _ask_dns)
             
         self.after(0, _show_ui)
 
     def open_claim_url(self):
+        """Manually open the claim URL."""
         if hasattr(self, 'claim_url') and self.claim_url:
+            self.tunnel_console.log(f"[UI] Manually opening claim URL...")
             webbrowser.open(self.claim_url)
-
+        else:
+            self.tunnel_console.log(f"[Error] No claim URL available yet.")
 
     def on_close(self):
         """Handles app closure to ensure subprocesses are killed."""

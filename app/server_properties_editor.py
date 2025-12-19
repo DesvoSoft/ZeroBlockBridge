@@ -183,10 +183,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                     widget.select()
                 widget.pack(side="right", padx=5)
             elif widget_type == "dropdown":
-                widget = ctk.CTkComboBox(frame, values=options)
+                widget = ctk.CTkComboBox(frame, values=options, state="readonly")
                 if val in options:
                     widget.set(val)
                 widget.pack(side="right", fill="x", expand=True, padx=5)
+                # Fix: Make clickable anywhere and prevent text selection
+                widget._entry.bind("<Button-1>", lambda e: widget._open_dropdown_menu())
+                widget._entry.bind("<B1-Motion>", lambda e: "break")
+                widget._entry.bind("<Double-Button-1>", lambda e: "break")
+                widget._entry.configure(cursor="arrow")
                 
             self.widgets[key] = (widget, widget_type)
         

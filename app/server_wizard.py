@@ -101,11 +101,21 @@ class ServerWizard(ctk.CTkToplevel):
                                          command=self.update_version_list, state="readonly")
         self.combo_type.set(self.wizard_data["type"])
         self.combo_type.pack(fill="x", pady=(0, 20))
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_type._entry.bind("<Button-1>", lambda e: self.combo_type._open_dropdown_menu())
+        self.combo_type._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_type._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_type._entry.configure(cursor="arrow")
         
         # Version
         ctk.CTkLabel(self.content_frame, text="Minecraft Version:").pack(anchor="w", pady=(0, 5))
         self.combo_version = ctk.CTkComboBox(self.content_frame, state="readonly")
         self.combo_version.pack(fill="x", pady=(0, 5))
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_version._entry.bind("<Button-1>", lambda e: self.combo_version._open_dropdown_menu())
+        self.combo_version._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_version._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_version._entry.configure(cursor="arrow")
         
         # Initialize versions
         self.update_version_list(self.wizard_data["type"])
@@ -213,6 +223,11 @@ class ServerWizard(ctk.CTkToplevel):
         self.combo_gamemode = ctk.CTkComboBox(gamemode_frame, values=["survival", "creative", "adventure", "spectator"], state="readonly")
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         self.combo_gamemode.pack(fill="x")
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_gamemode._entry.bind("<Button-1>", lambda e: self.combo_gamemode._open_dropdown_menu())
+        self.combo_gamemode._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_gamemode._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_gamemode._entry.configure(cursor="arrow")
 
         # --- Middle Row: Difficulty, View, Sim ---
         middle_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -226,6 +241,11 @@ class ServerWizard(ctk.CTkToplevel):
         self.combo_difficulty = ctk.CTkComboBox(difficulty_frame, values=["peaceful", "easy", "normal", "hard"], state="readonly")
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         self.combo_difficulty.pack(fill="x")
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_difficulty._entry.bind("<Button-1>", lambda e: self.combo_difficulty._open_dropdown_menu())
+        self.combo_difficulty._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_difficulty._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_difficulty._entry.configure(cursor="arrow")
 
         # View Distance
         view_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
