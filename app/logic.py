@@ -117,7 +117,10 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     Downloads Fabric Installer and runs it to generate server files.
     """
     server_path = create_server_directory(server_name)
-    installer_url = MINECRAFT_VERSIONS["Fabric"]["1.20.1"] # Hardcoded for now based on input
+    installer_url = MINECRAFT_VERSIONS.get("Fabric", {}).get(mc_version)
+    if not installer_url:
+        print(f"Fabric installer not found for version {mc_version}")
+        return None
     installer_path = os.path.join(server_path, "fabric-installer.jar")
     
     # 1. Download Installer

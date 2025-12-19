@@ -242,8 +242,8 @@ class PlayitManager:
         # "tunnel_addr: 209.25.140.1:5525"
         # "trying to establish tunnel connection addr=..."
         
-        # Priority 1: .ply.gg domain (most user friendly)
-        domain_match = re.search(r"([a-z0-9-]+\.ply\.gg)", line)
+        # Priority 1: .ply.gg or .playit.gg domain (most user friendly)
+        domain_match = re.search(r"([a-z0-9-]+\.(?:ply|playit)\.gg)", line)
         if domain_match:
             address = domain_match.group(1)
             self.current_address = address

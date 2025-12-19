@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import os
 import psutil
+from app.constants import MINECRAFT_VERSIONS
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
@@ -96,15 +97,33 @@ class ServerWizard(ctk.CTkToplevel):
             
         # Type
         ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
-        self.var_type = ctk.StringVar(value=self.wizard_data["type"])
+        self.combo_type = ctk.CTkComboBox(self.content_frame, values=list(MINECRAFT_VERSIONS.keys()), 
+                                         command=self.update_version_list, state="readonly")
+        self.combo_type.set(self.wizard_data["type"])
+        self.combo_type.pack(fill="x", pady=(0, 20))
         
-        self.rb_vanilla = ctk.CTkRadioButton(self.content_frame, text="Vanilla 1.21.1 (Official)", 
-                                            variable=self.var_type, value="Vanilla")
-        self.rb_vanilla.pack(anchor="w", pady=5)
+        # Version
+        ctk.CTkLabel(self.content_frame, text="Minecraft Version:").pack(anchor="w", pady=(0, 5))
+        self.combo_version = ctk.CTkComboBox(self.content_frame, state="readonly")
+        self.combo_version.pack(fill="x", pady=(0, 5))
         
-        self.rb_fabric = ctk.CTkRadioButton(self.content_frame, text="Fabric 1.20.1 (Modded)", 
-                                           variable=self.var_type, value="Fabric")
-        self.rb_fabric.pack(anchor="w", pady=5)
+        # Initialize versions
+        self.update_version_list(self.wizard_data["type"])
+        
+        # Pre-select version if available
+        if self.wizard_data["version"] in self.combo_version.cget("values"):
+             self.combo_version.set(self.wizard_data["version"])
+
+    def update_version_list(self, server_type):
+        versions = list(MINECRAFT_VERSIONS.get(server_type, {}).keys())
+        # Sort versions if needed (they are usually dict keys, so insertion order or random)
+        # For now, let's assume the dict in constants is ordered or we sort desc
+        versions.sort(reverse=True) 
+        self.combo_version.configure(values=versions)
+        if versions:
+            self.combo_version.set(versions[0])
+        else:
+            self.combo_version.set("No versions found")
         
     def show_step_2(self):
         self.clear_content()
@@ -270,8 +289,8 @@ class ServerWizard(ctk.CTkToplevel):
                 self.entry_name.configure(border_color="red")
                 return
             self.wizard_data["name"] = name
-            self.wizard_data["type"] = self.var_type.get()
-            self.wizard_data["version"] = "1.21.1" if self.wizard_data["type"] == "Vanilla" else "1.20.1"
+            self.wizard_data["type"] = self.combo_type.get()
+            self.wizard_data["version"] = self.combo_version.get()
             
         elif self.current_step == 2:
             # RAM already updated via callback
