@@ -4,3 +4,4 @@ requests
 psutil
 packaging
 playsound==1.2.2
+Pillow
