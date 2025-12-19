@@ -48,6 +48,20 @@ class MCTunnelApp(ctk.CTk):
     def _init_state_variables(self):
         """Initialize all state variables."""
         self.server_runner = None
+        self.current_server = None
+        self.restart_warnings_sent = set()
+        self.claim_url = None
+
+    def _init_managers(self):
+        """Initialize PlayitManager and other services."""
+        self.playit_manager = PlayitManager(
+            console_callback=self.update_tunnel_console,
+            status_callback=self.update_playit_status,
+            claim_callback=self.on_playit_claim,
+            on_ready_callback=self.play_notification_sound
+        )
+
+    def _build_sidebar(self):
         """Build left sidebar with server list."""
         self.sidebar_frame = ctk.CTkFrame(
             self, 
@@ -93,6 +107,11 @@ class MCTunnelApp(ctk.CTk):
         )
         self.server_list_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
 
+    def _build_layout(self):
+        """Construct entire UI layout."""
+        self._build_sidebar()
+        self._build_main_area()
+    
     def _build_main_area(self):
         """Build main content area."""
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
