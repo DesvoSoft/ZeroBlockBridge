@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import os
 import psutil
-from app.constants import MINECRAFT_VERSIONS
+from app.constants import MINECRAFT_VERSIONS, SERVERS_DIR
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
@@ -270,7 +270,8 @@ class ServerWizard(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.content_frame, text="Save Location:").pack(anchor="w", pady=(0, 5))
         
-        self.lbl_location = ctk.CTkLabel(self.content_frame, text=f"servers/{self.wizard_data['name']}/", 
+        server_path = SERVERS_DIR / self.wizard_data['name']
+        self.lbl_location = ctk.CTkLabel(self.content_frame, text=str(server_path), 
                                         fg_color="gray20", corner_radius=6, padx=10, pady=5)
         self.lbl_location.pack(fill="x", pady=(0, 20))
         
@@ -289,7 +290,7 @@ class ServerWizard(ctk.CTkToplevel):
             f"Difficulty: {self.wizard_data['difficulty']}\n"
             f"View Distance: {self.wizard_data['view_distance']}\n"
             f"Simulation Distance: {self.wizard_data['simulation_distance']}\n\n"
-            f"Location: servers/{self.wizard_data['name']}/"
+            f"Location: {SERVERS_DIR / self.wizard_data['name']}"
         )
         
         ctk.CTkLabel(self.content_frame, text="Please review your settings:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
@@ -307,7 +308,10 @@ class ServerWizard(ctk.CTkToplevel):
             if not name:
                 # Simple validation
                 self.entry_name.configure(border_color="red")
+                self.entry_name.focus()
                 return
+            else:
+                self.entry_name.configure(border_color=["#979da2", "#565b5e"]) # Reset to default (light/dark)
             self.wizard_data["name"] = name
             self.wizard_data["type"] = self.combo_type.get()
             self.wizard_data["version"] = self.combo_version.get()
@@ -320,8 +324,31 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             self.wizard_data["game_mode"] = self.combo_gamemode.get()
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
-            self.wizard_data["view_distance"] = self.entry_view_distance.get().strip() or "10"
-            self.wizard_data["simulation_distance"] = self.entry_sim_distance.get().strip() or "10"
+            # Validate distances
+            v_dist = self.entry_view_distance.get().strip() or "10"
+            s_dist = self.entry_sim_distance.get().strip() or "10"
+            
+            try:
+                v_val = int(v_dist)
+                s_val = int(s_dist)
+                
+                if not (2 <= v_val <= 32):
+                    raise ValueError("View distance must be between 2 and 32")
+                if not (2 <= s_val <= 32):
+                    raise ValueError("Simulation distance must be between 2 and 32")
+                    
+                self.wizard_data["view_distance"] = str(v_val)
+                self.wizard_data["simulation_distance"] = str(s_val)
+                
+                # Reset borders
+                self.entry_view_distance.configure(border_color=["#979da2", "#565b5e"])
+                self.entry_sim_distance.configure(border_color=["#979da2", "#565b5e"])
+                
+            except ValueError:
+                # Show error visually (red borders)
+                self.entry_view_distance.configure(border_color="red")
+                self.entry_sim_distance.configure(border_color="red")
+                return
             
         elif self.current_step == 5:
             # Finish

@@ -906,13 +906,14 @@ class MCTunnelApp(ctk.CTk):
             # Show the button in the dashboard
             self.btn_claim.pack(side="right", padx=10)
             
-            # 1. Link Account (Auto-open)
+            # 1. Link Account (Auto-open disabled)
             self.tunnel_console.log(f"[System] Playit setup required: {url}")
-            try:
-                webbrowser.open(url, new=2)
-                self.tunnel_console.log(f"[UI] Attempted to open claim URL in browser.")
-            except Exception as e:
-                self.tunnel_console.log(f"[Error] Failed to auto-open browser: {e}")
+            self.tunnel_console.log(f"[UI] Please click the '🔗' button to link your account.")
+            # try:
+            #     webbrowser.open(url, new=2)
+            #     self.tunnel_console.log(f"[UI] Attempted to open claim URL in browser.")
+            # except Exception as e:
+            #     self.tunnel_console.log(f"[Error] Failed to auto-open browser: {e}")
             
             # 2. Ask for DNS name (Optional)
             def _ask_dns():
