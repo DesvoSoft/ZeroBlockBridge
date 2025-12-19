@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from tkinter import filedialog
 import os
 
 class ServerPropertiesEditor(ctk.CTkToplevel):
@@ -190,6 +191,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             self.widgets[key] = (widget, widget_type)
         
         # --- General Tab ---
+        # Icon
+        icon_frame = ctk.CTkFrame(self.frame_general, fg_color="transparent")
+        icon_frame.pack(fill="x", pady=5)
+        ctk.CTkLabel(icon_frame, text="Server Icon:", width=200, anchor="w").pack(side="left", padx=5)
+        ctk.CTkButton(icon_frame, text="Change Icon...", command=self.change_icon, width=120).pack(side="left", padx=5)
+        
         add_field(self.frame_general, "motd", "MOTD")
         add_field(self.frame_general, "max-players", "Max Players", default_val="20")
         add_field(self.frame_general, "gamemode", "Game Mode", "dropdown", ["survival", "creative", "adventure", "spectator"])
@@ -225,6 +232,19 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         for key, val in self.properties.items():
             if key not in defined_keys:
                 add_field(self.frame_advanced, key, key)
+
+    def change_icon(self):
+        file_path = filedialog.askopenfilename(
+            title="Select Server Icon",
+            filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
+        )
+        if file_path:
+            if self.logic.save_server_icon(self.server_name, file_path):
+                # Show success?
+                pass
+            else:
+                # Show error?
+                pass
 
     def save_properties(self):
         # Save Automation

@@ -48,20 +48,6 @@ class MCTunnelApp(ctk.CTk):
     def _init_state_variables(self):
         """Initialize all state variables."""
         self.server_runner = None
-        self.current_server = None
-        self.restart_warnings_sent = set()
-        self.claim_url = None
-
-    def _init_managers(self):
-        """Initialize PlayitManager and other services."""
-        self.playit_manager = PlayitManager(self.update_tunnel_console, self.update_playit_status, self.on_playit_claim)
-
-    def _build_layout(self):
-        """Construct entire UI layout."""
-        self._build_sidebar()
-        self._build_main_area()
-    
-    def _build_sidebar(self):
         """Build left sidebar with server list."""
         self.sidebar_frame = ctk.CTkFrame(
             self, 
@@ -146,6 +132,14 @@ class MCTunnelApp(ctk.CTk):
             font=AppConfig.FONT_BODY_SMALL
         )
         self.lbl_server_info.pack(side="left", padx=(0, 15))
+        
+        self.lbl_player_count = ctk.CTkLabel(
+            self.status_right_frame, 
+            text="Players: 0", 
+            text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_player_count.pack(side="left", padx=(0, 15))
         
         self.lbl_java_ver = ctk.CTkLabel(
             self.status_right_frame, 
@@ -710,6 +704,7 @@ class MCTunnelApp(ctk.CTk):
         # Register Event Listeners
         self.server_runner.events.on(ServerEvent.READY, self.on_server_ready)
         self.server_runner.events.on(ServerEvent.STOPPED, self.on_server_stopped)
+        self.server_runner.events.on(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
         
         self.server_runner.start()
         
@@ -724,6 +719,9 @@ class MCTunnelApp(ctk.CTk):
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
         self.after(0, self.play_notification_sound)
+
+    def on_player_count_update(self, count):
+        self.after(0, lambda: self.lbl_player_count.configure(text=f"Players: {count}"))
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))

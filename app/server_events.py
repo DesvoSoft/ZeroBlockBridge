@@ -3,6 +3,7 @@ class ServerEvent:
     READY = "ready"
     STOPPED = "stopped"
     ERROR = "error"
+    PLAYER_COUNT = "player_count"
 
 class ServerEventEmitter:
     """Observable pattern for server state changes."""

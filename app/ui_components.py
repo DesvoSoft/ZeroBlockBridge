@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.app_config import AppConfig
+from app.constants import SERVERS_DIR
 
 
 class ConsoleWidget(ctk.CTkTextbox):
@@ -19,6 +20,9 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.see("end")
         self.configure(state="disabled")
 
+import os
+from PIL import Image
+
 class ServerListItem(ctk.CTkFrame):
     def __init__(self, master, server_name, on_click, **kwargs):
         super().__init__(master, **kwargs)
@@ -33,29 +37,40 @@ class ServerListItem(ctk.CTkFrame):
             border_color=("gray85", AppConfig.COLOR_BORDER_DARK)
         )
         
-        # Configure a 2-column grid
-        self.grid_columnconfigure(0, weight=1)  # Name column expands
-        self.grid_columnconfigure(1, weight=0)  # Button column is fixed
+        # Configure grid
+        self.grid_columnconfigure(0, weight=0)  # Icon
+        self.grid_columnconfigure(1, weight=1)  # Name
+        self.grid_columnconfigure(2, weight=0)  # Button
+        
+        # Icon
+        icon_path = os.path.join(SERVERS_DIR, server_name, "server-icon.png")
+        if os.path.exists(icon_path):
+            try:
+                img = ctk.CTkImage(Image.open(icon_path), size=(48, 48))
+                self.lbl_icon = ctk.CTkLabel(self, text="", image=img)
+                self.lbl_icon.grid(row=0, column=0, padx=(15, 5), pady=10)
+            except:
+                pass # Fallback to no icon
         
         self.lbl_name = ctk.CTkLabel(
             self, 
             text=server_name, 
             font=AppConfig.FONT_HEADING_SMALL,
-            anchor="w"  # Anchor text to the left
+            anchor="w"
         )
-        self.lbl_name.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
+        self.lbl_name.grid(row=0, column=1, padx=10, pady=15, sticky="ew")
         
         self.btn_select = ctk.CTkButton(
             self, 
             text="→", 
             width=36, 
-            font=("Roboto Medium", 18), # Larger font for icon
+            font=("Roboto Medium", 18),
             corner_radius=8,
             fg_color="royalblue",
             hover_color="#3a5ba0",
             command=self._on_select
         )
-        self.btn_select.grid(row=0, column=1, padx=5, pady=15)
+        self.btn_select.grid(row=0, column=2, padx=15, pady=15)
         
     def _on_select(self):
         if self.on_click:

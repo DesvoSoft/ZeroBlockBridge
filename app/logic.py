@@ -175,6 +175,7 @@ class ServerRunner:
         except:
             self.ram_allocation = ram_allocation
             
+        self.player_count = 0
         self.events = ServerEventEmitter()
 
     def _apply_pending_settings(self):
@@ -325,6 +326,7 @@ class ServerRunner:
 
         for line in self.process.stdout:
             self.console_callback(line.strip())
+            self._parse_player_count(line.strip())
             
             if "Done (" in line and "For help, type" in line:
                 self.events.emit(ServerEvent.READY)
@@ -334,6 +336,33 @@ class ServerRunner:
         self.process = None
         self.console_callback("[System] Server process exited.")
         self.events.emit(ServerEvent.STOPPED)
+
+    def _parse_player_count(self, line):
+        # Regex for "Player joined" and "Player left"
+        # Vanilla/Fabric: "Player joined the game" / "Player left the game"
+        if "joined the game" in line:
+            self.player_count += 1
+            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+        elif "left the game" in line:
+            self.player_count = max(0, self.player_count - 1)
+            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+
+def save_server_icon(server_name, image_path):
+    """
+    Resizes and saves the server icon.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(image_path)
+        img = img.resize((64, 64), Image.Resampling.LANCZOS)
+        
+        server_path = os.path.join(SERVERS_DIR, server_name)
+        icon_path = os.path.join(server_path, "server-icon.png")
+        img.save(icon_path, "PNG")
+        return True
+    except Exception as e:
+        print(f"Failed to save icon: {e}")
+        return False
 
 def check_eula(server_name):
     """Checks if eula.txt exists and is true."""

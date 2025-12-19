@@ -10,16 +10,18 @@ import time
 from app.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
 
 class PlayitManager:
-    def __init__(self, console_callback, status_callback, claim_callback):
+    def __init__(self, console_callback, status_callback, claim_callback, on_ready_callback=None):
         """
         Args:
             console_callback: func(str) -> None (Log message)
             status_callback: func(str, str) -> None (Status text, IP Address)
             claim_callback: func(str) -> None (Claim URL)
+            on_ready_callback: func() -> None (Called when tunnel is ready)
         """
         self.console_callback = console_callback
         self.status_callback = status_callback
         self.claim_callback = claim_callback
+        self.on_ready_callback = on_ready_callback
         self.process = None
         self.running = False
         self.binary_path = self._get_binary_path()
@@ -107,7 +109,7 @@ class PlayitManager:
             # Run in the config directory so playit.toml is stored there
             # Set RUST_LOG to force output
             env = os.environ.copy()
-            env["RUST_LOG"] = "info"
+            env["RUST_LOG"] = "debug"
             
             self.process = subprocess.Popen(
                 [self.binary_path, "--stdout"],
@@ -246,6 +248,8 @@ class PlayitManager:
         domain_match = re.search(r"([a-z0-9-]+\.(?:ply|playit)\.gg)", line)
         if domain_match:
             address = domain_match.group(1)
+            if self.current_address is None and self.on_ready_callback:
+                self.on_ready_callback()
             self.current_address = address
             self.status_callback("Online", address)
             return
@@ -254,6 +258,8 @@ class PlayitManager:
         ip_match = re.search(r"tunnel_addr:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)", line)
         if ip_match:
             address = ip_match.group(1)
+            if self.current_address is None and self.on_ready_callback:
+                self.on_ready_callback()
             self.current_address = address
             self.status_callback("Online", address)
             return
