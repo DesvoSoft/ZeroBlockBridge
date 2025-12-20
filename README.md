@@ -72,8 +72,8 @@ The application features:
 1.  **Clone the repository**
 
     ```bash
-    git clone https://github.com/yourusername/MCTunnel.git
-    cd MCTunnel
+    git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
+    cd ZeroBlockBridge
     ```
 
 2.  **Install dependencies**
@@ -104,6 +104,8 @@ The application features:
 4.  Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
 5.  **Optional**: Enable tunneling to play with friends online.
 
+Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will lead to their website and the respecitve dashboard to connect the agent, the tunnel, and to confirm your shearable IP (One time process).
+
 ---
 
 ## Documentation
@@ -113,7 +115,7 @@ The application features:
 
 ---
 
-## Key Features Explained
+## Key Features
 
 ### Server Creation Wizard
 
@@ -152,6 +154,18 @@ gamemode creative PlayerName
 ```
 
 Commands appear in the log with `>` prefix and execute immediately.
+
+---
+
+## Privacy & Service Disclaimer
+
+ZeroBlockBridge is designed with simplicity and transparency in mind:
+
+- **No External Connections**: The software does not connect to any external services other than the free tunneling services provided by [Playit.gg](https://playit.gg).  
+- **No Data Collection**: ZeroBlockBridge is not intended to collect, store, or transmit any personal information or usage data.  
+- **User Control**: All server management, backups, and tunneling operations remain fully under the user’s control.  
+
+This ensures that your Minecraft server management experience is secure, private, and limited strictly to the features described.
 
 ---
 
@@ -231,16 +245,23 @@ Contributions are welcome! Areas for improvement:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+ZeroBlockBridge is licensed under the **Creative Commons Attribution–NonCommercial 4.0 International License (CC BY-NC 4.0)**.
+
+You are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material
+
+Under the following terms:
+- Attribution — You must give appropriate credit, include the original copyright notice, and provide a link to the license.
+- NonCommercial — You may not use the material for commercial purposes.
 
 ---
 
 ## Acknowledgments
 
-- **CustomTkinter**: Modern UI framework by Tom Schimansky.
+- **CustomTkinter**: Modern UI Python framework by Tom Schimansky.
 - **Playit.gg**: Free tunneling service for easy multiplayer.
 - **Minecraft/Mojang**: For creating an amazing game.
-- **Fabric**: Lightweight modding platform.
 
 ---
 
@@ -252,4 +273,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made for the Minecraft community**
+**Built by a player, for players — Made with ❤️ for the Minecraft community**
+
+![Privacy Friendly](https://img.shields.io/badge/Privacy-Friendly-green?style=for-the-badge&logo=shield)
+![Community](https://img.shields.io/badge/Made_for-Minecraft_Community-blue?style=for-the-badge&logo=minecraft)
