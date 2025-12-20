@@ -203,6 +203,7 @@ class ServerRunner:
                     props["sync-chunk-writes"] = "false"
                     props["entity-broadcast-range-percentage"] = "75"
                     props["allow-flight"] = "true"
+                    props["force-gamemode"] = "true"
 
                 # Map wizard keys to server.properties keys
                 if pending.get("seed"): props["level-seed"] = pending.get("seed")
@@ -654,6 +655,7 @@ def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_di
         "allow-flight": "true",
         "level-seed": seed if seed else "",
         "gamemode": game_mode,
+        "force-gamemode": "true",
         "difficulty": difficulty,
         "view-distance": view_distance,
         "simulation-distance": simulation_distance

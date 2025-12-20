@@ -214,6 +214,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         add_field(self.frame_general, "max-players", "Max Players", default_val="20")
         add_field(self.frame_general, "gamemode", "Game Mode", "dropdown", ["survival", "creative", "adventure", "spectator"])
+        add_field(self.frame_general, "force-gamemode", "Force Game Mode", "checkbox")
         add_field(self.frame_general, "difficulty", "Difficulty", "dropdown", ["peaceful", "easy", "normal", "hard"])
         add_field(self.frame_general, "hardcore", "Hardcore", "checkbox")
         add_field(self.frame_general, "enable-command-block", "Command Blocks", "checkbox")
