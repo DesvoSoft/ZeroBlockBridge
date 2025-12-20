@@ -102,7 +102,7 @@ The application features:
 
 4.  **Run the application**
     ```bash
-    py app/main.py
+    py main.py
     ```
 
 > **Note:** Depending on your operating system and environment configuration, you might need to adjust the command used to run Python. For example, use `py`, `python`, or `python3` as appropriate.
