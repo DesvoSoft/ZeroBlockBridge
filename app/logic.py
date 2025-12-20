@@ -2,8 +2,6 @@ import json
 import os
 import subprocess
 import shutil
-
-import shutil
 import requests
 import threading
 import platform
@@ -13,21 +11,26 @@ from app.server_events import ServerEvent, ServerEventEmitter
 
 def load_config():
     """Loads the configuration from config.json."""
+    default_config = {
+        "java_path": "auto",
+        "ram_allocation": "2G",
+        "accepted_eula": False,
+        "last_server": None,
+        "playit_dns": None
+    }
+
     if not os.path.exists(APP_CONFIG_PATH):
-        default_config = {
-            "java_path": "auto",
-            "ram_allocation": "2G",
-            "accepted_eula": False,
-            "last_server": None
-        }
         save_config(default_config)
         return default_config
     
     try:
         with open(APP_CONFIG_PATH, "r") as f:
             return json.load(f)
-    except json.JSONDecodeError:
-        return load_config() # Return default if corrupted (or handle better)
+    except (json.JSONDecodeError, OSError):
+        # FIX: Do not recurse. Reset file and return default.
+        print("[Warning] Config file corrupted. Resetting to defaults.")
+        save_config(default_config)
+        return default_config
 
 def save_config(config):
     """Saves the configuration to config.json."""
@@ -93,15 +96,19 @@ def download_server(server_name, server_type, version, progress_callback=None):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
+                    # FIX: Prevent DivisionByZeroError
                     if progress_callback and total_size > 0:
                         progress_callback(downloaded / total_size)
         
         if progress_callback:
-            progress_callback(1.0) # Ensure 100% at end
+            progress_callback(1.0)
             
         return jar_path
     except Exception as e:
         print(f"Download failed: {e}")
+        # Clean up partial file
+        if os.path.exists(jar_path):
+            os.remove(jar_path)
         return None
 
 def accept_eula(server_name):
@@ -288,9 +295,13 @@ class ServerRunner:
 
         self.console_callback("[System] Stopping server...")
         try:
-            if self.process.stdin:
-                self.process.stdin.write("stop\n")
-                self.process.stdin.flush()
+            # FIX: Handle case where process is already dead/pipe broken
+            if self.process.stdin and self.process.poll() is None:
+                try:
+                    self.process.stdin.write("stop\n")
+                    self.process.stdin.flush()
+                except (IOError, BrokenPipeError):
+                    pass # Process likely dead already
             
             # Wait for graceful exit (up to 10 seconds)
             try:
@@ -451,15 +462,25 @@ class BackupManager:
         backup_filename = f"{timestamp}.zip"
         backup_path = self.backup_dir / backup_filename
         
+        # Resolve absolute paths for safe comparison
+        abs_server_path = self.server_path.resolve()
+        abs_backup_dir = self.backup_dir.resolve()
+
         try:
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
-                    # Exclude backups folder if it's somehow inside
-                    if "backups" in root:
+                    root_path = os.path.abspath(root)
+                    
+                    # FIX: Safe exclusion. Check if current root starts with the backup dir path
+                    if os.path.commonpath([root_path, str(abs_backup_dir)]) == str(abs_backup_dir):
                         continue
                         
                     for file in files:
                         file_path = os.path.join(root, file)
+                        # Avoid trying to zip the zip file itself if it's being created
+                        if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
+                            continue
+
                         arcname = os.path.relpath(file_path, self.server_path)
                         zipf.write(file_path, arcname)
             return backup_path
@@ -698,35 +719,27 @@ def set_server_ram(server_name, ram_mb):
 
 
 def play_sound(sound_path):
-    """
-    Plays a sound file in a cross-platform manner.
-    Supports Windows (playsound/winsound) and Linux (paplay/aplay).
-    """
     if not os.path.exists(sound_path):
-        print(f"[Warning] Sound file not found: {sound_path}")
         return
 
     system = platform.system()
 
     try:
         if system == "Windows":
-            # Try playsound first, fallback to winsound
             try:
-                from playsound import playsound
-                playsound(str(sound_path))
-            except Exception as e:
-                print(f"[Debug] playsound failed ({e}), trying winsound...")
+                import winsound
+                # FIX: Add SND_ASYNC to prevent UI freeze
+                winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            except ImportError:
+                # Fallback if winsound is missing (rare) or trying playsound
                 try:
-                    import winsound
-                    winsound.PlaySound(str(sound_path), winsound.SND_FILENAME)
-                except Exception as ws_e:
-                    print(f"[Error] Windows sound failed: {ws_e}")
-
+                    from playsound import playsound
+                    # playsound block argument depends on version, usually blocks=False
+                    threading.Thread(target=playsound, args=(str(sound_path),), daemon=True).start()
+                except:
+                    pass
         elif system == "Linux":
             # Try common Linux players
-            # paplay is for PulseAudio (most common)
-            # aplay is for ALSA (fallback)
-            # canberra-gtk-play is for GTK systems
             players = [
                 ["paplay", str(sound_path)],
                 ["aplay", str(sound_path)],
@@ -744,11 +757,9 @@ def play_sound(sound_path):
                     continue
             
             if not success:
-                print("[Warning] No suitable audio player found on Linux (tried paplay, aplay, canberra-gtk-play).")
-
+                print("[Warning] No suitable audio player found on Linux.")
         else:
             print(f"[Warning] Sound not supported on {system}")
-
     except Exception as e:
-        print(f"[Error] Failed to play sound: {e}")
+        print(f"Sound error: {e}")
 
