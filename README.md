@@ -10,6 +10,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm_Noncommercial-red.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+
 ---
 
 ## Features
@@ -79,10 +80,11 @@ The application features:
     git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
     ```
 
-2. **Navigate to the core app folder**
-   ```bash
-    cd ZeroBlockBridge
-    cd app
+2.  **Navigate to the core app folder**
+
+    ```bash
+     cd ZeroBlockBridge
+     cd app
     ```
 
 3.  **Install dependencies**
@@ -172,9 +174,9 @@ Commands appear in the log with `>` prefix and execute immediately.
 
 ZeroBlockBridge is designed with simplicity and transparency in mind:
 
-- **No External Connections**: The software does not connect to any external services other than the free tunneling services provided by [Playit.gg](https://playit.gg).  
-- **No Data Collection**: ZeroBlockBridge is not intended to collect, store, or transmit any personal information or usage data.  
-- **User Control**: All server management, backups, and tunneling operations remain fully under the user’s control.  
+- **No External Connections**: The software does not connect to any external services other than the free tunneling services provided by [Playit.gg](https://playit.gg).
+- **No Data Collection**: ZeroBlockBridge is not intended to collect, store, or transmit any personal information or usage data.
+- **User Control**: All server management, backups, and tunneling operations remain fully under the user’s control.
 
 This ensures that your Minecraft server management experience is secure, private, and limited strictly to the features described.
 
@@ -206,7 +208,7 @@ ZeroBlockBridge/
 ├── backups/                       # (Generated) Servers backups will be stored here
 │   └── ServerName                 # Example reference
 |
-├── docs/                          
+├── docs/
 │   ├── USAGE.md                   # User guide
 |   └── TESTING.md                 # Test documentation<server-name>/
 |
@@ -245,13 +247,12 @@ ZeroBlockBridge/
 
 All required Python packages are listed in `requirements.txt`. The dependencies are:
 
-- **customtkinter** – Modern graphical user interface framework for Python.  
-- **darkdetect** – Detects system dark/light mode for adaptive UI themes.  
-- **requests** – Handles HTTP requests for downloading server files and updates.  
-- **psutil** – Provides system information (CPU, RAM, processes) for resource management.  
-- **packaging** – Utilities for version parsing and dependency handling.  
-- **playsound==1.2.2** – Lightweight library for playing notification sounds.  
-- **Pillow** – Image processing library, used for server icon feature.  
+- **customtkinter** – Modern graphical user interface framework for Python.
+- **requests** – Handles HTTP requests for downloading server files and updates.
+- **psutil** – Provides system information (CPU, RAM, processes) for resource management.
+- **packaging** – Utilities for version parsing and dependency handling.
+- **playsound==1.2.2** – Lightweight library for playing notification sounds.
+- **Pillow** – Image processing library, used for server icon feature.
 
 ---
 
@@ -270,10 +271,10 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
 ### Restriction
 
-* **No Commercial Use** — You may **not** use this software for any commercial purpose. This includes:
-* Selling the software or any modified version of it.
-* Using the software as part of a paid hosting service.
-* Using the software to support the operations of a for-profit business.
+- **No Commercial Use** — You may **not** use this software for any commercial purpose. This includes:
+- Selling the software or any modified version of it.
+- Using the software as part of a paid hosting service.
+- Using the software to support the operations of a for-profit business.
 
 [View Full License Text](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 

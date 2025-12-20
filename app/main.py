@@ -708,11 +708,20 @@ class MCTunnelApp(ctk.CTk):
 
         server_path = SERVERS_DIR / self.current_server
         
+        if not server_path.exists():
+            self.server_console.log(f"[Error] Server folder does not exist: {server_path}")
+            return
+
         try:
-            webbrowser.open(str(server_path))
-            self.server_console.log(f"[System] Opened server folder for '{self.current_server}': {server_path}")
+            if sys.platform == "win32":
+                os.startfile(str(server_path))
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(server_path)])
+            else:
+                subprocess.run(["xdg-open", str(server_path)])
+            self.server_console.log(f"[System] Opened server folder for '{self.current_server}'")
         except Exception as e:
-            self.server_console.log(f"[Error] Failed to open server folder for '{self.current_server}': {e}")
+            self.server_console.log(f"[Error] Failed to open server folder: {e}")
 
     def update_console(self, text):
         """Thread-safe server console update."""
