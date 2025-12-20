@@ -77,15 +77,20 @@ The application features:
 
     ```bash
     git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
-    cd ZeroBlockBridge
     ```
 
-2.  **Install dependencies**
+2. **Navigate to the core app folder**
+   ```bash
+    cd ZeroBlockBridge
+    cd app
+    ```
+
+3.  **Install dependencies**
 
     Create a virtual environment (recommended):
 
     ```bash
-    python -m venv venv
+    py -m venv venv
     .\venv\Scripts\activate
     ```
 
@@ -95,10 +100,12 @@ The application features:
     pip install -r requirements.txt
     ```
 
-3.  **Run the application**
+4.  **Run the application**
     ```bash
-    python app/main.py
+    py app/main.py
     ```
+
+> **Note:** Depending on your operating system and environment configuration, you might need to adjust the command used to run Python. For example, use `py`, `python`, or `python3` as appropriate.
 
 ### First Server
 
