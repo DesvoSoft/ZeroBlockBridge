@@ -41,7 +41,6 @@ class ServerListItem(ctk.CTkFrame):
         # Configure grid
         self.grid_columnconfigure(0, weight=0)  # Icon
         self.grid_columnconfigure(1, weight=1)  # Name
-        self.grid_columnconfigure(2, weight=0)  # Button
         
         # Icon
         icon_path = os.path.join(SERVERS_DIR, server_name, "server-icon.png")
@@ -50,6 +49,7 @@ class ServerListItem(ctk.CTkFrame):
                 img = ctk.CTkImage(Image.open(icon_path), size=(48, 48))
                 self.lbl_icon = ctk.CTkLabel(self, text="", image=img)
                 self.lbl_icon.grid(row=0, column=0, padx=(15, 5), pady=10)
+                self.lbl_icon.bind("<Button-1>", lambda e: self._on_select())
             except:
                 pass # Fallback to no icon
         
@@ -60,18 +60,24 @@ class ServerListItem(ctk.CTkFrame):
             anchor="w"
         )
         self.lbl_name.grid(row=0, column=1, padx=10, pady=15, sticky="ew")
+        self.lbl_name.bind("<Button-1>", lambda e: self._on_select())
+
+        # Make entire frame clickable and add hover effects
+        self.bind("<Button-1>", lambda e: self._on_select())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
         
-        self.btn_select = ctk.CTkButton(
-            self, 
-            text="→", 
-            width=36, 
-            font=("Roboto Medium", 18),
-            corner_radius=8,
-            fg_color="royalblue",
-            hover_color="#3a5ba0",
-            command=self._on_select
-        )
-        self.btn_select.grid(row=0, column=2, padx=15, pady=15)
+        # Set cursor to hand
+        self.configure(cursor="hand2")
+        self.lbl_name.configure(cursor="hand2")
+        if hasattr(self, "lbl_icon"):
+            self.lbl_icon.configure(cursor="hand2")
+
+    def _on_enter(self, event=None):
+        self.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
+
+    def _on_leave(self, event=None):
+        self.configure(fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         
     def _on_select(self):
         if self.on_click:

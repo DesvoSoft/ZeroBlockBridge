@@ -53,7 +53,7 @@ class MCTunnelApp(ctk.CTk):
         self.minsize(AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT)
         
         # Grid layout - Responsive weights
-        self.grid_columnconfigure(0, weight=0, minsize=200)  # Sidebar - fixed min width
+        self.grid_columnconfigure(0, weight=0, minsize=260)  # Sidebar - fixed min width
         self.grid_columnconfigure(1, weight=1)  # Main Content - takes remaining space
         self.grid_rowconfigure(0, weight=1)
 
@@ -77,7 +77,7 @@ class MCTunnelApp(ctk.CTk):
         """Build left sidebar with server list."""
         self.sidebar_frame = ctk.CTkFrame(
             self, 
-            width=200, 
+            width=260, 
             corner_radius=0,
             fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK)
         )
