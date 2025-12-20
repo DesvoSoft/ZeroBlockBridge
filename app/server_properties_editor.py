@@ -203,6 +203,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkButton(icon_frame, text="Change Icon...", command=self.change_icon, width=120).pack(side="left", padx=5)
         
         add_field(self.frame_general, "motd", "MOTD")
+        
+        # RAM Allocation (Custom handling since it's in metadata, not server.properties)
+        ram_frame = ctk.CTkFrame(self.frame_general, fg_color="transparent")
+        ram_frame.pack(fill="x", pady=2)
+        ctk.CTkLabel(ram_frame, text="RAM Allocation (MB):", width=200, anchor="w").pack(side="left", padx=5)
+        self.entry_ram = ctk.CTkEntry(ram_frame)
+        self.entry_ram.insert(0, str(self.logic.get_server_ram(self.server_name)))
+        self.entry_ram.pack(side="right", fill="x", expand=True, padx=5)
+        
         add_field(self.frame_general, "max-players", "Max Players", default_val="20")
         add_field(self.frame_general, "gamemode", "Game Mode", "dropdown", ["survival", "creative", "adventure", "spectator"])
         add_field(self.frame_general, "difficulty", "Difficulty", "dropdown", ["peaceful", "easy", "normal", "hard"])
@@ -254,6 +263,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
     def save_properties(self):
         # Save Automation
         self.save_automation()
+        
+        # Save RAM
+        try:
+            ram = int(self.entry_ram.get())
+            self.logic.set_server_ram(self.server_name, ram)
+        except:
+            pass # Ignore invalid RAM input
 
         new_props = {}
         for key, (widget, w_type) in self.widgets.items():

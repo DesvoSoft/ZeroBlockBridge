@@ -12,7 +12,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 5
+        self.total_steps = 6
         
         # Data storage
         self.wizard_data = {
@@ -25,8 +25,10 @@ class ServerWizard(ctk.CTkToplevel):
             "difficulty": "normal",
             "view_distance": "10",
             "simulation_distance": "10",
-            "location": "default"
+            "location": "default",
+            "icon_path": None
         }
+        
         
         # Layout
         self.grid_columnconfigure(0, weight=1)
@@ -264,7 +266,45 @@ class ServerWizard(ctk.CTkToplevel):
         if self.wizard_data["simulation_distance"]: self.entry_sim_distance.insert(0, self.wizard_data["simulation_distance"])
 
 
+
     def show_step_4(self):
+        self.clear_content()
+        self.update_header("Server Icon")
+        
+        ctk.CTkLabel(self.content_frame, text="Choose a server icon (Optional):").pack(anchor="w", pady=(0, 10))
+        
+        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon Selected", 
+                                        width=100, height=100, fg_color="gray30", corner_radius=10)
+        self.icon_preview.pack(pady=10)
+        
+        if self.wizard_data["icon_path"]:
+            self._update_icon_preview(self.wizard_data["icon_path"])
+            
+        btn_browse = ctk.CTkButton(self.content_frame, text="Browse Image...", command=self.browse_icon)
+        btn_browse.pack(pady=10)
+        
+        ctk.CTkLabel(self.content_frame, text="Supported formats: PNG, JPG (will be resized to 64x64)", 
+                    text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
+
+    def browse_icon(self):
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select Server Icon",
+            filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
+        )
+        if file_path:
+            self.wizard_data["icon_path"] = file_path
+            self._update_icon_preview(file_path)
+            
+    def _update_icon_preview(self, path):
+        try:
+            from PIL import Image
+            img = ctk.CTkImage(Image.open(path), size=(100, 100))
+            self.icon_preview.configure(image=img, text="")
+        except Exception as e:
+            self.icon_preview.configure(text="Error loading image")
+
+    def show_step_5(self):
         self.clear_content()
         self.update_header("Storage Location")
         
@@ -277,10 +317,14 @@ class ServerWizard(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.content_frame, text="Note: Custom locations coming soon.", text_color="gray").pack(anchor="w")
 
-    def show_step_5(self):
+    def show_step_6(self):
         self.clear_content()
         self.update_header("Review & Create")
         
+        icon_status = "Default"
+        if self.wizard_data["icon_path"]:
+            icon_status = os.path.basename(self.wizard_data["icon_path"])
+            
         summary = (
             f"Server Name: {self.wizard_data['name']}\n"
             f"Type: {self.wizard_data['type']} {self.wizard_data['version']}\n"
@@ -290,6 +334,7 @@ class ServerWizard(ctk.CTkToplevel):
             f"Difficulty: {self.wizard_data['difficulty']}\n"
             f"View Distance: {self.wizard_data['view_distance']}\n"
             f"Simulation Distance: {self.wizard_data['simulation_distance']}\n\n"
+            f"Icon: {icon_status}\n"
             f"Location: {SERVERS_DIR / self.wizard_data['name']}"
         )
         
@@ -350,7 +395,8 @@ class ServerWizard(ctk.CTkToplevel):
                 self.entry_sim_distance.configure(border_color="red")
                 return
             
-        elif self.current_step == 5:
+            
+        elif self.current_step == 6:
             # Finish
             self.on_complete_callback(self.wizard_data)
             self.destroy()
@@ -369,4 +415,5 @@ class ServerWizard(ctk.CTkToplevel):
         elif self.current_step == 3: self.show_step_3()
         elif self.current_step == 4: self.show_step_4()
         elif self.current_step == 5: self.show_step_5()
+        elif self.current_step == 6: self.show_step_6()
 

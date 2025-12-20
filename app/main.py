@@ -790,6 +790,7 @@ class MCTunnelApp(ctk.CTk):
         difficulty = config["difficulty"]
         view_distance = config["view_distance"]
         simulation_distance = config["simulation_distance"]
+        icon_path = config.get("icon_path")
         
         # Check if server exists
         if os.path.exists(os.path.join(SERVERS_DIR, name)):
@@ -797,15 +798,15 @@ class MCTunnelApp(ctk.CTk):
             return
 
         # Start download thread
-        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
+        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance, icon_path)
         threading.Thread(target=self.start_download_process, args=args, daemon=True).start()
 
-    def start_download_process(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
+    def start_download_process(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance, icon_path):
         # Schedule UI update on main thread
-        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
+        args = (name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance, icon_path)
         self.after(0, lambda: self.show_progress_dialog(*args))
 
-    def show_progress_dialog(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
+    def show_progress_dialog(self, name, srv_type, version, ram, seed, game_mode, difficulty, view_distance, simulation_distance, icon_path):
         dialog = DownloadProgressDialog(self, title=f"Installing {name}...")
         
         def run_install():
@@ -820,6 +821,10 @@ class MCTunnelApp(ctk.CTk):
                 if success:
                     # Apply settings (RAM, Seed, Game Mode, Difficulty)
                     logic.apply_server_settings(name, ram, seed, game_mode, difficulty, view_distance, simulation_distance)
+                    
+                    # Save icon if provided
+                    if icon_path:
+                        logic.save_server_icon(name, icon_path)
                     
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.after(0, lambda: self._on_download_complete(dialog))

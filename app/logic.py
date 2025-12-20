@@ -250,6 +250,7 @@ class ServerRunner:
         # Build command with Java 24+ compatibility flags
         cmd = [
             "java",
+            f"-Xms{self.ram_allocation}",
             f"-Xmx{self.ram_allocation}",
             "--enable-native-access=ALL-UNNAMED",
             "-Dorg.lwjgl.util.NoChecks=true",
@@ -431,7 +432,6 @@ def save_server_properties(server_name, new_properties):
     with open(props_path, "w") as f:
         f.writelines(new_lines)
 
-import datetime
 import datetime
 import zipfile
 
@@ -645,6 +645,54 @@ def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_di
     
     # Note: server.properties will be generated on first server start
     # The pending_settings will be applied by the UI after the server generates the file
+    
+    # Create a default server.properties so the settings button is enabled immediately
+    props = {
+        "network-compression-threshold": "256",
+        "sync-chunk-writes": "false",
+        "entity-broadcast-range-percentage": "75",
+        "allow-flight": "true",
+        "level-seed": seed if seed else "",
+        "gamemode": game_mode,
+        "difficulty": difficulty,
+        "view-distance": view_distance,
+        "simulation-distance": simulation_distance
+    }
+    save_server_properties(server_name, props)
+    
+    # Clear pending settings since we just applied them
+    metadata["pending_settings"] = {}
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+
+def get_server_ram(server_name):
+    """Gets the RAM allocation (MB) from metadata.json."""
+    try:
+        with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
+            meta = json.load(f)
+            return meta.get("ram", 2048)
+    except:
+        return 2048
+
+def set_server_ram(server_name, ram_mb):
+    """Sets the RAM allocation (MB) in metadata.json."""
+    metadata_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    try:
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                meta = json.load(f)
+        else:
+            meta = {}
+            
+        meta["ram"] = int(ram_mb)
+        
+        with open(metadata_path, "w") as f:
+            json.dump(meta, f, indent=4)
+        return True
+    except Exception as e:
+        print(f"Failed to set RAM: {e}")
+        return False
+
 
 
 def play_sound(sound_path):
