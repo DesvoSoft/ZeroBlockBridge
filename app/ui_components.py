@@ -5,6 +5,73 @@ import webbrowser
 import os
 from PIL import Image
 
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip = None
+        self.schedule_id = None
+        self.widget.bind("<Enter>", self.on_enter)
+        self.widget.bind("<Leave>", self.hide)
+        self.widget.bind("<ButtonPress>", self.hide)
+
+    def on_enter(self, event=None):
+        self.unschedule()
+        self.schedule_id = self.widget.after(500, self.show)
+
+    def unschedule(self):
+        if self.schedule_id:
+            self.widget.after_cancel(self.schedule_id)
+            self.schedule_id = None
+
+    def show(self, event=None):
+        self.unschedule()
+        if self.tooltip or not self.widget.winfo_exists():
+            return
+            
+        # Final check: is the mouse still over the widget?
+        try:
+            x, y = self.widget.winfo_pointerxy()
+            widget_x1 = self.widget.winfo_rootx()
+            widget_y1 = self.widget.winfo_rooty()
+            widget_x2 = widget_x1 + self.widget.winfo_width()
+            widget_y2 = widget_y1 + self.widget.winfo_height()
+            
+            if not (widget_x1 <= x <= widget_x2 and widget_y1 <= y <= widget_y2):
+                return
+        except:
+            return
+
+        # Position relative to mouse
+        tip_x = x + 15
+        tip_y = y + 15
+        
+        self.tooltip = ctk.CTkToplevel(self.widget)
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry(f"+{tip_x}+{tip_y}")
+        self.tooltip.attributes("-topmost", True)
+        self.tooltip.configure(fg_color=("#ebebeb", "#2b2b2b"))
+        
+        # Ensure it doesn't steal focus
+        self.tooltip.bind("<Enter>", lambda e: self.hide())
+        
+        label = ctk.CTkLabel(self.tooltip, text=self.text, fg_color=("#ebebeb", "#2b2b2b"), 
+                             text_color=("black", "white"), corner_radius=6, padx=10, pady=5,
+                             font=ctk.CTkFont(size=12))
+        label.pack()
+        
+        # Force update to ensure visibility
+        self.tooltip.update_idletasks()
+        self.tooltip.lift()
+
+    def hide(self, event=None):
+        self.unschedule()
+        if self.tooltip:
+            try:
+                self.tooltip.destroy()
+            except:
+                pass
+            self.tooltip = None
 
 class ConsoleWidget(ctk.CTkTextbox):
     def __init__(self, master, **kwargs):
@@ -12,72 +79,87 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.configure(
             state="disabled", 
             font=AppConfig.FONT_MONO,
-            fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK),  # Sunken terminal look
+            fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK),
             border_width=2,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, "gray20")
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, "gray20"),
+            wrap="word"
         )
         
     def log(self, message):
         self.configure(state="normal")
-        self.insert("end", "> " + message + "\n")  # Terminal-style prefix
+        self.insert("end", "> " + message + "\n")
         self.see("end")
         self.configure(state="disabled")
-
 
 class ServerListItem(ctk.CTkFrame):
     def __init__(self, master, server_name, on_click, **kwargs):
         super().__init__(master, **kwargs)
         self.server_name = server_name
         self.on_click = on_click
+        self.full_name = server_name
         
-        # Card-style design
         self.configure(
-            corner_radius=15,
+            corner_radius=6,
             fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK),
             border_width=1,
             border_color=("gray85", AppConfig.COLOR_BORDER_DARK)
         )
         
-        # Configure grid
-        self.grid_columnconfigure(0, weight=0)  # Icon
-        self.grid_columnconfigure(1, weight=1)  # Name
+        self.grid_columnconfigure(0, weight=0)
+        self.grid_columnconfigure(1, weight=1)
         
-        # Icon
         icon_path = os.path.join(SERVERS_DIR, server_name, "server-icon.png")
+        self.icon_image = None
+        
         if os.path.exists(icon_path):
             try:
-                img = ctk.CTkImage(Image.open(icon_path), size=(48, 48))
-                self.lbl_icon = ctk.CTkLabel(self, text="", image=img)
-                self.lbl_icon.grid(row=0, column=0, padx=(15, 5), pady=10)
-                self.lbl_icon.bind("<Button-1>", lambda e: self._on_select())
-            except:
-                pass # Fallback to no icon
+                with Image.open(icon_path) as img_data:
+                    img_in_memory = img_data.copy()
+                self.icon_image = ctk.CTkImage(img_in_memory, size=(40, 40))
+            except Exception as e:
+                print(f"Error loading icon: {e}")
         
+        self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image)
+        self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5) 
+        
+        display_name = server_name
+        if len(display_name) > 22:
+            display_name = display_name[:20] + "..."
+
         self.lbl_name = ctk.CTkLabel(
             self, 
-            text=server_name, 
+            text=display_name, 
             font=AppConfig.FONT_HEADING_SMALL,
             anchor="w"
         )
-        self.lbl_name.grid(row=0, column=1, padx=10, pady=15, sticky="ew")
-        self.lbl_name.bind("<Button-1>", lambda e: self._on_select())
+        self.lbl_name.grid(row=0, column=1, padx=(5, 10), pady=5, sticky="ew")
 
-        # Make entire frame clickable and add hover effects
-        self.bind("<Button-1>", lambda e: self._on_select())
-        self.bind("<Enter>", self._on_enter)
-        self.bind("<Leave>", self._on_leave)
-        
-        # Set cursor to hand
-        self.configure(cursor="hand2")
-        self.lbl_name.configure(cursor="hand2")
-        if hasattr(self, "lbl_icon"):
-            self.lbl_icon.configure(cursor="hand2")
+        self.bind_events(self)
+        self.bind_events(self.lbl_name)
+        self.bind_events(self.lbl_icon)
+        self.set_cursor("hand2")
+
+        # Add ToolTip if truncated
+        if len(self.full_name) > 22:
+            self.tooltip_ref = ToolTip(self, self.full_name)
+
+    def bind_events(self, widget):
+        widget.bind("<Button-1>", lambda e: self._on_select())
+        widget.bind("<Enter>", self._on_enter)
+        widget.bind("<Leave>", self._on_leave)
+
+    def set_cursor(self, cursor_type):
+        self.configure(cursor=cursor_type)
+        self.lbl_name.configure(cursor=cursor_type)
+        self.lbl_icon.configure(cursor=cursor_type)
 
     def _on_enter(self, event=None):
         self.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
+        self.configure(border_color=("gray60", "gray50"))
 
     def _on_leave(self, event=None):
         self.configure(fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.configure(border_color=("gray85", AppConfig.COLOR_BORDER_DARK))
         
     def _on_select(self):
         if self.on_click:
@@ -87,35 +169,23 @@ class DownloadProgressDialog(ctk.CTkToplevel):
     def __init__(self, master, title="Downloading..."):
         super().__init__(master)
         self.title(title)
-        self.geometry("350x180")  # Increased size for better spacing
+        self.geometry("350x180")
         self.resizable(False, False)
         self.cancelled = False
         
-        # Main content with padding
-        self.label = ctk.CTkLabel(
-            self, 
-            text="Starting download...",
-            font=AppConfig.FONT_BODY  # Body text typography
-        )
+        self.label = ctk.CTkLabel(self, text="Starting download...", font=AppConfig.FONT_BODY)
         self.label.pack(pady=(20, 10))
         
-        # Modern, thicker progress bar
-        self.progress_bar = ctk.CTkProgressBar(
-            self, 
-            width=280,
-            height=12,  # Thicker for modern look
-            corner_radius=6
-        )
+        self.progress_bar = ctk.CTkProgressBar(self, width=280, height=12, corner_radius=6)
         self.progress_bar.pack(pady=10)
         self.progress_bar.set(0)
         
-        # Secondary ghost-style cancel button
         self.btn_cancel = ctk.CTkButton(
             self,
             text="Cancel",
             width=100,
             corner_radius=8,
-            fg_color="transparent",  # Ghost button style
+            fg_color="transparent",
             border_width=1,
             border_color=("gray70", "gray30"),
             hover_color=("gray90", "gray20"),
@@ -123,7 +193,6 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         )
         self.btn_cancel.pack(pady=(10, 20))
         
-        # Make modal
         self.transient(master)
         self.wait_visibility()
         self.grab_set()
@@ -133,9 +202,9 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.close()
         
     def update_progress(self, val, status_text=None):
+        if self.cancelled or not self.winfo_exists():
+            return
         try:
-            if self.cancelled:
-                return
             self.progress_bar.set(val)
             if status_text:
                 self.label.configure(text=status_text)
@@ -146,10 +215,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
     def close(self):
         try:
             self.grab_release()
-            self.withdraw()
-            # Delay destroy to prevent race condition with CTk internal callbacks
-            # if the window is closed too quickly after creation.
-            self.after(500, self.destroy)
+            self.destroy()
         except Exception:
             pass
 
@@ -162,89 +228,58 @@ class TunnelSetupDialog(ctk.CTkToplevel):
         self.resizable(False, False)
         self.result = None
 
-        # 1. Required: Visit Playit setup
-        self.lbl_step1 = ctk.CTkLabel(
-            self,
-            text="Required: visit the Playit setup page to create your tunnel.",
-            font=AppConfig.FONT_BODY,
-            wraplength=380,
-            justify="left"
-        )
-        self.lbl_step1.pack(pady=(20, 10), padx=20, anchor="w")
+        def create_label(text, font=AppConfig.FONT_BODY, color=None):
+            return ctk.CTkLabel(self, text=text, font=font, wraplength=380, justify="left", text_color=color)
 
-        # Button to open playit.gg setup website
-        self.btn_open_url = ctk.CTkButton(
-            self,
-            text="🔗 Open playit.gg setup website",
-            command=self._open_url,
-            fg_color=AppConfig.COLOR_BTN_WARNING,
-            hover_color=AppConfig.COLOR_BTN_WARNING_HOVER
-        )
-        self.btn_open_url.pack(pady=(0, 20), padx=20, anchor="w")
+        create_label("Required: visit the Playit setup page to create your tunnel.").pack(pady=(20, 10), padx=20, anchor="w")
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(0, 15))
         
-        # NEW: Button to copy claim_url to clipboard
+        self.btn_open_url = ctk.CTkButton(
+            btn_frame, text="🔗 Open Website", command=self._open_url,
+            fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=180
+        )
+        self.btn_open_url.pack(side="left", padx=(0, 10))
+        
         self.btn_copy_url = ctk.CTkButton(
-            self, text="Copy URL",
-            command=self._copy_url,
-            fg_color=AppConfig.COLOR_BTN_INFO,
-            hover_color=AppConfig.COLOR_BTN_INFO_HOVER
+            btn_frame, text="Copy URL", command=self._copy_url,
+            fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER, width=100
         )
-        self.btn_copy_url.pack(pady=(0, 20), padx=20, anchor="w")
+        self.btn_copy_url.pack(side="left")
 
-        # 2. Note about Step 3 connection behavior
-        self.lbl_step1_note = ctk.CTkLabel(
-            self,
-            text="Note: During Step 3 on the Playit website, it may take a few tries to connect. This is expected — please wait until Step 4 appears before continuing.",
-            font=AppConfig.FONT_NOTE,
-            wraplength=380,
-            justify="left",
-            text_color=AppConfig.COLOR_TEXT_NOTE
-        )
-        self.lbl_step1_note.pack(pady=(0, 20), padx=20, anchor="w")
+        create_label(
+            "Note: Connection may take a few tries. Wait for Step 4.", 
+            font=AppConfig.FONT_NOTE, color=AppConfig.COLOR_TEXT_NOTE
+        ).pack(pady=(0, 15), padx=20, anchor="w")
 
-
-        # 3. Optional: Enter Domain
-        self.lbl_step2 = ctk.CTkLabel(
-            self,
-            text="(Optional) Once the setup steps were completed, paste your assigned domain below to display it in the dashboard:",
-            font=AppConfig.FONT_BODY,
-            wraplength=380,
-            justify="left"
-        )
-        self.lbl_step2.pack(pady=(0, 10), padx=20, anchor="w")
+        create_label("(Optional) Paste assigned domain below:").pack(pady=(0, 5), padx=20, anchor="w")
 
         self.entry = ctk.CTkEntry(self, width=380)
-        self.entry.pack(pady=(0, 20), padx=20)
+        self.entry.pack(pady=(0, 15), padx=20)
 
-        # Confirm Button
         self.btn_confirm = ctk.CTkButton(
-            self,
-            text="Confirm",
-            command=self._on_confirm,
-            fg_color=AppConfig.COLOR_BTN_SUCCESS,
-            hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER
+            self, text="Confirm", command=self._on_confirm,
+            fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER
         )
         self.btn_confirm.pack(pady=(0, 20))
 
-        # Make modal
         self.transient(master)
         self.wait_visibility()
         self.grab_set()
 
     def _open_url(self):
-        if self.claim_url:
-            webbrowser.open(self.claim_url)
+        if self.claim_url: webbrowser.open(self.claim_url)
 
     def _copy_url(self):
         if self.claim_url:
             self.clipboard_clear()
             self.clipboard_append(self.claim_url)
-            self.update() # Ensure clipboard is updated
+            self.update()
             
-            # Visual feedback
-            old_text = self.btn_copy_url.cget("text")
-            self.btn_copy_url.configure(text="✅ Copied!")
-            self.after(2000, lambda: self.btn_copy_url.configure(text=old_text))
+            orig_text = self.btn_copy_url.cget("text")
+            self.btn_copy_url.configure(text="✅")
+            self.after(1500, lambda: self.btn_copy_url.configure(text=orig_text))
 
     def _on_confirm(self):
         self.result = self.entry.get()

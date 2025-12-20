@@ -3,78 +3,11 @@ from tkinter import filedialog, messagebox
 import os
 import threading
 from app.app_config import AppConfig
+from app.ui_components import ToolTip
 
-class ToolTip:
-    def __init__(self, widget, text):
-        self.widget = widget
-        self.text = text
-        self.tooltip = None
-        self.schedule_id = None
-        self.widget.bind("<Enter>", self.on_enter)
-        self.widget.bind("<Leave>", self.hide)
-        self.widget.bind("<ButtonPress>", self.hide)
-
-    def on_enter(self, event=None):
-        self.unschedule()
-        self.schedule_id = self.widget.after(500, self.show)
-
-    def unschedule(self):
-        if self.schedule_id:
-            self.widget.after_cancel(self.schedule_id)
-            self.schedule_id = None
-
-    def show(self, event=None):
-        self.unschedule()
-        if self.tooltip or not self.widget.winfo_exists():
-            return
-            
-        # Final check: is the mouse still over the widget?
-        try:
-            x, y = self.widget.winfo_pointerxy()
-            widget_x1 = self.widget.winfo_rootx()
-            widget_y1 = self.widget.winfo_rooty()
-            widget_x2 = widget_x1 + self.widget.winfo_width()
-            widget_y2 = widget_y1 + self.widget.winfo_height()
-            
-            if not (widget_x1 <= x <= widget_x2 and widget_y1 <= y <= widget_y2):
-                return
-        except:
-            return
-
-        # Position relative to mouse
-        tip_x = x + 15
-        tip_y = y + 15
-        
-        self.tooltip = ctk.CTkToplevel(self.widget)
-        self.tooltip.wm_overrideredirect(True)
-        self.tooltip.wm_geometry(f"+{tip_x}+{tip_y}")
-        self.tooltip.attributes("-topmost", True)
-        self.tooltip.configure(fg_color=("#ebebeb", "#2b2b2b"))
-        
-        # Ensure it doesn't steal focus
-        self.tooltip.bind("<Enter>", lambda e: self.hide())
-        
-        label = ctk.CTkLabel(self.tooltip, text=self.text, fg_color=("#ebebeb", "#2b2b2b"), 
-                             text_color=("black", "white"), corner_radius=6, padx=10, pady=5,
-                             font=ctk.CTkFont(size=12))
-        label.pack()
-        
-        # Force update to ensure visibility
-        self.tooltip.update_idletasks()
-        self.tooltip.lift()
-
-    def hide(self, event=None):
-        self.unschedule()
-        if self.tooltip:
-            try:
-                self.tooltip.destroy()
-            except:
-                pass
-            self.tooltip = None
 
 SETTINGS_METADATA = {
     # General
-    "motd": {"desc": "The message shown in the server list.", "impact": "Low"},
     "max-players": {"desc": "Maximum number of players allowed online.", "impact": "Low"},
     "gamemode": {"desc": "The default game mode for new players.", "impact": "Low"},
     "force-gamemode": {"desc": "Forces players to join in the default game mode.", "impact": "Low"},
