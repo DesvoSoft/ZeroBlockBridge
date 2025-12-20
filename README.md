@@ -178,7 +178,7 @@ This ensures that your Minecraft server management experience is secure, private
 The project follows a clean architecture, separating UI, business logic, and services.
 
 ```
-MCTunnel/
+ZeroBlockBridge/
 ├── app/
 │   ├── main.py                    # Main application, UI layout, and coordination
 │   ├── logic.py                   # Core business logic & Sound Utility
@@ -188,8 +188,18 @@ MCTunnel/
 │   ├── playit_manager.py          # Manages the playit.gg tunneling agent
 │   ├── server_wizard.py           # UI and logic for the 5-step creation wizard
 │   ├── server_properties_editor.py # UI for the server properties editor
-│   └── ui_components.py           # Reusable UI widgets (console, list items)
+│   ├── ui_components.py           # Reusable UI widgets (console, list items)
+|   └── requirements.txt           # Project dependencies for pip
 │
+├── assets/                        # Other misc files
+│   ├── notification.wav           # Notification sound effect
+|   ├── server-icon.png            # Image used during devolpment as server icon
+|   └── logo.png                   # Project logo
+|
+├── docs/                          
+│   ├── USAGE.md                   # User guide
+|   └── TESTING.md                 # Test documentation<server-name>/
+|
 ├── servers/                       # (Generated) Created servers are stored here
 │   └── <server-name>/
 │       ├── server.jar
@@ -199,13 +209,9 @@ MCTunnel/
 ├── bin/                           # (Generated) Binaries like the playit agent
 │
 ├── config/                        # (Generated) Playit.gg agent configuration
+│   └── config.json                # (Generated) App-level configuration
 │
-├── config.json                    # (Generated) App-level configuration
-├── requirements.txt               # Project dependencies for pip
-│
-├── USAGE.md                       # User guide
-├── TESTING.md                     # Test documentation
-└── README.md                      # This file
+└── README.md                      # This file c:
 ```
 
 ---
