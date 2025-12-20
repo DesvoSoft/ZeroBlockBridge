@@ -3,8 +3,9 @@
 <p align="center">Minecraft Server Management with Built-in Tunneling, Backups & Automation</p>
 
 <p align="center">
-  <img src="assets/logo.png" alt="ZeroBlockBridge Logo" width="200"/>
+  <img src="assets/logo.png" alt="ZeroBlockBridge Logo" width="350"/>
 </p>
+
 ZeroBlockBridge is a desktop application that simplifies Minecraft server creation and management, designed with the intent to provide a user‑friendly interface that can safely turn any computer into a Minecraft server. With Zero Block Bridge, you can easily host a server to play with your friends and community — without the hassle of complex setup, port forwarding or unsafe configurations.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
