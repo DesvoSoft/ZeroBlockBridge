@@ -215,25 +215,30 @@ MCTunnel/
 
 ### System Requirements
 
-- **OS**: Windows, macOS, Linux
+- **OS**: Windows/Linux
 - **Python**: 3.10 or higher
-- **Java**: 17 minimum, 24 fully supported
-- **RAM**: 2GB minimum (4GB+ recommended for modded)
+- **Java**: 17 minimum, 24 supported (This might also depend on your desired Minecraft server version)
+- **RAM**: 2GB minimum (4GB+ recommended for modded servers)
 - **Disk**: ~500MB per server + world size
 
 ### Dependencies
 
-All required Python packages are listed in the `requirements.txt` file. The main dependencies are:
+All required Python packages are listed in `requirements.txt`. The main dependencies are:
 
-- **customtkinter**: For the modern graphical user interface.
-- **requests**: For downloading server files.
-- **psutil**: For detecting system information like available RAM.
+- **customtkinter** – Modern graphical user interface framework for Python.  
+- **darkdetect** – Detects system dark/light mode for adaptive UI themes.  
+- **requests** – Handles HTTP requests for downloading server files and updates.  
+- **psutil** – Provides system information (CPU, RAM, processes) for resource management.  
+- **packaging** – Utilities for version parsing and dependency handling.  
+- **playsound==1.2.2** – Lightweight library for playing notification sounds.  
+- **Pillow** – Image processing library, used for server icon feature.  
 
 ---
 
 ## Contributing
 
-Contributions are welcome! ❤️
+Contributing, issues and pull requests are welcome!
+Feedback is always appreciated ❤️
 
 ---
 
