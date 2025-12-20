@@ -2,20 +2,18 @@
 
 **Minecraft Server Management with Built-in Tunneling, Backups & Automation**
 
-Zero Block Bridge is a feature-rich desktop application that simplifies Minecraft server creation and management. Create servers with a wizard, automate restarts, manage backups, and share with friends—no terminal commands or port forwarding required.
+Zero Block Bridge is a desktop application that simplifies Minecraft server creation and management. Create servers with a wizard, automate restarts, manage backups, and share with friends without setting any port forwarding and keeping your local network secure.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Java 17+](https://img.shields.io/badge/java-17+-orange.svg)](https://adoptium.net/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm_Noncommercial-red.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 ---
 
 ## Features
 
 ### Server Management
 
-- **5-Step Creation Wizard**: Name, type, RAM, world settings, and review.
-- **Multi-Version Support**: Vanilla 1.21.1 and Fabric 1.20.1.
+- **Creation Wizard**: Name, type, RAM, world settings, and review.
+- **Multi-Version Support**: Vanilla and Fabric 1.20.1.
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
 - **Integrated Console**: Send commands directly from the app.
@@ -33,10 +31,12 @@ Zero Block Bridge is a feature-rich desktop application that simplifies Minecraf
 
 ### Tunneling & Sharing
 
-- **Built-in Playit.gg Integration**: No port forwarding needed.
+- **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
 - **One-Click Tunnel Setup**: Auto-opens claim link in browser.
-- **Public IP Display**: Share `.ply.gg` address with friends.
+- **Public IP Display**: Share the provided public address.
 - **Auto-Update**: Agent stays up to date automatically.
+
+Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
 
 ### Developer Experience
 
@@ -65,7 +65,7 @@ The application features:
 ### Prerequisites
 
 - **Python 3.10+** ([Download](https://www.python.org/downloads/))
-- **Java 17+** (Java 24 fully supported) ([Download](https://adoptium.net/))
+- **Java 17+** ([Download](https://www.java.com/en/download/))
 
 ### Installation
 
@@ -233,27 +233,24 @@ All required Python packages are listed in the `requirements.txt` file. The main
 
 ## Contributing
 
-Contributions are welcome! Areas for improvement:
-
-- Additional server versions (Paper, Purpur, etc.)
-- More automation options (scheduled backups, auto-updates)
-- Custom storage locations
-- Multi-server simultaneous operation
-- Plugin/mod management UI
+Contributions are welcome! ❤️
 
 ---
 
 ## License
 
-ZeroBlockBridge is licensed under the **Creative Commons Attribution–NonCommercial 4.0 International License (CC BY-NC 4.0)**.
+**ZeroBlockBridge** © 2025 by **DesvoSoft**.
 
-You are free to:
-- Share — copy and redistribute the material in any medium or format
-- Adapt — remix, transform, and build upon the material
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
-Under the following terms:
-- Attribution — You must give appropriate credit, include the original copyright notice, and provide a link to the license.
-- NonCommercial — You may not use the material for commercial purposes.
+### Restriction
+
+* **No Commercial Use** — You may **not** use this software for any commercial purpose. This includes:
+* Selling the software or any modified version of it.
+* Using the software as part of a paid hosting service.
+* Using the software to support the operations of a for-profit business.
+
+[View Full License Text](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 
 ---
 
@@ -273,7 +270,7 @@ Under the following terms:
 
 ---
 
-**Built by a player, for players — Made with ❤️ for the Minecraft community**
+**Built by a player, for players — Empowering Minecraft creators & friends**
 
 ![Privacy Friendly](https://img.shields.io/badge/Privacy-Friendly-green?style=for-the-badge&logo=shield)
 ![Community](https://img.shields.io/badge/Made_for-Minecraft_Community-blue?style=for-the-badge&logo=minecraft)
