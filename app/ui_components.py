@@ -1,6 +1,9 @@
 import customtkinter as ctk
 from app.app_config import AppConfig
 from app.constants import SERVERS_DIR
+import webbrowser
+import os
+from PIL import Image
 
 
 class ConsoleWidget(ctk.CTkTextbox):
@@ -20,8 +23,6 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.see("end")
         self.configure(state="disabled")
 
-import os
-from PIL import Image
 
 class ServerListItem(ctk.CTkFrame):
     def __init__(self, master, server_name, on_click, **kwargs):
@@ -145,3 +146,108 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             self.after(500, self.destroy)
         except Exception:
             pass
+
+class TunnelSetupDialog(ctk.CTkToplevel):
+    def __init__(self, master, claim_url, title="Tunnel DNS Name"):
+        super().__init__(master)
+        self.claim_url = claim_url
+        self.title(title)
+        self.geometry("420x350")
+        self.resizable(False, False)
+        self.result = None
+
+        # 1. Required: Visit Playit setup
+        self.lbl_step1 = ctk.CTkLabel(
+            self,
+            text="Required: visit the Playit setup page to create your tunnel.",
+            font=AppConfig.FONT_BODY,
+            wraplength=380,
+            justify="left"
+        )
+        self.lbl_step1.pack(pady=(20, 10), padx=20, anchor="w")
+
+        # Button to open playit.gg setup website
+        self.btn_open_url = ctk.CTkButton(
+            self,
+            text="🔗 Open playit.gg setup website",
+            command=self._open_url,
+            fg_color=AppConfig.COLOR_BTN_WARNING,
+            hover_color=AppConfig.COLOR_BTN_WARNING_HOVER
+        )
+        self.btn_open_url.pack(pady=(0, 20), padx=20, anchor="w")
+        
+        # NEW: Button to copy claim_url to clipboard
+        self.btn_copy_url = ctk.CTkButton(
+            self, text="Copy URL",
+            command=self._copy_url,
+            fg_color=AppConfig.COLOR_BTN_INFO,
+            hover_color=AppConfig.COLOR_BTN_INFO_HOVER
+        )
+        self.btn_copy_url.pack(pady=(0, 20), padx=20, anchor="w")
+
+        # 2. Note about Step 3 connection behavior
+        self.lbl_step1_note = ctk.CTkLabel(
+            self,
+            text="Note: During Step 3 on the Playit website, it may take a few tries to connect. This is expected — please wait until Step 4 appears before continuing.",
+            font=AppConfig.FONT_NOTE,
+            wraplength=380,
+            justify="left",
+            text_color=AppConfig.COLOR_TEXT_NOTE
+        )
+        self.lbl_step1_note.pack(pady=(0, 20), padx=20, anchor="w")
+
+
+        # 3. Optional: Enter Domain
+        self.lbl_step2 = ctk.CTkLabel(
+            self,
+            text="(Optional) Once the setup steps were completed, paste your assigned domain below to display it in the dashboard:",
+            font=AppConfig.FONT_BODY,
+            wraplength=380,
+            justify="left"
+        )
+        self.lbl_step2.pack(pady=(0, 10), padx=20, anchor="w")
+
+        self.entry = ctk.CTkEntry(self, width=380)
+        self.entry.pack(pady=(0, 20), padx=20)
+
+        # Confirm Button
+        self.btn_confirm = ctk.CTkButton(
+            self,
+            text="Confirm",
+            command=self._on_confirm,
+            fg_color=AppConfig.COLOR_BTN_SUCCESS,
+            hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER
+        )
+        self.btn_confirm.pack(pady=(0, 20))
+
+        # Make modal
+        self.transient(master)
+        self.wait_visibility()
+        self.grab_set()
+
+    def _open_url(self):
+        if self.claim_url:
+            webbrowser.open(self.claim_url)
+
+    def _copy_url(self):
+        if self.claim_url:
+            self.clipboard_clear()
+            self.clipboard_append(self.claim_url)
+            self.update() # Ensure clipboard is updated
+            
+            # Visual feedback
+            old_text = self.btn_copy_url.cget("text")
+            self.btn_copy_url.configure(text="✅ Copied!")
+            self.after(2000, lambda: self.btn_copy_url.configure(text=old_text))
+
+    def _on_confirm(self):
+        self.result = self.entry.get()
+        self.close()
+
+    def close(self):
+        self.grab_release()
+        self.destroy()
+
+    def get_input(self):
+        self.master.wait_window(self)
+        return self.result

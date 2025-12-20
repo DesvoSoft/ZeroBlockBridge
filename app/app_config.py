@@ -24,6 +24,7 @@ class AppConfig:
     COLOR_STATUS_STARTING = "orange"
     COLOR_STATUS_ERROR = "red"
     COLOR_TEXT_GRAY = "gray"
+    COLOR_TEXT_NOTE = "#94a3b8"  # Slate-400 for subtle notes
 
     # Colors - Buttons
     COLOR_BTN_PRIMARY = "#3b82f6"
@@ -46,6 +47,7 @@ class AppConfig:
     FONT_HEADING = ("Roboto Medium", 18)
     FONT_HEADING_SMALL = ("Roboto Medium", 14)
     FONT_TITLE = ("Roboto Medium", 20)
+    FONT_NOTE = ("Roboto Italic", 11)
 
     # Scheduler
     SCHEDULER_CHECK_INTERVAL = 30  # seconds

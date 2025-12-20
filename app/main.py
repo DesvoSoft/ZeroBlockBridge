@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import webbrowser
 import time
 
-from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
+from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, TunnelSetupDialog
 from app.logic import load_config, check_java, save_config, download_server, accept_eula, install_fabric, ServerRunner
 import app.logic as logic
 from app.constants import SERVERS_DIR, ASSETS_DIR
@@ -917,10 +917,7 @@ class MCTunnelApp(ctk.CTk):
             
             # 2. Ask for DNS name (Optional)
             def _ask_dns():
-                dialog = ctk.CTkInputDialog(
-                    text="Playit setup opened in browser!\n\n1. Link your account and create a tunnel.\n2. Assign a domain (e.g. *.ply.gg).\n3. (Optional) Paste that domain here to show it in the dashboard:", 
-                    title="Tunnel DNS Name"
-                )
+                dialog = TunnelSetupDialog(self, claim_url=url, title="Tunnel DNS Name")
                 dns_name = dialog.get_input()
                 if dns_name:
                     dns_name = dns_name.strip().rstrip('.')
