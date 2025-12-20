@@ -203,6 +203,9 @@ ZeroBlockBridge/
 |   ├── server-icon.png            # Image used during devolpment as server icon
 |   └── logo.png                   # Project logo
 |
+├── backups/                       # (Generated) Servers backups will be stored here
+│   └── ServerName                 # Example reference
+|
 ├── docs/                          
 │   ├── USAGE.md                   # User guide
 |   └── TESTING.md                 # Test documentation<server-name>/
@@ -236,7 +239,7 @@ ZeroBlockBridge/
 - **Python**: 3.10 or higher
 - **Java**: 17 minimum, 24 supported (This might also depend on your desired Minecraft server version)
 - **RAM**: 2GB minimum (4GB+ recommended for modded servers)
-- **Disk**: ~500MB per server + world size
+- **Disk**: 37 MB for core app and dependencies + ~107MB per server (vanilla, it might vary for modded servers) + world size
 
 ### Dependencies
 
