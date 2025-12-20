@@ -1,8 +1,12 @@
-# Zero Block Bridge
+<h1 align="center">ZeroBlockBridge</h1>
 
-**Minecraft Server Management with Built-in Tunneling, Backups & Automation**
+<p align="center">Minecraft Server Management with Built-in Tunneling, Backups & Automation</p>
 
-Zero Block Bridge is a desktop application that simplifies Minecraft server creation and management. Create servers with a wizard, automate restarts, manage backups, and share with friends without setting any port forwarding and keeping your local network secure.
+<p align="center">
+  <img src="assets/logo.png" alt="ZeroBlockBridge Logo" width="200"/>
+</p>
+
+ZeroBlockBridge is a desktop application that simplifies Minecraft server creation and management, designed with the intent to provide a user‑friendly interface that can safely turn any computer into a Minecraft server. With Zero Block Bridge, you can easily host a server to play with your friends and community — without the hassle of complex setup, port forwarding or unsafe configurations.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm_Noncommercial-red.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
@@ -210,8 +214,8 @@ MCTunnel/
 
 ### Supported Versions
 
-- **Vanilla**: 1.21.1 (latest official release)
-- **Fabric**: 1.20.1 (with Fabric Loader 0.18.1)
+- **Vanilla**: All existing and officially available verions, including 1.21.1 (latest official release)
+- **Fabric**: 1.20.1 (with Fabric Loader 0.18.1) (Currently the only mod loader version I have implemented)
 
 ### System Requirements
 
@@ -223,7 +227,7 @@ MCTunnel/
 
 ### Dependencies
 
-All required Python packages are listed in `requirements.txt`. The main dependencies are:
+All required Python packages are listed in `requirements.txt`. The dependencies are:
 
 - **customtkinter** – Modern graphical user interface framework for Python.  
 - **darkdetect** – Detects system dark/light mode for adaptive UI themes.  
