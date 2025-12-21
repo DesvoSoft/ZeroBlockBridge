@@ -32,15 +32,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3. Install dependencies
+      # 3. Install dependencies (inside app folder)
       - name: Install dependencies
+        working-directory: ./app
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 4. Build executables with PyInstaller
+      # 4. Build executables with PyInstaller (inside app folder)
       - name: Build with PyInstaller
+        working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
             --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
@@ -50,9 +52,9 @@ jobs:
             --icon "${{ matrix.ICON }}" \
             main.py
 
-      # 5. Upload artifacts
+      # 5. Upload artifacts (dist folder is inside app)
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
-          path: dist/*
+          path: app/dist/*
