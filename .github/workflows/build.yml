@@ -3,7 +3,8 @@ name: Build App
 on:
   push:
     tags:
-      - 'v*' # Trigger only on version tags
+      - 'v*'   # Trigger on version tags like v1.2.0
+  workflow_dispatch: # Allow manual trigger from Actions tab
 
 jobs:
   build:
@@ -19,7 +20,7 @@ jobs:
           - os: windows-latest
             TARGET: windows
             SEP: ";"
-            ICON: "assets/logo.png"
+            ICON: "assets/logo.ico"
 
     steps:
       # 1. Checkout code
