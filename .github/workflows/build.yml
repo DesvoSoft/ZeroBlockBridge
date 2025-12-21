@@ -3,8 +3,8 @@ name: Build App
 on:
   push:
     tags:
-      - 'v*'   # Trigger on version tags like v1.2.0
-  workflow_dispatch: # Allow manual trigger from Actions tab
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,23 +16,20 @@ jobs:
           - os: ubuntu-latest
             TARGET: linux
             SEP: ":"
-            ICON: "assets/logo.png"
+            ICON: "../assets/logo.png"
           - os: windows-latest
             TARGET: windows
             SEP: ";"
-            ICON: "assets/logo.ico"
+            ICON: "../assets/logo.ico"
 
     steps:
-      # 1. Checkout code
       - uses: actions/checkout@v4
 
-      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 3. Install dependencies (inside app folder)
       - name: Install dependencies
         working-directory: ./app
         run: |
@@ -40,19 +37,17 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 4. Build executables with PyInstaller (inside app folder)
       - name: Build with PyInstaller
         working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
             --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
-            --add-data "assets${{ matrix.SEP }}assets" \
+            --add-data "../assets${{ matrix.SEP }}assets" \
             --add-data "app${{ matrix.SEP }}app" \
             --collect-all "customtkinter" \
             --icon "${{ matrix.ICON }}" \
             main.py
 
-      # 5. Upload artifacts (dist folder is inside app)
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
