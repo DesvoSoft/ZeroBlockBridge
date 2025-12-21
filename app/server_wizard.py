@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import os
 import psutil
+from app.constants import MINECRAFT_VERSIONS, SERVERS_DIR
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
@@ -11,7 +12,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 5
+        self.total_steps = 6
         
         # Data storage
         self.wizard_data = {
@@ -24,8 +25,10 @@ class ServerWizard(ctk.CTkToplevel):
             "difficulty": "normal",
             "view_distance": "10",
             "simulation_distance": "10",
-            "location": "default"
+            "location": "default",
+            "icon_path": None
         }
+        
         
         # Layout
         self.grid_columnconfigure(0, weight=1)
@@ -60,6 +63,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Make modal
         self.transient(parent)
+        self.wait_visibility()
         self.grab_set()
         
     def update_header(self, title):
@@ -95,15 +99,43 @@ class ServerWizard(ctk.CTkToplevel):
             
         # Type
         ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
-        self.var_type = ctk.StringVar(value=self.wizard_data["type"])
+        self.combo_type = ctk.CTkComboBox(self.content_frame, values=list(MINECRAFT_VERSIONS.keys()), 
+                                         command=self.update_version_list, state="readonly")
+        self.combo_type.set(self.wizard_data["type"])
+        self.combo_type.pack(fill="x", pady=(0, 20))
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_type._entry.bind("<Button-1>", lambda e: self.combo_type._open_dropdown_menu())
+        self.combo_type._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_type._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_type._entry.configure(cursor="arrow")
         
-        self.rb_vanilla = ctk.CTkRadioButton(self.content_frame, text="Vanilla 1.21.1 (Official)", 
-                                            variable=self.var_type, value="Vanilla")
-        self.rb_vanilla.pack(anchor="w", pady=5)
+        # Version
+        ctk.CTkLabel(self.content_frame, text="Minecraft Version:").pack(anchor="w", pady=(0, 5))
+        self.combo_version = ctk.CTkComboBox(self.content_frame, state="readonly")
+        self.combo_version.pack(fill="x", pady=(0, 5))
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_version._entry.bind("<Button-1>", lambda e: self.combo_version._open_dropdown_menu())
+        self.combo_version._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_version._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_version._entry.configure(cursor="arrow")
         
-        self.rb_fabric = ctk.CTkRadioButton(self.content_frame, text="Fabric 1.20.1 (Modded)", 
-                                           variable=self.var_type, value="Fabric")
-        self.rb_fabric.pack(anchor="w", pady=5)
+        # Initialize versions
+        self.update_version_list(self.wizard_data["type"])
+        
+        # Pre-select version if available
+        if self.wizard_data["version"] in self.combo_version.cget("values"):
+             self.combo_version.set(self.wizard_data["version"])
+
+    def update_version_list(self, server_type):
+        versions = list(MINECRAFT_VERSIONS.get(server_type, {}).keys())
+        # Sort versions if needed (they are usually dict keys, so insertion order or random)
+        # For now, let's assume the dict in constants is ordered or we sort desc
+        versions.sort(reverse=True) 
+        self.combo_version.configure(values=versions)
+        if versions:
+            self.combo_version.set(versions[0])
+        else:
+            self.combo_version.set("No versions found")
         
     def show_step_2(self):
         self.clear_content()
@@ -193,6 +225,11 @@ class ServerWizard(ctk.CTkToplevel):
         self.combo_gamemode = ctk.CTkComboBox(gamemode_frame, values=["survival", "creative", "adventure", "spectator"], state="readonly")
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         self.combo_gamemode.pack(fill="x")
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_gamemode._entry.bind("<Button-1>", lambda e: self.combo_gamemode._open_dropdown_menu())
+        self.combo_gamemode._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_gamemode._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_gamemode._entry.configure(cursor="arrow")
 
         # --- Middle Row: Difficulty, View, Sim ---
         middle_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -206,6 +243,11 @@ class ServerWizard(ctk.CTkToplevel):
         self.combo_difficulty = ctk.CTkComboBox(difficulty_frame, values=["peaceful", "easy", "normal", "hard"], state="readonly")
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         self.combo_difficulty.pack(fill="x")
+        # Fix: Make clickable anywhere and prevent text selection
+        self.combo_difficulty._entry.bind("<Button-1>", lambda e: self.combo_difficulty._open_dropdown_menu())
+        self.combo_difficulty._entry.bind("<B1-Motion>", lambda e: "break")
+        self.combo_difficulty._entry.bind("<Double-Button-1>", lambda e: "break")
+        self.combo_difficulty._entry.configure(cursor="arrow")
 
         # View Distance
         view_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
@@ -224,22 +266,65 @@ class ServerWizard(ctk.CTkToplevel):
         if self.wizard_data["simulation_distance"]: self.entry_sim_distance.insert(0, self.wizard_data["simulation_distance"])
 
 
+
     def show_step_4(self):
+        self.clear_content()
+        self.update_header("Server Icon")
+        
+        ctk.CTkLabel(self.content_frame, text="Choose a server icon (Optional):").pack(anchor="w", pady=(0, 10))
+        
+        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon Selected", 
+                                        width=100, height=100, fg_color="gray30", corner_radius=10)
+        self.icon_preview.pack(pady=10)
+        
+        if self.wizard_data["icon_path"]:
+            self._update_icon_preview(self.wizard_data["icon_path"])
+            
+        btn_browse = ctk.CTkButton(self.content_frame, text="Browse Image...", command=self.browse_icon)
+        btn_browse.pack(pady=10)
+        
+        ctk.CTkLabel(self.content_frame, text="Supported formats: PNG, JPG (will be resized to 64x64)", 
+                    text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
+
+    def browse_icon(self):
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select Server Icon",
+            filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
+        )
+        if file_path:
+            self.wizard_data["icon_path"] = file_path
+            self._update_icon_preview(file_path)
+            
+    def _update_icon_preview(self, path):
+        try:
+            from PIL import Image
+            img = ctk.CTkImage(Image.open(path), size=(100, 100))
+            self.icon_preview.configure(image=img, text="")
+        except Exception as e:
+            self.icon_preview.configure(text="Error loading image")
+
+    def show_step_5(self):
         self.clear_content()
         self.update_header("Storage Location")
         
         ctk.CTkLabel(self.content_frame, text="Save Location:").pack(anchor="w", pady=(0, 5))
         
-        self.lbl_location = ctk.CTkLabel(self.content_frame, text=f"servers/{self.wizard_data['name']}/", 
+        server_path = SERVERS_DIR / self.wizard_data['name']
+        self.lbl_location = ctk.CTkLabel(self.content_frame, text=str(server_path), 
                                         fg_color="gray20", corner_radius=6, padx=10, pady=5)
         self.lbl_location.pack(fill="x", pady=(0, 20))
         
         ctk.CTkLabel(self.content_frame, text="Note: Custom locations coming soon.", text_color="gray").pack(anchor="w")
 
-    def show_step_5(self):
+    def show_step_6(self):
         self.clear_content()
         self.update_header("Review & Create")
         
+        icon_status = "Default"
+        if self.wizard_data["icon_path"]:
+            icon_status = os.path.basename(self.wizard_data["icon_path"])
+            
         summary = (
             f"Server Name: {self.wizard_data['name']}\n"
             f"Type: {self.wizard_data['type']} {self.wizard_data['version']}\n"
@@ -249,7 +334,8 @@ class ServerWizard(ctk.CTkToplevel):
             f"Difficulty: {self.wizard_data['difficulty']}\n"
             f"View Distance: {self.wizard_data['view_distance']}\n"
             f"Simulation Distance: {self.wizard_data['simulation_distance']}\n\n"
-            f"Location: servers/{self.wizard_data['name']}/"
+            f"Icon: {icon_status}\n"
+            f"Location: {SERVERS_DIR / self.wizard_data['name']}"
         )
         
         ctk.CTkLabel(self.content_frame, text="Please review your settings:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
@@ -267,10 +353,13 @@ class ServerWizard(ctk.CTkToplevel):
             if not name:
                 # Simple validation
                 self.entry_name.configure(border_color="red")
+                self.entry_name.focus()
                 return
+            else:
+                self.entry_name.configure(border_color=["#979da2", "#565b5e"]) # Reset to default (light/dark)
             self.wizard_data["name"] = name
-            self.wizard_data["type"] = self.var_type.get()
-            self.wizard_data["version"] = "1.21.1" if self.wizard_data["type"] == "Vanilla" else "1.20.1"
+            self.wizard_data["type"] = self.combo_type.get()
+            self.wizard_data["version"] = self.combo_version.get()
             
         elif self.current_step == 2:
             # RAM already updated via callback
@@ -280,10 +369,34 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             self.wizard_data["game_mode"] = self.combo_gamemode.get()
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
-            self.wizard_data["view_distance"] = self.entry_view_distance.get().strip() or "10"
-            self.wizard_data["simulation_distance"] = self.entry_sim_distance.get().strip() or "10"
+            # Validate distances
+            v_dist = self.entry_view_distance.get().strip() or "10"
+            s_dist = self.entry_sim_distance.get().strip() or "10"
             
-        elif self.current_step == 5:
+            try:
+                v_val = int(v_dist)
+                s_val = int(s_dist)
+                
+                if not (2 <= v_val <= 32):
+                    raise ValueError("View distance must be between 2 and 32")
+                if not (2 <= s_val <= 32):
+                    raise ValueError("Simulation distance must be between 2 and 32")
+                    
+                self.wizard_data["view_distance"] = str(v_val)
+                self.wizard_data["simulation_distance"] = str(s_val)
+                
+                # Reset borders
+                self.entry_view_distance.configure(border_color=["#979da2", "#565b5e"])
+                self.entry_sim_distance.configure(border_color=["#979da2", "#565b5e"])
+                
+            except ValueError:
+                # Show error visually (red borders)
+                self.entry_view_distance.configure(border_color="red")
+                self.entry_sim_distance.configure(border_color="red")
+                return
+            
+            
+        elif self.current_step == 6:
             # Finish
             self.on_complete_callback(self.wizard_data)
             self.destroy()
@@ -302,4 +415,5 @@ class ServerWizard(ctk.CTkToplevel):
         elif self.current_step == 3: self.show_step_3()
         elif self.current_step == 4: self.show_step_4()
         elif self.current_step == 5: self.show_step_5()
+        elif self.current_step == 6: self.show_step_6()
 

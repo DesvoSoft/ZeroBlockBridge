@@ -4,11 +4,11 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-## 📋 Manual Testing Checklist
+## Manual Testing Checklist
 
-### Sprint 1 & 2: Core Functionality
+### Core Functionality
 
-#### Test 1: Application Launch ✅
+#### Test 1: Application Launch
 
 **Steps:**
 
@@ -22,7 +22,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-#### Test 2: Java Detection ✅
+#### Test 2: Java Detection
 
 **Steps:**
 
@@ -35,7 +35,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-#### Test 3: Create Vanilla Server ✅
+#### Test 3: Create Vanilla Server
 
 **Steps:**
 
@@ -52,7 +52,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-#### Test 4: Create Fabric Server ✅
+#### Test 4: Create Fabric Server
 
 **Steps:**
 
@@ -68,26 +68,26 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-### Sprint 3: Server Management
+### Server Management
 
-#### Test 5: Start & Stop Server ✅
+#### Test 5: Start & Stop Server
 
 **Steps:**
 
 1. Select a server.
-2. Click "▶" (Start).
+2. Click "Start".
 3. Wait for "Done!" message in console.
-4. Click "■" (Stop).
+4. Click "Stop".
 
 **Expected Results:**
 
-- [ ] Status changes: "⚪ Offline" -> "⏳ Starting..." -> "🟢 Running".
+- [ ] Status changes: "Offline" -> "Starting..." -> "Running".
 - [ ] Server Log shows startup messages.
-- [ ] After stop, Status changes back to "⚪ Offline".
+- [ ] After stop, Status changes back to "Offline".
 
 ---
 
-#### Test 6: Connect to Server Locally ✅
+#### Test 6: Connect to Server Locally
 
 **Steps:**
 
@@ -102,15 +102,15 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-### Sprint 4: Playit Integration
+### Playit Integration
 
-#### Test 7: Tunnel Lifecycle ✅
+#### Test 7: Tunnel Lifecycle
 
 **Steps:**
 
-1. Click "▶" on the tunnel controls.
+1. Click "Start" on the tunnel controls.
 2. Wait for tunnel to come online.
-3. Click "■" on the tunnel controls.
+3. Click "Stop" on the tunnel controls.
 
 **Expected Results:**
 
@@ -120,9 +120,9 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-### Sprint 5: Refactoring and UI/UX Enhancements
+### Refactoring and UI/UX Enhancements
 
-#### Test 8: Initial Server Properties ✅
+#### Test 8: Initial Server Properties
 
 **Steps:**
 
@@ -131,7 +131,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
    - `View Distance`: 12
    - `Simulation Distance`: 12
 2. Start the server once, then stop it.
-3. Click the "⚙️" (Edit Properties) button.
+3. Click the "Properties" button.
 
 **Expected Results:**
 
@@ -145,7 +145,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-#### Test 9: Properties Button State ✅
+#### Test 9: Properties Button State
 
 **Steps:**
 
@@ -156,12 +156,12 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 **Expected Results:**
 
-- [ ] After step 2, the "⚙️" button is **disabled**.
-- [ ] After step 4, the "⚙️" button is **enabled**.
+- [ ] After step 2, the "Properties" button is **disabled**.
+- [ ] After step 4, the "Properties" button is **enabled**.
 
 ---
 
-#### Test 10: Scheduler Warnings ✅
+#### Test 10: Scheduler Warnings
 
 **Steps:**
 
@@ -177,7 +177,7 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 
 ---
 
-#### Test 11: Server List UI Layout ✅
+#### Test 11: Server List UI Layout
 
 **Steps:**
 
@@ -187,22 +187,24 @@ Comprehensive testing procedures for validating all features of Zero Block Bridg
 **Expected Results:**
 
 - [ ] The server name is visible but truncated.
-- [ ] The select button ("→") is fully visible and not pushed out of view.
+- [ ] The select button ("->") is fully visible and not pushed out of view.
 - [ ] The button remains functional.
 
 ---
 
-## 🧹 Cleanup After Testing
+## Cleanup After Testing
 
 Remove test servers to free up space:
 
 **Windows (PowerShell):**
+
 ```powershell
 Remove-Item -Recurse -Force servers/test-vanilla
 Remove-Item -Recurse -Force servers/test-fabric
 ```
 
 **Linux/Mac:**
+
 ```bash
 rm -rf servers/test-vanilla
 rm -rf servers/test-fabric
@@ -210,7 +212,7 @@ rm -rf servers/test-fabric
 
 ---
 
-## ⚠️ Known Issues / Expected Behavior
+## Known Issues / Expected Behavior
 
 - **First server run**: The first time a new server starts, it generates its files. Settings from the wizard are applied on the first start.
 - **Progress may jump**: Download speed varies, so the progress bar may not be perfectly smooth.

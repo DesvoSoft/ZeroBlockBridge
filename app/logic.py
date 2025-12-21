@@ -2,30 +2,35 @@ import json
 import os
 import subprocess
 import shutil
-
-import shutil
 import requests
 import threading
+import platform
 
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, MINECRAFT_VERSIONS, BACKUPS_DIR
+from app.server_events import ServerEvent, ServerEventEmitter
 
 def load_config():
     """Loads the configuration from config.json."""
+    default_config = {
+        "java_path": "auto",
+        "ram_allocation": "2G",
+        "accepted_eula": False,
+        "last_server": None,
+        "playit_dns": None
+    }
+
     if not os.path.exists(APP_CONFIG_PATH):
-        default_config = {
-            "java_path": "auto",
-            "ram_allocation": "2G",
-            "accepted_eula": False,
-            "last_server": None
-        }
         save_config(default_config)
         return default_config
     
     try:
         with open(APP_CONFIG_PATH, "r") as f:
             return json.load(f)
-    except json.JSONDecodeError:
-        return load_config() # Return default if corrupted (or handle better)
+    except (json.JSONDecodeError, OSError):
+        # FIX: Do not recurse. Reset file and return default.
+        print("[Warning] Config file corrupted. Resetting to defaults.")
+        save_config(default_config)
+        return default_config
 
 def save_config(config):
     """Saves the configuration to config.json."""
@@ -91,15 +96,19 @@ def download_server(server_name, server_type, version, progress_callback=None):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
+                    # FIX: Prevent DivisionByZeroError
                     if progress_callback and total_size > 0:
                         progress_callback(downloaded / total_size)
         
         if progress_callback:
-            progress_callback(1.0) # Ensure 100% at end
+            progress_callback(1.0)
             
         return jar_path
     except Exception as e:
         print(f"Download failed: {e}")
+        # Clean up partial file
+        if os.path.exists(jar_path):
+            os.remove(jar_path)
         return None
 
 def accept_eula(server_name):
@@ -115,7 +124,10 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     Downloads Fabric Installer and runs it to generate server files.
     """
     server_path = create_server_directory(server_name)
-    installer_url = MINECRAFT_VERSIONS["Fabric"]["1.20.1"] # Hardcoded for now based on input
+    installer_url = MINECRAFT_VERSIONS.get("Fabric", {}).get(mc_version)
+    if not installer_url:
+        print(f"Fabric installer not found for version {mc_version}")
+        return None
     installer_path = os.path.join(server_path, "fabric-installer.jar")
     
     # 1. Download Installer
@@ -169,6 +181,9 @@ class ServerRunner:
                     self.ram_allocation = ram_allocation
         except:
             self.ram_allocation = ram_allocation
+            
+        self.player_count = 0
+        self.events = ServerEventEmitter()
 
     def _apply_pending_settings(self):
         """Checks for and applies initial settings from the wizard, creating the properties file if needed."""
@@ -195,6 +210,7 @@ class ServerRunner:
                     props["sync-chunk-writes"] = "false"
                     props["entity-broadcast-range-percentage"] = "75"
                     props["allow-flight"] = "true"
+                    props["force-gamemode"] = "true"
 
                 # Map wizard keys to server.properties keys
                 if pending.get("seed"): props["level-seed"] = pending.get("seed")
@@ -242,6 +258,7 @@ class ServerRunner:
         # Build command with Java 24+ compatibility flags
         cmd = [
             "java",
+            f"-Xms{self.ram_allocation}",
             f"-Xmx{self.ram_allocation}",
             "--enable-native-access=ALL-UNNAMED",
             "-Dorg.lwjgl.util.NoChecks=true",
@@ -251,6 +268,7 @@ class ServerRunner:
         ]
         
         self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
+        self.events.emit(ServerEvent.STARTING)
         
         try:
             self.process = subprocess.Popen(
@@ -277,9 +295,13 @@ class ServerRunner:
 
         self.console_callback("[System] Stopping server...")
         try:
-            if self.process.stdin:
-                self.process.stdin.write("stop\n")
-                self.process.stdin.flush()
+            # FIX: Handle case where process is already dead/pipe broken
+            if self.process.stdin and self.process.poll() is None:
+                try:
+                    self.process.stdin.write("stop\n")
+                    self.process.stdin.flush()
+                except (IOError, BrokenPipeError):
+                    pass # Process likely dead already
             
             # Wait for graceful exit (up to 10 seconds)
             try:
@@ -317,11 +339,43 @@ class ServerRunner:
 
         for line in self.process.stdout:
             self.console_callback(line.strip())
+            self._parse_player_count(line.strip())
+            
+            if "Done (" in line and "For help, type" in line:
+                self.events.emit(ServerEvent.READY)
         
         self.process.wait()
         self.running = False
         self.process = None
         self.console_callback("[System] Server process exited.")
+        self.events.emit(ServerEvent.STOPPED)
+
+    def _parse_player_count(self, line):
+        # Regex for "Player joined" and "Player left"
+        # Vanilla/Fabric: "Player joined the game" / "Player left the game"
+        if "joined the game" in line:
+            self.player_count += 1
+            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+        elif "left the game" in line:
+            self.player_count = max(0, self.player_count - 1)
+            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+
+def save_server_icon(server_name, image_path):
+    """
+    Resizes and saves the server icon.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(image_path)
+        img = img.resize((64, 64), Image.Resampling.LANCZOS)
+        
+        server_path = os.path.join(SERVERS_DIR, server_name)
+        icon_path = os.path.join(server_path, "server-icon.png")
+        img.save(icon_path, "PNG")
+        return True
+    except Exception as e:
+        print(f"Failed to save icon: {e}")
+        return False
 
 def check_eula(server_name):
     """Checks if eula.txt exists and is true."""
@@ -391,7 +445,6 @@ def save_server_properties(server_name, new_properties):
         f.writelines(new_lines)
 
 import datetime
-import datetime
 import zipfile
 
 class BackupManager:
@@ -409,15 +462,25 @@ class BackupManager:
         backup_filename = f"{timestamp}.zip"
         backup_path = self.backup_dir / backup_filename
         
+        # Resolve absolute paths for safe comparison
+        abs_server_path = self.server_path.resolve()
+        abs_backup_dir = self.backup_dir.resolve()
+
         try:
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
-                    # Exclude backups folder if it's somehow inside
-                    if "backups" in root:
+                    root_path = os.path.abspath(root)
+                    
+                    # FIX: Safe exclusion. Check if current root starts with the backup dir path
+                    if os.path.commonpath([root_path, str(abs_backup_dir)]) == str(abs_backup_dir):
                         continue
                         
                     for file in files:
                         file_path = os.path.join(root, file)
+                        # Avoid trying to zip the zip file itself if it's being created
+                        if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
+                            continue
+
                         arcname = os.path.relpath(file_path, self.server_path)
                         zipf.write(file_path, arcname)
             return backup_path
@@ -604,4 +667,99 @@ def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_di
     
     # Note: server.properties will be generated on first server start
     # The pending_settings will be applied by the UI after the server generates the file
+    
+    # Create a default server.properties so the settings button is enabled immediately
+    props = {
+        "network-compression-threshold": "256",
+        "sync-chunk-writes": "false",
+        "entity-broadcast-range-percentage": "75",
+        "allow-flight": "true",
+        "level-seed": seed if seed else "",
+        "gamemode": game_mode,
+        "force-gamemode": "true",
+        "difficulty": difficulty,
+        "view-distance": view_distance,
+        "simulation-distance": simulation_distance
+    }
+    save_server_properties(server_name, props)
+    
+    # Clear pending settings since we just applied them
+    metadata["pending_settings"] = {}
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+
+def get_server_ram(server_name):
+    """Gets the RAM allocation (MB) from metadata.json."""
+    try:
+        with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
+            meta = json.load(f)
+            return meta.get("ram", 2048)
+    except:
+        return 2048
+
+def set_server_ram(server_name, ram_mb):
+    """Sets the RAM allocation (MB) in metadata.json."""
+    metadata_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    try:
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                meta = json.load(f)
+        else:
+            meta = {}
+            
+        meta["ram"] = int(ram_mb)
+        
+        with open(metadata_path, "w") as f:
+            json.dump(meta, f, indent=4)
+        return True
+    except Exception as e:
+        print(f"Failed to set RAM: {e}")
+        return False
+
+
+
+def play_sound(sound_path):
+    if not os.path.exists(sound_path):
+        return
+
+    system = platform.system()
+
+    try:
+        if system == "Windows":
+            try:
+                import winsound
+                # FIX: Add SND_ASYNC to prevent UI freeze
+                winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            except ImportError:
+                # Fallback if winsound is missing (rare) or trying playsound
+                try:
+                    from playsound import playsound
+                    # playsound block argument depends on version, usually blocks=False
+                    threading.Thread(target=playsound, args=(str(sound_path),), daemon=True).start()
+                except:
+                    pass
+        elif system == "Linux":
+            # Try common Linux players
+            players = [
+                ["paplay", str(sound_path)],
+                ["aplay", str(sound_path)],
+                ["canberra-gtk-play", "-f", str(sound_path)],
+                ["mpg123", str(sound_path)]
+            ]
+            
+            success = False
+            for cmd in players:
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True)
+                    success = True
+                    break
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    continue
+            
+            if not success:
+                print("[Warning] No suitable audio player found on Linux.")
+        else:
+            print(f"[Warning] Sound not supported on {system}")
+    except Exception as e:
+        print(f"Sound error: {e}")
 

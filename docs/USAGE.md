@@ -4,7 +4,7 @@ Complete guide to using Zero Block Bridge for creating and managing Minecraft se
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Installation](#installation)
 - [Getting Started](#getting-started)
@@ -19,7 +19,7 @@ Complete guide to using Zero Block Bridge for creating and managing Minecraft se
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -46,11 +46,14 @@ Before running Zero Block Bridge, ensure you have:
 
    **Note for Linux users regarding sound notifications:**
    The application uses the `playsound` library for audio notifications. On some Linux distributions, `playsound` relies on external audio playback tools like `GStreamer` or `mpg123`. If you encounter issues with sound notifications, ensure one of these is installed. For Debian/Ubuntu-based systems, you can install `GStreamer` with:
+
    ```bash
    sudo apt-get update
    sudo apt-get install libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
    ```
+
    Alternatively, `mpg123` can often work as well:
+
    ```bash
    sudo apt-get update
    sudo apt-get install mpg123
@@ -63,7 +66,7 @@ Before running Zero Block Bridge, ensure you have:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### First Launch
 
@@ -71,14 +74,14 @@ When you first launch Zero Block Bridge:
 
 1. The application window opens with the title **"Zero Block Bridge"**
 2. **Java version** is displayed in the top-right corner:
-   - ✅ Green text shows "Java: version-info" if Java is detected
-   - ❌ Red text shows "Java NOT FOUND" if Java is missing
+   - Green text shows "Java: version-info" if Java is detected
+   - Red text shows "Java NOT FOUND" if Java is missing
 3. The **Server Log** tab displays system messages
 4. Empty server list appears in the sidebar (if no servers exist yet)
 
 ---
 
-## 🎮 Creating Servers
+## Creating Servers
 
 ### Server Creation Wizard
 
@@ -126,7 +129,7 @@ Zero Block Bridge features a comprehensive 5-step wizard:
 
 ---
 
-## 🎛️ Managing Servers
+## Managing Servers
 
 ### Dashboard Controls
 
@@ -134,9 +137,9 @@ When you select a server, the dashboard shows:
 
 **Server Controls:**
 
-- ▶ **Start** - Launch the server
-- ■ **Stop** - Gracefully shut down
-- ⚙ **Properties** - Edit server.properties
+- **Start** - Launch the server
+- **Stop** - Gracefully shut down
+- **Properties** - Edit server.properties
 
 **Auto-Restart:**
 
@@ -149,7 +152,7 @@ When you select a server, the dashboard shows:
 **Backups:**
 
 - Shows last backup date/time
-- **✚ Backup Now** - Create instant backup
+- **Backup Now** - Create instant backup
 
 ### Starting a Server
 
@@ -166,7 +169,7 @@ When you select a server, the dashboard shows:
 
 ### Editing Properties
 
-1. **Click** the **"⚙ Properties"** button (server must be stopped)
+1. **Click** the **"Properties"** button (server must be stopped)
 2. Navigate through tabs:
    - **General**: MOTD, max players, game mode, difficulty
    - **World**: Seed, level type, spawn settings, view distance
@@ -178,7 +181,7 @@ When you select a server, the dashboard shows:
 
 ---
 
-## 💻 Server Console Commands
+## Server Console Commands
 
 ### Sending Commands
 
@@ -204,13 +207,13 @@ whitelist add PlayerName
 
 ---
 
-## 💾 Automated Backups
+## Automated Backups
 
 ### Creating Backups
 
 **From Dashboard:**
 
-- Click **"✚ Backup Now"** for instant backup
+- Click **"Backup Now"** for instant backup
 
 **From Properties Editor:**
 
@@ -233,7 +236,7 @@ whitelist add PlayerName
 
 ---
 
-## ⏰ Scheduled Restarts
+## Scheduled Restarts
 
 ### Configuring Auto-Restart
 
@@ -279,11 +282,11 @@ Players receive in-game warnings at:
 
 ---
 
-## 🌐 Setting Up Tunneling
+## Setting Up Tunneling
 
 ### Starting the Tunnel
 
-1. **Click** the **"▶ Start Tunnel"** button
+1. **Click** the **"Start Tunnel"** button
 2. **Watch the Tunnel Log** tab for:
    ```
    [Playit] Downloading agent v0.16.5...
@@ -291,7 +294,7 @@ Players receive in-game warnings at:
    [Playit] Visit link to setup https://playit.gg/claim/...
    ```
 3. **Browser opens automatically** with the claim URL
-   - If it doesn't, click the **"🔗 Link"** button
+   - If it doesn't, click the **"Link"** button
 
 ### Linking Your Account
 
@@ -308,19 +311,19 @@ The tunnel completes setup automatically:
 
 ### Getting Your Public IP
 
-- **Status indicator**: "Tunnel: ● Online" (green)
+- **Status indicator**: "Tunnel: Online" (green)
 - **Public IP**: "Public IP: your-address.ply.gg"
 - **Share this address** with friends to join your server
 
 ### Tunnel Controls
 
-- **■ Stop Tunnel** - Disconnect tunnel
-- **↻ Reset** - Clear agent data (requires confirmation)
-- **🔗 Link** - Reopen claim URL in browser
+- **Stop Tunnel** - Disconnect tunnel
+- **Reset** - Clear agent data (requires confirmation)
+- **Link** - Reopen claim URL in browser
 
 ---
 
-## 📊 Console Logs
+## Console Logs
 
 ### Server Log Tab
 
@@ -354,7 +357,7 @@ Displays Playit agent output:
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Java Warnings (Java 24)
 
@@ -397,7 +400,7 @@ Modern Java versions show deprecation warnings. These are suppressed automatical
 
 ---
 
-## 📁 File Structure
+## File Structure
 
 ```
 MCTunnel/
@@ -429,7 +432,7 @@ MCTunnel/
 
 ---
 
-## 🎯 Quick Tips
+## Quick Tips
 
 - **Multiple Servers**: Create unlimited servers, each fully independent
 - **Server Files**: Access in `servers/<name>/` - add mods to `mods/` for Fabric
@@ -439,7 +442,7 @@ MCTunnel/
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **Main README**: [README.md](README.md) - Project overview
 - **Playit.gg Docs**: [docs.playit.gg](https://docs.playit.gg/) -Advanced tunneling
