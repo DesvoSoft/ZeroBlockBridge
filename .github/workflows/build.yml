@@ -11,6 +11,7 @@ jobs:
     name: Build packages
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false   # <-- prevents canceling all jobs if one fails
       matrix:
         include:
           - os: ubuntu-latest
@@ -32,7 +33,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3. Install dependencies (inside app folder)
+      # 3. Install dependencies
       - name: Install dependencies
         working-directory: ./app
         run: |
@@ -40,13 +41,14 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 4. Debug: list folder structure (optional, helps confirm paths)
+      # 4. Debug: show folder structure
       - name: Show folder structure
         run: ls -R
         working-directory: .
 
-      # 5. Build executables with PyInstaller (inside app folder)
-      - name: Build with PyInstaller
+      # 5a. Build on Linux
+      - name: Build with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-latest'
         working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
@@ -56,7 +58,19 @@ jobs:
             --icon "${{ matrix.ICON }}" \
             main.py
 
-      # 6. Upload artifacts (dist folder is inside app)
+      # 5b. Build on Windows (PowerShell safe syntax)
+      - name: Build with PyInstaller (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: ./app
+        run: >
+          pyinstaller --noconsole --onefile
+          --name "ZeroBlockBridge-${{ matrix.TARGET }}"
+          --add-data "../assets${{ matrix.SEP }}assets"
+          --collect-all "customtkinter"
+          --icon "${{ matrix.ICON }}"
+          main.py
+
+      # 6. Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
