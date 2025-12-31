@@ -17,8 +17,8 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ### Server Management
 
-- **Creation Wizard**: Name, type, RAM, world settings, and review.
-- **Multi-Version Support**: Vanilla and Fabric 1.20.1.
+- **Creation Wizard**: 6-step guided setup with preview and validation.
+- **Multi-Version Support**: Vanilla, Fabric, and Forge with dynamic version fetching (hundreds of versions).
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
 - **Integrated Console**: Send commands directly from the app.
@@ -96,10 +96,10 @@ The application features:
     .\venv\Scripts\activate
     ```
 
-    Install dependencies from the `requirements.txt` file:
+    Install dependencies:
 
     ```bash
-    pip install -r requirements.txt
+    pip install -r app/requirements.txt
     ```
 
 4.  **Run the application**
@@ -134,11 +134,12 @@ Note: The tunneling feature uses the free third party services from [Playit.GG](
 
 The wizard guides you through:
 
-1.  **Type & Name**: Choose Vanilla/Fabric and name your server.
+1.  **Type & Name**: Choose Vanilla/Fabric/Forge and select Minecraft version, then name your server.
 2.  **RAM**: Use slider or type exact MB value (with validation).
-3.  **World Settings**: Seed, game mode, difficulty.
-4.  **Location**: View save location (custom paths coming soon).
-5.  **Review**: Confirm all settings before creation.
+3.  **World Settings**: Seed, game mode, difficulty, view distance, simulation distance.
+4.  **Server Icon**: Upload custom PNG/JPG icon (optional, resized to 64x64).
+5.  **Location**: View save location (custom paths coming soon).
+6.  **Review**: Confirm all settings before creation.
 
 ### Automated Restarts
 
@@ -191,11 +192,13 @@ ZeroBlockBridge/
 ├── app/
 │   ├── main.py                    # Main application, UI layout, and coordination
 │   ├── logic.py                   # Core business logic & Sound Utility
-│   ├── app_config.py              # Centralized configuration and constants
-│   ├── server_events.py           # Event system for server state
+│   ├── constants.py               # File paths, URLs, and configuration constants
+│   ├── app_config.py              # UI configuration (colors, fonts, window settings)
+│   ├── version_manager.py         # Dynamic version fetching, caching, and URL resolution
+│   ├── server_events.py           # Event system for server state notifications
 │   ├── scheduler_service.py       # Handles the logic for automated restarts
 │   ├── playit_manager.py          # Manages the playit.gg tunneling agent
-│   ├── server_wizard.py           # UI and logic for the 5-step creation wizard
+│   ├── server_wizard.py           # UI and logic for the 6-step creation wizard
 │   ├── server_properties_editor.py # UI for the server properties editor
 │   ├── ui_components.py           # Reusable UI widgets (console, list items)
 |   └── requirements.txt           # Project dependencies for pip
@@ -232,8 +235,13 @@ ZeroBlockBridge/
 
 ### Supported Versions
 
-- **Vanilla**: All existing and officially available verions, including 1.21.1 (latest official release)
-- **Fabric**: 1.20.1 (with Fabric Loader 0.18.1) (Currently the only mod loader version I have implemented)
+Zero Block Bridge uses **dynamic version fetching** to automatically support hundreds of Minecraft versions:
+
+- **Vanilla**: Fetches top 20 latest releases from Mojang API (e.g., 1.21.1, 1.20.1, 1.19.4) + popular versions (1.18.2, 1.16.5, 1.12.2, 1.8.9, etc.)
+- **Fabric**: Fetches top 20 stable game versions from Fabric Meta API with latest installer
+- **Forge**: Fetches top 50 versions from Forge Promotions API with recommended/latest builds
+- **Auto-Update**: Version cache refreshes every 24 hours automatically
+- **Cache Location**: Stored in `config/versions_cache.json` for offline access
 
 ### System Requirements
 
