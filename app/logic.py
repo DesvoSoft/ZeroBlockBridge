@@ -6,8 +6,9 @@ import requests
 import threading
 import platform
 
-from app.constants import APP_CONFIG_PATH, SERVERS_DIR, MINECRAFT_VERSIONS, BACKUPS_DIR
+from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BACKUPS_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
+from app.version_manager import VersionManager
 
 def load_config():
     """Loads the configuration from config.json."""
@@ -77,7 +78,9 @@ def download_server(server_name, server_type, version, progress_callback=None):
     Downloads the server jar to the server directory.
     progress_callback: function(float) -> None (0.0 to 1.0)
     """
-    url = MINECRAFT_VERSIONS.get(server_type, {}).get(version)
+    vm = VersionManager()
+    url = vm.get_download_url(server_type, version)
+    
     if not url:
         raise ValueError(f"URL not found for {server_type} {version}")
 
@@ -124,7 +127,10 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     Downloads Fabric Installer and runs it to generate server files.
     """
     server_path = create_server_directory(server_name)
-    installer_url = MINECRAFT_VERSIONS.get("Fabric", {}).get(mc_version)
+    
+    vm = VersionManager()
+    installer_url = vm.get_download_url("Fabric", mc_version)
+    
     if not installer_url:
         print(f"Fabric installer not found for version {mc_version}")
         return None
@@ -161,6 +167,58 @@ def install_fabric(server_name, mc_version, progress_callback=None):
         
     except subprocess.CalledProcessError as e:
         print(f"Fabric install failed: {e}")
+        return None
+
+def install_forge(server_name, mc_version, progress_callback=None):
+    """
+    Downloads Forge Installer and runs it.
+    """
+    server_path = create_server_directory(server_name)
+    
+    vm = VersionManager()
+    installer_url = vm.get_download_url("Forge", mc_version)
+    
+    if not installer_url:
+        print(f"Forge installer not found for version {mc_version}")
+        return None
+        
+    installer_path = os.path.join(server_path, "forge-installer.jar")
+    
+    # 1. Download Installer
+    try:
+        if progress_callback: progress_callback(0.1)
+        response = requests.get(installer_url, stream=True)
+        response.raise_for_status()
+        with open(installer_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        if progress_callback: progress_callback(0.3)
+    except Exception as e:
+        print(f"Forge download failed: {e}")
+        return None
+
+    # 2. Run Installer
+    # java -jar forge-installer.jar --installServer
+    cmd = ["java", "-jar", "forge-installer.jar", "--installServer"]
+    
+    try:
+        if progress_callback: progress_callback(0.5)
+        # Run in the server directory
+        # Note: Forge installer might take a while
+        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True)
+        if progress_callback: progress_callback(0.9)
+        
+        # Identify the forge server jar
+        # Usually forge-1.20.1-47.2.0-shim.jar or similar
+        # We look for a jar that starts with forge- and ends with .jar but is not the installer
+        for file in os.listdir(server_path):
+            if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
+                return os.path.join(server_path, file)
+        
+        return None
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Forge install failed: {e}")
         return None
 
 
@@ -248,8 +306,16 @@ class ServerRunner:
 
         # Determine jar file
         jar_file = "server.jar"
+        
+        # Check for Fabric
         if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
             jar_file = "fabric-server-launch.jar"
+        
+        # Check for Forge
+        for file in os.listdir(server_path):
+            if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
+                jar_file = file
+                break
         
         if not os.path.exists(os.path.join(server_path, jar_file)):
             self.console_callback(f"[Error] Server jar not found: {jar_file}")
