@@ -9,7 +9,7 @@ import sys
 import datetime
 import zipfile
 
-from app.constants import APP_CONFIG_PATH, SERVERS_DIR
+from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
 from app.version_manager import VersionManager
 
@@ -433,7 +433,7 @@ class BackupManager:
     def __init__(self, server_name):
         self.server_name = server_name
         self.server_path = SERVERS_DIR / server_name
-        self.backup_dir = self.server_path / "backups"
+        self.backup_dir = BASE_DIR / "backups" / server_name
         if not self.backup_dir.exists():
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -443,19 +443,37 @@ class BackupManager:
         backup_path = self.backup_dir / backup_filename
         abs_backup_dir = self.backup_dir.resolve()
         try:
+            skipped_files = []
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
                     root_path = os.path.abspath(root)
-                    if os.path.commonpath([root_path, str(abs_backup_dir)]) == str(abs_backup_dir):
+                    # Skip the backups directory if it's still inside (legacy support/safety)
+                    if "backups" in os.path.relpath(root_path, self.server_path).split(os.sep):
                         continue
+                        
                     for file in files:
                         file_path = os.path.join(root, file)
+                        # Skip the backup file itself (shouldn't happen with new path, but good for safety)
                         if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
                             continue
+                            
                         arcname = os.path.relpath(file_path, self.server_path)
-                        zipf.write(file_path, arcname)
+                        try:
+                            zipf.write(file_path, arcname)
+                        except (PermissionError, OSError) as e:
+                            if e.errno == 13: # Permission denied
+                                skipped_files.append(arcname)
+                                print(f"[Warning] Skipped locked file: {arcname}")
+                            else:
+                                raise e
+            
+            if skipped_files:
+                return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
             return backup_path, None
         except Exception as e:
+            if backup_path.exists():
+                try: backup_path.unlink()
+                except: pass
             return None, str(e)
 
     def list_backups(self):
@@ -486,7 +504,7 @@ class BackupManager:
         }
 
     def restore_backup(self, backup_path_str):
-        backup_path = BACKUPS_DIR / self.server_name / os.path.basename(backup_path_str)
+        backup_path = Path(backup_path_str)
         if not backup_path.exists(): return False
         try:
             for item in self.server_path.iterdir():
