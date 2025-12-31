@@ -473,6 +473,18 @@ class BackupManager:
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
 
+    def get_latest_backup(self):
+        if not self.backup_dir.exists(): return None
+        backups = [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"]
+        if not backups: return None
+        backups.sort(key=lambda x: x.name, reverse=True)
+        latest = backups[0]
+        return {
+            "name": latest.name,
+            "path": str(latest),
+            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+        }
+
     def restore_backup(self, backup_path_str):
         backup_path = BACKUPS_DIR / self.server_name / os.path.basename(backup_path_str)
         if not backup_path.exists(): return False
