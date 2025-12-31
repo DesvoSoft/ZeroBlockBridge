@@ -349,8 +349,12 @@ class MCTunnelApp(ctk.CTk):
         self.current_server = server_name
         self.lbl_dash_title.configure(text=f"Server: {server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
+        
         server_type = "Vanilla"
-        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): server_type = "Fabric"
+        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): 
+            server_type = "Fabric"
+        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
+            server_type = "Forge"
         
         self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
         

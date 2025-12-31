@@ -5,6 +5,8 @@ import shutil
 import requests
 import threading
 import platform
+import sys
+import datetime
 
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BACKUPS_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
@@ -28,38 +30,26 @@ def load_config():
         with open(APP_CONFIG_PATH, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
-        # FIX: Do not recurse. Reset file and return default.
         print("[Warning] Config file corrupted. Resetting to defaults.")
         save_config(default_config)
         return default_config
 
 def save_config(config):
     """Saves the configuration to config.json."""
-    # Ensure the parent directory exists
     APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(APP_CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
 def check_java():
-    """
-    Checks for Java installation.
-    Returns:
-        str: Java version string if found.
-        None: If Java is not found.
-    """
+    """Checks for Java installation."""
     java_cmd = "java"
-    
-    # Check config first if we want to support custom paths later
     config = load_config()
     if config.get("java_path") != "auto":
         java_cmd = config.get("java_path")
 
     try:
-        # Run java -version. Note: java -version outputs to stderr.
         result = subprocess.run([java_cmd, "-version"], capture_output=True, text=True, check=False)
         if result.returncode == 0:
-            # Parse version from stderr (e.g., "openjdk version '17.0.1' ...")
-            # For now, just return the first line or the whole stderr
             return result.stderr.splitlines()[0] if result.stderr else "Java detected (Unknown version)"
         else:
             return None
@@ -74,10 +64,7 @@ def create_server_directory(server_name):
     return path
 
 def download_server(server_name, server_type, version, progress_callback=None):
-    """
-    Downloads the server jar to the server directory.
-    progress_callback: function(float) -> None (0.0 to 1.0)
-    """
+    """Downloads the server jar."""
     vm = VersionManager()
     url = vm.get_download_url(server_type, version)
     
@@ -99,7 +86,6 @@ def download_server(server_name, server_type, version, progress_callback=None):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
-                    # FIX: Prevent DivisionByZeroError
                     if progress_callback and total_size > 0:
                         progress_callback(downloaded / total_size)
         
@@ -109,34 +95,27 @@ def download_server(server_name, server_type, version, progress_callback=None):
         return jar_path
     except Exception as e:
         print(f"Download failed: {e}")
-        # Clean up partial file
         if os.path.exists(jar_path):
             os.remove(jar_path)
         return None
 
 def accept_eula(server_name):
-    """Writes eula.txt=true to the server directory."""
+    """Writes eula.txt=true."""
     server_path = os.path.join(SERVERS_DIR, server_name)
     eula_path = os.path.join(server_path, "eula.txt")
-    
     with open(eula_path, "w") as f:
         f.write("eula=true\n")
 
 def install_fabric(server_name, mc_version, progress_callback=None):
-    """
-    Downloads Fabric Installer and runs it to generate server files.
-    """
+    """Installs Fabric."""
     server_path = create_server_directory(server_name)
-    
     vm = VersionManager()
     installer_url = vm.get_download_url("Fabric", mc_version)
     
     if not installer_url:
-        print(f"Fabric installer not found for version {mc_version}")
         return None
     installer_path = os.path.join(server_path, "fabric-installer.jar")
     
-    # 1. Download Installer
     try:
         if progress_callback: progress_callback(0.1)
         response = requests.get(installer_url, stream=True)
@@ -146,48 +125,29 @@ def install_fabric(server_name, mc_version, progress_callback=None):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
     except Exception as e:
-        print(f"Fabric download failed: {e}")
         return None
 
-    # 2. Run Installer
-    # java -jar fabric-installer.jar server -mcversion 1.20.1 -downloadMinecraft
-    cmd = [
-        "java", "-jar", "fabric-installer.jar", 
-        "server", "-mcversion", mc_version, "-downloadMinecraft"
-    ]
-    
+    cmd = ["java", "-jar", "fabric-installer.jar", "server", "-mcversion", mc_version, "-downloadMinecraft"]
     try:
         if progress_callback: progress_callback(0.5)
-        # Run in the server directory
         subprocess.run(cmd, cwd=server_path, check=True, capture_output=True)
         if progress_callback: progress_callback(0.9)
-        
-        # Cleanup installer? Maybe keep it.
         return os.path.join(server_path, "fabric-server-launch.jar")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Fabric install failed: {e}")
+    except subprocess.CalledProcessError:
         return None
 
 def install_forge(server_name, mc_version, progress_callback=None):
-    """
-    Downloads Forge Installer and runs it.
-    """
+    """Installs Forge."""
     server_path = create_server_directory(server_name)
-    print(f"[Debug] Installing Forge for {server_name} (MC {mc_version}) in {server_path}")
-    
     vm = VersionManager()
     installer_url = vm.get_download_url("Forge", mc_version)
     
     if not installer_url:
-        print(f"[Error] Forge installer not found for version {mc_version}")
         return None
         
     installer_path = os.path.join(server_path, "forge-installer.jar")
     
-    # 1. Download Installer
     try:
-        print(f"[Debug] Downloading Forge installer from: {installer_url}")
         if progress_callback: progress_callback(0.1)
         response = requests.get(installer_url, stream=True)
         response.raise_for_status()
@@ -195,48 +155,25 @@ def install_forge(server_name, mc_version, progress_callback=None):
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
-        print("[Debug] Forge installer downloaded successfully.")
     except Exception as e:
-        print(f"[Error] Forge download failed: {e}")
         return None
 
-    # 2. Run Installer
-    # java -jar forge-installer.jar --installServer
     cmd = ["java", "-jar", "forge-installer.jar", "--installServer"]
-    print(f"[Debug] Running Forge installer: {' '.join(cmd)}")
-    
     try:
         if progress_callback: progress_callback(0.5)
-        # Run in the server directory
-        # Note: Forge installer might take a while
-        # We use capture_output=True but we will print it if it fails
-        result = subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
-        print("[Debug] Forge installer finished successfully.")
+        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
         if progress_callback: progress_callback(0.9)
         
-        # Identify the forge server jar
-        # Usually forge-1.20.1-47.2.0-shim.jar or similar
-        # We look for a jar that starts with forge- and ends with .jar but is not the installer
         for file in os.listdir(server_path):
             if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                jar_path = os.path.join(server_path, file)
-                print(f"[Debug] Identified Forge jar: {jar_path}")
-                return jar_path
+                return os.path.join(server_path, file)
         
-        print("[Warning] Could not identify Forge server jar, but installer finished.")
-        # Fallback: check for run.bat/sh which is common in newer Forge
         if os.path.exists(os.path.join(server_path, "run.bat")):
-            print("[Debug] Found run.bat, Forge installation likely successful (1.17+ style).")
-            return "FORGE_MODERN" # Special flag for modern forge
+            return "FORGE_MODERN"
             
         return None
-        
-    except subprocess.CalledProcessError as e:
-        print(f"[Error] Forge install failed with exit code {e.returncode}")
-        print(f"[Error] Installer STDOUT: {e.stdout}")
-        print(f"[Error] Installer STDERR: {e.stderr}")
+    except subprocess.CalledProcessError:
         return None
-
 
 class ServerRunner:
     def __init__(self, server_name, ram_allocation, console_callback):
@@ -245,7 +182,6 @@ class ServerRunner:
         self.process = None
         self.running = False
 
-        # Try to load RAM from metadata
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
                 meta = json.load(f)
@@ -260,7 +196,6 @@ class ServerRunner:
         self.events = ServerEventEmitter()
 
     def _apply_pending_settings(self):
-        """Checks for and applies initial settings from the wizard, creating the properties file if needed."""
         metadata_path = os.path.join(SERVERS_DIR, self.server_name, "metadata.json")
         if not os.path.exists(metadata_path):
             return
@@ -269,16 +204,11 @@ class ServerRunner:
             with open(metadata_path, "r+") as f:
                 meta = json.load(f)
                 pending = meta.get("pending_settings")
-
                 if not pending or not any(pending.values()):
                     return
 
                 self.console_callback("[System] Applying initial server settings from wizard...")
-                
-                # Load existing properties or create an empty dictionary
                 props = load_server_properties(self.server_name)
-                
-                # If props is empty, it's the first time, so set defaults
                 if not props:
                     props["network-compression-threshold"] = "256"
                     props["sync-chunk-writes"] = "false"
@@ -286,23 +216,19 @@ class ServerRunner:
                     props["allow-flight"] = "true"
                     props["force-gamemode"] = "true"
 
-                # Map wizard keys to server.properties keys
                 if pending.get("seed"): props["level-seed"] = pending.get("seed")
                 if pending.get("game_mode"): props["gamemode"] = pending.get("game_mode")
                 if pending.get("difficulty"): props["difficulty"] = pending.get("difficulty")
                 if pending.get("view_distance"): props["view-distance"] = pending.get("view_distance")
                 if pending.get("simulation_distance"): props["simulation-distance"] = pending.get("simulation_distance")
                 
-                # Save the updated properties. This will create the file if it doesn't exist.
                 save_server_properties(self.server_name, props)
                 
-                # Clear pending settings to prevent re-application
                 meta["pending_settings"] = {}
                 f.seek(0)
                 f.truncate()
                 json.dump(meta, f, indent=4)
                 self.console_callback("[System] Initial settings applied successfully.")
-
         except Exception as e:
             self.console_callback(f"[Error] Failed to apply pending settings: {e}")
 
@@ -310,44 +236,65 @@ class ServerRunner:
         if self.running:
             return
         
-        # Always apply settings before starting. This will create server.properties if it's the first time.
         self._apply_pending_settings()
         
-        # Accept EULA if not already accepted.
         if not check_eula(self.server_name):
             accept_eula(self.server_name)
             self.console_callback("[System] EULA auto-accepted.")
 
         server_path = os.path.join(SERVERS_DIR, self.server_name)
 
-        # Determine jar file
+        # Determine startup method
         jar_file = "server.jar"
+        is_forge_modern = False
+        forge_args_file = None
         
         # Check for Fabric
         if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
             jar_file = "fabric-server-launch.jar"
         
-        # Check for Forge
-        for file in os.listdir(server_path):
-            if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                jar_file = file
-                break
+        # Check for Forge (Modern 1.17+)
+        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
+            is_forge_modern = True
+            args_pattern = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+            for root, dirs, files in os.walk(os.path.join(server_path, "libraries")):
+                if args_pattern in files:
+                    forge_args_file = os.path.relpath(os.path.join(root, args_pattern), server_path)
+                    break
         
-        if not os.path.exists(os.path.join(server_path, jar_file)):
+        # Check for Forge (Legacy)
+        else:
+            for file in os.listdir(server_path):
+                if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
+                    jar_file = file
+                    break
+        
+        if not is_forge_modern and not os.path.exists(os.path.join(server_path, jar_file)):
             self.console_callback(f"[Error] Server jar not found: {jar_file}")
             return
 
-        # Build command with Java 24+ compatibility flags
-        cmd = [
-            "java",
-            f"-Xms{self.ram_allocation}",
-            f"-Xmx{self.ram_allocation}",
-            "--enable-native-access=ALL-UNNAMED",
-            "-Dorg.lwjgl.util.NoChecks=true",
-            "-jar",
-            jar_file,
-            "nogui"
-        ]
+        # Build command
+        if is_forge_modern and forge_args_file:
+            cmd = [
+                "java",
+                f"-Xms{self.ram_allocation}",
+                f"-Xmx{self.ram_allocation}",
+                "--enable-native-access=ALL-UNNAMED",
+                "-Dorg.lwjgl.util.NoChecks=true",
+                f"@{forge_args_file}",
+                "nogui"
+            ]
+        else:
+            cmd = [
+                "java",
+                f"-Xms{self.ram_allocation}",
+                f"-Xmx{self.ram_allocation}",
+                "--enable-native-access=ALL-UNNAMED",
+                "-Dorg.lwjgl.util.NoChecks=true",
+                "-jar",
+                jar_file,
+                "nogui"
+            ]
         
         self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
         self.events.emit(ServerEvent.STARTING)
@@ -363,10 +310,7 @@ class ServerRunner:
                 bufsize=1
             )
             self.running = True
-            
-            # Start output reader thread
             threading.Thread(target=self._read_output, daemon=True).start()
-            
         except Exception as e:
             self.console_callback(f"[Error] Failed to start server: {e}")
             self.running = False
@@ -377,36 +321,28 @@ class ServerRunner:
 
         self.console_callback("[System] Stopping server...")
         try:
-            # FIX: Handle case where process is already dead/pipe broken
             if self.process.stdin and self.process.poll() is None:
                 try:
                     self.process.stdin.write("stop\n")
                     self.process.stdin.flush()
                 except (IOError, BrokenPipeError):
-                    pass # Process likely dead already
+                    pass
             
-            # Wait for graceful exit (up to 10 seconds)
             try:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.console_callback("[System] Server unresponsive, force killing...")
                 self.process.kill()
                 self.process.wait()
-                
         except Exception as e:
             self.console_callback(f"[Error] Failed to stop server: {e}")
-            # Ensure it's dead if an error occurred during stop
             if self.process:
-                try:
-                    self.process.kill()
-                except:
-                    pass
+                try: self.process.kill()
+                except: pass
 
     def send_command(self, command):
-        """Sends a command to the server stdin."""
         if not self.running or not self.process or not self.process.stdin:
             return
-            
         try:
             self.console_callback(f"> {command}")
             self.process.stdin.write(command + "\n")
@@ -415,17 +351,13 @@ class ServerRunner:
             self.console_callback(f"[Error] Failed to send command: {e}")
 
     def _read_output(self):
-        """Reads stdout from the process and sends it to the callback."""
         if not self.process:
             return
-
         for line in self.process.stdout:
             self.console_callback(line.strip())
             self._parse_player_count(line.strip())
-            
             if "Done (" in line and "For help, type" in line:
                 self.events.emit(ServerEvent.READY)
-        
         self.process.wait()
         self.running = False
         self.process = None
@@ -433,8 +365,6 @@ class ServerRunner:
         self.events.emit(ServerEvent.STOPPED)
 
     def _parse_player_count(self, line):
-        # Regex for "Player joined" and "Player left"
-        # Vanilla/Fabric: "Player joined the game" / "Player left the game"
         if "joined the game" in line:
             self.player_count += 1
             self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
@@ -443,69 +373,47 @@ class ServerRunner:
             self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
 
 def save_server_icon(server_name, image_path):
-    """
-    Resizes and saves the server icon.
-    """
     try:
         from PIL import Image
         img = Image.open(image_path)
         img = img.resize((64, 64), Image.Resampling.LANCZOS)
-        
         server_path = os.path.join(SERVERS_DIR, server_name)
         icon_path = os.path.join(server_path, "server-icon.png")
         img.save(icon_path, "PNG")
         return True
-    except Exception as e:
-        print(f"Failed to save icon: {e}")
+    except:
         return False
 
 def check_eula(server_name):
-    """Checks if eula.txt exists and is true."""
     server_path = os.path.join(SERVERS_DIR, server_name)
     eula_path = os.path.join(server_path, "eula.txt")
-    
-    if not os.path.exists(eula_path):
-        return False
-        
+    if not os.path.exists(eula_path): return False
     with open(eula_path, "r") as f:
-        content = f.read()
-        return "eula=true" in content
+        return "eula=true" in f.read()
 
 def load_server_properties(server_name):
-    """Reads server.properties into a dict."""
     props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
     properties = {}
-    
-    if not os.path.exists(props_path):
-        return properties
-        
+    if not os.path.exists(props_path): return properties
     with open(props_path, "r") as f:
         for line in f:
             line = line.strip()
-            if line and not line.startswith("#"):
-                if "=" in line:
-                    key, value = line.split("=", 1)
-                    properties[key.strip()] = value.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                properties[key.strip()] = value.strip()
     return properties
 
 def save_server_properties(server_name, new_properties):
-    """Updates server.properties while preserving comments/order if possible."""
     props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
-    
     if not os.path.exists(props_path):
-        # Create new
         with open(props_path, "w") as f:
             for k, v in new_properties.items():
                 f.write(f"{k}={v}\n")
         return
-
-    # Read existing lines to preserve comments
     with open(props_path, "r") as f:
         lines = f.readlines()
-        
     updated_keys = set()
     new_lines = []
-    
     for line in lines:
         stripped = line.strip()
         if stripped and not stripped.startswith("#") and "=" in stripped:
@@ -513,69 +421,44 @@ def save_server_properties(server_name, new_properties):
             if key in new_properties:
                 new_lines.append(f"{key}={new_properties[key]}\n")
                 updated_keys.add(key)
-            else:
-                new_lines.append(line)
-        else:
-            new_lines.append(line)
-            
-    # Append new keys that weren't in the file
+            else: new_lines.append(line)
+        else: new_lines.append(line)
     for k, v in new_properties.items():
-        if k not in updated_keys:
-            new_lines.append(f"{k}={v}\n")
-            
+        if k not in updated_keys: new_lines.append(f"{k}={v}\n")
     with open(props_path, "w") as f:
         f.writelines(new_lines)
-
-import datetime
-import zipfile
 
 class BackupManager:
     def __init__(self, server_name):
         self.server_name = server_name
         self.server_path = SERVERS_DIR / server_name
         self.backup_dir = BACKUPS_DIR / server_name
-        
         if not self.backup_dir.exists():
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self):
-        """Creates a zip backup of the server directory."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_filename = f"{timestamp}.zip"
         backup_path = self.backup_dir / backup_filename
-        
-        # Resolve absolute paths for safe comparison
-        abs_server_path = self.server_path.resolve()
         abs_backup_dir = self.backup_dir.resolve()
-
         try:
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
                     root_path = os.path.abspath(root)
-                    
-                    # FIX: Safe exclusion. Check if current root starts with the backup dir path
                     if os.path.commonpath([root_path, str(abs_backup_dir)]) == str(abs_backup_dir):
                         continue
-                        
                     for file in files:
                         file_path = os.path.join(root, file)
-                        # Avoid trying to zip the zip file itself if it's being created
                         if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
                             continue
-
                         arcname = os.path.relpath(file_path, self.server_path)
                         zipf.write(file_path, arcname)
             return backup_path
-        except Exception as e:
-            print(f"Backup failed: {e}")
-            return None
+        except: return None
 
     def list_backups(self):
-        """Returns a list of dicts with backup info."""
         backups = []
-        if not self.backup_dir.exists():
-            return backups
-            
+        if not self.backup_dir.exists(): return backups
         for f in self.backup_dir.iterdir():
             if f.is_file() and f.suffix == ".zip":
                 size_mb = f.stat().st_size / (1024 * 1024)
@@ -583,35 +466,22 @@ class BackupManager:
                     "name": f.name,
                     "path": str(f),
                     "size": f"{size_mb:.2f} MB",
-                    # Parse and reformat the date string to a more readable format
                     "date": datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
                 })
-        # Sort by name (which is the date) desc
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
 
     def restore_backup(self, backup_path_str):
-        """Restores a backup, wiping the current server directory first."""
         backup_path = BACKUPS_DIR / self.server_name / os.path.basename(backup_path_str)
-        if not backup_path.exists():
-            return False
-            
+        if not backup_path.exists(): return False
         try:
-            # 1. Clear server directory
             for item in self.server_path.iterdir():
-                if item.is_file() or item.is_symlink():
-                    item.unlink()
-                elif item.is_dir():
-                    shutil.rmtree(item)
-            
-            # 2. Extract backup
+                if item.is_file() or item.is_symlink(): item.unlink()
+                elif item.is_dir(): shutil.rmtree(item)
             with zipfile.ZipFile(backup_path, 'r') as zipf:
                 zipf.extractall(self.server_path)
-                
             return True
-        except Exception as e:
-            print(f"Restore failed: {e}")
-            return False
+        except: return False
 
 class Scheduler:
     def __init__(self, server_name):
@@ -620,97 +490,52 @@ class Scheduler:
         self.metadata_path = os.path.join(self.server_path, "metadata.json")
         
     def _load_metadata(self):
-        if not os.path.exists(self.metadata_path):
-            return {}
+        if not os.path.exists(self.metadata_path): return {}
         try:
-            with open(self.metadata_path, "r") as f:
-                return json.load(f)
-        except:
-            return {}
+            with open(self.metadata_path, "r") as f: return json.load(f)
+        except: return {}
 
     def _save_metadata(self, data):
-        with open(self.metadata_path, "w") as f:
-            json.dump(data, f)
+        with open(self.metadata_path, "w") as f: json.dump(data, f)
 
     def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None):
-        """
-        Sets the restart schedule.
-        enabled: bool
-        interval_hours: int (e.g., 6, 12, 24) for interval mode
-        restart_time: str (e.g., "03:00") for time mode
-        """
         data = self._load_metadata()
-        
         if not enabled:
-            if "scheduler" in data:
-                del data["scheduler"]
+            if "scheduler" in data: del data["scheduler"]
         else:
             if restart_time:
-                # Time-based schedule
-                data["scheduler"] = {
-                    "type": "time",
-                    "restart_time": restart_time,
-                    "last_run": None  # Will be set after first restart
-                }
+                data["scheduler"] = {"type": "time", "restart_time": restart_time, "last_run": None}
             else:
-               # Interval-based schedule
-                data["scheduler"] = {
-                    "type": "interval",
-                    "interval_hours": interval_hours,
-                    "last_run": datetime.datetime.now().isoformat()
-                }
-            
+                data["scheduler"] = {"type": "interval", "interval_hours": interval_hours, "last_run": datetime.datetime.now().isoformat()}
         self._save_metadata(data)
 
     def get_schedule(self):
-        data = self._load_metadata()
-        return data.get("scheduler", None)
+        return self._load_metadata().get("scheduler", None)
 
     def check_due(self):
-        """Checks if a restart is due. Returns True if yes."""
         data = self._load_metadata()
         scheduler = data.get("scheduler")
-        
-        if not scheduler:
-            return False
-            
+        if not scheduler: return False
         if scheduler["type"] == "interval":
             last_run_str = scheduler.get("last_run")
             if not last_run_str:
                 self.update_last_run()
                 return False
-                
             last_run = datetime.datetime.fromisoformat(last_run_str)
             interval = datetime.timedelta(hours=scheduler["interval_hours"])
-            
-            if datetime.datetime.now() >= last_run + interval:
-                return True
-                
+            if datetime.datetime.now() >= last_run + interval: return True
         elif scheduler["type"] == "time":
-            # Time-based restart (e.g., daily at 03:00)
-            restart_time_str = scheduler["restart_time"]  # "HH:MM"
+            restart_time_str = scheduler["restart_time"]
             last_run_str = scheduler.get("last_run")
-            
-            # Parse target time for today
             hour, minute = map(int, restart_time_str.split(":"))
             now = datetime.datetime.now()
             target_time_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            
-            # Check if we've already restarted today
             if last_run_str:
                 last_run = datetime.datetime.fromisoformat(last_run_str)
-                # If last restart was today and within 5 minutes of target, don't restart again
                 if last_run.date() == now.date():
-                    time_since_last = (now - last_run).total_seconds()
-                    if time_since_last < 300:  # 5 minutes
-                        return False
-            
-            # Check if we're within the 2-minute window around target time
+                    if (now - last_run).total_seconds() < 300: return False
             time_diff = (now - target_time_today).total_seconds()
-            # Trigger if we're past the target time but within 2 minutes
-            if 0 <= time_diff < 120:
-                return True
-
+            if 0 <= time_diff < 120: return True
         return False
 
     def update_last_run(self):
@@ -719,129 +544,59 @@ class Scheduler:
             data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
             self._save_metadata(data)
 
-
 def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
-    """
-    Applies initial server settings after server installation.
-    Creates metadata.json and accepts EULA.
-    Server properties will be configured after first server start.
-    """
     server_path = os.path.join(SERVERS_DIR, server_name)
-    
-    # 1. Create metadata.json with RAM and other settings
     metadata = {
         "ram": ram,
         "created": datetime.datetime.now().isoformat(),
         "pending_settings": {
-            "seed": seed,
-            "game_mode": game_mode,
-            "difficulty": difficulty,
-            "view_distance": view_distance,
-            "simulation_distance": simulation_distance
+            "seed": seed, "game_mode": game_mode, "difficulty": difficulty,
+            "view_distance": view_distance, "simulation_distance": simulation_distance
         }
     }
     metadata_path = os.path.join(server_path, "metadata.json")
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=4)
-    
-    # 2. Accept EULA so server can start
+    with open(metadata_path, "w") as f: json.dump(metadata, f, indent=4)
     accept_eula(server_name)
-    
-    # Note: server.properties will be generated on first server start
-    # The pending_settings will be applied by the UI after the server generates the file
-    
-    # Create a default server.properties so the settings button is enabled immediately
     props = {
-        "network-compression-threshold": "256",
-        "sync-chunk-writes": "false",
-        "entity-broadcast-range-percentage": "75",
-        "allow-flight": "true",
-        "level-seed": seed if seed else "",
-        "gamemode": game_mode,
-        "force-gamemode": "true",
-        "difficulty": difficulty,
-        "view-distance": view_distance,
-        "simulation-distance": simulation_distance
+        "network-compression-threshold": "256", "sync-chunk-writes": "false",
+        "entity-broadcast-range-percentage": "75", "allow-flight": "true",
+        "level-seed": seed if seed else "", "gamemode": game_mode,
+        "force-gamemode": "true", "difficulty": difficulty,
+        "view-distance": view_distance, "simulation-distance": simulation_distance
     }
     save_server_properties(server_name, props)
-    
-    # Clear pending settings since we just applied them
     metadata["pending_settings"] = {}
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=4)
+    with open(metadata_path, "w") as f: json.dump(metadata, f, indent=4)
 
 def get_server_ram(server_name):
-    """Gets the RAM allocation (MB) from metadata.json."""
     try:
         with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
-            meta = json.load(f)
-            return meta.get("ram", 2048)
-    except:
-        return 2048
+            return json.load(f).get("ram", 2048)
+    except: return 2048
 
 def set_server_ram(server_name, ram_mb):
-    """Sets the RAM allocation (MB) in metadata.json."""
     metadata_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
     try:
         if os.path.exists(metadata_path):
-            with open(metadata_path, "r") as f:
-                meta = json.load(f)
-        else:
-            meta = {}
-            
+            with open(metadata_path, "r") as f: meta = json.load(f)
+        else: meta = {}
         meta["ram"] = int(ram_mb)
-        
-        with open(metadata_path, "w") as f:
-            json.dump(meta, f, indent=4)
+        with open(metadata_path, "w") as f: json.dump(meta, f, indent=4)
         return True
-    except Exception as e:
-        print(f"Failed to set RAM: {e}")
-        return False
-
-
+    except: return False
 
 def play_sound(sound_path):
-    if not os.path.exists(sound_path):
-        return
-
+    if not os.path.exists(sound_path): return
     system = platform.system()
-
     try:
         if system == "Windows":
-            try:
-                import winsound
-                # FIX: Add SND_ASYNC to prevent UI freeze
-                winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
-            except ImportError:
-                # Fallback if winsound is missing (rare) or trying playsound
-                try:
-                    from playsound import playsound
-                    # playsound block argument depends on version, usually blocks=False
-                    threading.Thread(target=playsound, args=(str(sound_path),), daemon=True).start()
-                except:
-                    pass
+            import winsound
+            winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
         elif system == "Linux":
-            # Try common Linux players
-            players = [
-                ["paplay", str(sound_path)],
-                ["aplay", str(sound_path)],
-                ["canberra-gtk-play", "-f", str(sound_path)],
-                ["mpg123", str(sound_path)]
-            ]
-            
-            success = False
+            players = [["paplay", str(sound_path)], ["aplay", str(sound_path)], ["canberra-gtk-play", "-f", str(sound_path)], ["mpg123", str(sound_path)]]
             for cmd in players:
                 try:
                     subprocess.run(cmd, check=True, capture_output=True)
-                    success = True
                     break
-                except (FileNotFoundError, subprocess.CalledProcessError):
-                    continue
-            
-            if not success:
-                print("[Warning] No suitable audio player found on Linux.")
-        else:
-            print(f"[Warning] Sound not supported on {system}")
-    except Exception as e:
-        print(f"Sound error: {e}")
-
+                except: continue
+    except: pass
