@@ -546,7 +546,6 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log(f"[Error] Server '{config['name']}' already exists.")
             return
         threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
-
     def start_download_process(self, config):
         # FIX: Using config dict directly
         self.after(0, lambda: self.show_progress_dialog(config))
@@ -561,9 +560,15 @@ class MCTunnelApp(ctk.CTk):
                 if config["type"] == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
                     success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                else:
+                elif config["type"] == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
                     success = logic.install_fabric(name, version, dialog.update_progress)
+                elif config["type"] == "Forge":
+                    self.server_console.log(f"[System] Installing Forge {version}...")
+                    success = logic.install_forge(name, version, dialog.update_progress)
+                else:
+                    self.server_console.log(f"[Error] Unknown server type: {config['type']}")
+                    success = False
                 
                 if success:
                     logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
