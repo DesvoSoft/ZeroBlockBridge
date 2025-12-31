@@ -39,6 +39,7 @@ env/
 /servers/          # Server instances (keep local only)
 /bin/              # External binaries (playit, java)
 config.json        # User configuration (contains local paths)
+config
 
 # Project Specific - App Directory
 app/servers/
