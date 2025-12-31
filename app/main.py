@@ -78,7 +78,7 @@ class MCTunnelApp(ctk.CTk):
             logo_path = ASSETS_DIR / "logo.png"
             if logo_path.exists():
                 pil_image = Image.open(logo_path)
-                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(200, 60))
+                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(160, 60))
                 self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="", image=self.logo_image)
             else:
                 self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
@@ -86,7 +86,7 @@ class MCTunnelApp(ctk.CTk):
             print(f"Error loading logo: {e}")
             self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
             
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(15, 5))
 
         self.btn_create_server = ctk.CTkButton(self.sidebar_frame, text="Create Server", command=self.create_server_dialog, corner_radius=8, height=36)
         self.btn_create_server.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
@@ -108,7 +108,7 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_status_bar(self):
         self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=10)
+        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
         
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
         self.lbl_status.pack(side="left", padx=20, pady=8)
@@ -127,21 +127,21 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 10))
+        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
         
         self.lbl_dash_title = ctk.CTkLabel(self.dashboard_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(pady=(10, 6))
+        self.lbl_dash_title.pack(pady=(5, 5))
 
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.controls_frame.pack(pady=6)
+        self.controls_frame.pack(pady=4)
         self._build_server_controls()
 
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(pady=10, fill="x")
+        self.tunnel_frame.pack(pady=5, fill="x")
         self._build_tunnel_controls()
 
         self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.management_frame.pack(pady=(6, 10), fill="x")
+        self.management_frame.pack(pady=(4, 8), fill="x")
         self._build_management_controls()
 
     def _build_server_controls(self):
