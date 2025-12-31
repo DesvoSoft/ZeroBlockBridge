@@ -78,7 +78,7 @@ class MCTunnelApp(ctk.CTk):
             logo_path = ASSETS_DIR / "logo.png"
             if logo_path.exists():
                 pil_image = Image.open(logo_path)
-                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(160, 60))
+                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(150, 100)) # Logo size (width, height)
                 self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="", image=self.logo_image)
             else:
                 self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
@@ -113,6 +113,10 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
+        # Moved from dashboard to save space
+        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
+        self.lbl_dash_title.pack(side="left", padx=(0, 20), pady=8)
+
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", padx=20, pady=8)
         
@@ -129,9 +133,6 @@ class MCTunnelApp(ctk.CTk):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
         
-        self.lbl_dash_title = ctk.CTkLabel(self.dashboard_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(pady=(5, 5))
-
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.controls_frame.pack(pady=4)
         self._build_server_controls()
@@ -379,7 +380,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_select(self, server_name):
         self.current_server = server_name
-        self.lbl_dash_title.configure(text=f"Server: {server_name}")
+        self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
         
         server_type = "Vanilla"
