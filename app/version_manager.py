@@ -48,11 +48,24 @@ class VersionManager:
         if os.path.exists(VERSIONS_CACHE_FILE):
             try:
                 with open(VERSIONS_CACHE_FILE, "r") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    
+                    # VALIDATION: Check if Fabric versions look like Game versions (1.x) not Loader versions (0.x)
+                    # Fabric game versions usually start with "1." (e.g. 1.20.1)
+                    # Loader versions usually start with "0." (e.g. 0.14.22)
+                    # If we see "0." versions in Fabric list, assume cache is stale/wrong type.
+                    fabric_versions = data.get("Fabric", [])
+                    if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
+                        print("[System] Detected stale Fabric loader versions in cache. Forcing refresh.")
+                        return self._get_default_cache()
+                        
+                    return data
             except (json.JSONDecodeError, OSError):
                 print("[Warning] Version cache corrupted. Using defaults.")
         
-        # Default fallback if cache missing/corrupt
+        return self._get_default_cache()
+
+    def _get_default_cache(self):
         return {
             "last_updated": None,
             "Vanilla": ["1.21.1", "1.20.1", "1.19.4"], # Minimal fallback
