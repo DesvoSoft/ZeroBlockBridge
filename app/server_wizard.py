@@ -150,15 +150,11 @@ class ServerWizard(ctk.CTkToplevel):
         
         def version_key(v):
             try:
-                # Split by dots and convert to int tuple for comparison
-                # Handle snapshots or other formats gracefully-ish
                 parts = []
                 for part in v.split('.'):
                     if part.isdigit():
                         parts.append(int(part))
                     else:
-                        # Handle "1.20.1-rc1" -> 1, 20, 1 (ignore suffix for now or handle better)
-                        # Simple fallback: try to extract leading digits
                         import re
                         match = re.match(r"(\d+)", part)
                         if match:
@@ -169,15 +165,32 @@ class ServerWizard(ctk.CTkToplevel):
             except:
                 return (0, 0, 0)
 
-        versions.sort(key=version_key, reverse=True) 
-        self.combo_version.configure(values=versions)
+        # Sort full list first to identify "latest" correctly
+        versions.sort(key=version_key, reverse=True)
+
+        POPULAR_VERSIONS = ["1.20.4", "1.20.1", "1.18.2", "1.16.5", "1.16.1", "1.12.2", "1.8.9", "1.7.10", "1.7.2"]
+        
+        filtered_versions = []
+        if versions:
+            # Top 5 latest
+            filtered_versions.extend(versions[:5])
+            
+            # Add popular ones if available and not already added
+            for v in POPULAR_VERSIONS:
+                if v in versions and v not in filtered_versions:
+                    filtered_versions.append(v)
+            
+            # Re-sort the filtered list
+            filtered_versions.sort(key=version_key, reverse=True)
+            
+        self.combo_version.configure(values=filtered_versions if filtered_versions else ["No versions found"])
         
         current_selection = self.combo_version.get()
-        if versions:
-            if current_selection in versions:
+        if filtered_versions:
+            if current_selection in filtered_versions:
                 self.combo_version.set(current_selection)
             else:
-                self.combo_version.set(versions[0])
+                self.combo_version.set(filtered_versions[0])
         else:
             self.combo_version.set("No versions found")
         
