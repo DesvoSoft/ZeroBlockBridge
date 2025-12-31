@@ -61,6 +61,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Initialize VersionManager
         self.vm = VersionManager()
+        self.vm.add_callback(self.on_versions_refreshed)
         
         # Initialize Step 1
         self.show_step_1()
@@ -87,6 +88,16 @@ class ServerWizard(ctk.CTkToplevel):
     def clear_content(self):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
+
+    def on_versions_refreshed(self):
+        """Called when VersionManager finishes fetching new versions."""
+        self.after(0, self._refresh_ui_versions)
+
+    def _refresh_ui_versions(self):
+        """Updates the version dropdown if currently on Step 1."""
+        if self.current_step == 1 and hasattr(self, 'combo_type'):
+            current_type = self.combo_type.get()
+            self.update_version_list(current_type)
 
     # --- Steps ---
     
@@ -160,8 +171,13 @@ class ServerWizard(ctk.CTkToplevel):
 
         versions.sort(key=version_key, reverse=True) 
         self.combo_version.configure(values=versions)
+        
+        current_selection = self.combo_version.get()
         if versions:
-            self.combo_version.set(versions[0])
+            if current_selection in versions:
+                self.combo_version.set(current_selection)
+            else:
+                self.combo_version.set(versions[0])
         else:
             self.combo_version.set("No versions found")
         
