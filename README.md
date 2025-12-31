@@ -83,8 +83,7 @@ The application features:
 2.  **Navigate to the core app folder**
 
     ```bash
-     cd ZeroBlockBridge
-     cd app
+     cd ZeroBlockBridge/app
     ```
 
 3.  **Install dependencies**
@@ -99,7 +98,7 @@ The application features:
     Install dependencies:
 
     ```bash
-    pip install -r app/requirements.txt
+    pip install -r requirements.txt
     ```
 
 4.  **Run the application**
@@ -112,7 +111,7 @@ The application features:
 ### First Server
 
 1.  Click **"Create Server"** in the sidebar.
-2.  Follow the 5-step wizard to configure your server.
+2.  Follow the 6-step wizard to configure your server.
 3.  Select the server from the list.
 4.  Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
 5.  **Optional**: Enable tunneling to play with friends online.
@@ -205,11 +204,8 @@ ZeroBlockBridge/
 │
 ├── assets/                        # Other misc files
 │   ├── notification.wav           # Notification sound effect
-|   ├── server-icon.png            # Image used during devolpment as server icon
+|   ├── icon.ico                   # App icon
 |   └── logo.png                   # Project logo
-|
-├── backups/                       # (Generated) Servers backups will be stored here
-│   └── ServerName                 # Example reference
 |
 ├── docs/
 │   ├── USAGE.md                   # User guide
@@ -219,7 +215,9 @@ ZeroBlockBridge/
 │   └── <server-name>/
 │       ├── server.jar
 │       ├── server.properties
-│       └── metadata.json          # Stores RAM allocation, scheduler config, etc.
+│       ├── metadata.json          # Stores RAM allocation, scheduler config, etc.
+│       └── backups/               # Server backups stored here
+│           └── YYYY-MM-DD_HH-MM-SS.zip
 │
 ├── bin/                           # (Generated) Binaries like the playit agent
 │
