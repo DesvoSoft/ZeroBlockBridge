@@ -11,7 +11,6 @@ ASSETS_DIR = BASE_DIR / "assets"
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Ruta al config.json principal
 
 # Versiones y URLs para descargas de servidores
-# Versiones y URLs para descargas de servidores
 VERSIONS_CACHE_FILE = CONFIG_DIR / "versions_cache.json"
 
 # API Endpoints
