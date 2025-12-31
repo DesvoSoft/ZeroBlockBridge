@@ -154,10 +154,19 @@ class VersionManager:
                         mc_ver = key.split("-")[0]
                         forge_versions.add(mc_ver)
                 
-                # Sort versions (simple string sort is flawed for versions, but sufficient for now or use packaging.version)
-                # Let's just rely on the fact we have a set.
-                sorted_versions = sorted(list(forge_versions), reverse=True)
-                new_cache["Forge"] = sorted_versions[:20]
+                # Sort versions using semantic versioning logic
+                def version_key(v):
+                    try:
+                        parts = []
+                        for part in v.split('.'):
+                            if part.isdigit():
+                                parts.append(int(part))
+                        return tuple(parts)
+                    except:
+                        return (0,)
+
+                sorted_versions = sorted(list(forge_versions), key=version_key, reverse=True)
+                new_cache["Forge"] = sorted_versions[:50]
         except Exception as e:
             print(f"[Warning] Failed to fetch Forge versions: {e}")
 

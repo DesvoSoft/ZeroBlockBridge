@@ -559,43 +559,6 @@ class MCTunnelApp(ctk.CTk):
                 version = config["version"]
                 if config["type"] == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
-                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                elif config["type"] == "Fabric":
-                    self.server_console.log(f"[System] Installing Fabric {version}...")
-                    success = logic.install_fabric(name, version, dialog.update_progress)
-                elif config["type"] == "Forge":
-                    self.server_console.log(f"[System] Installing Forge {version}...")
-                    success = logic.install_forge(name, version, dialog.update_progress)
-                else:
-                    self.server_console.log(f"[Error] Unknown server type: {config['type']}")
-                    success = False
-                
-                if success:
-                    logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
-                                              config["difficulty"], config["view_distance"], config["simulation_distance"])
-                    if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
-                    
-                    self.server_console.log(f"[System] Server '{name}' created successfully.")
-                    self.after(0, lambda: self._on_download_complete(dialog))
-                else:
-                    self.server_console.log(f"[Error] Failed to create server '{name}'.")
-                    self.after(0, dialog.close)
-            except Exception as e:
-                self.server_console.log(f"[Error] Installation failed: {e}")
-                self.after(0, dialog.close)
-        threading.Thread(target=run_install, daemon=True).start()
-
-    def _on_download_complete(self, dialog):
-        dialog.close()
-        self.load_servers()
-
-    def start_tunnel(self):
-        self.btn_tunnel_start.configure(state="disabled")
-        self.btn_tunnel_stop.configure(state="normal")
-        threading.Thread(target=self.playit_manager.start, daemon=True).start()
-
-    def stop_tunnel(self):
-        self.playit_manager.stop()
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 

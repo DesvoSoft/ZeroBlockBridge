@@ -174,18 +174,20 @@ def install_forge(server_name, mc_version, progress_callback=None):
     Downloads Forge Installer and runs it.
     """
     server_path = create_server_directory(server_name)
+    print(f"[Debug] Installing Forge for {server_name} (MC {mc_version}) in {server_path}")
     
     vm = VersionManager()
     installer_url = vm.get_download_url("Forge", mc_version)
     
     if not installer_url:
-        print(f"Forge installer not found for version {mc_version}")
+        print(f"[Error] Forge installer not found for version {mc_version}")
         return None
         
     installer_path = os.path.join(server_path, "forge-installer.jar")
     
     # 1. Download Installer
     try:
+        print(f"[Debug] Downloading Forge installer from: {installer_url}")
         if progress_callback: progress_callback(0.1)
         response = requests.get(installer_url, stream=True)
         response.raise_for_status()
@@ -193,19 +195,23 @@ def install_forge(server_name, mc_version, progress_callback=None):
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
+        print("[Debug] Forge installer downloaded successfully.")
     except Exception as e:
-        print(f"Forge download failed: {e}")
+        print(f"[Error] Forge download failed: {e}")
         return None
 
     # 2. Run Installer
     # java -jar forge-installer.jar --installServer
     cmd = ["java", "-jar", "forge-installer.jar", "--installServer"]
+    print(f"[Debug] Running Forge installer: {' '.join(cmd)}")
     
     try:
         if progress_callback: progress_callback(0.5)
         # Run in the server directory
         # Note: Forge installer might take a while
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True)
+        # We use capture_output=True but we will print it if it fails
+        result = subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
+        print("[Debug] Forge installer finished successfully.")
         if progress_callback: progress_callback(0.9)
         
         # Identify the forge server jar
@@ -213,12 +219,22 @@ def install_forge(server_name, mc_version, progress_callback=None):
         # We look for a jar that starts with forge- and ends with .jar but is not the installer
         for file in os.listdir(server_path):
             if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                return os.path.join(server_path, file)
+                jar_path = os.path.join(server_path, file)
+                print(f"[Debug] Identified Forge jar: {jar_path}")
+                return jar_path
         
+        print("[Warning] Could not identify Forge server jar, but installer finished.")
+        # Fallback: check for run.bat/sh which is common in newer Forge
+        if os.path.exists(os.path.join(server_path, "run.bat")):
+            print("[Debug] Found run.bat, Forge installation likely successful (1.17+ style).")
+            return "FORGE_MODERN" # Special flag for modern forge
+            
         return None
         
     except subprocess.CalledProcessError as e:
-        print(f"Forge install failed: {e}")
+        print(f"[Error] Forge install failed with exit code {e.returncode}")
+        print(f"[Error] Installer STDOUT: {e.stdout}")
+        print(f"[Error] Installer STDERR: {e.stderr}")
         return None
 
 
