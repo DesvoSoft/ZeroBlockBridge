@@ -1,7 +1,8 @@
 import customtkinter as ctk
 import os
 import psutil
-from app.constants import MINECRAFT_VERSIONS, SERVERS_DIR
+from app.constants import SERVERS_DIR
+from app.version_manager import VersionManager
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
@@ -18,7 +19,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.wizard_data = {
             "name": "",
             "type": "Vanilla",
-            "version": "1.21.1",
+            "version": "", # Will be set dynamically
             "ram": 2048,
             "seed": "",
             "game_mode": "survival",
@@ -58,6 +59,10 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next)
         self.btn_next.pack(side="right", padx=20, pady=15)
         
+        # Initialize VersionManager
+        self.vm = VersionManager()
+        self.vm.add_callback(self.on_versions_refreshed)
+        
         # Initialize Step 1
         self.show_step_1()
         
@@ -84,6 +89,16 @@ class ServerWizard(ctk.CTkToplevel):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
 
+    def on_versions_refreshed(self):
+        """Called when VersionManager finishes fetching new versions."""
+        self.after(0, self._refresh_ui_versions)
+
+    def _refresh_ui_versions(self):
+        """Updates the version dropdown if currently on Step 1."""
+        if self.current_step == 1 and hasattr(self, 'combo_type'):
+            current_type = self.combo_type.get()
+            self.update_version_list(current_type)
+
     # --- Steps ---
     
     def show_step_1(self):
@@ -99,7 +114,11 @@ class ServerWizard(ctk.CTkToplevel):
             
         # Type
         ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
-        self.combo_type = ctk.CTkComboBox(self.content_frame, values=list(MINECRAFT_VERSIONS.keys()), 
+        # Get available types from VersionManager cache keys (excluding metadata)
+        types = [k for k in self.vm.cache.keys() if k != "last_updated"]
+        if not types: types = ["Vanilla", "Fabric", "Forge"] # Fallback
+        
+        self.combo_type = ctk.CTkComboBox(self.content_frame, values=types, 
                                          command=self.update_version_list, state="readonly")
         self.combo_type.set(self.wizard_data["type"])
         self.combo_type.pack(fill="x", pady=(0, 20))
@@ -127,13 +146,51 @@ class ServerWizard(ctk.CTkToplevel):
              self.combo_version.set(self.wizard_data["version"])
 
     def update_version_list(self, server_type):
-        versions = list(MINECRAFT_VERSIONS.get(server_type, {}).keys())
-        # Sort versions if needed (they are usually dict keys, so insertion order or random)
-        # For now, let's assume the dict in constants is ordered or we sort desc
-        versions.sort(reverse=True) 
-        self.combo_version.configure(values=versions)
+        versions = self.vm.get_versions(server_type)
+        
+        def version_key(v):
+            try:
+                parts = []
+                for part in v.split('.'):
+                    if part.isdigit():
+                        parts.append(int(part))
+                    else:
+                        import re
+                        match = re.match(r"(\d+)", part)
+                        if match:
+                            parts.append(int(match.group(1)))
+                        else:
+                            parts.append(0)
+                return tuple(parts)
+            except:
+                return (0, 0, 0)
+
+        # Sort full list first to identify "latest" correctly
+        versions.sort(key=version_key, reverse=True)
+
+        POPULAR_VERSIONS = ["1.20.4", "1.20.1", "1.18.2", "1.16.5", "1.16.1", "1.12.2", "1.8.9", "1.7.10", "1.7.2"]
+        
+        filtered_versions = []
         if versions:
-            self.combo_version.set(versions[0])
+            # Top 5 latest
+            filtered_versions.extend(versions[:5])
+            
+            # Add popular ones if available and not already added
+            for v in POPULAR_VERSIONS:
+                if v in versions and v not in filtered_versions:
+                    filtered_versions.append(v)
+            
+            # Re-sort the filtered list
+            filtered_versions.sort(key=version_key, reverse=True)
+            
+        self.combo_version.configure(values=filtered_versions if filtered_versions else ["No versions found"])
+        
+        current_selection = self.combo_version.get()
+        if filtered_versions:
+            if current_selection in filtered_versions:
+                self.combo_version.set(current_selection)
+            else:
+                self.combo_version.set(filtered_versions[0])
         else:
             self.combo_version.set("No versions found")
         
