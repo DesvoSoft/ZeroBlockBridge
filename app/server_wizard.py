@@ -1,7 +1,8 @@
 import customtkinter as ctk
 import os
 import psutil
-from app.constants import MINECRAFT_VERSIONS, SERVERS_DIR
+from app.constants import SERVERS_DIR
+from app.version_manager import VersionManager
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
@@ -18,7 +19,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.wizard_data = {
             "name": "",
             "type": "Vanilla",
-            "version": "1.21.1",
+            "version": "", # Will be set dynamically
             "ram": 2048,
             "seed": "",
             "game_mode": "survival",
@@ -57,6 +58,9 @@ class ServerWizard(ctk.CTkToplevel):
         
         self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next)
         self.btn_next.pack(side="right", padx=20, pady=15)
+        
+        # Initialize VersionManager
+        self.vm = VersionManager()
         
         # Initialize Step 1
         self.show_step_1()
@@ -99,7 +103,11 @@ class ServerWizard(ctk.CTkToplevel):
             
         # Type
         ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
-        self.combo_type = ctk.CTkComboBox(self.content_frame, values=list(MINECRAFT_VERSIONS.keys()), 
+        # Get available types from VersionManager cache keys (excluding metadata)
+        types = [k for k in self.vm.cache.keys() if k != "last_updated"]
+        if not types: types = ["Vanilla", "Fabric", "Forge"] # Fallback
+        
+        self.combo_type = ctk.CTkComboBox(self.content_frame, values=types, 
                                          command=self.update_version_list, state="readonly")
         self.combo_type.set(self.wizard_data["type"])
         self.combo_type.pack(fill="x", pady=(0, 20))
@@ -127,10 +135,30 @@ class ServerWizard(ctk.CTkToplevel):
              self.combo_version.set(self.wizard_data["version"])
 
     def update_version_list(self, server_type):
-        versions = list(MINECRAFT_VERSIONS.get(server_type, {}).keys())
-        # Sort versions if needed (they are usually dict keys, so insertion order or random)
-        # For now, let's assume the dict in constants is ordered or we sort desc
-        versions.sort(reverse=True) 
+        versions = self.vm.get_versions(server_type)
+        
+        def version_key(v):
+            try:
+                # Split by dots and convert to int tuple for comparison
+                # Handle snapshots or other formats gracefully-ish
+                parts = []
+                for part in v.split('.'):
+                    if part.isdigit():
+                        parts.append(int(part))
+                    else:
+                        # Handle "1.20.1-rc1" -> 1, 20, 1 (ignore suffix for now or handle better)
+                        # Simple fallback: try to extract leading digits
+                        import re
+                        match = re.match(r"(\d+)", part)
+                        if match:
+                            parts.append(int(match.group(1)))
+                        else:
+                            parts.append(0)
+                return tuple(parts)
+            except:
+                return (0, 0, 0)
+
+        versions.sort(key=version_key, reverse=True) 
         self.combo_version.configure(values=versions)
         if versions:
             self.combo_version.set(versions[0])
