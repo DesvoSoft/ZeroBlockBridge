@@ -15,7 +15,7 @@ VERSIONS_CACHE_FILE = CONFIG_DIR / "versions_cache.json"
 
 # API Endpoints
 VANILLA_MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
-FABRIC_META_URL = "https://meta.fabricmc.net/v2/versions/loader"
+FABRIC_META_URL = "https://meta.fabricmc.net/v2/versions/game"
 FORGE_PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"
 
 # Configuración de Playit
