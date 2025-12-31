@@ -58,6 +58,14 @@ class VersionManager:
                     if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
                         print("[System] Detected stale Fabric loader versions in cache. Forcing refresh.")
                         return self._get_default_cache()
+
+                    # VALIDATION: Check if Forge versions look like Game versions (1.x)
+                    # Forge loader versions usually start with large numbers (e.g. 47.x, 14.x)
+                    # Minecraft versions start with "1."
+                    forge_versions = data.get("Forge", [])
+                    if forge_versions and any(not v.startswith("1.") for v in forge_versions[:3]):
+                        print("[System] Detected stale Forge loader versions in cache. Forcing refresh.")
+                        return self._get_default_cache()
                         
                     return data
             except (json.JSONDecodeError, OSError):
