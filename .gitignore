@@ -68,3 +68,4 @@ servers/*
 
 # Executable
 Zero Block Bridge.exe
+bin/*
