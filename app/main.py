@@ -4,6 +4,7 @@ import sys
 import threading
 import webbrowser
 import time
+import subprocess
 
 # --- Tcl/Tk Fix for Windows Virtual Environments ---
 if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
@@ -59,6 +60,40 @@ class MCTunnelApp(ctk.CTk):
             status_callback=self.update_playit_status,
             claim_callback=self.on_playit_claim,
             on_ready_callback=self.play_notification_sound
+        )
+
+    def _build_layout(self):
+        self._build_sidebar()
+        self._build_main_area()
+
+    def _build_sidebar(self):
+        self.sidebar_frame = ctk.CTkFrame(self, width=300, corner_radius=0, fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_rowconfigure(3, weight=1)
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
+
+        # Logo
+        try:
+            from PIL import Image
+            logo_path = ASSETS_DIR / "logo.png"
+            if logo_path.exists():
+                pil_image = Image.open(logo_path)
+                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(200, 60))
+                self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="", image=self.logo_image)
+            else:
+                self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
+            
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+
+        self.btn_create_server = ctk.CTkButton(self.sidebar_frame, text="Create Server", command=self.create_server_dialog, corner_radius=8, height=36)
+        self.btn_create_server.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+
+        self.lbl_servers = ctk.CTkLabel(self.sidebar_frame, text="Your Servers:", anchor="w", font=AppConfig.FONT_BODY)
+        self.lbl_servers.grid(row=2, column=0, padx=20, pady=(10, 0))
+
         self.server_list_frame = ctk.CTkScrollableFrame(self.sidebar_frame, label_text="", corner_radius=10, border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.server_list_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
 
@@ -398,6 +433,20 @@ class MCTunnelApp(ctk.CTk):
                 self.toggle_schedule_mode("Daily Time")
             
             self.var_backup_on_restart.set(schedule.get("backup_on_restart", False))
+        
+        self.toggle_scheduler_inputs()
+        
+        # Update last backup date
+        manager = logic.BackupManager(self.current_server)
+        latest = manager.get_latest_backup()
+        if latest:
+            self.lbl_last_backup.configure(text=f"Last: {latest['date']}")
+        else:
+            self.lbl_last_backup.configure(text="Last: None")
+
+    def toggle_scheduler_inputs(self):
+        state = "normal" if self.var_scheduler_enabled.get() else "disabled"
+        self.combo_schedule_mode.configure(state=state)
         self.entry_scheduler_interval.configure(state=state)
         self.entry_restart_time.configure(state=state)
         self.btn_apply_schedule.configure(state=state)
