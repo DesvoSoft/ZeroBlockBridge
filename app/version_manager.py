@@ -29,6 +29,19 @@ class VersionManager:
         self._initialized = True
         self.cache = self._load_cache()
         self.refresh_thread = None
+        self.callbacks = []
+
+    def add_callback(self, callback):
+        """Adds a callback to be notified when versions are refreshed."""
+        if callback not in self.callbacks:
+            self.callbacks.append(callback)
+
+    def _notify_callbacks(self):
+        for cb in self.callbacks:
+            try:
+                cb()
+            except Exception as e:
+                print(f"[Error] Version callback failed: {e}")
 
     def _load_cache(self):
         """Loads versions from cache file."""
@@ -130,7 +143,9 @@ class VersionManager:
         new_cache["last_updated"] = datetime.datetime.now().isoformat()
         self.cache = new_cache
         self._save_cache()
+        self._save_cache()
         print("[System] Server versions refreshed.")
+        self._notify_callbacks()
 
     def get_download_url(self, server_type, version):
         """Resolves the download URL for a specific version."""
