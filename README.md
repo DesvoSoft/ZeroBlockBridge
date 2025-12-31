@@ -76,45 +76,46 @@ The application features:
 
 1.  **Clone the repository**
 
-    ```bash
-    git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
-    ```
+```bash
+git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
+```
 
 2.  **Navigate to the core app folder**
 
-    ```bash
-     cd ZeroBlockBridge/app
-    ```
+```bash
+ cd ZeroBlockBridge/app
+```
 
 3.  **Install dependencies**
 
-    Create a virtual environment (recommended):
+Create a virtual environment (recommended):
 
-    ```bash
-    py -m venv venv
-    .\venv\Scripts\activate
-    ```
+```bash
+py -m venv venv
+.\venv\Scripts\activate
+```
 
-    Install dependencies:
+Install dependencies:
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+pip install -r requirements.txt
+```
 
 4.  **Run the application**
-    ```bash
-    py main.py
-    ```
+
+```bash
+py main.py
+```
 
 > **Note:** Depending on your operating system and environment configuration, you might need to adjust the command used to run Python. For example, use `py`, `python`, or `python3` as appropriate.
 
 ### First Server
 
-1.  Click **"Create Server"** in the sidebar.
-2.  Follow the 6-step wizard to configure your server.
-3.  Select the server from the list.
-4.  Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
-5.  **Optional**: Enable tunneling to play with friends online.
+1. Click **"Create Server"** in the sidebar.
+2. Follow the 6-step wizard to configure your server.
+3. Select the server from the list.
+4. Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
+5. **Optional**: Enable tunneling to play with friends online.
 
 Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will lead to their website and the respecitve dashboard to connect the agent, the tunnel, and to confirm your shearable IP (One time process).
 
@@ -133,12 +134,12 @@ Note: The tunneling feature uses the free third party services from [Playit.GG](
 
 The wizard guides you through:
 
-1.  **Type & Name**: Choose Vanilla/Fabric/Forge and select Minecraft version, then name your server.
-2.  **RAM**: Use slider or type exact MB value (with validation).
-3.  **World Settings**: Seed, game mode, difficulty, view distance, simulation distance.
-4.  **Server Icon**: Upload custom PNG/JPG icon (optional, resized to 64x64).
-5.  **Location**: View save location (custom paths coming soon).
-6.  **Review**: Confirm all settings before creation.
+1. **Type & Name**: Choose Vanilla/Fabric/Forge and select Minecraft version, then name your server.
+2. **RAM**: Use slider or type exact MB value (with validation).
+3. **World Settings**: Seed, game mode, difficulty, view distance, simulation distance.
+4. **Server Icon**: Upload custom PNG/JPG icon (optional, resized to 64x64).
+5. **Location**: View save location (custom paths coming soon).
+6. **Review**: Confirm all settings before creation.
 
 ### Automated Restarts
 
@@ -160,7 +161,7 @@ Configure from the dashboard or properties editor:
 
 Send any Minecraft command:
 
-```
+```text
 say Hello everyone!
 op PlayerName
 gamemode creative PlayerName
@@ -186,7 +187,7 @@ This ensures that your Minecraft server management experience is secure, private
 
 The project follows a clean architecture, separating UI, business logic, and services.
 
-```
+```text
 ZeroBlockBridge/
 ├── app/
 │   ├── main.py                    # Main application, UI layout, and coordination
@@ -302,7 +303,7 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
 ---
 
-**Built by a player, for players — Empowering Minecraft creators & friends**
+### Built by a player, for players — Empowering Minecraft creators & friends
 
 ![Privacy Friendly](https://img.shields.io/badge/Privacy-Friendly-green?style=for-the-badge&logo=shield)
 ![Community](https://img.shields.io/badge/Made_for-Minecraft_Community-blue?style=for-the-badge&logo=minecraft)
