@@ -39,7 +39,6 @@ class MCTunnelApp(ctk.CTk):
         self._build_layout()
         self._init_background_services()
 
-    # ... [Keep _init_window_config, _init_state_variables, _init_managers unchanged] ...
     def _init_window_config(self):
         self.title(AppConfig.WINDOW_TITLE)
         self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
@@ -62,7 +61,6 @@ class MCTunnelApp(ctk.CTk):
             on_ready_callback=self.play_notification_sound
         )
 
-    # ... [Keep _build_sidebar, _build_layout, _build_main_area unchanged] ...
     def _build_layout(self):
         self._build_sidebar()
         self._build_main_area()
@@ -94,7 +92,6 @@ class MCTunnelApp(ctk.CTk):
         self._build_dashboard()
         self._build_console_tabs()
 
-    # ... [Keep _build_status_bar, _build_dashboard, etc. unchanged] ...
     def _build_status_bar(self):
         self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=10)
@@ -223,7 +220,6 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
         self.tunnel_console.pack(fill="both", expand=True)
 
-    # ... [Keep init_background_services, start_scheduler, etc. unchanged until send_restart_warning] ...
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
@@ -236,7 +232,6 @@ class MCTunnelApp(ctk.CTk):
                 if not (self.server_runner and self.server_runner.running and self.current_server):
                     continue
                 
-                # ... (rest of logic same as before)
                 service = SchedulerService(self.current_server)
                 status = service.get_status()
                 if not status: continue
@@ -258,46 +253,34 @@ class MCTunnelApp(ctk.CTk):
         """Sends a restart warning to players safely."""
         if self.server_runner and self.server_runner.running:
             self.server_console.log(f"[System] {message}")
-            # FIX: Use safe method instead of raw stdin access
             self.server_runner.send_command(f"say {message}")
 
     def restart_server_sequence(self):
         """Handles the automated restart sequence with final countdown."""
         def _restart():
-            # Final 5-second countdown
             for i in [5, 4, 3, 2]:
                 if self.server_runner and self.server_runner.running:
                     self.server_console.log(f"[System] Restarting in {i}...")
-                    # FIX: Use safe method
                     self.server_runner.send_command(f"say Restarting in {i}...")
                 time.sleep(1)
             
-            # Final message
             if self.server_runner and self.server_runner.running:
                 self.server_console.log("[System] Restarting NOW!")
                 self.server_runner.send_command("say Restarting NOW!")
             
             time.sleep(1)
-            
-            # Stop Server (Main Thread safe call)
             self.after(0, self.stop_server_action)
             
-            # Wait for it to actually stop
             timeout = AppConfig.SERVER_STOP_TIMEOUT
             while timeout > 0:
                 if not self.server_runner: break
                 time.sleep(1)
                 timeout -= 1
             
-            time.sleep(5) # Cooldown
-            
-            # Start Server (Main Thread safe call)
+            time.sleep(5)
             self.after(0, self.start_server_action)
-            
-            # Wait for server to start
             time.sleep(AppConfig.SERVER_START_WAIT)
             
-            # Check if restart was successful
             if self.server_runner and self.server_runner.running:
                 self.server_console.log("[System] ✓ Scheduled restart completed successfully! Server is back online.")
             else:
@@ -305,7 +288,6 @@ class MCTunnelApp(ctk.CTk):
             
         threading.Thread(target=_restart, daemon=True).start()
 
-    # ... [Keep format_time, send_server_command, check_java, play_sound, load_servers, on_server_select, start_all] ...
     def _format_time_input(self, event=None):
         current = self.entry_restart_time.get()
         cleaned = ''.join(c for c in current if c.isdigit() or c == ':')
@@ -372,7 +354,6 @@ class MCTunnelApp(ctk.CTk):
         
         self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
         
-        # UI State Logic
         is_running = self.server_runner and self.server_runner.running and self.server_runner.server_name == server_name
         
         self.btn_start.configure(state="disabled" if is_running else "normal")
@@ -398,7 +379,6 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log("[System] Starting server and tunnel...")
             runner.events.on(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
 
-    # ... [Keep update_management_ui, toggle_scheduler, save_scheduler, quick_backup, etc.] ...
     def update_management_ui(self):
         if not self.current_server: return
         scheduler = logic.Scheduler(self.current_server)
@@ -497,7 +477,6 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
-        self.server_console.log("[Debug] start_server_action called.")
         if not self.current_server: return
         if self.server_runner and self.server_runner.running:
             self.server_console.log("[Error] A server is already running.")
@@ -541,13 +520,12 @@ class MCTunnelApp(ctk.CTk):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
-        # FIX: Using config dict directly
         if os.path.exists(os.path.join(SERVERS_DIR, config["name"])):
             self.server_console.log(f"[Error] Server '{config['name']}' already exists.")
             return
         threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
+
     def start_download_process(self, config):
-        # FIX: Using config dict directly
         self.after(0, lambda: self.show_progress_dialog(config))
 
     def show_progress_dialog(self, config):
@@ -559,6 +537,46 @@ class MCTunnelApp(ctk.CTk):
                 version = config["version"]
                 if config["type"] == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
+                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
+                elif config["type"] == "Fabric":
+                    self.server_console.log(f"[System] Installing Fabric {version}...")
+                    success = logic.install_fabric(name, version, dialog.update_progress)
+                elif config["type"] == "Forge":
+                    self.server_console.log(f"[System] Installing Forge {version}...")
+                    success = logic.install_forge(name, version, dialog.update_progress)
+                else:
+                    self.server_console.log(f"[Error] Unknown server type: {config['type']}")
+                    success = False
+                
+                if success:
+                    self.server_console.log(f"[System] Installation success. Applying settings...")
+                    logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
+                                              config["difficulty"], config["view_distance"], config["simulation_distance"])
+                    if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
+                    
+                    self.server_console.log(f"[System] Server '{name}' created successfully.")
+                    self.after(0, lambda: self._on_download_complete(dialog))
+                else:
+                    self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
+                    self.after(0, dialog.close)
+            except Exception as e:
+                self.server_console.log(f"[Error] Installation failed: {e}")
+                import traceback
+                print(traceback.format_exc())
+                self.after(0, dialog.close)
+        threading.Thread(target=run_install, daemon=True).start()
+
+    def _on_download_complete(self, dialog):
+        dialog.close()
+        self.load_servers()
+
+    def start_tunnel(self):
+        self.btn_tunnel_start.configure(state="disabled")
+        self.btn_tunnel_stop.configure(state="normal")
+        threading.Thread(target=self.playit_manager.start, daemon=True).start()
+
+    def stop_tunnel(self):
+        self.playit_manager.stop()
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
@@ -603,10 +621,9 @@ class MCTunnelApp(ctk.CTk):
             self.btn_claim.pack(side="right", padx=10)
             self.tunnel_console.log(f"[System] Playit setup required: {url}")
             
-            # FIX: Removed the infinite recursion bug logic
             def _ask_dns():
                 dialog = TunnelSetupDialog(self, claim_url=url, title="Tunnel DNS Name")
-                dns_name = dialog.get_input() # This blocks
+                dns_name = dialog.get_input()
                 if dns_name:
                     dns_name = dns_name.strip().rstrip('.')
                     config = load_config()
@@ -618,7 +635,6 @@ class MCTunnelApp(ctk.CTk):
                 else:
                     self.server_console.log("[System] DNS entry skipped.")
             
-            # Ask once, 1 second after UI appears
             self.after(1000, _ask_dns)
             
         self.after(0, _show_ui)
