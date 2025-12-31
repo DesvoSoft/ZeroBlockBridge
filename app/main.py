@@ -169,22 +169,6 @@ class MCTunnelApp(ctk.CTk):
         self.var_scheduler_enabled = ctk.BooleanVar()
         self.chk_scheduler = ctk.CTkCheckBox(scheduler_container, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, corner_radius=6)
         self.chk_scheduler.grid(row=1, column=0, padx=5)
-        
-        self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode, corner_radius=8, state="readonly")
-        self.combo_schedule_mode.grid(row=1, column=1, padx=5)
-        self.combo_schedule_mode.set("Interval")
-        
-        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8)
-        self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
-            self.server_console.log("[Error] Stop the server before editing properties.")
-            return
-        ServerPropertiesEditor(self, self.current_server, logic)
-
-    def open_mods_folder_action(self):
-        if not self.current_server: return
-        server_path = SERVERS_DIR / self.current_server
-        if not server_path.exists(): return
-        try:
             if sys.platform == "win32": os.startfile(str(server_path))
             elif sys.platform == "darwin": subprocess.run(["open", str(server_path)])
             else: subprocess.run(["xdg-open", str(server_path)])
