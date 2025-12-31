@@ -9,7 +9,7 @@ import sys
 import datetime
 import zipfile
 
-from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BACKUPS_DIR
+from app.constants import APP_CONFIG_PATH, SERVERS_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
 from app.version_manager import VersionManager
 
@@ -433,7 +433,7 @@ class BackupManager:
     def __init__(self, server_name):
         self.server_name = server_name
         self.server_path = SERVERS_DIR / server_name
-        self.backup_dir = BACKUPS_DIR / server_name
+        self.backup_dir = self.server_path / "backups"
         if not self.backup_dir.exists():
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
