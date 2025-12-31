@@ -4,6 +4,7 @@ import sys
 import threading
 import webbrowser
 import time
+import subprocess
 
 # --- Tcl/Tk Fix for Windows Virtual Environments ---
 if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
@@ -39,7 +40,6 @@ class MCTunnelApp(ctk.CTk):
         self._build_layout()
         self._init_background_services()
 
-    # ... [Keep _init_window_config, _init_state_variables, _init_managers unchanged] ...
     def _init_window_config(self):
         self.title(AppConfig.WINDOW_TITLE)
         self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
@@ -62,7 +62,6 @@ class MCTunnelApp(ctk.CTk):
             on_ready_callback=self.play_notification_sound
         )
 
-    # ... [Keep _build_sidebar, _build_layout, _build_main_area unchanged] ...
     def _build_layout(self):
         self._build_sidebar()
         self._build_main_area()
@@ -73,8 +72,21 @@ class MCTunnelApp(ctk.CTk):
         self.sidebar_frame.grid_rowconfigure(3, weight=1)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+        # Logo
+        try:
+            from PIL import Image
+            logo_path = ASSETS_DIR / "logo.png"
+            if logo_path.exists():
+                pil_image = Image.open(logo_path)
+                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(150, 100)) # Logo size (width, height)
+                self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="", image=self.logo_image)
+            else:
+                self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
+            
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(15, 5))
 
         self.btn_create_server = ctk.CTkButton(self.sidebar_frame, text="Create Server", command=self.create_server_dialog, corner_radius=8, height=36)
         self.btn_create_server.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
@@ -94,13 +106,16 @@ class MCTunnelApp(ctk.CTk):
         self._build_dashboard()
         self._build_console_tabs()
 
-    # ... [Keep _build_status_bar, _build_dashboard, etc. unchanged] ...
     def _build_status_bar(self):
         self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=10)
+        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
         
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
         self.lbl_status.pack(side="left", padx=20, pady=8)
+
+        # Moved from dashboard to save space
+        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
+        self.lbl_dash_title.pack(side="left", padx=(0, 20), pady=8)
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", padx=20, pady=8)
@@ -116,21 +131,18 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 10))
+        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
         
-        self.lbl_dash_title = ctk.CTkLabel(self.dashboard_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(pady=(10, 6))
-
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.controls_frame.pack(pady=6)
+        self.controls_frame.pack(pady=4)
         self._build_server_controls()
 
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(pady=10, fill="x")
+        self.tunnel_frame.pack(pady=5, fill="x")
         self._build_tunnel_controls()
 
         self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.management_frame.pack(pady=(6, 10), fill="x")
+        self.management_frame.pack(pady=(4, 8), fill="x")
         self._build_management_controls()
 
     def _build_server_controls(self):
@@ -179,6 +191,7 @@ class MCTunnelApp(ctk.CTk):
         
         self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8)
         self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
+        
         self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
         self.lbl_interval_unit.grid(row=1, column=3, padx=2)
         
@@ -187,6 +200,10 @@ class MCTunnelApp(ctk.CTk):
         
         self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=70, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
         self.btn_apply_schedule.grid(row=1, column=4, padx=5)
+
+        self.var_backup_on_restart = ctk.BooleanVar()
+        self.chk_backup_on_restart = ctk.CTkCheckBox(scheduler_container, text="Backup on Restart", variable=self.var_backup_on_restart, corner_radius=6, font=("Roboto", 11))
+        self.chk_backup_on_restart.grid(row=2, column=0, columnspan=5, sticky="w", padx=5, pady=(5,0))
 
         self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
         self.backup_frame.pack(side="right", padx=20, fill="x", expand=True)
@@ -223,7 +240,6 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
         self.tunnel_console.pack(fill="both", expand=True)
 
-    # ... [Keep init_background_services, start_scheduler, etc. unchanged until send_restart_warning] ...
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
@@ -236,7 +252,6 @@ class MCTunnelApp(ctk.CTk):
                 if not (self.server_runner and self.server_runner.running and self.current_server):
                     continue
                 
-                # ... (rest of logic same as before)
                 service = SchedulerService(self.current_server)
                 status = service.get_status()
                 if not status: continue
@@ -258,46 +273,47 @@ class MCTunnelApp(ctk.CTk):
         """Sends a restart warning to players safely."""
         if self.server_runner and self.server_runner.running:
             self.server_console.log(f"[System] {message}")
-            # FIX: Use safe method instead of raw stdin access
             self.server_runner.send_command(f"say {message}")
 
     def restart_server_sequence(self):
         """Handles the automated restart sequence with final countdown."""
         def _restart():
-            # Final 5-second countdown
             for i in [5, 4, 3, 2]:
                 if self.server_runner and self.server_runner.running:
                     self.server_console.log(f"[System] Restarting in {i}...")
-                    # FIX: Use safe method
                     self.server_runner.send_command(f"say Restarting in {i}...")
                 time.sleep(1)
             
-            # Final message
             if self.server_runner and self.server_runner.running:
                 self.server_console.log("[System] Restarting NOW!")
                 self.server_runner.send_command("say Restarting NOW!")
             
-            time.sleep(1)
+            # Auto-Backup Check
+            scheduler = logic.Scheduler(self.current_server)
+            schedule = scheduler.get_schedule()
+            if schedule and schedule.get("backup_on_restart", False):
+                self.server_console.log("[System] Performing auto-backup before restart...")
+                self.server_runner.send_command("say Performing auto-backup...")
+                manager = logic.BackupManager(self.current_server)
+                path, error = manager.create_backup()
+                if path:
+                    self.server_console.log(f"[System] Auto-backup created: {os.path.basename(path)}")
+                else:
+                    self.server_console.log(f"[Error] Auto-backup failed: {error}")
             
-            # Stop Server (Main Thread safe call)
+            time.sleep(1)
             self.after(0, self.stop_server_action)
             
-            # Wait for it to actually stop
             timeout = AppConfig.SERVER_STOP_TIMEOUT
             while timeout > 0:
                 if not self.server_runner: break
                 time.sleep(1)
                 timeout -= 1
             
-            time.sleep(5) # Cooldown
-            
-            # Start Server (Main Thread safe call)
+            time.sleep(5)
             self.after(0, self.start_server_action)
-            
-            # Wait for server to start
             time.sleep(AppConfig.SERVER_START_WAIT)
             
-            # Check if restart was successful
             if self.server_runner and self.server_runner.running:
                 self.server_console.log("[System] ✓ Scheduled restart completed successfully! Server is back online.")
             else:
@@ -305,7 +321,6 @@ class MCTunnelApp(ctk.CTk):
             
         threading.Thread(target=_restart, daemon=True).start()
 
-    # ... [Keep format_time, send_server_command, check_java, play_sound, load_servers, on_server_select, start_all] ...
     def _format_time_input(self, event=None):
         current = self.entry_restart_time.get()
         cleaned = ''.join(c for c in current if c.isdigit() or c == ':')
@@ -365,14 +380,17 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_select(self, server_name):
         self.current_server = server_name
-        self.lbl_dash_title.configure(text=f"Server: {server_name}")
+        self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
+        
         server_type = "Vanilla"
-        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): server_type = "Fabric"
+        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): 
+            server_type = "Fabric"
+        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
+            server_type = "Forge"
         
         self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
         
-        # UI State Logic
         is_running = self.server_runner and self.server_runner.running and self.server_runner.server_name == server_name
         
         self.btn_start.configure(state="disabled" if is_running else "normal")
@@ -398,7 +416,6 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log("[System] Starting server and tunnel...")
             runner.events.on(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
 
-    # ... [Keep update_management_ui, toggle_scheduler, save_scheduler, quick_backup, etc.] ...
     def update_management_ui(self):
         if not self.current_server: return
         scheduler = logic.Scheduler(self.current_server)
@@ -415,22 +432,26 @@ class MCTunnelApp(ctk.CTk):
                 self.entry_restart_time.delete(0, "end")
                 self.entry_restart_time.insert(0, schedule["restart_time"])
                 self.toggle_schedule_mode("Daily Time")
-        else:
-            self.var_scheduler_enabled.set(False)
+            
+            self.var_backup_on_restart.set(schedule.get("backup_on_restart", False))
+        
         self.toggle_scheduler_inputs()
         
-        backup_manager = logic.BackupManager(self.current_server)
-        backups = backup_manager.list_backups()
-        if backups: self.lbl_last_backup.configure(text=f"Last: {backups[0]['date']}")
-        else: self.lbl_last_backup.configure(text="Last Backup: None")
+        # Update last backup date
+        manager = logic.BackupManager(self.current_server)
+        latest = manager.get_latest_backup()
+        if latest:
+            self.lbl_last_backup.configure(text=f"Last: {latest['date']}")
+        else:
+            self.lbl_last_backup.configure(text="Last: None")
 
     def toggle_scheduler_inputs(self):
-        enabled = self.var_scheduler_enabled.get()
-        state = "normal" if enabled else "disabled"
+        state = "normal" if self.var_scheduler_enabled.get() else "disabled"
         self.combo_schedule_mode.configure(state=state)
         self.entry_scheduler_interval.configure(state=state)
         self.entry_restart_time.configure(state=state)
         self.btn_apply_schedule.configure(state=state)
+        self.chk_backup_on_restart.configure(state=state)
 
     def toggle_schedule_mode(self, mode=None):
         if mode is None: mode = self.combo_schedule_mode.get()
@@ -448,27 +469,29 @@ class MCTunnelApp(ctk.CTk):
         enabled = self.var_scheduler_enabled.get()
         mode = self.combo_schedule_mode.get()
         scheduler = logic.Scheduler(self.current_server)
+        backup_on_restart = self.var_backup_on_restart.get()
+        
         if mode == "Interval":
             interval = AppConfig.DEFAULT_INTERVAL_HOURS
             try: interval = int(self.entry_scheduler_interval.get())
             except: pass
-            scheduler.set_restart_schedule(enabled, interval_hours=interval)
-            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h)")
+            scheduler.set_restart_schedule(enabled, interval_hours=interval, backup_on_restart=backup_on_restart)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h, Auto-Backup: {backup_on_restart})")
         else:
             restart_time = self.entry_restart_time.get() or AppConfig.DEFAULT_RESTART_TIME
-            scheduler.set_restart_schedule(enabled, restart_time=restart_time)
-            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time})")
+            scheduler.set_restart_schedule(enabled, restart_time=restart_time, backup_on_restart=backup_on_restart)
+            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time}, Auto-Backup: {backup_on_restart})")
 
     def quick_backup_action(self):
         if not self.current_server: return
         self.server_console.log("[System] Creating backup...")
         def _run():
             manager = logic.BackupManager(self.current_server)
-            path = manager.create_backup()
+            path, error = manager.create_backup()
             if path:
                 self.server_console.log(f"[System] Backup created: {os.path.basename(path)}")
                 self.after(0, self.update_management_ui)
-            else: self.server_console.log("[Error] Backup failed.")
+            else: self.server_console.log(f"[Error] Backup failed: {error}")
         threading.Thread(target=_run, daemon=True).start()
 
     def edit_server_properties(self):
@@ -497,7 +520,6 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
-        self.server_console.log("[Debug] start_server_action called.")
         if not self.current_server: return
         if self.server_runner and self.server_runner.running:
             self.server_console.log("[Error] A server is already running.")
@@ -541,14 +563,12 @@ class MCTunnelApp(ctk.CTk):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
-        # FIX: Using config dict directly
         if os.path.exists(os.path.join(SERVERS_DIR, config["name"])):
             self.server_console.log(f"[Error] Server '{config['name']}' already exists.")
             return
         threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
 
     def start_download_process(self, config):
-        # FIX: Using config dict directly
         self.after(0, lambda: self.show_progress_dialog(config))
 
     def show_progress_dialog(self, config):
@@ -561,11 +581,18 @@ class MCTunnelApp(ctk.CTk):
                 if config["type"] == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
                     success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                else:
+                elif config["type"] == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
                     success = logic.install_fabric(name, version, dialog.update_progress)
+                elif config["type"] == "Forge":
+                    self.server_console.log(f"[System] Installing Forge {version}...")
+                    success = logic.install_forge(name, version, dialog.update_progress)
+                else:
+                    self.server_console.log(f"[Error] Unknown server type: {config['type']}")
+                    success = False
                 
                 if success:
+                    self.server_console.log(f"[System] Installation success. Applying settings...")
                     logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
                                               config["difficulty"], config["view_distance"], config["simulation_distance"])
                     if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
@@ -573,10 +600,12 @@ class MCTunnelApp(ctk.CTk):
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.after(0, lambda: self._on_download_complete(dialog))
                 else:
-                    self.server_console.log(f"[Error] Failed to create server '{name}'.")
+                    self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
                     self.after(0, dialog.close)
             except Exception as e:
                 self.server_console.log(f"[Error] Installation failed: {e}")
+                import traceback
+                print(traceback.format_exc())
                 self.after(0, dialog.close)
         threading.Thread(target=run_install, daemon=True).start()
 
@@ -635,10 +664,9 @@ class MCTunnelApp(ctk.CTk):
             self.btn_claim.pack(side="right", padx=10)
             self.tunnel_console.log(f"[System] Playit setup required: {url}")
             
-            # FIX: Removed the infinite recursion bug logic
             def _ask_dns():
                 dialog = TunnelSetupDialog(self, claim_url=url, title="Tunnel DNS Name")
-                dns_name = dialog.get_input() # This blocks
+                dns_name = dialog.get_input()
                 if dns_name:
                     dns_name = dns_name.strip().rstrip('.')
                     config = load_config()
@@ -650,7 +678,6 @@ class MCTunnelApp(ctk.CTk):
                 else:
                     self.server_console.log("[System] DNS entry skipped.")
             
-            # Ask once, 1 second after UI appears
             self.after(1000, _ask_dns)
             
         self.after(0, _show_ui)
