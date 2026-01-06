@@ -32,7 +32,7 @@ Before running Zero Block Bridge, ensure you have:
 
 2. **Java 17 or higher** (Java 24 fully supported)
    - Required for running Minecraft servers
-   - Download from [Adoptium](https://adoptium.net/) (recommended) or[ Oracle](https://www.oracle.com/java/technologies/downloads/)
+   - Download from [Adoptium](https://adoptium.net/) or [Oracle](https://www.oracle.com/java/technologies/downloads/)
 
 ### Setup Steps
 
@@ -41,18 +41,11 @@ Before running Zero Block Bridge, ensure you have:
 2. **Install Python dependencies:**
 
    ```bash
-   pip install customtkinter requests psutil playsound
+   pip install customtkinter requests psutil packaging Pillow
    ```
 
    **Note for Linux users regarding sound notifications:**
-   The application uses the `playsound` library for audio notifications. On some Linux distributions, `playsound` relies on external audio playback tools like `GStreamer` or `mpg123`. If you encounter issues with sound notifications, ensure one of these is installed. For Debian/Ubuntu-based systems, you can install `GStreamer` with:
-
-   ```bash
-   sudo apt-get update
-   sudo apt-get install libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
-   ```
-
-   Alternatively, `mpg123` can often work as well:
+   The application uses a lightweight sound utility for audio notifications. On some Linux distributions, it relies on external audio playback tools like `paplay`, `aplay`, `canberra-gtk-play`, or `mpg123`. If you encounter issues with sound notifications, ensure one of these is installed. For Debian/Ubuntu-based systems, you can install `mpg123` with:
 
    ```bash
    sudo apt-get update
@@ -85,7 +78,7 @@ When you first launch Zero Block Bridge:
 
 ### Server Creation Wizard
 
-Zero Block Bridge features a comprehensive 5-step wizard:
+Zero Block Bridge features a comprehensive 6-step wizard:
 
 1. **Click** the **"Create Server"** button in the sidebar
 
@@ -93,8 +86,10 @@ Zero Block Bridge features a comprehensive 5-step wizard:
 
    - Enter a unique server name (alphanumeric, no spaces)
    - Choose between:
-     - **Vanilla 1.21.1** (Official Minecraft server)
-     - **Fabric 1.20.1** (Modded server platform)
+     - **Vanilla** (Official Minecraft server)
+     - **Fabric** (Modded server platform)
+     - **Forge** (Popular modded server platform)
+   - Select the desired **Minecraft Version** (dynamically fetched)
 
 3. **Step 2: Performance (RAM)**
 
@@ -102,30 +97,37 @@ Zero Block Bridge features a comprehensive 5-step wizard:
    - **Manual Entry**: Type exact MB value
    - Recommendations:
      - Vanilla: 2048 - 4096 MB
-     - Fabric/Modded: 6144 - 8192 MB
+     - Modded (Fabric/Forge): 6144 - 8192 MB
 
 4. **Step 3: World Settings**
 
    - **World Seed**: Optional seed for world generation
    - **Game Mode**: survival, creative, adventure, or spectator
    - **Difficulty**: peaceful, easy, normal, or hard
+   - **View Distance**: 2 - 32 chunks
+   - **Simulation Distance**: 2 - 32 chunks
 
-5. **Step 4: Storage Location**
+5. **Step 4: Server Icon**
+
+   - **Browse Image**: Select a custom PNG or JPG icon
+   - Icons are automatically resized to 64x64 for the server list
+
+6. **Step 5: Storage Location**
 
    - Shows where server will be saved (`servers/<name>/`)
-   - Custom locations coming soon
+   - Note: Custom locations coming soon
 
-6. **Step 5: Review & Create**
+7. **Step 6: Review & Create**
    - Review all settings
    - Click "Create Server" to begin installation
 
 ### Installation Process
 
 - **Vanilla**: ~50MB download (~1-2 minutes)
-- **Fabric**: ~200MB download + installation (~3-5 minutes)
+- **Fabric/Forge**: Download + automated installation (~3-5 minutes)
 - Progress dialog shows real-time status
 - EULA is automatically accepted
-- Server properties are configured with wizard settings
+- Server properties are configured with wizard settings on the first run
 
 ---
 
@@ -171,12 +173,12 @@ When you select a server, the dashboard shows:
 
 1. **Click** the **"Properties"** button (server must be stopped)
 2. Navigate through tabs:
-   - **General**: MOTD, max players, game mode, difficulty
-   - **World**: Seed, level type, spawn settings, view distance
+   - **General**: MOTD, max players, game mode, difficulty, RAM allocation, and Server Icon
+   - **World**: Seed, level type, spawn settings, view distance, simulation distance
    - **Network**: Port, whitelist, RCON, online mode
-   - **Advanced**: All other properties
-   - **Backups**: Manage backups (see below)
-   - **Automation**: Configure scheduled restarts (see below)
+   - **Advanced**: Performance settings and other properties
+   - **Backups**: Manage and restore backups
+   - **Automation**: Configure scheduled restarts
 3. **Click "Save"** to apply changes
 
 ---
@@ -193,7 +195,7 @@ At the bottom of the **Server Log** tab:
 
 **Example Commands:**
 
-```
+```text
 say Hello everyone!
 op PlayerName
 gamemode creative PlayerName
@@ -230,9 +232,9 @@ whitelist add PlayerName
 
 ### Backup Storage
 
-- Stored in `servers/<server-name>/backups/`
-- Format: `backup_YYYYMMDD_HHMMSS.zip`
-- Contains entire server directory
+- Stored in `backups/<server-name>/` (relative to the application root)
+- Format: `YYYY-MM-DD_HH-MM-SS.zip`
+- Contains entire server directory (excluding internal backups)
 
 ---
 
@@ -247,10 +249,8 @@ whitelist add PlayerName
    - **Interval**: Restart every X hours
    - **Daily Time**: Restart at specific time (24-hour format)
 3. Enter value:
-
-- Interval: Number of hours (e.g., "6")
-- Daily Time: HH:MM format (e.g., "03:00" for 3:00 AM)
-
+   - Interval: Number of hours (e.g., "6")
+   - Daily Time: HH:MM format (e.g., "03:00" for 3:00 AM)
 4. Click **"Apply"** to save
 
 **From Properties Editor:**
@@ -271,15 +271,6 @@ Players receive in-game warnings at:
 - **Final countdown**: 5, 4, 3, 2 seconds
 - "Restarting NOW!"
 
-### Restart Process
-
-1. Warnings sent to players via `/say` command
-2. Final countdown (5-4-3-2)
-3. Server stops gracefully
-4. 5-second cooldown
-5. Server automatically restarts
-6. Console shows success/error message
-
 ---
 
 ## Setting Up Tunneling
@@ -288,7 +279,7 @@ Players receive in-game warnings at:
 
 1. **Click** the **"Start Tunnel"** button
 2. **Watch the Tunnel Log** tab for:
-   ```
+   ```text
    [Playit] Downloading agent v0.16.5...
    [Playit] Starting agent...
    [Playit] Visit link to setup https://playit.gg/claim/...
@@ -304,7 +295,7 @@ Players receive in-game warnings at:
 
 The tunnel completes setup automatically:
 
-```
+```text
 [Playit] Program approved :)
 [Playit] tunnel running, 1 tunnels registered
 ```
@@ -314,12 +305,6 @@ The tunnel completes setup automatically:
 - **Status indicator**: "Tunnel: Online" (green)
 - **Public IP**: "Public IP: your-address.ply.gg"
 - **Share this address** with friends to join your server
-
-### Tunnel Controls
-
-- **Stop Tunnel** - Disconnect tunnel
-- **Reset** - Clear agent data (requires confirmation)
-- **Link** - Reopen claim URL in browser
 
 ---
 
@@ -336,15 +321,6 @@ Displays your Minecraft server output:
 - Error messages
 - Automated restart warnings
 
-**Example:**
-
-```
-[System] Starting server with: java -Xmx6543M...
-[Server] Done! For help, type "help"
-> say Hello from the console!
-[System] Server will restart in 1 minute!
-```
-
 ### Tunnel Log Tab
 
 Displays Playit agent output:
@@ -353,7 +329,6 @@ Displays Playit agent output:
 - Tunnel connection status
 - Public IP assignment
 - Authentication messages
-- Error diagnostics
 
 ---
 
@@ -373,19 +348,6 @@ Modern Java versions show deprecation warnings. These are suppressed automatical
 - Ensure Java 17+ is installed
 - Check server.properties for invalid values
 
-### Backup/Restore Errors
-
-- Server must be stopped before restoring
-- Ensure sufficient disk space
-- Check file permissions in servers/ directory
-
-### Scheduled Restart Issues
-
-- Server must be running for restart to trigger
-- Check **metadata.json** in server folder for schedule settings
-- Warnings appear in console before restart
-- Success/error message shown after restart completes
-
 ### Tunnel Issues
 
 **AgentDisabledOverLimit:**
@@ -402,50 +364,41 @@ Modern Java versions show deprecation warnings. These are suppressed automatical
 
 ## File Structure
 
-```
-MCTunnel/
+```text
+ZeroBlockBridge/
 ├── app/
-│   ├── main.py
-│   ├── logic.py
-│   ├── playit_manager.py
-│   ├── server_wizard.py
-│   ├── server_properties_editor.py
-│   └── ui_components.py
+│   ├── main.py                    # Main entry point
+│   ├── logic.py                   # Core business logic
+│   ├── constants.py               # Paths and API URLs
+│   ├── version_manager.py         # Dynamic version fetching
+│   ├── scheduler_service.py       # Automated restarts
+│   ├── playit_manager.py          # Tunneling management
+│   ├── server_wizard.py           # 6-step creation wizard
+│   ├── server_properties_editor.py # Tabbed properties editor
+│   └── ui_components.py           # Reusable UI widgets
 │
-├── servers/
+├── servers/                       # Created servers
 │   └── <server-name>/
-│       ├── server.jar / fabric-server-launch.jar
-│       ├── server.properties
-│       ├── world/
-│       ├── backups/
-│       │   └── backup_YYYYMMDD_HHMMSS.zip
-│       └── metadata.json    # Scheduler settings
+│       ├── server.jar             # Server binary
+│       ├── server.properties      # Config
+│       ├── world/                 # World data
+│       └── metadata.json          # App-specific settings
 │
-├── bin/
-│   └── playit.exe           # Auto-downloaded
+├── backups/                       # Server backups
+│   └── <server-name>/
+│       └── YYYY-MM-DD_HH-MM-SS.zip
 │
-├── config/
-│   └── (playit config)
-│
-└── README.md
+├── bin/                           # External binaries (playit)
+├── config/                        # Application configuration
+└── assets/                        # Sounds and icons
 ```
-
----
-
-## Quick Tips
-
-- **Multiple Servers**: Create unlimited servers, each fully independent
-- **Server Files**: Access in `servers/<name>/` - add mods to `mods/` for Fabric
-- **Automated Management**: Set up backups + scheduled restarts for hands-free operation
-- **Console Commands**: Send any server command directly from the app
-- **RAM Tuning**: Adjust per-server in wizard or via editing server folder
 
 ---
 
 ## Additional Resources
 
-- **Main README**: [README.md](README.md) - Project overview
-- **Playit.gg Docs**: [docs.playit.gg](https://docs.playit.gg/) -Advanced tunneling
+- **Main README**: [README.md](../README.md) - Project overview
+- **Playit.gg Docs**: [docs.playit.gg](https://docs.playit.gg/) - Advanced tunneling
 - **Minecraft Wiki**: [minecraft.wiki](https://minecraft.wiki/) - Server configuration
 
 ---
