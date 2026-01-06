@@ -53,6 +53,7 @@ Before running Zero Block Bridge, ensure you have:
    ```
 
 3. **Run the application:**
+
    ```bash
    python app/main.py
    ```
@@ -161,7 +162,7 @@ When you select a server, the dashboard shows:
 1. **Select** a server from the sidebar list
 2. **Click** the green **"Start Server"** button
 3. **Monitor** the Server Log tab for startup progress
-4. Status bar shows **"Running <server-name>"** in green
+4. Status bar shows **"Running (server-name)"** in green
 
 ### Stopping a Server
 
@@ -279,11 +280,13 @@ Players receive in-game warnings at:
 
 1. **Click** the **"Start Tunnel"** button
 2. **Watch the Tunnel Log** tab for:
+
    ```text
    [Playit] Downloading agent v0.16.5...
    [Playit] Starting agent...
    [Playit] Visit link to setup https://playit.gg/claim/...
    ```
+
 3. **Browser opens automatically** with the claim URL
    - If it doesn't, click the **"Link"** button
 
