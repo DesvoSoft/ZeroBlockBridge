@@ -1,8 +1,12 @@
+<!-- markdownlint-disable-next-line MD033 -->
 <h1 align="center">ZeroBlockBridge</h1>
 
+<!-- markdownlint-disable-next-line MD033 -->
 <p align="center">Minecraft Server Management with Built-in Tunneling, Backups & Automation</p>
 
+<!-- markdownlint-disable-next-line MD033 -->
 <p align="center">
+<!-- markdownlint-disable-next-line MD033 -->
   <img src="assets/logo.png" alt="ZeroBlockBridge Logo" width="350"/>
 </p>
 
@@ -47,7 +51,7 @@ Note: playit.gg is a global proxy that allows anyone to host a server without po
 
 - **Modern GUI**: Clean dark theme built with CustomTkinter.
 - **Cross-Platform Sound**: Reliable notifications on Windows and Linux.
-- **Java 24 Support**: Fully compatible with latest Java versions.
+- **Java 17+ Support**: Fully compatible with latest Java versions (17, 21, etc.).
 - **Error Handling**: Comprehensive validation and user feedback.
 - **Organized Structure**: Dedicated folders for each server.
 
@@ -74,19 +78,19 @@ The application features:
 
 ### Installation
 
-1.  **Clone the repository**
+1- **Clone the repository**
 
 ```bash
 git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
 ```
 
-2.  **Navigate to the core app folder**
+2- **Navigate to the core app folder**
 
 ```bash
  cd ZeroBlockBridge/app
 ```
 
-3.  **Install dependencies**
+3- **Install dependencies**
 
 Create a virtual environment (recommended):
 
@@ -101,7 +105,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-4.  **Run the application**
+4- **Run the application**
 
 ```bash
 py main.py
@@ -155,7 +159,7 @@ Configure from the dashboard or properties editor:
 - **Create**: Dashboard button or Properties → Backups tab.
 - **Format**: ZIP archives with timestamp (`backup_YYYYMMDD_HHMMSS.zip`).
 - **Restore**: Select backup in properties editor (wipes current server!).
-- **Storage**: `servers/<server-name>/backups/`.
+- **Storage**: `backups/<server-name>/`.
 
 ### Console Commands
 
@@ -210,20 +214,23 @@ ZeroBlockBridge/
 |
 ├── docs/
 │   ├── USAGE.md                   # User guide
-|   └── TESTING.md                 # Test documentation<server-name>/
+|   └── TESTING.md                 # Test documentation
 |
 ├── servers/                       # (Generated) Created servers are stored here
 │   └── <server-name>/
 │       ├── server.jar
 │       ├── server.properties
-│       ├── metadata.json          # Stores RAM allocation, scheduler config, etc.
-│       └── backups/               # Server backups stored here
-│           └── YYYY-MM-DD_HH-MM-SS.zip
+│       └── metadata.json          # Stores RAM, scheduler config, and wizard settings
+│
+├── backups/                       # (Generated) Server backups stored here
+│   └── <server-name>/
+│       └── YYYY-MM-DD_HH-MM-SS.zip
 │
 ├── bin/                           # (Generated) Binaries like the playit agent
 │
 ├── config/                        # (Generated) Playit.gg agent configuration
-│   └── config.json                # (Generated) App-level configuration
+│   ├── config.json                # (Generated) App-level configuration
+│   └── versions_cache.json        # (Generated) Cached Minecraft versions
 │
 └── README.md                      # This file c:
 ```
@@ -246,7 +253,7 @@ Zero Block Bridge uses **dynamic version fetching** to automatically support hun
 
 - **OS**: Windows/Linux
 - **Python**: 3.10 or higher
-- **Java**: 17 minimum, 24 supported (This might also depend on your desired Minecraft server version)
+- **Java**: 17 minimum (This might also depend on your desired Minecraft server version)
 - **RAM**: 2GB minimum (4GB+ recommended for modded servers)
 - **Disk**: 37 MB for core app and dependencies + ~107MB per server (vanilla, it might vary for modded servers) + world size
 
@@ -303,7 +310,7 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
 ---
 
-### Built by a player, for players — Empowering Minecraft creators & friends
+### Built by a player, for players, Minecraft creators & friends
 
 ![Privacy Friendly](https://img.shields.io/badge/Privacy-Friendly-green?style=for-the-badge&logo=shield)
 ![Community](https://img.shields.io/badge/Made_for-Minecraft_Community-blue?style=for-the-badge&logo=minecraft)
