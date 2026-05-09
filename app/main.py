@@ -711,7 +711,25 @@ class MCTunnelApp(ctk.CTk):
                     logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
                                               config["difficulty"], config["view_distance"], config["simulation_distance"])
                     if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
-                    
+
+                    # --- PROV-02: Pre-Boot Scaffolding ---
+                    self.server_console.log("[System] Scaffolding server environment...")
+                    from app.services.scaffolder import pre_boot_scaffold
+                    server_dir = os.path.join(SERVERS_DIR, name)
+                    port = self.zbb_manager.get_server_port(name)
+                    pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
+                    self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
+
+                    # --- PROV-03: Bytecode Analysis ---
+                    self.server_console.log("[System] Analyzing Java requirements from server jar...")
+                    from app.services.bytecode_analyzer import analyze_jar_bytecode
+                    jar_path = os.path.join(server_dir, "server.jar")
+                    required_java = analyze_jar_bytecode(jar_path)
+                    if required_java:
+                        self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
+                    else:
+                        self.server_console.log("[System] Bytecode analysis inconclusive; will use version map at startup.")
+
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.zbb_manager.create_tunnel_for_server(name)
                     self.after(0, lambda: self._on_download_complete(dialog))

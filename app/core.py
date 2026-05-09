@@ -96,14 +96,15 @@ class ZBBManager:
             return False
             
         self._stop_monitors()
-        
+
         config = self.get_config()
         ram = config.get("ram_allocation", "2G")
 
-        # Load metadata to find java settings
+        # Load metadata to find java/version settings
         import json
         from app.constants import SERVERS_DIR
         meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        server_dir = os.path.join(SERVERS_DIR, self.current_server)
         mc_version = "1.20.1"
         java_path = "auto"
         use_aikars = True
@@ -118,33 +119,58 @@ class ZBBManager:
         except Exception as e:
             logger.error("Failed to read metadata: %s", e)
 
+        # --- PROV-02: Pre-Boot Scaffolding ---
+        from app.services.scaffolder import pre_boot_scaffold
+        port = self.get_server_port(self.current_server)
+        pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
+
+        # --- PROV-03 / INTEG-03: Java Resolution ---
+        # Source of Truth: Bytecode analysis of the server.jar.
+        # Fallback: Static MC-to-Java map from java_detector.
         if java_path == "auto":
             from app.services.java_detector import JavaDetector, get_required_java
+            from app.services.bytecode_analyzer import analyze_jar_bytecode
+
+            # 1. Try bytecode analysis on the actual jar
+            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
+            jar_path = os.path.join(server_dir, "server.jar")
+            bytecode_java = analyze_jar_bytecode(jar_path)
+
+            # 2. Fallback to static MC map
+            required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
+            source = "bytecode" if bytecode_java else "version-map"
+            self.events.emit(
+                ServerEvent.CONSOLE_LINE,
+                f"[System] Java {required_java} required (source: {source})"
+            )
+
+            # 3. Find matching binary
             detector = JavaDetector()
-            best_java = detector.find_best_for_mc(mc_version)
-            required_java = get_required_java(mc_version)
-            if best_java:
-                java_bin = best_java.path
+            candidates = [j for j in detector.detect_all() if j.major == required_java]
+            if candidates:
+                candidates.sort(key=lambda j: j.is_jdk, reverse=True)
+                java_bin = candidates[0].path
             else:
                 all_javas = detector.detect_all()
                 detected_major = all_javas[0].major if all_javas else "N/A"
-                msg = f"Error: Versión de Java incompatible. Se requiere Java {required_java}, se detectó Java {detected_major}."
+                msg = (
+                    f"Error: Java version mismatch. "
+                    f"Required Java {required_java}, detected Java {detected_major}."
+                )
                 self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "color": "red"})
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
                 return False
         else:
             java_bin = java_path
-        
+
         self.server_runner = ServerRunner(
-            self.current_server, ram, self.events, 
+            self.current_server, ram, self.events,
             java_bin=java_bin, use_aikars=use_aikars
         )
-        # Subscriptions moved from UI
-        # (EventBus fan-out handles the UI now, we just pass the events bus)
-        
+
         self._setup_monitors(config)
         self.server_runner.start()
-        
+
         # Let UI know
         self.events.emit(ServerEvent.STARTING)
         return True
