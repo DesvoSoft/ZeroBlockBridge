@@ -73,7 +73,7 @@ class MCTunnelApp(ctk.CTk):
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
-            Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
+            Toast.show(self, "Lag spike threshold exceeded", toast_type="warning"),
         )))
 
     def _init_managers(self):
@@ -634,8 +634,9 @@ class MCTunnelApp(ctk.CTk):
     def _handle_notification(self, data):
         if data and isinstance(data, dict):
             msg = data.get("msg", "")
-            color = data.get("color", "white")
-            self.after(0, lambda: Toast.show(self, msg, color=color))
+            toast_type = Toast.resolve_type(data)
+            duration = 6000 if toast_type == "error" else 4000
+            self.after(0, lambda: Toast.show(self, msg, toast_type=toast_type, duration=duration))
 
     def update_tunnel_console(self, text):
         self.after(0, lambda: self.tunnel_console.log(text))

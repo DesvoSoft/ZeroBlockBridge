@@ -124,19 +124,17 @@ class ZBBManager:
         port = self.get_server_port(self.current_server)
         pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
 
-        # --- PROV-03 / INTEG-03: Java Resolution ---
+        # --- PROV-03 / INTEG-03: Smart Java Resolution ---
         # Source of Truth: Bytecode analysis of the server.jar.
         # Fallback: Static MC-to-Java map from java_detector.
         if java_path == "auto":
             from app.services.java_detector import JavaDetector, get_required_java
             from app.services.bytecode_analyzer import analyze_jar_bytecode
 
-            # 1. Try bytecode analysis on the actual jar
+            # 1. Determine required Java version
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
             jar_path = os.path.join(server_dir, "server.jar")
             bytecode_java = analyze_jar_bytecode(jar_path)
-
-            # 2. Fallback to static MC map
             required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
             source = "bytecode" if bytecode_java else "version-map"
             self.events.emit(
@@ -144,22 +142,60 @@ class ZBBManager:
                 f"[System] Java {required_java} required (source: {source})"
             )
 
-            # 3. Find matching binary
+            # 2. Find best available Java
             detector = JavaDetector()
-            candidates = [j for j in detector.detect_all() if j.major == required_java]
-            if candidates:
-                candidates.sort(key=lambda j: j.is_jdk, reverse=True)
-                java_bin = candidates[0].path
-            else:
-                all_javas = detector.detect_all()
-                detected_major = all_javas[0].major if all_javas else "N/A"
-                msg = (
-                    f"Error: Java version mismatch. "
-                    f"Required Java {required_java}, detected Java {detected_major}."
-                )
-                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "color": "red"})
+            all_javas = detector.detect_all()
+
+            if not all_javas:
+                msg = "Error: No Java installation found. Please install Java."
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
                 return False
+
+            # 3. Smart Java Flexibility — 3-case resolution
+            # CASE 1: Exact match (ideal)
+            exact = [j for j in all_javas if j.major == required_java]
+            if exact:
+                exact.sort(key=lambda j: j.is_jdk, reverse=True)
+                java_bin = exact[0].path
+                self.events.emit(
+                    ServerEvent.CONSOLE_LINE,
+                    f"[System] Using Java {exact[0].major} ({exact[0].source})"
+                )
+            else:
+                # No exact match — try flexible selection
+                best = sorted(all_javas, key=lambda j: j.major, reverse=True)[0]
+
+                # CASE 2: Detected > required AND <= 21 (safe range)
+                if best.major > required_java and best.major <= 21:
+                    java_bin = best.path
+                    msg = (
+                        f"Running with Java {best.major}. "
+                        f"Recommended: Java {required_java}."
+                    )
+                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "warning"})
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] {msg}")
+
+                # CASE 3: Detected > 21 (experimental, unstable)
+                elif best.major > 21:
+                    msg = (
+                        f"Java {best.major} detected (experimental). "
+                        f"ZBB supports up to Java 21 for stability. "
+                        f"Required: Java {required_java}."
+                    )
+                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                    return False
+
+                # CASE 1: Detected < required (incompatible)
+                else:
+                    msg = (
+                        f"Java version too low. "
+                        f"Required Java {required_java}, detected Java {best.major}."
+                    )
+                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                    return False
         else:
             java_bin = java_path
 

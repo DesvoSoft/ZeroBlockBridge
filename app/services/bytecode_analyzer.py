@@ -104,12 +104,22 @@ def analyze_jar_bytecode(jar_path: str) -> Optional[int]:
                 except KeyError:
                     logger.debug("Main-Class '%s' not found in jar; falling back to full scan", main_class)
 
-            # --- Strategy 2: Full scan ---
+            # --- Strategy 2: Targeted scan (root .class files first) ---
+            # Most server jars place the entry-point classes at the root level.
+            # Scanning 15 root-level files is sufficient and much faster than
+            # scanning every .class in a fat jar with thousands of entries.
+            all_names = zf.namelist()
+            root_classes = [n for n in all_names
+                            if n.endswith(".class") and "/" not in n]
+            deep_classes = [n for n in all_names
+                            if n.endswith(".class") and "/" in n]
+
+            # Prioritize root, then deep — cap at 15 each pass
+            scan_order = root_classes[:15] + deep_classes[:15]
+
             highest_raw = 0
             scanned = 0
-            for name in zf.namelist():
-                if not name.endswith(".class"):
-                    continue
+            for name in scan_order:
                 try:
                     raw = _extract_class_major(zf.read(name))
                     if raw is not None and raw > highest_raw:
