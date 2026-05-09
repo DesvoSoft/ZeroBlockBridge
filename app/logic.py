@@ -281,27 +281,34 @@ class ServerRunner:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Server jar not found: {jar_file}")
             return
 
-        # Build command
+        # Build command — PROV-05: Aikar's Flags Integration
+        from app.services.aikars_flags import calculate_flags
+
+        # Parse RAM in MB for flags calculator
+        ram_str = self.ram_allocation.rstrip("MmGg")
+        try:
+            ram_mb = int(ram_str)
+            if self.ram_allocation.upper().endswith("G"):
+                ram_mb *= 1024
+        except ValueError:
+            ram_mb = 2048
+
+        aikars = calculate_flags(ram_mb)
+
         if is_forge_modern and forge_args_file:
-            cmd = [
-                "java",
-                f"-Xms{self.ram_allocation}",
-                f"-Xmx{self.ram_allocation}",
+            cmd = ["java"] + aikars + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 f"@{forge_args_file}",
-                "nogui"
+                "nogui",
             ]
         else:
-            cmd = [
-                "java",
-                f"-Xms{self.ram_allocation}",
-                f"-Xmx{self.ram_allocation}",
+            cmd = ["java"] + aikars + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 "-jar",
                 jar_file,
-                "nogui"
+                "nogui",
             ]
         
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
