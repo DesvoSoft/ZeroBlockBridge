@@ -69,3 +69,7 @@ servers/*
 # Executable
 Zero Block Bridge.exe
 bin/*
+
+# Planning and AI References
+.planning/
+AI reference/
