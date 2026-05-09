@@ -184,6 +184,8 @@ class ServerRunner:
         self.process = None
         self.running = False
         self.exit_code = None
+        self._stderr_buffer = []
+        self._stderr_thread = None
 
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
@@ -303,17 +305,20 @@ class ServerRunner:
         self.events.emit(ServerEvent.STARTING)
         
         try:
+            self._stderr_buffer = []
             self.process = subprocess.Popen(
                 cmd,
                 cwd=server_path,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1
             )
             self.running = True
             threading.Thread(target=self._read_output, daemon=True).start()
+            self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
+            self._stderr_thread.start()
         except Exception as e:
             self.console_callback(f"[Error] Failed to start server: {e}")
             self.running = False
@@ -364,11 +369,30 @@ class ServerRunner:
                 self.events.emit(ServerEvent.READY)
         self.process.wait()
         self.exit_code = self.process.returncode
+        stderr_snapshot = self.get_stderr_snapshot()
         uptime = time.time() - start_time
         self.running = False
         self.process = None
         self.console_callback(f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
-        self.events.emit(ServerEvent.STOPPED, {"exit_code": self.exit_code, "uptime": uptime})
+        self.events.emit(ServerEvent.STOPPED, {
+            "exit_code": self.exit_code,
+            "uptime": uptime,
+            "stderr": stderr_snapshot,
+        })
+
+    def _read_stderr(self):
+        if not self.process or not self.process.stderr:
+            return
+        for line in self.process.stderr:
+            stripped = line.strip()
+            if stripped:
+                self._stderr_buffer.append(stripped)
+                if len(self._stderr_buffer) > 100:
+                    self._stderr_buffer.pop(0)
+                self.console_callback(f"[JVM] {stripped}")
+
+    def get_stderr_snapshot(self):
+        return "\n".join(self._stderr_buffer[-50:])
 
     def _parse_player_count(self, line):
         if "joined the game" in line:

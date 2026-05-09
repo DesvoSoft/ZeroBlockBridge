@@ -34,6 +34,7 @@ from app.services.watchdog import Watchdog
 from app.services.sanitizer import is_safe_command
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
+from app.services.toast import Toast
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -560,13 +561,22 @@ class MCTunnelApp(ctk.CTk):
         )
         self._heartbeat.start()
         
-        # Watchdog: auto-restart on crash with retry + backoff
+        # Watchdog: auto-restart on crash + zombie detection, with toasts
         max_retries = config.get("watchdog_max_retries", 3)
         self._watchdog = Watchdog(
             self.server_runner, self.update_console, self.server_runner.events,
+            notification_callback=lambda msg, color: self.after(0, lambda: Toast.show(self, msg, color=color)),
             max_retries=max_retries,
         )
         self._watchdog.listen()
+        
+        # Toast notifications for other events
+        self.server_runner.events.on(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
+            self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
+            Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
+        )))
+        self.server_runner.events.on(ServerEvent.CRASHED, lambda d: None)
+        self.server_runner.events.on(ServerEvent.ZOMBIE_DETECTED, lambda d: None)
         
         self.server_runner.start()
         
