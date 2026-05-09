@@ -18,11 +18,15 @@ jobs:
             TARGET: linux
             SEP: ":"
             ICON: "../assets/logo.png"
+            EXT: ""
           - os: windows-latest
             TARGET: windows
             SEP: ";"
             ICON: "../assets/logo.ico"
-
+            EXT: ".exe"
+    defaults:
+      run:
+        working-directory: ./app
     steps:
       # 1. Checkout code
       - uses: actions/checkout@v4
@@ -32,10 +36,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       # 3. Install dependencies
       - name: Install dependencies
-        working-directory: ./app
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -43,13 +47,12 @@ jobs:
 
       # 4. Debug: show folder structure
       - name: Show folder structure
-        run: ls -R
         working-directory: .
+        run: ls -R
 
       # 5a. Build on Linux
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
-        working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
             --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
@@ -61,7 +64,6 @@ jobs:
       # 5b. Build on Windows (PowerShell safe syntax)
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
-        working-directory: ./app
         run: >
           pyinstaller --noconsole --onefile
           --name "ZeroBlockBridge-${{ matrix.TARGET }}"
@@ -76,3 +78,10 @@ jobs:
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
           path: app/dist/*
+
+      # 7. Auto-Release
+      - name: Create Release and Upload Assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/dist/ZeroBlockBridge-${{ matrix.TARGET }}${{ matrix.EXT }}
