@@ -54,11 +54,17 @@ class ZBBManager:
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
 
     def _on_playit_status(self, status, ip):
-        display_ip = ip
         config = self.get_config()
+        display_ip = ip
+        dns = None
+        if ip:
+            domain_suffixes = (".ply.gg", ".playit.gg", ".joinmc.link")
+            if any(s in ip for s in domain_suffixes):
+                dns = ip
         if status == "Online" and config.get("playit_dns"):
+            dns = dns or config["playit_dns"]
             display_ip = config["playit_dns"]
-        self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip})
+        self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns})
 
     # --- Configuration ---
     def get_config(self):
@@ -83,6 +89,16 @@ class ZBBManager:
         """Initializes non-blocking services on app startup."""
         logger.info("[ZBBManager] Bootstrapping core services...")
         self._start_scheduler_loop()
+        self._pre_warm_version_cache()
+
+    def _pre_warm_version_cache(self):
+        """REND-01: Pre-warm version caches from all providers in background."""
+        def _warm():
+            from app.version_manager import VersionManager
+            vm = VersionManager()
+            vm.get_versions("Vanilla")
+            logger.info("[ZBBManager] Version cache pre-warmed.")
+        threading.Thread(target=_warm, daemon=True).start()
 
     def select_server(self, server_name: str):
         self.current_server = server_name
@@ -130,10 +146,16 @@ class ZBBManager:
         if java_path == "auto":
             from app.services.java_detector import JavaDetector, get_required_java
             from app.services.bytecode_analyzer import analyze_jar_bytecode
+            from app.logic import wait_for_jar_ready
 
             # 1. Determine required Java version
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
             jar_path = os.path.join(server_dir, "server.jar")
+            # Sync guarantee: wait until server.jar exists (handles Forge normalization race)
+            if not os.path.exists(jar_path):
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
+                if not wait_for_jar_ready(server_dir, timeout=5.0):
+                    self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
             bytecode_java = analyze_jar_bytecode(jar_path)
             required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
             source = "bytecode" if bytecode_java else "version-map"

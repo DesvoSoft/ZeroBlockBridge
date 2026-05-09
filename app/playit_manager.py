@@ -147,9 +147,14 @@ class PlayitManager:
         try:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
-            
+            env["PLAYIT_FORCE_IPV4"] = "1"
+
+            cmd = [str(self.binary_path), "--stdout"]
+            # Force IPv4 to avoid IPv6 connectivity failures in restricted networks
+            cmd.append("--force-ipv4")
+
             self.process = subprocess.Popen(
-                [str(self.binary_path), "--stdout"],
+                cmd,
                 cwd=os.path.abspath(CONFIG_DIR),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -263,6 +268,7 @@ class PlayitManager:
             self.status_callback("Offline", None)
 
     def _parse_line(self, line):
+        # Claim URL detection with notification toast
         claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
         if claim_match:
             url = claim_match.group(1)
@@ -270,32 +276,40 @@ class PlayitManager:
                 self.claim_url_detected = True
                 self.claim_callback(url)
 
-        domain_match = re.search(r"([a-z0-9-.]+\.(?:ply|playit)\.gg|[a-z0-9-.]+\.joinmc\.link)", line)
-        if domain_match:
-            address = domain_match.group(1).rstrip('.')
-            if "at.ply.gg" not in address:
-                if self.current_address is None and self.on_ready_callback:
-                    self.on_ready_callback()
-                self.current_address = address
-                self.status_callback("Online", address)
+        # Broad DNS/resolved address regex — catches any *.playit.gg, *.ply.gg, *.joinmc.link
+        dns_patterns = [
+            r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg)",
+            r"([a-z0-9][a-z0-9-]*\.joinmc\.link)",
+            r"(\d+\.\d+\.\d+\.\d+:\d+)",
+        ]
+        for pattern in dns_patterns:
+            dns_match = re.search(pattern, line)
+            if dns_match:
+                address = dns_match.group(1).rstrip('.')
+                # Skip internal/multicast addresses
+                if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
+                    continue
+                if address != self.current_address:
+                    was_none = self.current_address is None
+                    self.current_address = address
+                    self.status_callback("Online", address)
+                    if was_none and self.on_ready_callback:
+                        self.on_ready_callback()
                 return
 
-        ip_match = re.search(r"tunnel_addr:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)", line)
-        if ip_match:
-            address = ip_match.group(1)
-            if self.current_address is None and self.on_ready_callback:
-                self.on_ready_callback()
-            self.current_address = address
-            self.status_callback("Online", address)
-            return
-
+        # Fallback: "tunnel running" status with no explicit address yet
         if "tunnel running" in line:
-            if not getattr(self, "current_address", None):
+            if not self.current_address:
                  self.status_callback("Online", "Check Console")
             return
 
+        # Account limit error
         if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
             self.status_callback("Error", None)
             self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
             self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
             return
+
+        # "Ready" / tunnel established without explicit address in same line
+        if "agent registered" in line and not self.current_address:
+            self.status_callback("Online", "Check Console")

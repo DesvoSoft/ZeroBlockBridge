@@ -15,6 +15,22 @@ from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
 from app.version_manager import VersionManager
 
+# Per-server threading.Events for jar normalization synchronization
+_jar_ready_events: dict[str, threading.Event] = {}
+_jar_events_lock = threading.Lock()
+
+def _get_jar_event(server_dir: str) -> threading.Event:
+    """Get or create a threading.Event for a server's jar normalization."""
+    with _jar_events_lock:
+        if server_dir not in _jar_ready_events:
+            _jar_ready_events[server_dir] = threading.Event()
+        return _jar_ready_events[server_dir]
+
+def wait_for_jar_ready(server_dir: str, timeout: float = 5.0) -> bool:
+    """Wait until normalize_server_jar signals that the jar is ready."""
+    ev = _get_jar_event(server_dir)
+    return ev.wait(timeout=timeout)
+
 logger = logging.getLogger(__name__)
 
 def load_config():
@@ -66,6 +82,11 @@ def create_server_directory(server_name):
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
         os.makedirs(path)
+    # Atomic Metadata: ensure metadata.json exists immediately after folder creation
+    metadata_path = os.path.join(path, "metadata.json")
+    if not os.path.exists(metadata_path):
+        with open(metadata_path, "w") as f:
+            json.dump({"name": server_name, "ram": 2048}, f, indent=4)
     return path
 
 def download_server(server_name, server_type, version, progress_callback=None):
@@ -96,7 +117,9 @@ def download_server(server_name, server_type, version, progress_callback=None):
         
         if progress_callback:
             progress_callback(1.0)
-            
+
+        normalize_server_jar(server_path)
+
         return jar_path
     except Exception as e:
         logger.error("Download failed: %s", e)
@@ -137,9 +160,127 @@ def install_fabric(server_name, mc_version, progress_callback=None):
         if progress_callback: progress_callback(0.5)
         subprocess.run(cmd, cwd=server_path, check=True, capture_output=True)
         if progress_callback: progress_callback(0.9)
+        normalize_server_jar(server_path)
         return os.path.join(server_path, "fabric-server-launch.jar")
     except subprocess.CalledProcessError:
         return None
+
+def normalize_server_jar(server_dir):
+    """Normalize the server jar to 'server.jar' for consistent access.
+
+    Forge uses dynamic names like 'forge-1.20.1-44.1.23.jar'.
+    This function finds the actual server entry jar and creates a
+    copy or symlink named 'server.jar' so the bytecode analyzer
+    and ServerRunner can always find it.
+
+    After creating the jar, verifies it is readable and has minimum
+    content size (> 100 bytes), then signals the per-server
+    threading.Event so consumers (bytecode analyzer, server starter)
+    can wait on it synchronously.
+    """
+    server_jar_path = os.path.join(server_dir, "server.jar")
+    result = False
+
+    # Verify existing server.jar is valid
+    if os.path.exists(server_jar_path):
+        try:
+            if os.path.getsize(server_jar_path) > 100:
+                with open(server_jar_path, "rb") as _f:
+                    _f.read(4)
+                result = True
+        except OSError:
+            pass
+        if result:
+            _get_jar_event(server_dir).set()
+            return True
+
+    # Fabric
+    fabric_jar = os.path.join(server_dir, "fabric-server-launch.jar")
+    if os.path.exists(fabric_jar):
+        try:
+            os.symlink("fabric-server-launch.jar", server_jar_path)
+            result = True
+        except (OSError, NotImplementedError):
+            try:
+                shutil.copy2(fabric_jar, server_jar_path)
+                result = True
+            except Exception:
+                pass
+
+    # Forge (legacy: forge-*.jar, excluding installer)
+    if not result:
+        for fname in os.listdir(server_dir):
+            if fname.startswith("forge-") and fname.endswith(".jar") and "installer" not in fname:
+                src = os.path.join(server_dir, fname)
+                try:
+                    os.symlink(fname, server_jar_path)
+                    result = True
+                except (OSError, NotImplementedError):
+                    try:
+                        shutil.copy2(src, server_jar_path)
+                        result = True
+                    except Exception:
+                        pass
+                if result:
+                    break
+
+    # Forge Modern (1.17+) — look in libraries/ for the main jar via win_args.txt / unix_args.txt
+    if not result:
+        args_pattern = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+        for root, _dirs, files in os.walk(os.path.join(server_dir, "libraries")):
+            if args_pattern in files:
+                args_path = os.path.join(root, args_pattern)
+                try:
+                    with open(args_path, "r") as f:
+                        content = f.read()
+                    import re as _re
+                    lib_jar_match = _re.search(r'([^\s]+\.jar)', content)
+                    if lib_jar_match:
+                        lib_rel = lib_jar_match.group(1)
+                        lib_abs = os.path.join(server_dir, lib_rel)
+                        if os.path.exists(lib_abs):
+                            try:
+                                os.symlink(os.path.relpath(lib_abs, server_dir), server_jar_path)
+                            except (OSError, NotImplementedError):
+                                shutil.copy2(lib_abs, server_jar_path)
+                            result = True
+                except Exception:
+                    pass
+                break
+
+    # Paper / Purpur — find any jar that is not an installer
+    if not result:
+        for fname in os.listdir(server_dir):
+            if fname.endswith(".jar") and fname not in ("forge-installer.jar", "fabric-installer.jar"):
+                src = os.path.join(server_dir, fname)
+                try:
+                    os.symlink(fname, server_jar_path)
+                    result = True
+                except (OSError, NotImplementedError):
+                    try:
+                        shutil.copy2(src, server_jar_path)
+                        result = True
+                    except Exception:
+                        pass
+                if result:
+                    break
+
+    # Final verification: ensure the created symlink/copy is readable
+    if result and os.path.exists(server_jar_path):
+        try:
+            if os.path.getsize(server_jar_path) <= 100:
+                logger.warning("normalize_server_jar: %s is too small (%d bytes)", server_jar_path, os.path.getsize(server_jar_path))
+                result = False
+            else:
+                with open(server_jar_path, "rb") as _f:
+                    _f.read(4)
+        except OSError:
+            result = False
+
+    # Signal consumers the jar is ready (or timeout will handle failure)
+    _get_jar_event(server_dir).set()
+    return result
+
 
 def install_forge(server_name, mc_version, progress_callback=None):
     """Installs Forge."""
@@ -168,6 +309,9 @@ def install_forge(server_name, mc_version, progress_callback=None):
         if progress_callback: progress_callback(0.5)
         subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
         if progress_callback: progress_callback(0.9)
+        
+        # Normalize: ensure server.jar exists for bytecode analyzer
+        normalize_server_jar(server_path)
         
         for file in os.listdir(server_path):
             if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:

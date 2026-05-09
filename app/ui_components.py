@@ -164,11 +164,13 @@ class ServerListItem(ctk.CTkFrame):
             try:
                 with Image.open(icon_path) as img_data:
                     img_in_memory = img_data.copy()
+                    if img_in_memory.mode != "RGBA":
+                        img_in_memory = img_in_memory.convert("RGBA")
                 self.icon_image = ctk.CTkImage(img_in_memory, size=(40, 40))
             except Exception as e:
                 logger.error("Error loading icon: %s", e)
         
-        self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image)
+        self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image, width=40, height=40)
         self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5) 
         
         display_name = server_name

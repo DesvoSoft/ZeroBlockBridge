@@ -69,7 +69,7 @@ class ToastNotification:
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
         toast.attributes("-alpha", 0.0)
-        toast.configure(fg_color="transparent")
+        toast.configure(fg_color="#1e293b")
 
         # Outer frame with border accent
         outer = ctk.CTkFrame(

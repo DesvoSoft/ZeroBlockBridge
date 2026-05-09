@@ -173,9 +173,23 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
-        self.lbl_tunnel_status.pack(side="left", padx=20)
-        self.lbl_public_ip = ctk.CTkLabel(self.tunnel_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
-        self.lbl_public_ip.pack(side="left", padx=20)
+        self.lbl_tunnel_status.pack(side="left", padx=(20, 5))
+
+        self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
+        self.ip_frame.pack(side="left", fill="x", expand=True)
+        self.lbl_public_ip = ctk.CTkLabel(self.ip_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
+        self.lbl_public_ip.pack(side="left", padx=5)
+
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 12), text_color="#3b82f6")
+        self.lbl_dns_display.pack(side="left", padx=5)
+
+        self.btn_copy_ip = ctk.CTkButton(
+            self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
+            fg_color="#1e293b", hover_color="#334155",
+            border_width=1, border_color="#3b82f6",
+            width=36, corner_radius=8, height=28,
+            font=("Roboto", 13), text_color="#3b82f6",
+        )
 
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
@@ -315,6 +329,22 @@ class MCTunnelApp(ctk.CTk):
         self.check_java_startup()
         self.load_servers()
         self.zbb_manager.bootstrap()
+        self._pre_warm_version_cache()
+
+    def _pre_warm_version_cache(self):
+        """REND-01: Pre-warm version cache on app startup.
+        
+        Triggers VersionManager background refresh of Mojang/Fabric/Forge/Paper/Purpur
+        manifests so version data is ready when the user opens the wizard.
+        Runs in a daemon thread; non-blocking.
+        """
+        def _warm():
+            from app.version_manager import VersionManager
+            vm = VersionManager()
+            # Trigger lazy refresh in background
+            vm.get_versions("Vanilla")
+            logger.info("[PreWarm] Version cache refresh initiated in background.")
+        threading.Thread(target=_warm, daemon=True).start()
 
 
 
@@ -724,7 +754,13 @@ class MCTunnelApp(ctk.CTk):
                     # --- PROV-03: Bytecode Analysis ---
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
+                    from app.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
+                    # Sync guarantee: wait until server.jar exists (handles Forge normalization race)
+                    if not os.path.exists(jar_path):
+                        self.server_console.log("[System] Waiting for server.jar normalization...")
+                        if not wait_for_jar_ready(server_dir, timeout=5.0):
+                            self.server_console.log("[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
                     required_java = analyze_jar_bytecode(jar_path)
                     if required_java:
                         self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
@@ -768,6 +804,7 @@ class MCTunnelApp(ctk.CTk):
         if not data: return
         status = data.get("status", "Offline")
         ip = data.get("ip", None)
+        dns = data.get("dns", None)
         
         def _update():
             color = "green" if status == "Online" else "gray"
@@ -777,16 +814,35 @@ class MCTunnelApp(ctk.CTk):
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
-            if ip:
-                self.lbl_public_ip.configure(text=f"Public IP: {ip}")
-                self.btn_claim.pack_forget()
+            # Always show DNS label — even during pending/resolving state
+            if dns:
+                self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
+                self.btn_copy_ip.configure(state="normal")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            elif ip and any(domain in ip for domain in [".ply.gg", ".playit.gg", ".joinmc.link"]):
+                self.lbl_dns_display.configure(text=ip, text_color="#3b82f6")
+                self.btn_copy_ip.configure(state="normal")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            elif status in ("Starting...", "Online"):
+                self.lbl_dns_display.configure(text="Asignando dirección...", text_color="#f97316")
+                self.btn_copy_ip.configure(state="disabled")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
             else:
-                self.lbl_public_ip.configure(text="Public IP: N/A")
+                self.lbl_dns_display.configure(text="")
+                self.btn_copy_ip.pack_forget()
+            
+            self.lbl_public_ip.configure(
+                text=f"Public IP: {ip}" if ip else "Public IP: N/A"
+            )
+            if ip:
+                self.btn_claim.pack_forget()
                 
             if status == "Offline":
                 self.btn_tunnel_start.configure(state="normal")
                 self.btn_tunnel_stop.configure(state="disabled")
                 self.btn_claim.pack_forget()
+                self.lbl_dns_display.configure(text="")
+                self.btn_copy_ip.pack_forget()
         self.after(0, _update)
 
     def on_playit_claim(self, url):
@@ -794,6 +850,12 @@ class MCTunnelApp(ctk.CTk):
         def _show_ui():
             self.btn_claim.pack(side="right", padx=10)
             self.tunnel_console.log(f"[System] Playit setup required: {url}")
+            Toast.show(
+                self,
+                "Se requiere vinculación. Haz clic en '🔗' para configurar el túnel.",
+                toast_type="info",
+                duration=5000,
+            )
             
             def _ask_dns():
                 dialog = TunnelSetupDialog(self, claim_url=url, title="Tunnel DNS Name")
@@ -810,6 +872,19 @@ class MCTunnelApp(ctk.CTk):
             self.after(1000, _ask_dns)
             
         self.after(0, _show_ui)
+
+    def _copy_ip_to_clipboard(self):
+        ip_text = self.lbl_public_ip.cget("text")
+        dns_text = self.lbl_dns_display.cget("text")
+        copy_value = None
+        if dns_text and dns_text != "Asignando dirección...":
+            copy_value = dns_text
+        elif ip_text and "N/A" not in ip_text:
+            copy_value = ip_text.replace("Public IP: ", "")
+        if copy_value:
+            self.clipboard_clear()
+            self.clipboard_append(copy_value)
+            Toast.show(self, f"Address copied: {copy_value}", toast_type="info", duration=2500)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:
