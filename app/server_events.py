@@ -4,6 +4,10 @@ class ServerEvent:
     STOPPED = "stopped"
     ERROR = "error"
     PLAYER_COUNT = "player_count"
+    CRASHED = "crashed"
+    RESTARTED = "restarted"
+    ZOMBIE_DETECTED = "zombie_detected"
+    LAG_SPIKE = "lag_spike"
 
 class ServerEventEmitter:
     """Observable pattern for server state changes."""

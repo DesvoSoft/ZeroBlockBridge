@@ -73,3 +73,7 @@ bin/*
 # Planning and AI References
 .planning/
 AI reference/
+
+# Agent workspace
+.opencode/
+skills-lock.json

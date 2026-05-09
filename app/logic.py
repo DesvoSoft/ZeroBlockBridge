@@ -7,6 +7,7 @@ import threading
 import platform
 import sys
 import datetime
+import time
 import zipfile
 
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR
@@ -182,6 +183,7 @@ class ServerRunner:
         self.console_callback = console_callback
         self.process = None
         self.running = False
+        self.exit_code = None
 
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
@@ -354,16 +356,19 @@ class ServerRunner:
     def _read_output(self):
         if not self.process:
             return
+        start_time = time.time()
         for line in self.process.stdout:
             self.console_callback(line.strip())
             self._parse_player_count(line.strip())
             if "Done (" in line and "For help, type" in line:
                 self.events.emit(ServerEvent.READY)
         self.process.wait()
+        self.exit_code = self.process.returncode
+        uptime = time.time() - start_time
         self.running = False
         self.process = None
-        self.console_callback("[System] Server process exited.")
-        self.events.emit(ServerEvent.STOPPED)
+        self.console_callback(f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
+        self.events.emit(ServerEvent.STOPPED, {"exit_code": self.exit_code, "uptime": uptime})
 
     def _parse_player_count(self, line):
         if "joined the game" in line:

@@ -1,10 +1,13 @@
 import customtkinter as ctk
+import logging
 import os
 import sys
 import threading
 import webbrowser
 import time
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 # --- Tcl/Tk Fix for Windows Virtual Environments ---
 if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
@@ -27,6 +30,10 @@ from app.server_properties_editor import ServerPropertiesEditor
 from app.scheduler_service import SchedulerService
 from app.server_events import ServerEvent
 from app.app_config import AppConfig
+from app.services.watchdog import Watchdog
+from app.services.sanitizer import is_safe_command
+from app.services.lag_monitor import LagMonitor
+from app.services.heartbeat import HeartbeatMonitor
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -50,6 +57,9 @@ class MCTunnelApp(ctk.CTk):
 
     def _init_state_variables(self):
         self.server_runner = None
+        self._watchdog = None
+        self._lag_monitor = None
+        self._heartbeat = None
         self.current_server = None
         self.restart_warnings_sent = set()
         self.claim_url = None
@@ -338,6 +348,12 @@ class MCTunnelApp(ctk.CTk):
             return
         cmd = self.entry_console.get()
         if not cmd: return
+        safe, reason = is_safe_command(cmd)
+        if not safe:
+            self.server_console.log(f"[Security] Command blocked: {reason}")
+            logger.warning("Blocked command from user: %r (reason: %s)", cmd, reason)
+            self.entry_console.delete(0, "end")
+            return
         self.server_runner.send_command(cmd)
         self.entry_console.delete(0, "end")
 
@@ -527,11 +543,30 @@ class MCTunnelApp(ctk.CTk):
         
         config = load_config()
         ram = config.get("ram_allocation", "2G")
-        self.server_runner = ServerRunner(self.current_server, ram, self.update_console)
+        
+        self.server_runner = ServerRunner(self.current_server, ram, self._on_console_line)
         
         self.server_runner.events.on(ServerEvent.READY, self.on_server_ready)
         self.server_runner.events.on(ServerEvent.STOPPED, self.on_server_stopped)
         self.server_runner.events.on(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        
+        # Lag monitor: tracks TPS lag spikes
+        self._lag_monitor = LagMonitor(event_emitter=self.server_runner.events)
+        
+        # Heartbeat: detects zombie servers
+        self._heartbeat = HeartbeatMonitor(
+            event_emitter=self.server_runner.events,
+            server_runner_getter=lambda: self.server_runner,
+        )
+        self._heartbeat.start()
+        
+        # Watchdog: auto-restart on crash with retry + backoff
+        max_retries = config.get("watchdog_max_retries", 3)
+        self._watchdog = Watchdog(
+            self.server_runner, self.update_console, self.server_runner.events,
+            max_retries=max_retries,
+        )
+        self._watchdog.listen()
         
         self.server_runner.start()
         
@@ -540,6 +575,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
         return self.server_runner
+
+    def _on_console_line(self, text: str):
+        """Fan-out: all console line observers, then UI."""
+        if self._lag_monitor:
+            self._lag_monitor.observe_line(text)
+        if self._heartbeat:
+            self._heartbeat.observe_line(text)
+        self.after(0, lambda: self.server_console.log(text))
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
@@ -690,11 +733,29 @@ class MCTunnelApp(ctk.CTk):
 
     def on_close(self):
         if self.server_runner: self.server_runner.stop()
+        if self._watchdog: self._watchdog.stop()
+        if self._heartbeat: self._heartbeat.stop()
         if self.playit_manager: self.playit_manager.stop()
+        if hasattr(self, '_instance_lock'): self._instance_lock.release()
         self.destroy()
         sys.exit(0)
 
 if __name__ == "__main__":
+    # Single-instance lock: prevent multiple app instances
+    from app.single_instance import SingleInstanceLock
+    from app.constants import CONFIG_DIR
+
+    instance_lock = SingleInstanceLock(CONFIG_DIR / ".zbb.lock")
+    if not instance_lock.try_acquire():
+        import tkinter.messagebox
+        tkinter.messagebox.showwarning(
+            "Zero Block Bridge",
+            "Another instance is already running.\n\n"
+            "Only one instance of the application is allowed."
+        )
+        sys.exit(1)
+
     app = MCTunnelApp()
+    app._instance_lock = instance_lock
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
