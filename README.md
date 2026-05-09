@@ -69,6 +69,63 @@ The application features:
 
 ---
 
+## Auto-Healing System (Fase 1)
+
+ZeroBlockBridge includes built-in resilience through four coordinated services that automatically detect, classify, and recover from server failures.
+
+### Watchdog Service (`app/services/watchdog.py`)
+
+Monitors the server process exit code and console output to detect crashes:
+
+| Crash Type | Detection | Recovery |
+|---|---|---|
+| `jvm_config_error` | stderr matches "UnsupportedClassVersionError", "Could not find main class", etc. | Retry with backoff |
+| `out_of_memory` | stderr matches "OutOfMemoryError", "GC overhead limit" | Retry with backoff |
+| `oom_kill` | Exit code 137 or -9 (SIGKILL by OOM killer) | Retry with backoff |
+| `boot_crash` | Exit code 1, uptime < 5 seconds | Retry with backoff |
+| `runtime_crash` | Exit code 1, uptime >= 5 seconds | Retry with backoff |
+| `signal_N` | Negative exit code (segfault = -11, etc.) | Retry with backoff |
+
+- **Retry policy**: Configurable max (default 3), exponential backoff (`base × 2^(n-1)`).
+- **Stability reset**: Counter resets after 10 minutes of uptime.
+- **Events**: Emits `CRASHED`, `RESTARTED` on the event bus.
+
+### Heartbeat Monitor (`app/services/heartbeat.py`)
+
+Detects zombie servers (Java process alive but unresponsive):
+
+- Sends `list` command every 60 seconds.
+- If console goes silent for >5 minutes, sends a probe.
+- No response within 15 seconds → classifies as zombie.
+- Watchdog subscribes to `ZOMBIE_DETECTED` and triggers auto-restart.
+
+### Lag Monitor (`app/services/lag_monitor.py`)
+
+Tracks server performance degradation in real-time:
+
+- Matches `"Can't keep up!"` and `"Warning: TPS"` console patterns.
+- Sliding window counter (default: 5 spikes in 5 minutes).
+- Emits `LAG_SPIKE` event and shows toast notification.
+
+### Command Sanitizer (`app/services/sanitizer.py`)
+
+Protects against OS command injection via the console:
+
+- **Allowlist**: 80+ known-safe Minecraft commands (op, deop, say, gamemode, etc.).
+- **Character filter**: Rejects `;`, `|`, `&`, `` ` ``, `$()`, `${}`, `\n`.
+- **Unknown commands**: Allowed if they pass the character filter (forward-compatible with new Minecraft commands).
+
+### Notifications
+
+All auto-healing events display a **Toast notification** (bottom-right overlay, auto-dismiss after 4 seconds):
+- Server crash detected (red)
+- Zombie server detected (orange)
+- Lag threshold exceeded (orange)
+- Retry exhaustion (red)
+- Restart attempts (orange)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -84,10 +141,10 @@ The application features:
 git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
 ```
 
-2- **Navigate to the core app folder**
+2- **Navigate to the project folder**
 
 ```bash
- cd ZeroBlockBridge/app
+cd ZeroBlockBridge
 ```
 
 3- **Install dependencies**
@@ -205,7 +262,17 @@ ZeroBlockBridge/
 │   ├── server_wizard.py           # UI and logic for the 6-step creation wizard
 │   ├── server_properties_editor.py # UI for the server properties editor
 │   ├── ui_components.py           # Reusable UI widgets (console, list items)
-|   └── requirements.txt           # Project dependencies for pip
+│   ├── single_instance.py         # PID lockfile to prevent duplicate app instances
+│   │
+│   └── services/                  # Auto-Healing & Utility Services
+│       ├── __init__.py
+│       ├── watchdog.py            # Crash detection, classification & auto-restart
+│       ├── heartbeat.py           # Zombie server detection via periodic probes
+│       ├── lag_monitor.py         # TPS lag spike detection with sliding window
+│       ├── sanitizer.py           # OS command injection prevention
+│       └── toast.py               # Non-blocking notification overlay
+│
+├── requirements.txt               # Project dependencies for pip
 │
 ├── assets/                        # Other misc files
 │   ├── notification.wav           # Notification sound effect
@@ -259,7 +326,7 @@ Zero Block Bridge uses **dynamic version fetching** to automatically support hun
 
 ### Dependencies
 
-All required Python packages are listed in `requirements.txt`. The dependencies are:
+All required Python packages are listed in `requirements.txt` at the project root. The dependencies are:
 
 - **customtkinter** – Modern graphical user interface framework for Python.
 - **requests** – Handles HTTP requests for downloading server files and updates.

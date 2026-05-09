@@ -1,55 +1,57 @@
 import customtkinter as ctk
 
 
-class Toast:
-    """Non-blocking notification overlay positioned at bottom-right of parent window."""
+class _ToastWindow:
+    """Non-blocking notification overlay at bottom-right of parent window."""
 
-    _active = None
-    _after_id = None
+    def __init__(self):
+        self._toast = None
+        self._after_id = None
 
-    @classmethod
-    def show(cls, parent, message, duration=4000, color="#f97316"):
-        cls.dismiss()
+    def show(self, parent, message, duration=4000, color="#f97316"):
+        self.dismiss()
 
         toast = ctk.CTkToplevel(parent)
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
         toast.lift()
+        toast.attributes("-alpha", 0.95)
 
         frame = ctk.CTkFrame(toast, fg_color=color, corner_radius=8)
         frame.pack(fill="both", expand=True)
 
-        label = ctk.CTkLabel(
+        ctk.CTkLabel(
             frame, text=message, text_color="white",
             font=("Roboto", 12), padx=16, pady=10,
-        )
-        label.pack()
+        ).pack()
 
         parent.update_idletasks()
-        px = parent.winfo_rootx()
-        py = parent.winfo_rooty()
         pw = parent.winfo_width()
         ph = parent.winfo_height()
-        tw = 380
-        th = 44
-        x = px + pw - tw - 16
-        y = py + ph - th - 16
-        toast.geometry(f"{tw}x{th}+{x}+{y}")
+        x = parent.winfo_rootx() + pw - 380 - 16
+        y = parent.winfo_rooty() + ph - 44 - 16
+        toast.geometry(f"380x44+{x}+{y}")
+        toast.update_idletasks()
 
-        cls._active = toast
-        cls._after_id = toast.after(duration, cls.dismiss)
+        self._toast = toast
+        self._after_id = toast.after(duration, self._destroy)
 
-    @classmethod
-    def dismiss(cls):
-        if cls._after_id and cls._active:
+    def _destroy(self):
+        if self._toast:
             try:
-                cls._active.after_cancel(cls._after_id)
+                self._toast.destroy()
             except Exception:
                 pass
-        if cls._active:
+        self._toast = None
+        self._after_id = None
+
+    def dismiss(self):
+        if self._after_id and self._toast:
             try:
-                cls._active.destroy()
+                self._toast.after_cancel(self._after_id)
             except Exception:
                 pass
-        cls._active = None
-        cls._after_id = None
+            self._destroy()
+
+
+Toast = _ToastWindow()
