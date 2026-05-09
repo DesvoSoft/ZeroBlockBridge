@@ -1,9 +1,12 @@
 import customtkinter as ctk
+import logging
 from app.app_config import AppConfig
 from app.constants import SERVERS_DIR
 import webbrowser
 import os
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -163,7 +166,7 @@ class ServerListItem(ctk.CTkFrame):
                     img_in_memory = img_data.copy()
                 self.icon_image = ctk.CTkImage(img_in_memory, size=(40, 40))
             except Exception as e:
-                print(f"Error loading icon: {e}")
+                logger.error("Error loading icon: %s", e)
         
         self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image)
         self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5) 

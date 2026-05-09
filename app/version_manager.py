@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import requests
 import threading
 import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from app.constants import (
     VERSIONS_CACHE_FILE, 
     VANILLA_MANIFEST_URL, 
@@ -69,7 +72,7 @@ class VersionManager:
             try:
                 cb()
             except Exception as e:
-                print(f"[Error] Version callback failed: {e}")
+                logger.error("Version callback failed: %s", e)
 
     def _load_cache(self):
         """
@@ -93,7 +96,7 @@ class VersionManager:
                     # If we see "0." versions in Fabric list, assume cache is stale/wrong type.
                     fabric_versions = data.get("Fabric", [])
                     if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
-                        print("[System] Detected stale Fabric loader versions in cache. Forcing refresh.")
+                        logger.info("Detected stale Fabric loader versions in cache. Forcing refresh.")
                         return self._get_default_cache()
 
                     # VALIDATION: Check if Forge versions look like Game versions (1.x)
@@ -101,12 +104,12 @@ class VersionManager:
                     # Minecraft versions start with "1."
                     forge_versions = data.get("Forge", [])
                     if forge_versions and any(not v.startswith("1.") for v in forge_versions[:3]):
-                        print("[System] Detected stale Forge loader versions in cache. Forcing refresh.")
+                        logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
                         return self._get_default_cache()
                         
                     return data
             except (json.JSONDecodeError, OSError):
-                print("[Warning] Version cache corrupted. Using defaults.")
+                logger.warning("Version cache corrupted. Using defaults.")
         
         return self._get_default_cache()
 
@@ -127,7 +130,7 @@ class VersionManager:
             with open(VERSIONS_CACHE_FILE, "w") as f:
                 json.dump(self.cache, f, indent=4)
         except Exception as e:
-            print(f"[Error] Failed to save version cache: {e}")
+            logger.error("Failed to save version cache: %s", e)
 
     def get_versions(self, server_type):
         """
@@ -174,7 +177,7 @@ class VersionManager:
         
         Automatically saves cache and notifies registered callbacks on completion.
         """
-        print("[System] Refreshing server versions...")
+        logger.info("Refreshing server versions...")
         new_cache = self.cache.copy()
         
         # 1. Vanilla
@@ -185,7 +188,7 @@ class VersionManager:
                 versions = [v["id"] for v in data.get("versions", []) if v["type"] == "release"]
                 new_cache["Vanilla"] = versions[:20] # Keep top 20 latest
         except Exception as e:
-            print(f"[Warning] Failed to fetch Vanilla versions: {e}")
+            logger.warning("Failed to fetch Vanilla versions: %s", e)
 
         # 2. Fabric
         try:
@@ -196,7 +199,7 @@ class VersionManager:
                 versions = [v["version"] for v in data if v.get("stable")]
                 new_cache["Fabric"] = versions[:20]
         except Exception as e:
-            print(f"[Warning] Failed to fetch Fabric versions: {e}")
+            logger.warning("Failed to fetch Fabric versions: %s", e)
 
         # 3. Forge
         try:
@@ -225,7 +228,7 @@ class VersionManager:
                 sorted_versions = sorted(list(forge_versions), key=version_key, reverse=True)
                 new_cache["Forge"] = sorted_versions[:50]
         except Exception as e:
-            print(f"[Warning] Failed to fetch Forge versions: {e}")
+            logger.warning("Failed to fetch Forge versions: %s", e)
 
         # 4. Paper
         try:
@@ -236,7 +239,7 @@ class VersionManager:
                 versions.reverse() # Reverse to get newest first
                 new_cache["Paper"] = versions[:30]
         except Exception as e:
-            print(f"[Warning] Failed to fetch Paper versions: {e}")
+            logger.warning("Failed to fetch Paper versions: %s", e)
 
         # 5. Purpur
         try:
@@ -247,12 +250,12 @@ class VersionManager:
                 versions.reverse() # Reverse to get newest first
                 new_cache["Purpur"] = versions[:30]
         except Exception as e:
-            print(f"[Warning] Failed to fetch Purpur versions: {e}")
+            logger.warning("Failed to fetch Purpur versions: %s", e)
 
         new_cache["last_updated"] = datetime.datetime.now().isoformat()
         self.cache = new_cache
         self._save_cache()
-        print("[System] Server versions refreshed.")
+        logger.info("Server versions refreshed.")
         self._notify_callbacks()
 
     def get_download_url(self, server_type, version):
@@ -291,7 +294,7 @@ class VersionManager:
                     v_data = v_resp.json()
                     return v_data["downloads"]["server"]["url"]
         except Exception as e:
-            print(f"[Error] Failed to resolve Vanilla URL for {version}: {e}")
+            logger.error("Failed to resolve Vanilla URL for %s: %s", version, e)
         return None
 
     def _get_fabric_installer_url(self, version):
@@ -309,7 +312,7 @@ class VersionManager:
                 latest_installer = data[0]["version"]
                 return f"https://maven.fabricmc.net/net/fabricmc/fabric-installer/{latest_installer}/fabric-installer-{latest_installer}.jar"
         except Exception as e:
-            print(f"[Error] Failed to resolve Fabric installer URL: {e}")
+            logger.error("Failed to resolve Fabric installer URL: %s", e)
         return None
 
     def _get_forge_installer_url(self, version):
@@ -328,7 +331,7 @@ class VersionManager:
                 # Sometimes it's just {forge_ver} if it includes mc_ver? No, usually {mc}-{forge}
                 return f"https://maven.minecraftforge.net/net/minecraftforge/forge/{version}-{forge_ver}/forge-{version}-{forge_ver}-installer.jar"
         except Exception as e:
-            print(f"[Error] Failed to resolve Forge installer URL for {version}: {e}")
+            logger.error("Failed to resolve Forge installer URL for %s: %s", version, e)
         return None
 
     def _get_paper_url(self, version):
@@ -341,7 +344,7 @@ class VersionManager:
                 latest_build = builds[-1]
                 return f"{url}/builds/{latest_build}/downloads/paper-{version}-{latest_build}.jar"
         except Exception as e:
-            print(f"[Error] Failed to resolve Paper URL for {version}: {e}")
+            logger.error("Failed to resolve Paper URL for %s: %s", version, e)
         return None
 
     def _get_purpur_url(self, version):
@@ -354,5 +357,5 @@ class VersionManager:
             if latest_build:
                 return f"{url}/{latest_build}/download"
         except Exception as e:
-            print(f"[Error] Failed to resolve Purpur URL for {version}: {e}")
+            logger.error("Failed to resolve Purpur URL for %s: %s", version, e)
         return None

@@ -100,7 +100,7 @@ class MCTunnelApp(ctk.CTk):
             else:
                 self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
         except Exception as e:
-            print(f"Error loading logo: {e}")
+            logger.error("Error loading logo: %s", e)
             self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Zero Block\nBridge", font=AppConfig.FONT_TITLE)
             
         self.logo_label.grid(row=0, column=0, padx=20, pady=(15, 5))
@@ -545,7 +545,7 @@ class MCTunnelApp(ctk.CTk):
             except Exception as e:
                 self.server_console.log(f"[Error] Installation failed: {e}")
                 import traceback
-                print(traceback.format_exc())
+                logger.error("Installation failed:\n%s", traceback.format_exc())
                 self.after(0, dialog.close)
         threading.Thread(target=run_install, daemon=True).start()
 
@@ -629,6 +629,13 @@ class MCTunnelApp(ctk.CTk):
         sys.exit(0)
 
 if __name__ == "__main__":
+    # --- CONV-01: Structured Logging Configuration ---
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     # Single-instance lock: prevent multiple app instances
     from app.single_instance import SingleInstanceLock
     from app.constants import CONFIG_DIR

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import subprocess
 import shutil
@@ -13,6 +14,8 @@ import zipfile
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR
 from app.server_events import ServerEvent, ServerEventEmitter
 from app.version_manager import VersionManager
+
+logger = logging.getLogger(__name__)
 
 def load_config():
     """Loads the configuration from config.json."""
@@ -32,7 +35,7 @@ def load_config():
         with open(APP_CONFIG_PATH, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
-        print("[Warning] Config file corrupted. Resetting to defaults.")
+        logger.warning("Config file corrupted. Resetting to defaults.")
         save_config(default_config)
         return default_config
 
@@ -96,7 +99,7 @@ def download_server(server_name, server_type, version, progress_callback=None):
             
         return jar_path
     except Exception as e:
-        print(f"Download failed: {e}")
+        logger.error("Download failed: %s", e)
         if os.path.exists(jar_path):
             os.remove(jar_path)
         return None
@@ -496,7 +499,7 @@ class BackupManager:
                         except (PermissionError, OSError) as e:
                             if e.errno == 13: # Permission denied
                                 skipped_files.append(arcname)
-                                print(f"[Warning] Skipped locked file: {arcname}")
+                                logger.warning("Skipped locked file: %s", arcname)
                             else:
                                 raise e
             
