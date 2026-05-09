@@ -76,4 +76,5 @@ AI reference/
 
 # Agent workspace
 .opencode/
+.agent/
 skills-lock.json
