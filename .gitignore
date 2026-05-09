@@ -73,6 +73,8 @@ bin/*
 # Planning and AI References
 .planning/
 AI reference/
+CHECKLIST.md
+.planning/research/
 
 # Agent workspace
 .opencode/
