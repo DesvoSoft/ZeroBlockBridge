@@ -125,12 +125,12 @@
 - [ ] Extract subprocess.Popen logic from logic.py into `app/services/process_runner.py`
 - [ ] Implement process_runner.py: PID tracking, kill, exit_code callback, stdout reader thread
 - [ ] Move process management (subprocess.Popen, PID tracking, kill) into ServerLifecycle
-- [ ] Move restart scheduling logic (interval + daily time) into ServerLifecycle
-- [ ] Move server status tracking (running, stopped, crashed, starting) into ServerLifecycle
+- [x] Move restart scheduling logic (interval + daily time) into ZBBManager
+- [x] Move server status tracking (running, stopped, crashed, starting) into ZBBManager
 - [ ] Move console I/O (stdin pipe, stdout reader thread) into ServerLifecycle
-- [ ] Implement Observer pattern: ServerLifecycle emits status changes, UI subscribes without coupling
-- [ ] Refactor main.py to delegate all lifecycle operations to ZBBManager
-- [ ] Verify ALL existing functionality unchanged (manual smoke test)
+- [x] Implement Observer pattern: ServerLifecycle emits status changes, UI subscribes without coupling
+- [x] Refactor main.py to delegate all lifecycle operations to ZBBManager
+- [x] Verify ALL existing functionality unchanged (manual smoke test)
 - [ ] Write unit tests: start, stop, restart, status transitions, process_runner, edge cases
 
 ### ARCH-02 — Typed event system ✅
@@ -326,8 +326,8 @@
 | 2. Arquitectura | ARCH-01, ARCH-02, ARCH-03, ARCH-04, CONV-01 | ~37 | 🚧 In Progress |
 | 3. Ecosistema | ECO-01, ECO-02, ECO-03, ECO-04 | ~28 | 🔲 Not started |
 | 4. Provisioning | PROV-01–05, INTEG-03, REND-01, UI-01 | ~40 | 🔲 Not started |
-| **Total** | **23 requirements** | **~172 subtasks** | **~75 / 172 ✅** |
+| **Total** | **23 requirements** | **~172 subtasks** | **~80 / 172 ✅** |
 
 ---
 
-*Last updated: 2026-05-09 — ARCH-02 completed (EventBus). ARCH-01 in progress (ZBBManager created, logic.py refactored to events). UI decoupled from core services.*
+*Last updated: 2026-05-09 — ARCH-01 heavily progressed (ZBBManager handles Scheduler and Playit. main.py fully decoupled from business logic).*

@@ -21,20 +21,16 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, TunnelSetupDialog
-from app.logic import load_config, check_java, save_config, download_server, accept_eula, install_fabric, ServerRunner
+from app.logic import check_java, download_server, accept_eula, install_fabric, BackupManager, Scheduler
 import app.logic as logic
 from app.constants import SERVERS_DIR, ASSETS_DIR
-from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
-from app.scheduler_service import SchedulerService
 from app.server_events import ServerEvent, EventBus
 from app.app_config import AppConfig
-from app.services.watchdog import Watchdog
 from app.services.sanitizer import is_safe_command
-from app.services.lag_monitor import LagMonitor
-from app.services.heartbeat import HeartbeatMonitor
 from app.services.toast import Toast
+from app.core import ZBBManager
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -57,25 +53,31 @@ class MCTunnelApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
 
     def _init_state_variables(self):
-        self.server_runner = None
-        self._watchdog = None
-        self._lag_monitor = None
-        self._heartbeat = None
         self.current_server = None
-        self.restart_warnings_sent = set()
         self.claim_url = None
         
         self.events = EventBus()
+        self.zbb_manager = ZBBManager(self.events)
+        
         self.events.subscribe(ServerEvent.CONSOLE_LINE, self.update_console)
         self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
+        self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, self.update_tunnel_console)
+        self.events.subscribe(ServerEvent.TUNNEL_STATUS, self.on_tunnel_status)
+        self.events.subscribe(ServerEvent.PLAYIT_CLAIM, self.on_playit_claim)
+        self.events.subscribe(ServerEvent.READY, self.on_server_ready)
+        self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
+        self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
+        self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        
+        # Toast notification for lag spikes
+        self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
+            self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
+            Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
+        )))
 
     def _init_managers(self):
-        self.playit_manager = PlayitManager(
-            console_callback=self.update_tunnel_console,
-            status_callback=self.update_playit_status,
-            claim_callback=self.on_playit_claim,
-            on_ready_callback=self.play_notification_sound
-        )
+        # Initialized inside ZBBManager now
+        pass
 
     def _build_layout(self):
         self._build_sidebar()
@@ -258,97 +260,12 @@ class MCTunnelApp(ctk.CTk):
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
-        self.start_scheduler()
+        self.zbb_manager.bootstrap()
 
-    def start_scheduler(self):
-        def _scheduler_loop():
-            while True:
-                time.sleep(AppConfig.SCHEDULER_CHECK_INTERVAL)
-                if not (self.server_runner and self.server_runner.running and self.current_server):
-                    continue
-                
-                service = SchedulerService(self.current_server)
-                status = service.get_status()
-                if not status: continue
 
-                key, message = service.get_warning_message(status["remaining_seconds"], self.restart_warnings_sent)
-                if key:
-                    self.send_restart_warning(message)
-                    self.restart_warnings_sent.add(key)
-                
-                if status["is_due"]:
-                    self.server_console.log("[System] Scheduled restart due. Initiating final countdown...")
-                    self.restart_server_sequence()
-                    service.scheduler.update_last_run()
-                    self.restart_warnings_sent.clear()
-
-        threading.Thread(target=_scheduler_loop, daemon=True).start()
-
-    def send_restart_warning(self, message):
-        """Sends a restart warning to players safely."""
-        if self.server_runner and self.server_runner.running:
-            self.server_console.log(f"[System] {message}")
-            self.server_runner.send_command(f"say {message}")
-
-    def restart_server_sequence(self):
-        """Handles the automated restart sequence with final countdown."""
-        def _restart():
-            for i in [5, 4, 3, 2]:
-                if self.server_runner and self.server_runner.running:
-                    self.server_console.log(f"[System] Restarting in {i}...")
-                    self.server_runner.send_command(f"say Restarting in {i}...")
-                time.sleep(1)
-            
-            if self.server_runner and self.server_runner.running:
-                self.server_console.log("[System] Restarting NOW!")
-                self.server_runner.send_command("say Restarting NOW!")
-            
-            # Auto-Backup Check
-            scheduler = logic.Scheduler(self.current_server)
-            schedule = scheduler.get_schedule()
-            if schedule and schedule.get("backup_on_restart", False):
-                self.server_console.log("[System] Performing auto-backup before restart...")
-                self.server_runner.send_command("say Performing auto-backup...")
-                manager = logic.BackupManager(self.current_server)
-                path, error = manager.create_backup()
-                if path:
-                    self.server_console.log(f"[System] Auto-backup created: {os.path.basename(path)}")
-                else:
-                    self.server_console.log(f"[Error] Auto-backup failed: {error}")
-            
-            time.sleep(1)
-            self.after(0, self.stop_server_action)
-            
-            timeout = AppConfig.SERVER_STOP_TIMEOUT
-            while timeout > 0:
-                if not self.server_runner: break
-                time.sleep(1)
-                timeout -= 1
-            
-            time.sleep(5)
-            self.after(0, self.start_server_action)
-            time.sleep(AppConfig.SERVER_START_WAIT)
-            
-            if self.server_runner and self.server_runner.running:
-                self.server_console.log("[System] ✓ Scheduled restart completed successfully! Server is back online.")
-            else:
-                self.server_console.log("[System] ✗ ERROR: Server failed to restart automatically. Please check logs and start manually.")
-            
-        threading.Thread(target=_restart, daemon=True).start()
-
-    def _format_time_input(self, event=None):
-        current = self.entry_restart_time.get()
-        cleaned = ''.join(c for c in current if c.isdigit() or c == ':')
-        digits_only = cleaned.replace(':', '')
-        if len(digits_only) > 4: digits_only = digits_only[:4]
-        if len(digits_only) >= 2: formatted = digits_only[:2] + ':' + digits_only[2:4]
-        else: formatted = digits_only
-        if formatted != current:
-            self.entry_restart_time.delete(0, "end")
-            self.entry_restart_time.insert(0, formatted)
 
     def send_server_command(self, event=None):
-        if not self.server_runner or not self.server_runner.running:
+        if not self.zbb_manager.is_running():
             self.server_console.log("[UI] Server is not running.")
             return
         cmd = self.entry_console.get()
@@ -359,7 +276,7 @@ class MCTunnelApp(ctk.CTk):
             logger.warning("Blocked command from user: %r (reason: %s)", cmd, reason)
             self.entry_console.delete(0, "end")
             return
-        self.server_runner.send_command(cmd)
+        self.zbb_manager.send_command(cmd)
         self.entry_console.delete(0, "end")
 
     def check_java_startup(self):
@@ -401,6 +318,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_select(self, server_name):
         self.current_server = server_name
+        self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
         
@@ -412,7 +330,7 @@ class MCTunnelApp(ctk.CTk):
         
         self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
         
-        is_running = self.server_runner and self.server_runner.running and self.server_runner.server_name == server_name
+        is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
         
         self.btn_start.configure(state="disabled" if is_running else "normal")
         self.btn_start_all.configure(state="disabled" if is_running else "normal")
@@ -432,10 +350,9 @@ class MCTunnelApp(ctk.CTk):
 
     def start_all_action(self):
         if not self.current_server: return
-        runner = self.start_server_action()
-        if runner:
+        if self.start_server_action():
             self.update_console("[System] Starting server and tunnel...")
-            self.events.subscribe(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
+            self.start_tunnel()
 
     def update_management_ui(self):
         if not self.current_server: return
@@ -517,7 +434,7 @@ class MCTunnelApp(ctk.CTk):
 
     def edit_server_properties(self):
         if not self.current_server: return
-        if self.server_runner and self.server_runner.running:
+        if self.zbb_manager.is_running():
             self.server_console.log("[Error] Stop the server before editing properties.")
             return
         ServerPropertiesEditor(self, self.current_server, logic)
@@ -548,55 +465,15 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
-        if not self.current_server: return
-        if self.server_runner and self.server_runner.running:
-            self.server_console.log("[Error] A server is already running.")
-            return
-        
-        # Stop old services before creating new ones
-        if self._heartbeat: self._heartbeat.stop()
-        if self._watchdog: self._watchdog.stop()
-        
-        config = load_config()
-        ram = config.get("ram_allocation", "2G")
-        
-        self.server_runner = ServerRunner(self.current_server, ram, self.events)
-        
-        self.events.subscribe(ServerEvent.READY, self.on_server_ready)
-        self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
-        self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
-        
-        # Lag monitor: tracks TPS lag spikes
-        self._lag_monitor = LagMonitor(event_emitter=self.events)
-        
-        # Heartbeat: detects zombie servers
-        self._heartbeat = HeartbeatMonitor(
-            event_emitter=self.events,
-            server_runner_getter=lambda: self.server_runner,
-        )
-        self._heartbeat.start()
-        
-        # Watchdog: auto-restart on crash + zombie detection, with toasts
-        max_retries = config.get("watchdog_max_retries", 3)
-        self._watchdog = Watchdog(
-            self.server_runner, self.events,
-            max_retries=max_retries,
-        )
-        self._watchdog.listen()
-        
-        # Toast notification for lag spikes
-        self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
-            self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
-            Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
-        )))
-        
-        self.server_runner.start()
-        
-        self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING)
-        self.btn_start.configure(state="disabled")
-        self.btn_start_all.configure(state="disabled")
-        self.btn_stop.configure(state="normal")
-        return self.server_runner
+        if self.zbb_manager.start_server():
+            return True
+        return False
+
+    def on_server_starting(self, data=None):
+        self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self.btn_start.configure(state="disabled"))
+        self.after(0, lambda: self.btn_start_all.configure(state="disabled"))
+        self.after(0, lambda: self.btn_stop.configure(state="normal"))
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
@@ -612,9 +489,8 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
 
     def stop_server_action(self):
-        if self.server_runner:
-            self.server_runner.stop()
-            self.on_server_stopped()
+        self.zbb_manager.stop_server()
+        self.on_server_stopped()
 
     def create_server_dialog(self):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
@@ -673,24 +549,24 @@ class MCTunnelApp(ctk.CTk):
     def start_tunnel(self):
         self.btn_tunnel_start.configure(state="disabled")
         self.btn_tunnel_stop.configure(state="normal")
-        threading.Thread(target=self.playit_manager.start, daemon=True).start()
+        self.zbb_manager.start_tunnel()
 
     def stop_tunnel(self):
-        self.playit_manager.stop()
+        self.zbb_manager.stop_tunnel()
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
     def reset_tunnel(self):
         if ctk.CTkInputDialog(text="Type 'yes' to confirm reset:", title="Confirm Reset").get_input() != "yes": return
-        self.playit_manager.reset()
-        config = load_config()
-        if "playit_dns" in config:
-            del config["playit_dns"]
-            save_config(config)
+        self.zbb_manager.reset_tunnel()
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
-    def update_playit_status(self, status, ip):
+    def on_tunnel_status(self, data):
+        if not data: return
+        status = data.get("status", "Offline")
+        ip = data.get("ip", None)
+        
         def _update():
             color = "green" if status == "Online" else "gray"
             icon = "●"
@@ -699,12 +575,8 @@ class MCTunnelApp(ctk.CTk):
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
-            display_ip = ip
-            config = load_config()
-            if status == "Online" and config.get("playit_dns"): display_ip = config["playit_dns"]
-
-            if display_ip:
-                self.lbl_public_ip.configure(text=f"Public IP: {display_ip}")
+            if ip:
+                self.lbl_public_ip.configure(text=f"Public IP: {ip}")
                 self.btn_claim.pack_forget()
             else:
                 self.lbl_public_ip.configure(text="Public IP: N/A")
@@ -726,11 +598,9 @@ class MCTunnelApp(ctk.CTk):
                 dns_name = dialog.get_input()
                 if dns_name:
                     dns_name = dns_name.strip().rstrip('.')
-                    config = load_config()
-                    config["playit_dns"] = dns_name
-                    save_config(config)
+                    self.zbb_manager.update_config("playit_dns", dns_name)
                     self.server_console.log(f"[System] Saved Playit DNS: {dns_name}")
-                    if self.playit_manager.current_address:
+                    if self.zbb_manager.get_tunnel_ip():
                         self.lbl_public_ip.configure(text=f"Public IP: {dns_name}")
                 else:
                     self.server_console.log("[System] DNS entry skipped.")
@@ -746,10 +616,7 @@ class MCTunnelApp(ctk.CTk):
         else: self.tunnel_console.log(f"[Error] No claim URL available yet.")
 
     def on_close(self):
-        if self.server_runner: self.server_runner.stop()
-        if self._watchdog: self._watchdog.stop()
-        if self._heartbeat: self._heartbeat.stop()
-        if self.playit_manager: self.playit_manager.stop()
+        self.zbb_manager.shutdown()
         if hasattr(self, '_instance_lock'): self._instance_lock.release()
         self.destroy()
         sys.exit(0)
