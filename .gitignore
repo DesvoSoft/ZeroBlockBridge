@@ -75,6 +75,7 @@ bin/*
 AI reference/
 CHECKLIST.md
 .planning/research/
+tests/
 
 # Agent workspace
 .opencode/

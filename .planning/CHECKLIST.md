@@ -190,22 +190,22 @@
 
 
 
-### ECO-01 — Paper server type 🚧
+### ECO-01 — Paper server type ✅
 
 - [x] Consult spec from ANALY-01 for Paper API endpoints
 - [x] Add "Paper" to server type enum / selection dropdown in creation wizard
 - [x] Implement PaperVersionProvider: MC version → latest Paper build resolution
 - [x] Implement PaperDownloadProvider: download jar + SHA1 verification
-- [ ] Test Paper server creation, startup, and playability
-- [ ] Verify Paper-specific features work (e.g. `paper.yml` generation)
+- [x] Test Paper server creation, startup, and playability
+- [x] Verify Paper-specific features work (e.g. `paper.yml` generation)
 
-### ECO-02 — Purpur server type
+### ECO-02 — Purpur server type ✅
 
-- [ ] Consult spec from ANALY-01 for Purpur API endpoints
-- [ ] Add "Purpur" to server type enum / selection dropdown
-- [ ] Implement PurpurVersionProvider: MC version → latest Purpur build resolution
-- [ ] Implement PurpurDownloadProvider: download jar + SHA1 verification
-- [ ] Test Purpur server creation, startup, and playability
+- [x] Consult spec from ANALY-01 for Purpur API endpoints
+- [x] Add "Purpur" to server type enum / selection dropdown
+- [x] Implement PurpurVersionProvider: MC version → latest Purpur build resolution
+- [x] Implement PurpurDownloadProvider: download jar + SHA1 verification
+- [x] Test Purpur server creation, startup, and playability
 
 ### ECO-03 — Modrinth integration
 

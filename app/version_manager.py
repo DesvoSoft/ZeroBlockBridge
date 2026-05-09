@@ -116,7 +116,8 @@ class VersionManager:
             "Vanilla": ["1.21.1", "1.20.1", "1.19.4"], # Minimal fallback
             "Fabric": ["1.21.1", "1.20.1"],
             "Forge": ["1.20.1", "1.19.2"],
-            "Paper": ["1.21.1", "1.20.1", "1.19.4"]
+            "Paper": ["1.21.1", "1.20.1", "1.19.4"],
+            "Purpur": ["1.21.1", "1.20.1", "1.19.4"]
         }
 
     def _save_cache(self):
@@ -237,6 +238,17 @@ class VersionManager:
         except Exception as e:
             print(f"[Warning] Failed to fetch Paper versions: {e}")
 
+        # 5. Purpur
+        try:
+            resp = requests.get("https://api.purpurmc.org/v2/purpur", timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                versions = data.get("versions", [])
+                versions.reverse() # Reverse to get newest first
+                new_cache["Purpur"] = versions[:30]
+        except Exception as e:
+            print(f"[Warning] Failed to fetch Purpur versions: {e}")
+
         new_cache["last_updated"] = datetime.datetime.now().isoformat()
         self.cache = new_cache
         self._save_cache()
@@ -262,6 +274,8 @@ class VersionManager:
             return self._get_forge_installer_url(version)
         elif server_type == "Paper":
             return self._get_paper_url(version)
+        elif server_type == "Purpur":
+            return self._get_purpur_url(version)
         return None
 
     def _get_vanilla_url(self, version):
@@ -328,4 +342,17 @@ class VersionManager:
                 return f"{url}/builds/{latest_build}/downloads/paper-{version}-{latest_build}.jar"
         except Exception as e:
             print(f"[Error] Failed to resolve Paper URL for {version}: {e}")
+        return None
+
+    def _get_purpur_url(self, version):
+        try:
+            url = f"https://api.purpurmc.org/v2/purpur/{version}"
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            builds = data.get("builds", {})
+            latest_build = builds.get("latest")
+            if latest_build:
+                return f"{url}/{latest_build}/download"
+        except Exception as e:
+            print(f"[Error] Failed to resolve Purpur URL for {version}: {e}")
         return None

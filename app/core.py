@@ -227,16 +227,20 @@ class ZBBManager:
             scheduler = Scheduler(self.current_server)
             schedule = scheduler.get_schedule()
             if schedule and schedule.get("backup_on_restart", False):
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Performing auto-backup before restart...")
-                self._send_system_message("Performing auto-backup...")
-                manager = BackupManager(self.current_server)
-                path, error = manager.create_backup()
-                if path:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup created: {os.path.basename(path)}")
-                else:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initiating async auto-backup before restart...")
+                
+                def _do_backup():
+                    manager = BackupManager(self.current_server)
+                    path, error = manager.create_backup()
+                    if path:
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {os.path.basename(path)}")
+                    else:
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+                
+                threading.Thread(target=_do_backup, daemon=True).start()
+                # Give it a second to start archiving before we shut down the JVM
+                time.sleep(1)
             
-            time.sleep(1)
             self.stop_server()
             
             timeout = AppConfig.SERVER_STOP_TIMEOUT
