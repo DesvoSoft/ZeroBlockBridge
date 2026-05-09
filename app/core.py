@@ -140,8 +140,31 @@ class ZBBManager:
         if self._watchdog: self._watchdog.stop()
 
     # --- Tunnel Management ---
+    def get_server_port(self, server_name: str = None) -> int:
+        target = server_name or self.current_server
+        if not target: return 25565
+        from app.logic import read_properties
+        from app.constants import SERVERS_DIR
+        path = os.path.join(SERVERS_DIR, target, "server.properties")
+        if os.path.exists(path):
+            props = read_properties(path)
+            return int(props.get("server-port", 25565))
+        return 25565
+
+    def create_tunnel_for_server(self, server_name: str):
+        """Automatically creates a tunnel for a newly created server (if playit is linked)."""
+        port = self.get_server_port(server_name)
+        # We run this in a thread because API polling can take 15 seconds
+        def _create():
+            try:
+                self.playit_manager.get_or_create_tunnel(port)
+            except Exception as e:
+                logger.error(f"Auto-tunnel creation failed for {server_name}: {e}")
+        threading.Thread(target=_create, daemon=True).start()
+
     def start_tunnel(self):
-        threading.Thread(target=self.playit_manager.start, daemon=True).start()
+        port = self.get_server_port()
+        threading.Thread(target=self.playit_manager.start, args=(port,), daemon=True).start()
 
     def stop_tunnel(self):
         self.playit_manager.stop()

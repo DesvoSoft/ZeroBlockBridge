@@ -531,6 +531,7 @@ class MCTunnelApp(ctk.CTk):
                     if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
                     
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
+                    self.zbb_manager.create_tunnel_for_server(name)
                     self.after(0, lambda: self._on_download_complete(dialog))
                 else:
                     self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")

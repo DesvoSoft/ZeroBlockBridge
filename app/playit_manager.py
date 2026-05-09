@@ -1,23 +1,19 @@
 import os
-import sys
 import platform
 import subprocess
 import threading
 import requests
 import re
 import time
+import logging
 
 from app.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
+from app.services.playit_api import PlayitApiClient, PlayitApiException
+
+logger = logging.getLogger(__name__)
 
 class PlayitManager:
     def __init__(self, console_callback, status_callback, claim_callback, on_ready_callback=None):
-        """
-        Args:
-            console_callback: func(str) -> None (Log message)
-            status_callback: func(str, str) -> None (Status text, IP Address)
-            claim_callback: func(str) -> None (Claim URL)
-            on_ready_callback: func() -> None (Called when tunnel is ready)
-        """
         self.console_callback = console_callback
         self.status_callback = status_callback
         self.claim_callback = claim_callback
@@ -27,11 +23,15 @@ class PlayitManager:
         self.binary_path = self._get_binary_path()
         self.claim_url_detected = False
         self.current_address = None
+        
+        # API Client and state
+        self.api_client = PlayitApiClient()
+        self.in_use_count = 0
+        self._lock = threading.Lock()
 
     def _get_binary_path(self):
         system = platform.system()
         filename = "playit.exe" if system == "Windows" else "playit"
-        # Use pathlib's `/` operator for path joining
         return (BIN_DIR / filename).resolve()
 
     def ensure_binary(self):
@@ -40,17 +40,13 @@ class PlayitManager:
             BIN_DIR.mkdir(parents=True, exist_ok=True)
         
         if self.binary_path.exists():
-            # Check version
             try:
-                # Run playit version
                 result = subprocess.run(
                     [str(self.binary_path), "version"],
                     capture_output=True,
                     text=True,
                     check=False
                 )
-                # Output format example: "playit (v0.15.26): ..." or just "v0.15.26"
-                # Let's just check if the target version string is in the output
                 if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
                     self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
                     os.remove(self.binary_path)
@@ -85,34 +81,75 @@ class PlayitManager:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
 
-    def start(self):
-        """Starts the playit agent subprocess."""
-        if self.running:
-            self.console_callback("[Debug] Agent already running.")
-            return
+    def get_or_create_tunnel(self, port: int) -> str:
+        """Uses API to find an existing tunnel for the port, or creates one. Returns DNS."""
+        if not self.api_client.load_secret_key():
+            # If no secret key, we must rely on the CLI to claim first.
+            self.console_callback("[Playit] Agent not linked yet. Please start tunnel manually to link.")
+            return None
+            
+        try:
+            tunnels = self.api_client.list_tunnels()
+            for t in tunnels:
+                origin_port = t.get("origin", {}).get("data", {}).get("local_port")
+                if origin_port == port:
+                    domain = t.get("alloc", {}).get("data", {}).get("assigned_domain")
+                    if domain:
+                        return domain
+                        
+            # Not found, create it
+            self.console_callback(f"[Playit] Creating new tunnel for port {port}...")
+            tunnel = self.api_client.create_tunnel(port=port)
+            domain = tunnel.get("alloc", {}).get("data", {}).get("assigned_domain")
+            self.console_callback(f"[Playit] Tunnel created automatically: {domain}")
+            return domain
+        except PlayitApiException as e:
+            self.console_callback(f"[Playit] API Error: {e}")
+            return None
+
+    def start(self, port: int = 25565):
+        """Starts the playit agent subprocess with reference counting."""
+        with self._lock:
+            self.in_use_count += 1
+            if self.running:
+                self.console_callback(f"[Debug] Agent already running (In use: {self.in_use_count}).")
+                
+                # Try to get or create tunnel via API if linked
+                domain = self.get_or_create_tunnel(port)
+                if domain:
+                    self.current_address = domain
+                    self.status_callback("Online", domain)
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+                return
 
         self.claim_url_detected = False
         self.current_address = None
 
         if not self.ensure_binary():
             self.console_callback("[Debug] Binary check failed.")
+            with self._lock: self.in_use_count -= 1
             return
 
-        # Ensure config directory exists
         if not os.path.exists(CONFIG_DIR):
             os.makedirs(CONFIG_DIR)
 
-        self.console_callback(f"[Debug] Starting agent from: {self.binary_path}")
-        self.console_callback(f"[Debug] CWD: {os.path.abspath(CONFIG_DIR)}")
-        
         try:
-            # Run in the config directory so playit.toml is stored there
-            # Set RUST_LOG to force output
+            domain = self.get_or_create_tunnel(port)
+            if domain:
+                self.current_address = domain
+                self.status_callback("Online", domain)
+                if self.on_ready_callback:
+                    self.on_ready_callback()
+        except Exception as e:
+            logger.error(f"Failed to auto-create tunnel: {e}")
+
+        try:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
             
             self.process = subprocess.Popen(
-                [self.binary_path, "--stdout"],
+                [str(self.binary_path), "--stdout"],
                 cwd=os.path.abspath(CONFIG_DIR),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -122,85 +159,85 @@ class PlayitManager:
                 env=env
             )
             self.running = True
-            self.status_callback("Starting...", None)
-            self.console_callback(f"[Debug] Process started with PID: {self.process.pid}")
+            if not self.current_address:
+                self.status_callback("Starting...", None)
             
-            # Start the output reader thread
             threading.Thread(target=self._read_output, daemon=True).start()
             
         except Exception as e:
             self.console_callback(f"[Playit] Failed to start: {e}")
             self.running = False
             self.status_callback("Error", None)
+            with self._lock: self.in_use_count -= 1
 
     def stop(self):
-        """Stops the playit agent."""
+        """Stops the playit agent using reference counting."""
+        with self._lock:
+            if self.in_use_count > 0:
+                self.in_use_count -= 1
+            
+            if self.in_use_count > 0:
+                self.console_callback(f"[Playit] Agent kept alive (In use: {self.in_use_count}).")
+                return
+
         if not self.running or not self.process:
             return
 
         self.console_callback("[Playit] Stopping agent...")
         try:
             self.process.terminate()
-            # We don't wait() here to avoid blocking the UI thread if it hangs.
-            # The reader thread will handle the cleanup when stdout closes.
         except Exception as e:
             self.console_callback(f"[Playit] Error stopping: {e}")
         
-        # We manually set running to False just in case, though reader thread does it too
         self.running = False
         self.current_address = None
         self.status_callback("Offline", None)
 
     def reset(self):
         """Resets the playit agent configuration (clears secret)."""
-        self.stop()
-        
+        # Force stop
+        with self._lock:
+            self.in_use_count = 0
+            
+        if self.running and self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=2)
+            except:
+                pass
+                
         self.console_callback("[Playit] Resetting agent configuration...")
         try:
-            # Run playit reset
-            # We use subprocess.run because we want it to finish before we do anything else
             subprocess.run(
-                [self.binary_path, "reset"],
+                [str(self.binary_path), "reset"],
                 cwd=os.path.abspath(CONFIG_DIR),
-                check=False, # Don't crash if it fails, just log
+                check=False,
                 capture_output=True,
                 text=True
             )
             self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
-            self.claim_url_detected = False # Reset this too
+            self.claim_url_detected = False
             self.current_address = None
+            self.api_client._secret_key = None
+            self.running = False
+            self.status_callback("Offline", None)
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
     SPAM_LOGS = [
-        "tunnel running",
-        "udp channel requires auth",
-        "udp session details received",
-        "send KeepAlive",
-        "agent registered details",
-        "authenticate control last_pong",
-        "session expired reason=SessionNotSetup",
-        "failed to send initial ping error=Os { code: 10051", # IPv6 noise on Windows
-        "failed to send initial ping error=Os { code: 101",   # IPv6 noise on Linux
-        "failed to ping tunnel server",
-        "failed to parse json", # Messy API errors
-        "ReqProtoRegister"
+        "tunnel running", "udp channel requires auth", "udp session details received",
+        "send KeepAlive", "agent registered details", "authenticate control last_pong",
+        "session expired reason=SessionNotSetup", "failed to send initial ping error=Os { code: 10051",
+        "failed to send initial ping error=Os { code: 101", "failed to ping tunnel server",
+        "failed to parse json", "ReqProtoRegister"
     ]
 
     def _read_output(self):
-        """Reads stdout from the process character by character (binary)."""
-        self.console_callback("[Debug] Output reader thread started.")
         try:
             buffer = bytearray()
             while self.running and self.process:
-                # Read 1 byte
-                # self.console_callback("[Debug] Waiting for byte...") # Too spammy?
                 byte = self.process.stdout.read(1)
-                if not byte:
-                    self.console_callback("[Debug] EOF received.")
-                    break
-                
-                # self.console_callback(f"[Debug] Byte: {byte}") # Very spammy but useful if stuck
+                if not byte: break
                 
                 if byte == b'\n' or byte == b'\r':
                     if buffer:
@@ -208,21 +245,15 @@ class PlayitManager:
                             line = buffer.decode('utf-8', errors='replace').strip()
                         except:
                             line = ""
-                            
                         if line:
-                            # Remove ANSI escape codes
                             clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
-                            
-                            # Filter spam
                             is_spam = any(s in clean_line for s in self.SPAM_LOGS)
                             if not is_spam or "ERROR" in clean_line:
                                 self.console_callback(f"[Playit] {clean_line}")
-                                
                             self._parse_line(clean_line)
                         buffer = bytearray()
                 else:
                     buffer.extend(byte)
-                    
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:
@@ -230,12 +261,8 @@ class PlayitManager:
             self.process = None
             self.current_address = None
             self.status_callback("Offline", None)
-            self.console_callback("[Playit] Agent process exited.")
 
     def _parse_line(self, line):
-        """Parses a single line of output for relevant info."""
-        # 1. Check for Claim URL
-        # Pattern: "https://playit.gg/claim/..."
         claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
         if claim_match:
             url = claim_match.group(1)
@@ -243,14 +270,6 @@ class PlayitManager:
                 self.claim_url_detected = True
                 self.claim_callback(url)
 
-        # 2. Check for Tunnel Address
-        # Pattern: looks for .ply.gg domains OR IP addresses in specific contexts
-        # Log examples:
-        # "tunnel_addr: 209.25.140.1:5525"
-        # "trying to establish tunnel connection addr=..."
-        
-        # 2. Check for Tunnel Address
-        # Priority 1: .ply.gg or .playit.gg domain (most user friendly)
         domain_match = re.search(r"([a-z0-9-.]+\.(?:ply|playit)\.gg|[a-z0-9-.]+\.joinmc\.link)", line)
         if domain_match:
             address = domain_match.group(1).rstrip('.')
@@ -261,7 +280,6 @@ class PlayitManager:
                 self.status_callback("Online", address)
                 return
 
-        # Priority 2: IP Address from "tunnel_addr: IP:PORT"
         ip_match = re.search(r"tunnel_addr:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)", line)
         if ip_match:
             address = ip_match.group(1)
@@ -271,21 +289,13 @@ class PlayitManager:
             self.status_callback("Online", address)
             return
 
-        # Priority 3: "tunnel running" confirmation (fallback if no IP found yet)
         if "tunnel running" in line:
             if not getattr(self, "current_address", None):
                  self.status_callback("Online", "Check Console")
             return
 
-        # 3. Check for Errors
         if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
             self.status_callback("Error", None)
             self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
             self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
             return
-            
-        if "AgentVersionTooOld" in line:
-             self.console_callback("[Playit] ERROR: Agent version too old. Restarting to update...")
-             # The ensure_binary check on next start should handle this, but we can force it here if we want
-             # For now, just logging it is enough as the user will likely restart or we can trigger a restart
-
