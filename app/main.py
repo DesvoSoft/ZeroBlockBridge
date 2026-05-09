@@ -847,14 +847,15 @@ class MCTunnelApp(ctk.CTk):
 
     def on_playit_claim(self, url):
         self.claim_url = url
+        claim_code = url.split("/")[-1] if url else ""
         def _show_ui():
             self.btn_claim.pack(side="right", padx=10)
             self.tunnel_console.log(f"[System] Playit setup required: {url}")
             Toast.show(
                 self,
-                "Se requiere vinculación. Haz clic en '🔗' para configurar el túnel.",
+                f"Vincula tu cuenta: {claim_code}",
                 toast_type="info",
-                duration=5000,
+                duration=8000,
             )
             
             def _ask_dns():

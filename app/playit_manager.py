@@ -23,6 +23,8 @@ class PlayitManager:
         self.binary_path = self._get_binary_path()
         self.claim_url_detected = False
         self.current_address = None
+        self.is_linked = False
+        self.secret_path = os.path.join(CONFIG_DIR, "playit.toml")
         
         # API Client and state
         self.api_client = PlayitApiClient()
@@ -147,11 +149,8 @@ class PlayitManager:
         try:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
-            env["PLAYIT_FORCE_IPV4"] = "1"
 
-            cmd = [str(self.binary_path), "--stdout"]
-            # Force IPv4 to avoid IPv6 connectivity failures in restricted networks
-            cmd.append("--force-ipv4")
+            cmd = [str(self.binary_path), "--stdout", "--secret_path", self.secret_path]
 
             self.process = subprocess.Popen(
                 cmd,
@@ -164,6 +163,7 @@ class PlayitManager:
                 env=env
             )
             self.running = True
+            self.is_linked = os.path.exists(self.secret_path)
             if not self.current_address:
                 self.status_callback("Starting...", None)
             
@@ -199,8 +199,7 @@ class PlayitManager:
         self.status_callback("Offline", None)
 
     def reset(self):
-        """Resets the playit agent configuration (clears secret)."""
-        # Force stop
+        """Resets the playit agent configuration (clears secret and deletes playit.toml)."""
         with self._lock:
             self.in_use_count = 0
             
@@ -220,9 +219,14 @@ class PlayitManager:
                 capture_output=True,
                 text=True
             )
+            # Delete secret file to force re-link on next start
+            if os.path.exists(self.secret_path):
+                os.remove(self.secret_path)
+                self.console_callback("[Playit] Deleted playit.toml secret.")
             self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
             self.claim_url_detected = False
             self.current_address = None
+            self.is_linked = False
             self.api_client._secret_key = None
             self.running = False
             self.status_callback("Offline", None)
@@ -232,9 +236,11 @@ class PlayitManager:
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",
         "send KeepAlive", "agent registered details", "authenticate control last_pong",
-        "session expired reason=SessionNotSetup", "failed to send initial ping error=Os { code: 10051",
+        "session expired reason=SessionNotSetup",
+        "failed to send initial ping error=Os { code: 10051",
         "failed to send initial ping error=Os { code: 101", "failed to ping tunnel server",
-        "failed to parse json", "ReqProtoRegister"
+        "failed to parse json", "ReqProtoRegister",
+        "NetworkUnreachable"
     ]
 
     def _read_output(self):
@@ -268,7 +274,7 @@ class PlayitManager:
             self.status_callback("Offline", None)
 
     def _parse_line(self, line):
-        # Claim URL detection with notification toast
+        # --- Claim URL detection (always active, even before LINKED) ---
         claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
         if claim_match:
             url = claim_match.group(1)
@@ -276,7 +282,28 @@ class PlayitManager:
                 self.claim_url_detected = True
                 self.claim_callback(url)
 
-        # Broad DNS/resolved address regex — catches any *.playit.gg, *.ply.gg, *.joinmc.link
+        # --- Network unreachable — agent will auto-retry via IPv4 ---
+        if "NetworkUnreachable" in line or "Os { code: 10051" in line or "Os { code: 101" in line:
+            return
+
+        # --- Account limit error ---
+        if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
+            self.status_callback("Error", None)
+            self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
+            self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
+            return
+
+        # --- Agent registered → LINKED state confirmed ---
+        if "agent registered" in line and not self.is_linked:
+            self.is_linked = True
+            self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
+            # Reload secret into API client now that TOML exists
+            self.api_client.load_secret_key()
+
+        # --- DNS / address detection (only after LINKED) ---
+        if not self.is_linked:
+            return
+
         dns_patterns = [
             r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg)",
             r"([a-z0-9][a-z0-9-]*\.joinmc\.link)",
@@ -286,7 +313,6 @@ class PlayitManager:
             dns_match = re.search(pattern, line)
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
-                # Skip internal/multicast addresses
                 if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
                     continue
                 if address != self.current_address:
@@ -297,19 +323,6 @@ class PlayitManager:
                         self.on_ready_callback()
                 return
 
-        # Fallback: "tunnel running" status with no explicit address yet
-        if "tunnel running" in line:
-            if not self.current_address:
-                 self.status_callback("Online", "Check Console")
-            return
-
-        # Account limit error
-        if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
-            self.status_callback("Error", None)
-            self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
-            self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
-            return
-
-        # "Ready" / tunnel established without explicit address in same line
-        if "agent registered" in line and not self.current_address:
+        # Fallback: "tunnel running" but no explicit address yet
+        if "tunnel running" in line and not self.current_address:
             self.status_callback("Online", "Check Console")
