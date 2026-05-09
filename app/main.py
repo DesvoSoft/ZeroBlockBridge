@@ -28,6 +28,7 @@ from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 from app.server_events import ServerEvent, EventBus
 from app.app_config import AppConfig
+from app.modrinth_browser import ModrinthBrowser
 from app.services.sanitizer import is_safe_command
 from app.services.toast import Toast
 from app.core import ZBBManager
@@ -257,6 +258,14 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
         self.tunnel_console.pack(fill="both", expand=True)
 
+        # --- Mods Tab (Modrinth Browser) ---
+        self.console_tabs.add("Mods")
+        self.modrinth_browser = ModrinthBrowser(
+            self.console_tabs.tab("Mods"),
+            get_server_info=self._get_current_server_info,
+        )
+        self.modrinth_browser.pack(fill="both", expand=True)
+
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
@@ -347,6 +356,33 @@ class MCTunnelApp(ctk.CTk):
         self.btn_open_server_folder.configure(state="normal")
         self.server_console.log(f"[UI] Selected server: {server_name}")
         self.update_management_ui()
+
+    def _get_current_server_info(self):
+        """Return (server_name, mc_version, loader) for the current server."""
+        if not self.current_server:
+            return None
+        server_path = os.path.join(SERVERS_DIR, self.current_server)
+        meta_path = os.path.join(server_path, "metadata.json")
+        mc_version = None
+        loader = None
+        if os.path.exists(meta_path):
+            try:
+                import json
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
+                mc_version = meta.get("version")
+                stype = meta.get("type", "Vanilla").lower()
+                if stype in ("fabric",):
+                    loader = "fabric"
+                elif stype in ("forge",):
+                    loader = "forge"
+                elif stype in ("paper", "purpur", "spigot"):
+                    loader = stype
+                else:
+                    loader = None
+            except Exception:
+                pass
+        return (self.current_server, mc_version, loader)
 
     def start_all_action(self):
         if not self.current_server: return
