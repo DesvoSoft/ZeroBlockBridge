@@ -33,17 +33,23 @@ Los usuarios pueden crear, iniciar y compartir un servidor Minecraft con amigos 
 <!-- Current scope. Building toward these. -->
 
 - [ ] **AUTO-01**: Watchdog service detects Java process crashes (OOM, exit_code != 0) and auto-restarts with configurable max retries (default 3)
-- [ ] **AUTO-02**: Command validation layer prevents dangerous/malformed commands from reaching server stdin
+- [ ] **AUTO-02**: Command sanitizer prevents OS command injection (bash/powershell) through Minecraft console while allowing full Minecraft command flexibility
 - [ ] **AUTO-03**: Lag detection monitors console for "Can't keep up!" patterns with configurable restart thresholds
 - [ ] **ARCH-01**: Extract server lifecycle management from main.py into dedicated service classes
 - [ ] **ARCH-02**: Implement typed event system (ServerCrashed, PlayerJoined, ServerReady, etc.) decoupling UI from logic
 - [ ] **ARCH-03**: Circular buffer console (FIFO) prevents memory growth during long sessions
+- [ ] **ARCH-04**: Lazy console rendering — skip log rendering when window is minimized
 - [ ] **ECO-01**: Add Paper server type support with dynamic version resolution
 - [ ] **ECO-02**: Add Purpur server type support
 - [ ] **ECO-03**: Modrinth integration for mod search, install, and updates
-- [ ] **PROV-01**: Java version detection and automatic suggestion per Minecraft version
+- [ ] **PROV-01**: Java version detection across multiple installations, auto-assigning correct Java per MC version (inspired by auto-mcs source/core/tools/java.py)
 - [ ] **PROV-02**: Server directory scaffolding (pre-generate eula.txt, start scripts, metadata)
 - [ ] **PROV-03**: Analyze auto-mcs Spigot/Bukkit build-tools approach and decide ZBB strategy
+- [ ] **PROV-04**: SHA1 validation of downloaded server jars (VersionProvider pattern from auto-mcs source/core/server/foundry.py)
+- [ ] **PROV-05**: Aikars Flags auto-application based on allocated RAM
+- [ ] **RES-01**: Research auto-mcs cross-platform patterns (Windows/Linux accessibility, path handling, process spawning)
+- [ ] **RES-02**: Research auto-mcs foundry.py version resolution and mapping logic
+- [ ] **RES-03**: Research auto-mcs java.py multi-installation detection and version matching
 
 ### Out of Scope
 
@@ -71,7 +77,8 @@ El análisis de brechas (`.planning/codebase/CONCERNS.md`) identificó 18 carenc
 - **Performance**: El watchdog debe ser "zero-impact" (sin polling constante, basado en eventos)
 - **Compatibility**: Debe seguir funcionando en Windows 10/11 y Linux
 - **Dependency**: La modularización (ARCH-*) es prerequisito para el headless/CLI futuro
-- **Security**: La validación de comandos debe implementarse desde la fase inicial de auto-healing
+- **Security**: Command sanitizer (character/OS injection filter) en lugar de blacklist — protege sin limitar al usuario avanzado
+- **Conventions**: Sin emojis en código. Documentación en español/español neutro. No se permite `print()` para logging
 
 ## Key Decisions
 
@@ -79,8 +86,12 @@ El análisis de brechas (`.planning/codebase/CONCERNS.md`) identificó 18 carenc
 |----------|-----------|---------|
 | Watchdog basado en eventos (no polling) | exit_code del proceso Java + parser de consola | — Pending |
 | Auto-restart con máximo 3 intentos | Evita bucles infinitos en crashes persistentes | — Pending |
+| Command sanitizer vs blacklist | No limitar usuarios avanzados, solo prevenir inyección OS | — Pending |
+| SHA1 validation de jars descargados | Evita servers corruptos, problema #1 de arranque fallido | — Pending |
+| Aikars Flags automáticos según RAM | Optimización zero-effort para el usuario | — Pending |
 | Evolución: monolitos → servicios (no reescritura) | Menor riesgo, entrega incremental de valor | — Pending |
 | Paper/Purpur como prioridad de ecosistema | Estándar de la comunidad para servidores con plugins | — Pending |
+| Sin emojis en código, logging estructurado | Consistencia y mantenibilidad a largo plazo | — Pending |
 
 ## Evolution
 
