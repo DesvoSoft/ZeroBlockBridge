@@ -28,7 +28,7 @@ from app.playit_manager import PlayitManager
 from app.server_wizard import ServerWizard
 from app.server_properties_editor import ServerPropertiesEditor
 from app.scheduler_service import SchedulerService
-from app.server_events import ServerEvent
+from app.server_events import ServerEvent, EventBus
 from app.app_config import AppConfig
 from app.services.watchdog import Watchdog
 from app.services.sanitizer import is_safe_command
@@ -64,6 +64,10 @@ class MCTunnelApp(ctk.CTk):
         self.current_server = None
         self.restart_warnings_sent = set()
         self.claim_url = None
+        
+        self.events = EventBus()
+        self.events.subscribe(ServerEvent.CONSOLE_LINE, self.update_console)
+        self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
 
     def _init_managers(self):
         self.playit_manager = PlayitManager(
@@ -430,8 +434,8 @@ class MCTunnelApp(ctk.CTk):
         if not self.current_server: return
         runner = self.start_server_action()
         if runner:
-            self.server_console.log("[System] Starting server and tunnel...")
-            runner.events.on(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
+            self.update_console("[System] Starting server and tunnel...")
+            self.events.subscribe(ServerEvent.READY, lambda d: self.after(0, self.start_tunnel))
 
     def update_management_ui(self):
         if not self.current_server: return
@@ -531,7 +535,14 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log(f"[Error] Failed to open server folder: {e}")
 
     def update_console(self, text):
-        self.after(0, lambda: self.server_console.log(text))
+        if isinstance(text, str):
+            self.after(0, lambda: self.server_console.log(text))
+
+    def _handle_notification(self, data):
+        if data and isinstance(data, dict):
+            msg = data.get("msg", "")
+            color = data.get("color", "white")
+            self.after(0, lambda: Toast.show(self, msg, color=color))
 
     def update_tunnel_console(self, text):
         self.after(0, lambda: self.tunnel_console.log(text))
@@ -549,18 +560,18 @@ class MCTunnelApp(ctk.CTk):
         config = load_config()
         ram = config.get("ram_allocation", "2G")
         
-        self.server_runner = ServerRunner(self.current_server, ram, self._on_console_line)
+        self.server_runner = ServerRunner(self.current_server, ram, self.events)
         
-        self.server_runner.events.on(ServerEvent.READY, self.on_server_ready)
-        self.server_runner.events.on(ServerEvent.STOPPED, self.on_server_stopped)
-        self.server_runner.events.on(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        self.events.subscribe(ServerEvent.READY, self.on_server_ready)
+        self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
+        self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
         
         # Lag monitor: tracks TPS lag spikes
-        self._lag_monitor = LagMonitor(event_emitter=self.server_runner.events)
+        self._lag_monitor = LagMonitor(event_emitter=self.events)
         
         # Heartbeat: detects zombie servers
         self._heartbeat = HeartbeatMonitor(
-            event_emitter=self.server_runner.events,
+            event_emitter=self.events,
             server_runner_getter=lambda: self.server_runner,
         )
         self._heartbeat.start()
@@ -568,14 +579,13 @@ class MCTunnelApp(ctk.CTk):
         # Watchdog: auto-restart on crash + zombie detection, with toasts
         max_retries = config.get("watchdog_max_retries", 3)
         self._watchdog = Watchdog(
-            self.server_runner, self.update_console, self.server_runner.events,
-            notification_callback=lambda msg, color: self.after(0, lambda: Toast.show(self, msg, color=color)),
+            self.server_runner, self.events,
             max_retries=max_retries,
         )
         self._watchdog.listen()
         
         # Toast notification for lag spikes
-        self.server_runner.events.on(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
+        self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
             Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
         )))
@@ -587,14 +597,6 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start_all.configure(state="disabled")
         self.btn_stop.configure(state="normal")
         return self.server_runner
-
-    def _on_console_line(self, text: str):
-        """Fan-out: all console line observers, then UI."""
-        if self._lag_monitor:
-            self._lag_monitor.observe_line(text)
-        if self._heartbeat:
-            self._heartbeat.observe_line(text)
-        self.after(0, lambda: self.server_console.log(text))
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))

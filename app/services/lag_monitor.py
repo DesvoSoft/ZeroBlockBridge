@@ -20,6 +20,8 @@ class LagMonitor:
         self._threshold = threshold
         self._window = window_minutes * 60.0
         self._spikes = []
+        
+        self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
     def observe_line(self, line: str):
         if self._is_spike(line):

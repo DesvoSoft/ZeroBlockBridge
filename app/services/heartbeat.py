@@ -34,6 +34,8 @@ class HeartbeatMonitor:
         self._last_probe = 0.0
         self._last_response = 0.0
         self._running = False
+        
+        self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
     def start(self):
         self._running = True
@@ -43,6 +45,7 @@ class HeartbeatMonitor:
         self._running = False
 
     def observe_line(self, line: str):
+        if not self._running: return
         self._last_output = time.time()
         if any(p in line for p in PLAYER_LIST_PATTERNS):
             self._last_response = time.time()

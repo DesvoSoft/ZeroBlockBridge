@@ -38,13 +38,11 @@ def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence
 
 
 class Watchdog:
-    def __init__(self, server_runner, console_callback, event_emitter,
-                 notification_callback=None, max_retries=3,
+    def __init__(self, server_runner, event_emitter,
+                 max_retries=3,
                  backoff_base=5, stability_window=600, min_uptime_for_retry=5):
         self._runner = server_runner
-        self._console = console_callback
         self._events = event_emitter
-        self._notify = notification_callback
         self.max_retries = max_retries
         self._backoff_base = backoff_base
         self._stability_window = stability_window
@@ -89,13 +87,13 @@ class Watchdog:
         stderr = data.get("stderr", "")
 
         if exit_code == 0:
-            self._console("[Watchdog] Server stopped normally (exit code 0).")
+            self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Server stopped normally (exit code 0).")
             self.retry_count = 0
             return
 
         self._classify_crash(exit_code, uptime, stderr)
         next_retry = self.retry_count + 1
-        self._console(
+        self._events.emit(ServerEvent.CONSOLE_LINE, 
             f"[Watchdog] Server crashed (exit {exit_code}, {self._crash_reason}). "
             f"Retry {next_retry}/{self.max_retries}"
         )
@@ -103,11 +101,10 @@ class Watchdog:
             reason=self._crash_reason, exit_code=exit_code,
             uptime=uptime, retry=next_retry,
         ))
-        if self._notify:
-            self._notify(
-                f"Server crashed: {self._crash_reason}",
-                color="red"
-            )
+        self._events.emit(ServerEvent.NOTIFICATION, {
+            "msg": f"Server crashed: {self._crash_reason}",
+            "color": "red"
+        })
 
         self._trigger_restart("crash")
 
@@ -116,25 +113,29 @@ class Watchdog:
             return
         silence = (data or {}).get("silence_seconds", 0)
         next_retry = self.retry_count + 1
-        self._console(f"[Watchdog] Zombie server detected (silent {silence:.0f}s). Restarting...")
+        self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Zombie server detected (silent {silence:.0f}s). Restarting...")
         self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
             reason="zombie", silence_seconds=silence, retry=next_retry, context="zombie",
         ))
-        if self._notify:
-            self._notify("Server unresponsive (zombie). Restarting...", color="orange")
+        self._events.emit(ServerEvent.NOTIFICATION, {
+            "msg": "Server unresponsive (zombie). Restarting...", 
+            "color": "orange"
+        })
         self._trigger_restart("zombie")
 
     def _trigger_restart(self, context):
         if self.retry_count >= self.max_retries:
-            self._console(f"[Watchdog] Max retries ({self.max_retries}) reached. Will not auto-restart.")
+            self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Max retries ({self.max_retries}) reached. Will not auto-restart.")
             logger.warning("Watchdog: max retries (%d) exhausted (%s)", self.max_retries, context)
-            if self._notify:
-                self._notify("Max retries reached. Server will not restart.", color="red")
+            self._events.emit(ServerEvent.NOTIFICATION, {
+                "msg": "Max retries reached. Server will not restart.", 
+                "color": "red"
+            })
             return
 
         self.retry_count += 1
         backoff = self._compute_backoff()
-        self._console(f"[Watchdog] Auto-restart in {backoff:.0f}s (attempt {self.retry_count}/{self.max_retries})...")
+        self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Auto-restart in {backoff:.0f}s (attempt {self.retry_count}/{self.max_retries})...")
         self._restart_thread = threading.Thread(
             target=self._do_restart, args=(context, backoff), daemon=True
         )
@@ -146,11 +147,10 @@ class Watchdog:
             return
         self._runner.start()
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
-        if self._notify:
-            self._notify(
-                f"Server restarting (attempt {self.retry_count}/{self.max_retries})",
-                color="orange"
-            )
+        self._events.emit(ServerEvent.NOTIFICATION, {
+            "msg": f"Server restarting (attempt {self.retry_count}/{self.max_retries})",
+            "color": "orange"
+        })
 
     def _classify_crash(self, exit_code, uptime, stderr=""):
         if self._match_stderr(stderr, JVM_ERROR_PATTERNS):

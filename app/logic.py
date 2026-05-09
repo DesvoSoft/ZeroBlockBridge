@@ -178,9 +178,9 @@ def install_forge(server_name, mc_version, progress_callback=None):
         return None
 
 class ServerRunner:
-    def __init__(self, server_name, ram_allocation, console_callback):
+    def __init__(self, server_name, ram_allocation, event_bus):
         self.server_name = server_name
-        self.console_callback = console_callback
+        self.events = event_bus
         self.process = None
         self.running = False
         self.exit_code = None
@@ -198,7 +198,6 @@ class ServerRunner:
             self.ram_allocation = ram_allocation
             
         self.player_count = 0
-        self.events = ServerEventEmitter()
         self._stderr_done = threading.Event()
 
     def _apply_pending_settings(self):
@@ -213,7 +212,7 @@ class ServerRunner:
                 if not pending or not any(pending.values()):
                     return
 
-                self.console_callback("[System] Applying initial server settings from wizard...")
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Applying initial server settings from wizard...")
                 props = load_server_properties(self.server_name)
                 if not props:
                     props["network-compression-threshold"] = "256"
@@ -234,9 +233,9 @@ class ServerRunner:
                 f.seek(0)
                 f.truncate()
                 json.dump(meta, f, indent=4)
-                self.console_callback("[System] Initial settings applied successfully.")
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initial settings applied successfully.")
         except Exception as e:
-            self.console_callback(f"[Error] Failed to apply pending settings: {e}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to apply pending settings: {e}")
 
     def start(self):
         if self.running:
@@ -246,7 +245,7 @@ class ServerRunner:
         
         if not check_eula(self.server_name):
             accept_eula(self.server_name)
-            self.console_callback("[System] EULA auto-accepted.")
+            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] EULA auto-accepted.")
 
         server_path = os.path.join(SERVERS_DIR, self.server_name)
 
@@ -276,7 +275,7 @@ class ServerRunner:
                     break
         
         if not is_forge_modern and not os.path.exists(os.path.join(server_path, jar_file)):
-            self.console_callback(f"[Error] Server jar not found: {jar_file}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Server jar not found: {jar_file}")
             return
 
         # Build command
@@ -302,7 +301,7 @@ class ServerRunner:
                 "nogui"
             ]
         
-        self.console_callback(f"[System] Starting server with: {' '.join(cmd)}")
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
         self.events.emit(ServerEvent.STARTING)
         
         try:
@@ -321,14 +320,14 @@ class ServerRunner:
             self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
             self._stderr_thread.start()
         except Exception as e:
-            self.console_callback(f"[Error] Failed to start server: {e}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to start server: {e}")
             self.running = False
 
     def stop(self):
         if not self.running or not self.process:
             return
 
-        self.console_callback("[System] Stopping server...")
+        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Stopping server...")
         try:
             if self.process.stdin and self.process.poll() is None:
                 try:
@@ -340,11 +339,11 @@ class ServerRunner:
             try:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                self.console_callback("[System] Server unresponsive, force killing...")
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Server unresponsive, force killing...")
                 self.process.kill()
                 self.process.wait()
         except Exception as e:
-            self.console_callback(f"[Error] Failed to stop server: {e}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to stop server: {e}")
             if self.process:
                 try: self.process.kill()
                 except: pass
@@ -353,18 +352,18 @@ class ServerRunner:
         if not self.running or not self.process or not self.process.stdin:
             return
         try:
-            self.console_callback(f"> {command}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"> {command}")
             self.process.stdin.write(command + "\n")
             self.process.stdin.flush()
         except Exception as e:
-            self.console_callback(f"[Error] Failed to send command: {e}")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to send command: {e}")
 
     def _read_output(self):
         if not self.process:
             return
         start_time = time.time()
         for line in self.process.stdout:
-            self.console_callback(line.strip())
+            self.events.emit(ServerEvent.CONSOLE_LINE, line.strip())
             self._parse_player_count(line.strip())
             if "Done (" in line and "For help, type" in line:
                 self.events.emit(ServerEvent.READY)
@@ -375,7 +374,7 @@ class ServerRunner:
         uptime = time.time() - start_time
         self.running = False
         self.process = None
-        self.console_callback(f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
         self.events.emit(ServerEvent.STOPPED, {
             "exit_code": self.exit_code,
             "uptime": uptime,
@@ -393,7 +392,7 @@ class ServerRunner:
                 self._stderr_buffer.append(stripped)
                 if len(self._stderr_buffer) > 100:
                     self._stderr_buffer.pop(0)
-                self.console_callback(f"[JVM] {stripped}")
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[JVM] {stripped}")
         self._stderr_done.set()
 
     def get_stderr_snapshot(self):
