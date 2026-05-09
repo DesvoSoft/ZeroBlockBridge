@@ -438,6 +438,41 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_interval_unit.grid_forget()
             self.entry_restart_time.grid(row=1, column=2, padx=2, columnspan=2)
 
+    def _format_time_input(self, event=None):
+        """Auto-format time entry to HH:MM. Strips non-numeric chars
+        and inserts colon separator after two digits."""
+        raw = self.entry_restart_time.get()
+        digits = "".join(c for c in raw if c.isdigit())
+
+        # Clamp to 4 digits max (HHMM)
+        digits = digits[:4]
+
+        # Auto-insert colon after 2 digits
+        if len(digits) > 2:
+            formatted = f"{digits[:2]}:{digits[2:]}"
+        else:
+            formatted = digits
+
+        # Validate hour/minute range when complete
+        if len(digits) == 4:
+            hour, minute = int(digits[:2]), int(digits[2:])
+            if hour > 23:
+                formatted = f"23:{digits[2:]}"
+            if minute > 59:
+                formatted = f"{digits[:2]}:59"
+
+        # Only update if changed (avoid cursor jump)
+        if raw != formatted:
+            cursor = self.entry_restart_time.index("insert")
+            self.entry_restart_time.delete(0, "end")
+            self.entry_restart_time.insert(0, formatted)
+            # Try to restore cursor, accounting for colon insertion
+            try:
+                new_pos = min(cursor + (len(formatted) - len(raw)), len(formatted))
+                self.entry_restart_time.icursor(max(0, new_pos))
+            except Exception:
+                pass
+
     def save_scheduler_dashboard(self):
         if not self.current_server: return
         enabled = self.var_scheduler_enabled.get()
