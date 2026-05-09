@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 # the G1NewSizePercent and G1MaxNewSizePercent based on available RAM.
 
 
-def calculate_flags(ram_mb: int) -> list:
+def calculate_flags(ram_mb: int, java_major: int = 17) -> list:
     """
     Calculate Aikar's JVM flags based on RAM allocation.
 
     Args:
         ram_mb: RAM allocation in megabytes (e.g., 2048, 4096, 8192).
+        java_major: Java major version (to omit deprecated flags like ParallelRefProcEnabled).
 
     Returns:
         List of JVM argument strings.
@@ -35,12 +36,16 @@ def calculate_flags(ram_mb: int) -> list:
         f"-Xmx{ram_mb}M",
         "--add-modules=jdk.incubator.vector",
         "-XX:+UseG1GC",
-        "-XX:+ParallelRefProcEnabled",
+    ]
+    if java_major < 26:
+        flags.append("-XX:+ParallelRefProcEnabled")
+        
+    flags.extend([
         "-XX:MaxGCPauseMillis=200",
         "-XX:+UnlockExperimentalVMOptions",
         "-XX:+DisableExplicitGC",
         "-XX:+AlwaysPreTouch",
-    ]
+    ])
 
     # RAM-tier-specific G1 tuning
     if ram_mb >= 12288:  # 12G+

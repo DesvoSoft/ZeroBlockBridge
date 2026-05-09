@@ -93,9 +93,9 @@ def check_java_compatibility(mc_version: str, java_major: int) -> tuple:
         (is_compatible: bool, required: int, message: str)
     """
     required = get_required_java(mc_version)
-    if java_major >= required:
-        return True, required, f"Java {java_major} is compatible with MC {mc_version} (requires ≥{required})."
-    return False, required, f"Java {java_major} is incompatible with MC {mc_version}. Requires Java ≥{required}."
+    if java_major == required:
+        return True, required, f"Java {java_major} is compatible with MC {mc_version} (requires {required})."
+    return False, required, f"Java {java_major} is incompatible with MC {mc_version}. Requires Java == {required}."
 
 
 # ---------------------------------------------------------------------------
@@ -267,16 +267,16 @@ class JavaDetector:
         """
         Find the best matching Java for a Minecraft version.
 
-        Returns the lowest-major Java that satisfies the requirement,
+        Returns a JavaInstallation that EXACTLY matches the required major version,
         preferring JDKs over JREs.
         """
         required = get_required_java(mc_version)
-        candidates = [j for j in self.detect_all() if j.major >= required]
+        candidates = [j for j in self.detect_all() if j.major == required]
         if not candidates:
             return None
 
-        # Prefer exact match, then lowest compatible
-        candidates.sort(key=lambda j: (j.major == required, -j.major, j.is_jdk), reverse=True)
+        # Prefer JDKs over JREs
+        candidates.sort(key=lambda j: j.is_jdk, reverse=True)
         return candidates[0]
 
     # ------------------------------------------------------------------

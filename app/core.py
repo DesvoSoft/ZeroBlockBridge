@@ -99,9 +99,46 @@ class ZBBManager:
         
         config = self.get_config()
         ram = config.get("ram_allocation", "2G")
+
+        # Load metadata to find java settings
+        import json
+        from app.constants import SERVERS_DIR
+        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        mc_version = "1.20.1"
+        java_path = "auto"
+        use_aikars = True
+        try:
+            if os.path.exists(meta_path):
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
+                    mc_version = meta.get("version", "1.20.1")
+                    if meta.get("advanced_mode", False):
+                        java_path = meta.get("java_path", "auto")
+                        use_aikars = meta.get("use_aikars", True)
+        except Exception as e:
+            logger.error("Failed to read metadata: %s", e)
+
+        if java_path == "auto":
+            from app.services.java_detector import JavaDetector, get_required_java
+            detector = JavaDetector()
+            best_java = detector.find_best_for_mc(mc_version)
+            required_java = get_required_java(mc_version)
+            if best_java:
+                java_bin = best_java.path
+            else:
+                all_javas = detector.detect_all()
+                detected_major = all_javas[0].major if all_javas else "N/A"
+                msg = f"Error: Versión de Java incompatible. Se requiere Java {required_java}, se detectó Java {detected_major}."
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "color": "red"})
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                return False
+        else:
+            java_bin = java_path
         
-        self.server_runner = ServerRunner(self.current_server, ram, self.events)
-        
+        self.server_runner = ServerRunner(
+            self.current_server, ram, self.events, 
+            java_bin=java_bin, use_aikars=use_aikars
+        )
         # Subscriptions moved from UI
         # (EventBus fan-out handles the UI now, we just pass the events bus)
         

@@ -181,7 +181,7 @@ def install_forge(server_name, mc_version, progress_callback=None):
         return None
 
 class ServerRunner:
-    def __init__(self, server_name, ram_allocation, event_bus):
+    def __init__(self, server_name, ram_allocation, event_bus, java_bin="java", use_aikars=True):
         self.server_name = server_name
         self.events = event_bus
         self.process = None
@@ -189,6 +189,8 @@ class ServerRunner:
         self.exit_code = None
         self._stderr_buffer = []
         self._stderr_thread = None
+        self.java_bin = java_bin
+        self.use_aikars = use_aikars
 
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
@@ -282,7 +284,7 @@ class ServerRunner:
             return
 
         # Build command — PROV-05: Aikar's Flags Integration
-        from app.services.aikars_flags import calculate_flags
+        from app.services.aikars_flags import build_java_command
 
         # Parse RAM in MB for flags calculator
         ram_str = self.ram_allocation.rstrip("MmGg")
@@ -293,17 +295,28 @@ class ServerRunner:
         except ValueError:
             ram_mb = 2048
 
-        aikars = calculate_flags(ram_mb)
+        # Find Java major version
+        java_major = 17
+        try:
+            from app.services.java_detector import _probe_java
+            inst = _probe_java(self.java_bin, "PROBE")
+            if inst:
+                java_major = inst.major
+        except Exception:
+            pass
+
+        from app.services.aikars_flags import calculate_flags
+        aikars = calculate_flags(ram_mb, java_major=java_major) if self.use_aikars else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"]
 
         if is_forge_modern and forge_args_file:
-            cmd = ["java"] + aikars + [
+            cmd = [self.java_bin] + aikars + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 f"@{forge_args_file}",
                 "nogui",
             ]
         else:
-            cmd = ["java"] + aikars + [
+            cmd = [self.java_bin] + aikars + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 "-jar",

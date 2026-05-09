@@ -253,13 +253,32 @@ class MCTunnelApp(ctk.CTk):
         self.settings_frame.grid_columnconfigure(0, weight=1)
         
         self.lbl_settings_title = ctk.CTkLabel(self.settings_frame, text="Server Settings", font=AppConfig.FONT_HEADING_SMALL)
-        self.lbl_settings_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+        self.lbl_settings_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
         
         self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
         self.btn_edit_properties.grid(row=1, column=0, sticky="w", padx=15, pady=5)
 
         self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
-        self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=(5, 15))
+        self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=5)
+
+        # Advanced View Toggle
+        self.var_advanced_mode = ctk.BooleanVar(value=False)
+        self.switch_advanced = ctk.CTkSwitch(self.settings_frame, text="Advanced View", variable=self.var_advanced_mode, command=self.toggle_advanced_view)
+        self.switch_advanced.grid(row=3, column=0, sticky="w", padx=15, pady=(5, 10))
+
+        # Advanced Controls Container (Hidden by default)
+        self.advanced_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        
+        self.lbl_java = ctk.CTkLabel(self.advanced_frame, text="Java Runtime:")
+        self.lbl_java.grid(row=0, column=0, sticky="w", padx=0, pady=2)
+        
+        self.var_java_path = ctk.StringVar(value="auto")
+        self.combo_java = ctk.CTkOptionMenu(self.advanced_frame, variable=self.var_java_path, dynamic_resizing=False, width=150, corner_radius=8, height=32, command=self.save_advanced_settings)
+        self.combo_java.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 5))
+
+        self.var_use_aikars = ctk.BooleanVar(value=True)
+        self.switch_aikars = ctk.CTkSwitch(self.advanced_frame, text="Aikar's Optimizer", variable=self.var_use_aikars, command=self.save_advanced_settings)
+        self.switch_aikars.grid(row=2, column=0, sticky="w", padx=0, pady=5)
 
     def _build_console_tabs(self):
         self.console_tabs = ctk.CTkTabview(self.main_frame)
@@ -445,6 +464,39 @@ class MCTunnelApp(ctk.CTk):
         else:
             self.lbl_last_backup.configure(text="Last: None")
 
+        # Update Advanced Settings
+        import json
+        from app.services.java_detector import JavaDetector
+        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            self.var_advanced_mode.set(meta.get("advanced_mode", False))
+            self.var_java_path.set(meta.get("java_path", "auto"))
+            self.var_use_aikars.set(meta.get("use_aikars", True))
+        except Exception:
+            self.var_advanced_mode.set(False)
+            self.var_java_path.set("auto")
+            self.var_use_aikars.set(True)
+
+        detector = JavaDetector()
+        javas = detector.detect_all()
+        
+        self._java_label_to_path = {"Auto-Detect": "auto"}
+        self._java_path_to_label = {"auto": "Auto-Detect"}
+        
+        for j in javas:
+            self._java_label_to_path[j.label] = j.path
+            self._java_path_to_label[j.path] = j.label
+
+        options = list(self._java_label_to_path.keys())
+        self.combo_java.configure(values=options)
+        
+        saved_path = meta.get("java_path", "auto") if 'meta' in locals() else "auto"
+        self.var_java_path.set(self._java_path_to_label.get(saved_path, "Auto-Detect"))
+        
+        self.toggle_advanced_view()
+
     def toggle_scheduler_inputs(self):
         state = "normal" if self.var_scheduler_enabled.get() else "disabled"
         self.combo_schedule_mode.configure(state=state)
@@ -452,6 +504,33 @@ class MCTunnelApp(ctk.CTk):
         self.entry_restart_time.configure(state=state)
         self.btn_apply_schedule.configure(state=state)
         self.chk_backup_on_restart.configure(state=state)
+
+    def toggle_advanced_view(self):
+        if self.var_advanced_mode.get():
+            self.advanced_frame.grid(row=4, column=0, sticky="w", padx=15, pady=5)
+        else:
+            self.advanced_frame.grid_forget()
+        self.save_advanced_settings()
+
+    def save_advanced_settings(self, *args):
+        if not self.current_server: return
+        import json
+        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            meta["advanced_mode"] = self.var_advanced_mode.get()
+            
+            # Map label back to path
+            label = self.var_java_path.get()
+            path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
+            meta["java_path"] = path
+            
+            meta["use_aikars"] = self.var_use_aikars.get()
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=4)
+        except Exception as e:
+            self.server_console.log(f"[Error] Failed to save advanced settings: {e}")
 
     def toggle_schedule_mode(self, mode=None):
         if mode is None: mode = self.combo_schedule_mode.get()
