@@ -170,10 +170,6 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_stop.pack(side="left", padx=2)
-        self.btn_edit_properties = ctk.CTkButton(self.controls_frame, text="⚙", command=self.edit_server_properties, state="disabled", width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
-        self.btn_edit_properties.pack(side="left", padx=2)
-        self.btn_open_server_folder = ctk.CTkButton(self.controls_frame, text="📂", command=self.open_mods_folder_action, state="disabled", width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
-        self.btn_open_server_folder.pack(side="left", padx=2)
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
@@ -193,47 +189,77 @@ class MCTunnelApp(ctk.CTk):
         self.btn_reset.pack(side="left", padx=2)
 
     def _build_management_controls(self):
-        scheduler_container = ctk.CTkFrame(self.management_frame, fg_color="transparent")
-        scheduler_container.pack(side="left", padx=20)
+        # Configure management_frame layout
+        self.management_frame.grid_columnconfigure(0, weight=1)
+        self.management_frame.grid_columnconfigure(1, weight=1)
+        self.management_frame.grid_columnconfigure(2, weight=1)
         
-        self.lbl_scheduler = ctk.CTkLabel(scheduler_container, text="Auto-Restart:", font=("Roboto Medium", 12))
-        self.lbl_scheduler.grid(row=0, column=0, padx=5, sticky="w", columnspan=3)
+        card_fg = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK)
+        
+        # 1. Scheduler Card
+        self.scheduler_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
+        self.scheduler_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        self.scheduler_frame.grid_columnconfigure(1, weight=1)
+
+        self.lbl_scheduler = ctk.CTkLabel(self.scheduler_frame, text="Auto-Restart Scheduler", font=AppConfig.FONT_HEADING_SMALL)
+        self.lbl_scheduler.grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        # Controls container
+        sched_controls = ctk.CTkFrame(self.scheduler_frame, fg_color="transparent")
+        sched_controls.grid(row=1, column=0, columnspan=2, sticky="ew", padx=15, pady=5)
+        sched_controls.grid_columnconfigure(1, weight=1)
         
         self.var_scheduler_enabled = ctk.BooleanVar()
-        self.chk_scheduler = ctk.CTkCheckBox(scheduler_container, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, corner_radius=6)
-        self.chk_scheduler.grid(row=1, column=0, padx=5)
+        self.chk_scheduler = ctk.CTkSwitch(sched_controls, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, width=40)
+        self.chk_scheduler.grid(row=0, column=0, sticky="w", pady=5)
         
-        self.combo_schedule_mode = ctk.CTkComboBox(scheduler_container, values=["Interval", "Daily Time"], width=100, command=self.toggle_schedule_mode, corner_radius=8, state="readonly")
-        self.combo_schedule_mode.grid(row=1, column=1, padx=5)
+        self.combo_schedule_mode = ctk.CTkComboBox(sched_controls, values=["Interval", "Daily Time"], width=110, command=self.toggle_schedule_mode, corner_radius=8, state="readonly", height=32)
+        self.combo_schedule_mode.grid(row=0, column=1, sticky="w", padx=(5, 0))
         self.combo_schedule_mode.set("Interval")
+
+        self.entry_scheduler_interval = ctk.CTkEntry(sched_controls, width=60, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8, height=32)
+        self.entry_scheduler_interval.grid(row=0, column=2, sticky="w", padx=(5, 0))
         
-        self.entry_scheduler_interval = ctk.CTkEntry(scheduler_container, width=50, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8)
-        self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
+        self.lbl_interval_unit = ctk.CTkLabel(sched_controls, text="h")
+        self.lbl_interval_unit.grid(row=0, column=3, sticky="w")
         
-        self.lbl_interval_unit = ctk.CTkLabel(scheduler_container, text="h")
-        self.lbl_interval_unit.grid(row=1, column=3, padx=2)
-        
-        self.entry_restart_time = ctk.CTkEntry(scheduler_container, width=60, placeholder_text=AppConfig.DEFAULT_RESTART_TIME, corner_radius=8)
+        self.entry_restart_time = ctk.CTkEntry(sched_controls, width=60, placeholder_text=AppConfig.DEFAULT_RESTART_TIME, corner_radius=8, height=32)
         self.entry_restart_time.bind("<KeyRelease>", self._format_time_input)
         
-        self.btn_apply_schedule = ctk.CTkButton(scheduler_container, text="Apply", width=70, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
-        self.btn_apply_schedule.grid(row=1, column=4, padx=5)
+        self.btn_apply_schedule = ctk.CTkButton(sched_controls, text="Apply", width=60, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
+        self.btn_apply_schedule.grid(row=0, column=4, sticky="e", padx=(10, 0))
 
         self.var_backup_on_restart = ctk.BooleanVar()
-        self.chk_backup_on_restart = ctk.CTkCheckBox(scheduler_container, text="Backup on Restart", variable=self.var_backup_on_restart, corner_radius=6, font=("Roboto", 11))
-        self.chk_backup_on_restart.grid(row=2, column=0, columnspan=5, sticky="w", padx=5, pady=(5,0))
+        self.chk_backup_on_restart = ctk.CTkSwitch(self.scheduler_frame, text="Backup on Restart", variable=self.var_backup_on_restart, font=AppConfig.FONT_BODY)
+        self.chk_backup_on_restart.grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
 
-        self.backup_frame = ctk.CTkFrame(self.management_frame, fg_color="transparent")
-        self.backup_frame.pack(side="right", padx=20, fill="x", expand=True)
-        self.backup_frame.grid_columnconfigure(1, weight=1)
+        # 2. Backup Card
+        self.backup_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
+        self.backup_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+        self.backup_frame.grid_columnconfigure(0, weight=1)
 
-        self.lbl_backup_title = ctk.CTkLabel(self.backup_frame, text="Quick Backup:", font=("Roboto Medium", 12))
-        self.lbl_backup_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=5)
-        self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last: None", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 12))
-        self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=5, pady=(0, 5))
+        self.lbl_backup_title = ctk.CTkLabel(self.backup_frame, text="Quick Backup", font=AppConfig.FONT_HEADING_SMALL)
+        self.lbl_backup_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+
+        self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last: None", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
+        self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=15, pady=0)
         
-        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, width=120, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
-        self.btn_quick_backup.grid(row=1, column=1, sticky="e", padx=5, pady=(0, 5))
+        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
+        self.btn_quick_backup.grid(row=2, column=0, sticky="w", padx=15, pady=(10, 15))
+
+        # 3. Server Settings Card
+        self.settings_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
+        self.settings_frame.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
+        self.settings_frame.grid_columnconfigure(0, weight=1)
+        
+        self.lbl_settings_title = ctk.CTkLabel(self.settings_frame, text="Server Settings", font=AppConfig.FONT_HEADING_SMALL)
+        self.lbl_settings_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+        
+        self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
+        self.btn_edit_properties.grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
+        self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=(5, 15))
 
     def _build_console_tabs(self):
         self.console_tabs = ctk.CTkTabview(self.main_frame)

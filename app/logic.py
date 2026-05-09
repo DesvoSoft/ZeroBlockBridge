@@ -447,6 +447,10 @@ def load_server_properties(server_name):
                 properties[key.strip()] = value.strip()
     return properties
 
+def read_properties(server_name):
+    """Alias/Implementation for reading properties as requested in Fase 3/4."""
+    return load_server_properties(server_name)
+
 def save_server_properties(server_name, new_properties):
     props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
     if not os.path.exists(props_path):

@@ -144,12 +144,8 @@ class ZBBManager:
         target = server_name or self.current_server
         if not target: return 25565
         from app.logic import read_properties
-        from app.constants import SERVERS_DIR
-        path = os.path.join(SERVERS_DIR, target, "server.properties")
-        if os.path.exists(path):
-            props = read_properties(path)
-            return int(props.get("server-port", 25565))
-        return 25565
+        props = read_properties(target)
+        return int(props.get("server-port", 25565))
 
     def create_tunnel_for_server(self, server_name: str):
         """Automatically creates a tunnel for a newly created server (if playit is linked)."""
