@@ -115,7 +115,8 @@ class VersionManager:
             "last_updated": None,
             "Vanilla": ["1.21.1", "1.20.1", "1.19.4"], # Minimal fallback
             "Fabric": ["1.21.1", "1.20.1"],
-            "Forge": ["1.20.1", "1.19.2"]
+            "Forge": ["1.20.1", "1.19.2"],
+            "Paper": ["1.21.1", "1.20.1", "1.19.4"]
         }
 
     def _save_cache(self):
@@ -225,6 +226,17 @@ class VersionManager:
         except Exception as e:
             print(f"[Warning] Failed to fetch Forge versions: {e}")
 
+        # 4. Paper
+        try:
+            resp = requests.get("https://api.papermc.io/v2/projects/paper", timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                versions = data.get("versions", [])
+                versions.reverse() # Reverse to get newest first
+                new_cache["Paper"] = versions[:30]
+        except Exception as e:
+            print(f"[Warning] Failed to fetch Paper versions: {e}")
+
         new_cache["last_updated"] = datetime.datetime.now().isoformat()
         self.cache = new_cache
         self._save_cache()
@@ -248,6 +260,8 @@ class VersionManager:
             return self._get_fabric_installer_url(version)
         elif server_type == "Forge":
             return self._get_forge_installer_url(version)
+        elif server_type == "Paper":
+            return self._get_paper_url(version)
         return None
 
     def _get_vanilla_url(self, version):
@@ -301,4 +315,17 @@ class VersionManager:
                 return f"https://maven.minecraftforge.net/net/minecraftforge/forge/{version}-{forge_ver}/forge-{version}-{forge_ver}-installer.jar"
         except Exception as e:
             print(f"[Error] Failed to resolve Forge installer URL for {version}: {e}")
+        return None
+
+    def _get_paper_url(self, version):
+        try:
+            url = f"https://api.papermc.io/v2/projects/paper/versions/{version}"
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            builds = data.get("builds", [])
+            if builds:
+                latest_build = builds[-1]
+                return f"{url}/builds/{latest_build}/downloads/paper-{version}-{latest_build}.jar"
+        except Exception as e:
+            print(f"[Error] Failed to resolve Paper URL for {version}: {e}")
         return None

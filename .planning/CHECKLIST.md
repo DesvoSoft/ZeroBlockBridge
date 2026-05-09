@@ -190,12 +190,12 @@
 
 
 
-### ECO-01 — Paper server type
+### ECO-01 — Paper server type 🚧
 
-- [ ] Consult spec from ANALY-01 for Paper API endpoints
-- [ ] Add "Paper" to server type enum / selection dropdown in creation wizard
-- [ ] Implement PaperVersionProvider: MC version → latest Paper build resolution
-- [ ] Implement PaperDownloadProvider: download jar + SHA1 verification
+- [x] Consult spec from ANALY-01 for Paper API endpoints
+- [x] Add "Paper" to server type enum / selection dropdown in creation wizard
+- [x] Implement PaperVersionProvider: MC version → latest Paper build resolution
+- [x] Implement PaperDownloadProvider: download jar + SHA1 verification
 - [ ] Test Paper server creation, startup, and playability
 - [ ] Verify Paper-specific features work (e.g. `paper.yml` generation)
 

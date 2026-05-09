@@ -514,6 +514,9 @@ class MCTunnelApp(ctk.CTk):
                 if config["type"] == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
                     success = logic.download_server(name, config["type"], version, dialog.update_progress)
+                elif config["type"] == "Paper":
+                    self.server_console.log(f"[System] Downloading Paper {version}...")
+                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
                 elif config["type"] == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
                     success = logic.install_fabric(name, version, dialog.update_progress)
