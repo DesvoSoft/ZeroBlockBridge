@@ -24,7 +24,8 @@ class PlayitManager:
         self.claim_url_detected = False
         self.current_address = None
         self.is_linked = False
-        self.secret_path = os.path.join(CONFIG_DIR, "playit.toml")
+        self.secret_dir = str(CONFIG_DIR)
+        self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
         
         # API Client and state
         self.api_client = PlayitApiClient()
@@ -135,6 +136,7 @@ class PlayitManager:
 
         if not os.path.exists(CONFIG_DIR):
             os.makedirs(CONFIG_DIR)
+        self.secret_dir = str(CONFIG_DIR)
 
         try:
             domain = self.get_or_create_tunnel(port)
@@ -150,7 +152,7 @@ class PlayitManager:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
 
-            cmd = [str(self.binary_path), "--stdout", "--secret_path", self.secret_path]
+            cmd = [str(self.binary_path), "--stdout", "--secret-path", self.secret_dir]
 
             self.process = subprocess.Popen(
                 cmd,
@@ -163,7 +165,7 @@ class PlayitManager:
                 env=env
             )
             self.running = True
-            self.is_linked = os.path.exists(self.secret_path)
+            self.is_linked = os.path.exists(self.toml_path)
             if not self.current_address:
                 self.status_callback("Starting...", None)
             
@@ -220,8 +222,8 @@ class PlayitManager:
                 text=True
             )
             # Delete secret file to force re-link on next start
-            if os.path.exists(self.secret_path):
-                os.remove(self.secret_path)
+            if os.path.exists(self.toml_path):
+                os.remove(self.toml_path)
                 self.console_callback("[Playit] Deleted playit.toml secret.")
             self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
             self.claim_url_detected = False
@@ -274,16 +276,18 @@ class PlayitManager:
             self.status_callback("Offline", None)
 
     def _parse_line(self, line):
-        # --- Claim URL detection (always active, even before LINKED) ---
-        claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
-        if claim_match:
-            url = claim_match.group(1)
-            if not self.claim_url_detected:
-                self.claim_url_detected = True
-                self.claim_callback(url)
+        # --- Claim URL detection (only if not already linked) ---
+        if not self.is_linked:
+            claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
+            if claim_match:
+                url = claim_match.group(1)
+                if not self.claim_url_detected:
+                    self.claim_url_detected = True
+                    self.claim_callback(url)
 
         # --- Network unreachable — agent will auto-retry via IPv4 ---
         if "NetworkUnreachable" in line or "Os { code: 10051" in line or "Os { code: 101" in line:
+            self.console_callback("[Playit] Network unreachable (IPv6), letting agent fallback to IPv4...")
             return
 
         # --- Account limit error ---
@@ -297,8 +301,10 @@ class PlayitManager:
         if "agent registered" in line and not self.is_linked:
             self.is_linked = True
             self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
-            # Reload secret into API client now that TOML exists
             self.api_client.load_secret_key()
+            # Refresh DNS detection in case address was assigned while linking
+            if not self.current_address:
+                self.status_callback("Online", "checking...")
 
         # --- DNS / address detection (only after LINKED) ---
         if not self.is_linked:
@@ -325,4 +331,5 @@ class PlayitManager:
 
         # Fallback: "tunnel running" but no explicit address yet
         if "tunnel running" in line and not self.current_address:
-            self.status_callback("Online", "Check Console")
+            self.status_callback("Online", "checking...")
+            self.console_callback("[Playit] Tunnel running, waiting for DNS assignment...")

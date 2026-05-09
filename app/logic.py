@@ -11,7 +11,7 @@ import datetime
 import time
 import zipfile
 
-from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR
+from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR, VANILLA_MANIFEST_URL
 from app.server_events import ServerEvent, ServerEventEmitter
 from app.version_manager import VersionManager
 
@@ -90,42 +90,59 @@ def create_server_directory(server_name):
     return path
 
 def download_server(server_name, server_type, version, progress_callback=None):
-    """Downloads the server jar."""
+    """Downloads the server jar with SHA1 verification (PROV-04)."""
     vm = VersionManager()
     url = vm.get_download_url(server_type, version)
-    
+
     if not url:
         raise ValueError(f"URL not found for {server_type} {version}")
 
     server_path = create_server_directory(server_name)
     jar_path = os.path.join(server_path, "server.jar")
 
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded = 0
+    # Try to get expected SHA1 from Vanilla manifest
+    expected_sha1 = None
+    if server_type == "Vanilla":
+        try:
+            resp = requests.get(VANILLA_MANIFEST_URL, timeout=10)
+            if resp.status_code == 200:
+                manifest = resp.json()
+                for v in manifest.get("versions", []):
+                    if v["id"] == version:
+                        v_resp = requests.get(v["url"], timeout=10)
+                        if v_resp.status_code == 200:
+                            v_data = v_resp.json()
+                            expected_sha1 = v_data.get("downloads", {}).get("server", {}).get("sha1")
+                        break
+        except Exception as e:
+            logger.warning("Failed to fetch SHA1 for validation: %s", e)
 
-        with open(jar_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress_callback and total_size > 0:
-                        progress_callback(downloaded / total_size)
-        
-        if progress_callback:
-            progress_callback(1.0)
+    if expected_sha1:
+        from app.services.sha1_validator import download_with_verification
+        success, path, error = download_with_verification(
+            url, jar_path,
+            expected_sha1=expected_sha1,
+            progress_callback=progress_callback,
+            max_retries=3,
+        )
+        if not success:
+            logger.error("Download with SHA1 verification failed: %s", error)
+            return None
+    else:
+        # Fallback to simple download with retry on network errors
+        from app.services.sha1_validator import download_with_verification
+        success, path, error = download_with_verification(
+            url, jar_path,
+            expected_sha1=None,
+            progress_callback=progress_callback,
+            max_retries=3,
+        )
+        if not success:
+            logger.error("Download failed after retries: %s", error)
+            return None
 
-        normalize_server_jar(server_path)
-
-        return jar_path
-    except Exception as e:
-        logger.error("Download failed: %s", e)
-        if os.path.exists(jar_path):
-            os.remove(jar_path)
-        return None
+    normalize_server_jar(server_path)
+    return jar_path
 
 def accept_eula(server_name):
     """Writes eula.txt=true."""

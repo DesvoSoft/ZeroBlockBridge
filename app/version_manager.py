@@ -51,10 +51,11 @@ class VersionManager:
     def __init__(self):
         if self._initialized:
             return
-        self._initialized = True
+        # Set cache FIRST so concurrent threads never see _initialized=True without cache
         self.cache = self._load_cache()
         self.refresh_thread = None
         self.callbacks = []
+        self._initialized = True
 
     def add_callback(self, callback):
         """

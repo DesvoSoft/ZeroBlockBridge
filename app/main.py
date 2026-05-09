@@ -329,24 +329,7 @@ class MCTunnelApp(ctk.CTk):
         self.check_java_startup()
         self.load_servers()
         self.zbb_manager.bootstrap()
-        self._pre_warm_version_cache()
-
-    def _pre_warm_version_cache(self):
-        """REND-01: Pre-warm version cache on app startup.
-        
-        Triggers VersionManager background refresh of Mojang/Fabric/Forge/Paper/Purpur
-        manifests so version data is ready when the user opens the wizard.
-        Runs in a daemon thread; non-blocking.
-        """
-        def _warm():
-            from app.version_manager import VersionManager
-            vm = VersionManager()
-            # Trigger lazy refresh in background
-            vm.get_versions("Vanilla")
-            logger.info("[PreWarm] Version cache refresh initiated in background.")
-        threading.Thread(target=_warm, daemon=True).start()
-
-
+        # Pre-warm now handled by ZBBManager.bootstrap() → core.py
 
     def send_server_command(self, event=None):
         if not self.zbb_manager.is_running():
@@ -814,7 +797,11 @@ class MCTunnelApp(ctk.CTk):
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
-            # Always show DNS label — even during pending/resolving state
+            # REND-02: DNS display state machine
+            has_claim = bool(self.claim_url) if hasattr(self, 'claim_url') else False
+            resolving = status in ("Starting...", "Online") and not dns and not ip
+            waiting_claim = has_claim and not dns and not self.zbb_manager.playit_manager.is_linked if hasattr(self, 'zbb_manager') else False
+            
             if dns:
                 self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
                 self.btn_copy_ip.configure(state="normal")
@@ -823,8 +810,12 @@ class MCTunnelApp(ctk.CTk):
                 self.lbl_dns_display.configure(text=ip, text_color="#3b82f6")
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif status in ("Starting...", "Online"):
-                self.lbl_dns_display.configure(text="Asignando dirección...", text_color="#f97316")
+            elif waiting_claim:
+                self.lbl_dns_display.configure(text="Vínculo Requerido", text_color="#f97316")
+                self.btn_copy_ip.configure(state="disabled")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            elif resolving:
+                self.lbl_dns_display.configure(text="Asignando dirección...", text_color="#3b82f6")
                 self.btn_copy_ip.configure(state="disabled")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             else:
@@ -878,14 +869,15 @@ class MCTunnelApp(ctk.CTk):
         ip_text = self.lbl_public_ip.cget("text")
         dns_text = self.lbl_dns_display.cget("text")
         copy_value = None
-        if dns_text and dns_text != "Asignando dirección...":
+        blocked_states = ("Asignando dirección...", "Vínculo Requerido")
+        if dns_text and dns_text not in blocked_states:
             copy_value = dns_text
         elif ip_text and "N/A" not in ip_text:
             copy_value = ip_text.replace("Public IP: ", "")
         if copy_value:
             self.clipboard_clear()
             self.clipboard_append(copy_value)
-            Toast.show(self, f"Address copied: {copy_value}", toast_type="info", duration=2500)
+            Toast.show(self, f"¡IP copiada al portapapeles!: {copy_value}", toast_type="info", duration=2500)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:
