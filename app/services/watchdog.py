@@ -65,10 +65,10 @@ class Watchdog:
 
     def listen(self):
         self._listening = True
-        self._events.on(ServerEvent.STOPPED, self._on_stopped)
-        self._events.on(ServerEvent.READY, self._on_ready)
-        self._events.on(ServerEvent.STARTING, self._on_starting)
-        self._events.on(ServerEvent.ZOMBIE_DETECTED, self._on_zombie)
+        self._events.subscribe(ServerEvent.STOPPED, self._on_stopped)
+        self._events.subscribe(ServerEvent.READY, self._on_ready)
+        self._events.subscribe(ServerEvent.STARTING, self._on_starting)
+        self._events.subscribe(ServerEvent.ZOMBIE_DETECTED, self._on_zombie)
 
     def _on_starting(self, data=None):
         self._crash_reason = None

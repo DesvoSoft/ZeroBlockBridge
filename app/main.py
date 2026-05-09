@@ -456,13 +456,13 @@ class MCTunnelApp(ctk.CTk):
     def toggle_schedule_mode(self, mode=None):
         if mode is None: mode = self.combo_schedule_mode.get()
         if mode == "Interval":
-            self.entry_scheduler_interval.grid(row=1, column=2, padx=2)
-            self.lbl_interval_unit.grid(row=1, column=3, padx=2)
+            self.entry_scheduler_interval.grid(row=0, column=2, sticky="w", padx=(5, 0))
+            self.lbl_interval_unit.grid(row=0, column=3, sticky="w")
             self.entry_restart_time.grid_forget()
         else:
             self.entry_scheduler_interval.grid_forget()
             self.lbl_interval_unit.grid_forget()
-            self.entry_restart_time.grid(row=1, column=2, padx=2, columnspan=2)
+            self.entry_restart_time.grid(row=0, column=2, sticky="w", padx=(5, 0), columnspan=2)
 
     def _format_time_input(self, event=None):
         """Auto-format time entry to HH:MM. Strips non-numeric chars

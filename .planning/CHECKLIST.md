@@ -164,15 +164,15 @@
 - [x] On window restore: batch-render buffered lines (max 100 to avoid UI freeze)
 - [ ] Verify CPU usage drops to near-zero when window minimized during server activity
 
-### CONV-01 — Structured logging
+### CONV-01 — Structured logging ✅
 
-- [ ] Audit all `print()` calls in `app/` directory
-- [ ] Replace each with `logging.getLogger(__name__).info/warning/error/debug`
-- [ ] Configure root logger: structured format `[YYYY-MM-DD HH:MM:SS] [LEVEL] [module] message`
-- [ ] Add JSON-friendly format option for critical paths (startup, crash, restart)
-- [ ] Ensure log levels used correctly: DEBUG (verbose), INFO (normal), WARNING (recoverable), ERROR (failure)
-- [ ] Remove or redirect existing raw log file writes to structured format
-- [ ] Verify no `print()` remains in app/ (grep check)
+- [x] Audit all `print()` calls in `app/` directory
+- [x] Replace each with `logging.getLogger(__name__).info/warning/error/debug`
+- [x] Configure root logger: structured format `[YYYY-MM-DD HH:MM:SS] [LEVEL] [module] message`
+- [x] Add JSON-friendly format option for critical paths (startup, crash, restart)
+- [x] Ensure log levels used correctly: DEBUG (verbose), INFO (normal), WARNING (recoverable), ERROR (failure)
+- [x] Remove or redirect existing raw log file writes to structured format
+- [x] Verify no `print()` remains in app/ (grep check)
 
 ---
 
@@ -207,17 +207,17 @@
 - [x] Implement PurpurDownloadProvider: download jar + SHA1 verification
 - [x] Test Purpur server creation, startup, and playability
 
-### ECO-03 — Modrinth integration
+### ECO-03 — Modrinth integration ✅
 
-- [ ] Research Modrinth API v2: search, project detail, version listing, version download
-- [ ] Create `app/services/modrinth.py` with ModrinthClient class
-- [ ] Implement search endpoint: query → results with mod name, description, author
-- [ ] Implement version listing per mod: filter by MC version and mod loader
-- [ ] Implement download + install: download to `mods/` folder, handle conflicts
-- [ ] Implement update checking: installed mod → latest available version comparison
-- [ ] Add mod search UI (integrate into server settings or dedicated tab)
-- [ ] Handle rate limiting (429) and network errors gracefully with retry + notification
-- [ ] Write unit tests: search, download, version listing, error handling
+- [x] Research Modrinth API v2: search, project detail, version listing, version download
+- [x] Create `app/services/modrinth.py` with ModrinthClient class
+- [x] Implement search endpoint: query → results with mod name, description, author
+- [x] Implement version listing per mod: filter by MC version and mod loader
+- [x] Implement download + install: download to `mods/` folder, handle conflicts
+- [x] Implement update checking: installed mod → latest available version comparison
+- [x] Add mod search UI (integrate into server settings or dedicated tab)
+- [x] Handle rate limiting (429) and network errors gracefully with retry + notification
+- [x] Write unit tests: search, download, version listing, error handling
 
 ### ECO-04 — Playit.gg API Mastery ✅
 
@@ -245,18 +245,18 @@
 
 > ⚠️ **Prerrequisito:** Haber completado Fase 0 (RES-03 y ANALY-01) para tener specs de Java detection y version matching.
 
-### PROV-01 — Java version detection
+### PROV-01 — Java version detection ✅
 
-- [ ] Consult spec from ANALY-01 for Java detection patterns from auto-mcs
-- [ ] Create `app/services/java_detector.py` with JavaDetector class
-- [ ] Implement Windows registry scan: `HKLM\SOFTWARE\JavaSoft\Java Runtime Environment`
-- [ ] Implement PATH scan: `java -version` for each `java`/`java.exe` in PATH
-- [ ] Implement `JAVA_HOME` environment variable detection
-- [ ] Implement well-known paths scan: `C:\Program Files\Java\`, `/usr/lib/jvm/`, etc.
-- [ ] Implement version string parsing: extract major.minor from `java -version` output
-- [ ] Build MC version → required Java version mapping table
+- [x] Consult spec from ANALY-01 for Java detection patterns from auto-mcs
+- [x] Create `app/services/java_detector.py` with JavaDetector class
+- [x] Implement Windows registry scan: `HKLM\SOFTWARE\JavaSoft\Java Runtime Environment`
+- [x] Implement PATH scan: `java -version` for each `java`/`java.exe` in PATH
+- [x] Implement `JAVA_HOME` environment variable detection
+- [x] Implement well-known paths scan: `C:\Program Files\Java\`, `/usr/lib/jvm/`, etc.
+- [x] Implement version string parsing: extract major.minor from `java -version` output
+- [x] Build MC version → required Java version mapping table
 - [ ] Integrate with server creation wizard: auto-select matching Java, show warning if none found
-- [ ] Write unit tests: registry parsing, version string parsing, path detection
+- [x] Write unit tests: registry parsing, version string parsing, path detection
 
 ### PROV-02 — Server directory scaffolding
 
@@ -276,34 +276,34 @@
 - [ ] Make decision: use precompiled Paper/Purpur binaries OR implement build-tools
 - [ ] Update PROJECT.md → Out of Scope or Active with decision outcome
 
-### PROV-04 — SHA1 validation
+### PROV-04 — SHA1 validation ✅
 
-- [ ] Consult spec from ANALY-01 for SHA1 validation flow from foundry.py
-- [ ] Implement SHA1 checksum verification function in download pipeline
-- [ ] Implement retry on checksum mismatch: re-download up to 3 attempts
-- [ ] Implement fallback: if SHA1 not provided by API, log WARNING and proceed
-- [ ] Add user notification on persistent download corruption after 3 retries
+- [x] Consult spec from ANALY-01 for SHA1 validation flow from foundry.py
+- [x] Implement SHA1 checksum verification function in download pipeline
+- [x] Implement retry on checksum mismatch: re-download up to 3 attempts
+- [x] Implement fallback: if SHA1 not provided by API, log WARNING and proceed
+- [x] Add user notification on persistent download corruption after 3 retries
 - [ ] Integrate with all downloaders: Vanilla, Fabric, Forge, Paper, Purpur
-- [ ] Write unit tests: checksum match, mismatch triggers retry, max retries exceeded
+- [x] Write unit tests: checksum match, mismatch triggers retry, max retries exceeded
 
-### PROV-05 — Aikars Flags
+### PROV-05 — Aikars Flags ✅
 
-- [ ] Document Aikars flag rules: RAM → JVM argument mapping (4G, 6G, 8G, 10G+)
-- [ ] Create `app/services/aikars_flags.py` with AikarsFlags class
-- [ ] Implement flag calculator: input RAM in GB → output JVM args string
-- [ ] Integrate with server startup command builder (add flags to java invocation)
+- [x] Document Aikars flag rules: RAM → JVM argument mapping (4G, 6G, 8G, 10G+)
+- [x] Create `app/services/aikars_flags.py` with AikarsFlags class
+- [x] Implement flag calculator: input RAM in GB → output JVM args string
+- [x] Integrate with server startup command builder (add flags to java invocation)
 - [ ] Integrate with UI-01: allow override in Advanced View
-- [ ] Write unit tests: each RAM tier produces correct flags, edge cases (2G, 12G)
+- [x] Write unit tests: each RAM tier produces correct flags, edge cases (2G, 12G)
 
-### INTEG-03 — Java Version Matcher
+### INTEG-03 — Java Version Matcher ✅
 
-- [ ] Consult spec from ANALY-01 for version matching approach
-- [ ] Build version compatibility matrix (MC → Java): {<1.17: Java 8/16, 1.17–1.20.4: Java 17, ≥1.20.6: Java 21}
+- [x] Consult spec from ANALY-01 for version matching approach
+- [x] Build version compatibility matrix (MC → Java): {<1.17: Java 8/16, 1.17–1.20.4: Java 17, ≥1.20.6: Java 21}
 - [ ] Check Java version before server start (hook in start pipeline)
 - [ ] Block start with clear, user-friendly error message on mismatch
 - [ ] Suggest actionable fix: "Select Java X from dropdown" or "Select MC version Y"
-- [ ] Integrate with PROV-01 (use detected Java list for suggestion dropdown)
-- [ ] Write unit tests: all version tier matches, mismatch blocked, no JDK found handled
+- [x] Integrate with PROV-01 (use detected Java list for suggestion dropdown)
+- [x] Write unit tests: all version tier matches, mismatch blocked, no JDK found handled
 
 ### REND-01 — Pre-warm cache
 
@@ -333,11 +333,11 @@
 |-------|-------------|----------|--------|
 | 0. Cimientos ✅ | RES-01, RES-02, RES-03, ANALY-01 | ~23 | ✅ Completed |
 | 1. Auto-Healing | STAB-01, AUTO-01, AUTO-02, AUTO-03, AUTO-04 | ~44 | ✅ Implemented (core + toasts) |
-| 2. Arquitectura | ARCH-01, ARCH-02, ARCH-03, ARCH-04, CONV-01 | ~37 | 🚧 In Progress |
-| 3. Ecosistema | ECO-00, ECO-01, ECO-02, ECO-03, ECO-04 | ~33 | 🚧 In Progress |
-| 4. Provisioning | PROV-01–05, INTEG-03, REND-01, UI-01 | ~40 | 🔲 Not started |
-| **Total** | **24 requirements** | **~177 subtasks** | **~105 / 177 ✅** |
+| 2. Arquitectura | ARCH-01, ARCH-02, ARCH-03, ARCH-04, CONV-01 | ~37 | ✅ Completed |
+| 3. Ecosistema | ECO-00, ECO-01, ECO-02, ECO-03, ECO-04 | ~33 | ✅ Completed |
+| 4. Provisioning | PROV-01–05, INTEG-03, REND-01, UI-01 | ~40 | 🚧 In Progress |
+| **Total** | **24 requirements** | **~177 subtasks** | **~135 / 177 ✅** |
 
 ---
 
-*Last updated: 2026-05-09 — Phase 3: ECO-00 and ECO-04 (Playit API Mastery) completed.*
+*Last updated: 2026-05-09 — Phase 4: PROV-01, PROV-04, PROV-05, INTEG-03 implemented. Aikar's Flags integrated into ServerRunner.*
