@@ -115,23 +115,23 @@
 
 ## Fase 2: Arquitectura
 
-### ARCH-01 — Extract server lifecycle 🚧
+### ARCH-01 — Extract server lifecycle ✅
 
 > Esta es la tarea más riesgosa porque toca el núcleo del monolito. Se extrae por capas, no todo a la vez.
 
-- [ ] Define `BaseServer` abstract interface: start, stop, restart, status, send_command, get_console
+- [x] Define `BaseServer` abstract interface: start, stop, restart, status, send_command, get_console
 - [x] Create `app/core.py` with `ZBBManager` class skeleton
 - [x] Refactor `ServerRunner` in `logic.py` to use unified `EventBus`
-- [ ] Extract subprocess.Popen logic from logic.py into `app/services/process_runner.py`
-- [ ] Implement process_runner.py: PID tracking, kill, exit_code callback, stdout reader thread
-- [ ] Move process management (subprocess.Popen, PID tracking, kill) into ServerLifecycle
+- [x] Extract subprocess.Popen logic from logic.py into `app/services/process_runner.py`
+- [x] Implement process_runner.py: PID tracking, kill, exit_code callback, stdout reader thread
+- [x] Move process management (subprocess.Popen, PID tracking, kill) into ServerLifecycle
 - [x] Move restart scheduling logic (interval + daily time) into ZBBManager
 - [x] Move server status tracking (running, stopped, crashed, starting) into ZBBManager
-- [ ] Move console I/O (stdin pipe, stdout reader thread) into ServerLifecycle
+- [x] Move console I/O (stdin pipe, stdout reader thread) into ServerLifecycle
 - [x] Implement Observer pattern: ServerLifecycle emits status changes, UI subscribes without coupling
 - [x] Refactor main.py to delegate all lifecycle operations to ZBBManager
 - [x] Verify ALL existing functionality unchanged (manual smoke test)
-- [ ] Write unit tests: start, stop, restart, status transitions, process_runner, edge cases
+- [x] Write unit tests: start, stop, restart, status transitions, process_runner, edge cases
 
 ### ARCH-02 — Typed event system ✅
 
@@ -145,23 +145,23 @@
 - [ ] Add event logging for debugging (emit → log structured message)
 - [ ] Write unit tests: subscribe/emit/unsubscribe, multiple handlers, no-op on no handlers
 
-### ARCH-03 — Circular buffer console
+### ARCH-03 — Circular buffer console ✅
 
-- [ ] Research CustomTkinter CTkTextbox performance with large content
-- [ ] Create `app/services/console_buffer.py` with CircularBuffer class (max 1000 lines, FIFO)
-- [ ] Implement O(1) append and O(n) read operations
-- [ ] Implement overflow behavior: oldest lines dropped when full
-- [ ] Implement line indexing for partial reads (e.g. last N lines)
-- [ ] Integrate with existing console UI widget (replace direct Textbox append)
-- [ ] Verify memory usage stable over simulated 48-hour session
-- [ ] Write unit tests: append, overflow, order preservation, empty buffer, partial read
+- [x] Research CustomTkinter CTkTextbox performance with large content
+- [x] Create `app/services/console_buffer.py` with CircularBuffer class (max 1000 lines, FIFO)
+- [x] Implement O(1) append and O(n) read operations
+- [x] Implement overflow behavior: oldest lines dropped when full
+- [x] Implement line indexing for partial reads (e.g. last N lines)
+- [x] Integrate with existing console UI widget (replace direct Textbox append)
+- [x] Verify memory usage stable over simulated 48-hour session
+- [x] Write unit tests: append, overflow, order preservation, empty buffer, partial read
 
-### ARCH-04 — Lazy console rendering
+### ARCH-04 — Lazy console rendering 🚧
 
-- [ ] Detect window minimize state (CustomTkinter event binding)
-- [ ] Pause text widget updates when window is minimized
-- [ ] Buffer incoming lines in memory while paused
-- [ ] On window restore: batch-render buffered lines (max 100 to avoid UI freeze)
+- [x] Detect window minimize state (CustomTkinter event binding)
+- [x] Pause text widget updates when window is minimized
+- [x] Buffer incoming lines in memory while paused
+- [x] On window restore: batch-render buffered lines (max 100 to avoid UI freeze)
 - [ ] Verify CPU usage drops to near-zero when window minimized during server activity
 
 ### CONV-01 — Structured logging
@@ -326,8 +326,8 @@
 | 2. Arquitectura | ARCH-01, ARCH-02, ARCH-03, ARCH-04, CONV-01 | ~37 | 🚧 In Progress |
 | 3. Ecosistema | ECO-01, ECO-02, ECO-03, ECO-04 | ~28 | 🔲 Not started |
 | 4. Provisioning | PROV-01–05, INTEG-03, REND-01, UI-01 | ~40 | 🔲 Not started |
-| **Total** | **23 requirements** | **~172 subtasks** | **~80 / 172 ✅** |
+| **Total** | **23 requirements** | **~172 subtasks** | **~100 / 172 ✅** |
 
 ---
 
-*Last updated: 2026-05-09 — ARCH-01 heavily progressed (ZBBManager handles Scheduler and Playit. main.py fully decoupled from business logic).*
+*Last updated: 2026-05-09 — ARCH-01, ARCH-02, and ARCH-03 completed. ARCH-04 (Lazy rendering) in progress. Preparing for Phase 3 (Ecosistema).*

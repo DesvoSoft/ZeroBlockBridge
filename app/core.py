@@ -11,6 +11,7 @@ from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
 from app.playit_manager import PlayitManager
 from app.scheduler_service import SchedulerService
+from app.services.console_buffer import CircularBuffer
 from app.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,10 @@ class ZBBManager:
         self._scheduler_running = False
         self.restart_warnings_sent = set()
         
+        # Buffers
+        self.console_buffer = CircularBuffer(max_size=1000)
+        self.tunnel_buffer = CircularBuffer(max_size=1000)
+        
         # External Services
         self.playit_manager = PlayitManager(
             console_callback=lambda txt: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, txt),
@@ -45,6 +50,8 @@ class ZBBManager:
         
         # Internal Subscriptions
         self.events.subscribe(ServerEvent.REQUEST_RESTART, self._handle_restart_request)
+        self.events.subscribe(ServerEvent.CONSOLE_LINE, lambda line: self.console_buffer.append(line))
+        self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
 
     def _on_playit_status(self, status, ip):
         display_ip = ip

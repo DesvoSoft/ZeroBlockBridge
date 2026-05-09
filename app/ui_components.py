@@ -74,7 +74,7 @@ class ToolTip:
             self.tooltip = None
 
 class ConsoleWidget(ctk.CTkTextbox):
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, max_lines=1000, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(
             state="disabled", 
@@ -84,10 +84,56 @@ class ConsoleWidget(ctk.CTkTextbox):
             border_color=(AppConfig.COLOR_BORDER_LIGHT, "gray20"),
             wrap="word"
         )
+        self.max_lines = max_lines
+        self._buffer = []
+        self._is_paused = False
         
+        # Bind visibility events for lazy rendering (ARCH-04)
+        top = self.winfo_toplevel()
+        top.bind("<Unmap>", self._on_unmap, add="+")
+        top.bind("<Map>", self._on_map, add="+")
+
+    def _on_unmap(self, event):
+        if event.widget == self.winfo_toplevel():
+            self._is_paused = True
+
+    def _on_map(self, event):
+        if event.widget == self.winfo_toplevel():
+            self._is_paused = False
+            self._flush_buffer()
+
+    def _flush_buffer(self):
+        if not self._buffer: return
+        self.configure(state="normal")
+        
+        # Batch insert up to the last 100 lines to avoid UI freeze if huge backlog
+        lines_to_render = self._buffer[-100:]
+        text_chunk = "".join("> " + line + "\n" for line in lines_to_render)
+        self.insert("end", text_chunk)
+        self._buffer.clear()
+        
+        self._enforce_limit()
+        self.see("end")
+        self.configure(state="disabled")
+
+    def _enforce_limit(self):
+        lines = int(self.index("end-1c").split(".")[0])
+        if lines > self.max_lines:
+            # Delete from line 1.0 to (lines - max_lines + 1).0
+            delete_to = float(lines - self.max_lines + 1)
+            self.delete("1.0", str(delete_to))
+
     def log(self, message):
+        if self._is_paused:
+            self._buffer.append(message)
+            # Cap the memory buffer as well
+            if len(self._buffer) > self.max_lines:
+                self._buffer = self._buffer[-self.max_lines:]
+            return
+
         self.configure(state="normal")
         self.insert("end", "> " + message + "\n")
+        self._enforce_limit()
         self.see("end")
         self.configure(state="disabled")
 
