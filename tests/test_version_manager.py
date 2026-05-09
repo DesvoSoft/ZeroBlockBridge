@@ -53,14 +53,19 @@ def test_refresh_versions(mock_get, vm):
     mock_forge = MagicMock()
     mock_forge.status_code = 200
     mock_forge.json.return_value = {"promos": {"1.99.9-recommended": "1.0.0"}}
+
+    mock_paper = MagicMock()
+    mock_paper.status_code = 200
+    mock_paper.json.return_value = {"versions": ["1.99.9"]}
     
-    mock_get.side_effect = [mock_vanilla, mock_fabric, mock_forge]
+    mock_get.side_effect = [mock_vanilla, mock_fabric, mock_forge, mock_paper]
     
     vm.refresh_versions()
     
     assert "1.99.9" in vm.cache["Vanilla"]
     assert "0.99.9" in vm.cache["Fabric"]
     assert "1.99.9" in vm.cache["Forge"]
+    assert "1.99.9" in vm.cache["Paper"]
 
 @patch("requests.get")
 def test_get_download_url_vanilla(mock_get, vm):
@@ -95,3 +100,16 @@ def test_get_download_url_forge(vm):
         url = vm.get_download_url("Forge", "1.20.1")
         assert "47.2.0" in url
         assert "installer.jar" in url
+
+@patch("requests.get")
+def test_get_download_url_paper(mock_get, vm):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "project_id": "paper",
+        "version": "1.20.1",
+        "builds": [100, 101, 102]
+    }
+    mock_get.return_value = mock_resp
+    
+    url = vm.get_download_url("Paper", "1.20.1")
+    assert "builds/102/downloads/paper-1.20.1-102.jar" in url

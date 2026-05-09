@@ -3,6 +3,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from app.services.watchdog import Watchdog, _make_crash_payload
+from app.server_events import ServerEvent
 
 
 class FakeRunner:
@@ -18,12 +19,18 @@ class FakeRunner:
 class FakeEmitter:
     def __init__(self):
         self.events = []
+        self._listeners = {}
 
-    def on(self, event, callback):
-        pass
+    def subscribe(self, event, callback):
+        if event not in self._listeners:
+            self._listeners[event] = []
+        self._listeners[event].append(callback)
 
     def emit(self, event, data=None):
         self.events.append((event, data))
+        for cb in self._listeners.get(event, []):
+            try: cb(data)
+            except: pass
 
 
 class TestWatchdogCrashClassification:
@@ -32,9 +39,13 @@ class TestWatchdogCrashClassification:
         self.notifications = []
         runner = FakeRunner()
         emitter = FakeEmitter()
+        
+        # Subscribe to simulate the old callbacks
+        emitter.subscribe(ServerEvent.CONSOLE_LINE, lambda msg: self.log.append(msg))
+        emitter.subscribe(ServerEvent.NOTIFICATION, lambda d: self.notifications.append((d.get("msg"), d.get("color"))))
+        
         w = Watchdog(
-            runner, lambda msg: self.log.append(msg), emitter,
-            notification_callback=lambda msg, color: self.notifications.append((msg, color)),
+            runner, emitter,
             max_retries=3, backoff_base=1, min_uptime_for_retry=min_uptime,
         )
         w._listening = True
@@ -105,8 +116,11 @@ class TestWatchdogRetryLogic:
         self.log = []
         runner = FakeRunner()
         emitter = FakeEmitter()
+        
+        emitter.subscribe(ServerEvent.CONSOLE_LINE, lambda msg: self.log.append(msg))
+        
         w = Watchdog(
-            runner, lambda msg: self.log.append(msg), emitter,
+            runner, emitter,
             max_retries=max_retries, backoff_base=1,
         )
         w._listening = True
