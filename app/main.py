@@ -542,6 +542,10 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log("[Error] A server is already running.")
             return
         
+        # Stop old services before creating new ones
+        if self._heartbeat: self._heartbeat.stop()
+        if self._watchdog: self._watchdog.stop()
+        
         config = load_config()
         ram = config.get("ram_allocation", "2G")
         
@@ -570,13 +574,11 @@ class MCTunnelApp(ctk.CTk):
         )
         self._watchdog.listen()
         
-        # Toast notifications for other events
+        # Toast notification for lag spikes
         self.server_runner.events.on(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
             Toast.show(self, "Lag spike threshold exceeded", color="#f97316"),
         )))
-        self.server_runner.events.on(ServerEvent.CRASHED, lambda d: None)
-        self.server_runner.events.on(ServerEvent.ZOMBIE_DETECTED, lambda d: None)
         
         self.server_runner.start()
         

@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 from app.server_events import ServerEvent
@@ -24,13 +25,22 @@ JVM_ERROR_PATTERNS = [
     "java.lang.NoClassDefFoundError",
 ]
 
-BOOT_CRASH_THRESHOLD = 5.0
+
+def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence_seconds=None, context=None):
+    return {
+        "reason": reason,
+        "exit_code": exit_code,
+        "uptime": uptime,
+        "retry": retry,
+        "silence_seconds": silence_seconds,
+        "context": context,
+    }
 
 
 class Watchdog:
     def __init__(self, server_runner, console_callback, event_emitter,
                  notification_callback=None, max_retries=3,
-                 backoff_base=5, stability_window=600, min_uptime_for_retry=10):
+                 backoff_base=5, stability_window=600, min_uptime_for_retry=5):
         self._runner = server_runner
         self._console = console_callback
         self._events = event_emitter
@@ -43,6 +53,7 @@ class Watchdog:
         self._stable_since = 0.0
         self._listening = False
         self._crash_reason = None
+        self._restart_thread = None
 
     @property
     def is_retry_exhausted(self):
@@ -83,16 +94,15 @@ class Watchdog:
             return
 
         self._classify_crash(exit_code, uptime, stderr)
+        next_retry = self.retry_count + 1
         self._console(
             f"[Watchdog] Server crashed (exit {exit_code}, {self._crash_reason}). "
-            f"Retry {self.retry_count + 1}/{self.max_retries}"
+            f"Retry {next_retry}/{self.max_retries}"
         )
-        self._events.emit(ServerEvent.CRASHED, {
-            "exit_code": exit_code,
-            "reason": self._crash_reason,
-            "uptime": uptime,
-            "retry": self.retry_count + 1,
-        })
+        self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
+            reason=self._crash_reason, exit_code=exit_code,
+            uptime=uptime, retry=next_retry,
+        ))
         if self._notify:
             self._notify(
                 f"Server crashed: {self._crash_reason}",
@@ -105,11 +115,11 @@ class Watchdog:
         if not self._listening:
             return
         silence = (data or {}).get("silence_seconds", 0)
+        next_retry = self.retry_count + 1
         self._console(f"[Watchdog] Zombie server detected (silent {silence:.0f}s). Restarting...")
-        self._events.emit(ServerEvent.CRASHED, {
-            "reason": "zombie",
-            "silence_seconds": silence,
-        })
+        self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
+            reason="zombie", silence_seconds=silence, retry=next_retry, context="zombie",
+        ))
         if self._notify:
             self._notify("Server unresponsive (zombie). Restarting...", color="orange")
         self._trigger_restart("zombie")
@@ -125,7 +135,15 @@ class Watchdog:
         self.retry_count += 1
         backoff = self._compute_backoff()
         self._console(f"[Watchdog] Auto-restart in {backoff:.0f}s (attempt {self.retry_count}/{self.max_retries})...")
+        self._restart_thread = threading.Thread(
+            target=self._do_restart, args=(context, backoff), daemon=True
+        )
+        self._restart_thread.start()
+
+    def _do_restart(self, context, backoff):
         time.sleep(backoff)
+        if not self._listening or not self._runner or self._runner.running:
+            return
         self._runner.start()
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
         if self._notify:

@@ -199,6 +199,7 @@ class ServerRunner:
             
         self.player_count = 0
         self.events = ServerEventEmitter()
+        self._stderr_done = threading.Event()
 
     def _apply_pending_settings(self):
         metadata_path = os.path.join(SERVERS_DIR, self.server_name, "metadata.json")
@@ -368,6 +369,7 @@ class ServerRunner:
             if "Done (" in line and "For help, type" in line:
                 self.events.emit(ServerEvent.READY)
         self.process.wait()
+        self._stderr_done.wait(timeout=2)
         self.exit_code = self.process.returncode
         stderr_snapshot = self.get_stderr_snapshot()
         uptime = time.time() - start_time
@@ -381,7 +383,9 @@ class ServerRunner:
         })
 
     def _read_stderr(self):
+        self._stderr_done.clear()
         if not self.process or not self.process.stderr:
+            self._stderr_done.set()
             return
         for line in self.process.stderr:
             stripped = line.strip()
@@ -390,6 +394,7 @@ class ServerRunner:
                 if len(self._stderr_buffer) > 100:
                     self._stderr_buffer.pop(0)
                 self.console_callback(f"[JVM] {stripped}")
+        self._stderr_done.set()
 
     def get_stderr_snapshot(self):
         return "\n".join(self._stderr_buffer[-50:])

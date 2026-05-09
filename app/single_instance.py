@@ -5,10 +5,10 @@ from pathlib import Path
 
 
 class SingleInstanceLock:
-    """Single-instance lock using a PID lockfile.
+    """Single-instance lock using atomic PID lockfile creation.
 
-    On Windows uses OpenProcess/GetExitCodeProcess for PID-alive checks.
-    On Unix uses os.kill(pid, 0). Falls back gracefully on errors.
+    Uses O_CREAT | O_EXCL on both Unix and Windows (Python 3) for
+    atomic create-or-fail semantics, eliminating the TOCTOU race.
     """
 
     def __init__(self, lockfile_path: Path):
@@ -16,16 +16,18 @@ class SingleInstanceLock:
         self._is_owner = False
 
     def try_acquire(self) -> bool:
-        """Try to acquire the lock. Returns True if acquired, False if another instance is running."""
-        if self._check_existing():
-            return False
-
         try:
             self._lockfile.parent.mkdir(parents=True, exist_ok=True)
-            self._lockfile.write_text(str(os.getpid()))
+            fd = os.open(str(self._lockfile), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            try:
+                os.write(fd, str(os.getpid()).encode())
+            finally:
+                os.close(fd)
             self._is_owner = True
             atexit.register(self.release)
             return True
+        except FileExistsError:
+            return self._check_existing()
         except OSError:
             return False
 
@@ -38,19 +40,17 @@ class SingleInstanceLock:
             self._is_owner = False
 
     def _check_existing(self) -> bool:
-        if not self._lockfile.exists():
-            return False
         try:
             pid_str = self._lockfile.read_text().strip()
             if pid_str and self._is_pid_alive(int(pid_str)):
-                return True
+                return False
         except (ValueError, OSError):
             pass
         try:
             self._lockfile.unlink(missing_ok=True)
         except OSError:
             pass
-        return False
+        return self.try_acquire()
 
     @staticmethod
     def _is_pid_alive(pid: int) -> bool:

@@ -49,24 +49,27 @@ class HeartbeatMonitor:
 
     def _loop(self):
         while self._running:
-            time.sleep(self._check_interval)
             runner = self._get_runner()
-            if not runner or not runner.running:
-                continue
+            if runner and runner.running:
+                now = time.time()
+                silence = now - self._last_output
 
-            now = time.time()
-            silence = now - self._last_output
+                if silence >= self._suspect_after:
+                    logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
+                    runner.send_command("list")
+                    self._last_probe = now
+                    for _ in range(self._probe_timeout):
+                        if not self._running:
+                            return
+                        time.sleep(1)
 
-            if silence < self._suspect_after:
-                continue
+                    if self._last_response < self._last_probe:
+                        logger.warning("Heartbeat: zombie detected (no response to probe)")
+                        self._events.emit(ServerEvent.ZOMBIE_DETECTED, {
+                            "silence_seconds": silence,
+                        })
 
-            logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
-            runner.send_command("list")
-            self._last_probe = now
-            time.sleep(self._probe_timeout)
-
-            if self._last_response < self._last_probe:
-                logger.warning("Heartbeat: zombie detected (no response to probe)")
-                self._events.emit(ServerEvent.ZOMBIE_DETECTED, {
-                    "silence_seconds": silence,
-                })
+            for _ in range(self._check_interval):
+                if not self._running:
+                    return
+                time.sleep(1)

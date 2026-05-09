@@ -26,12 +26,14 @@ class _ToastWindow:
         ).pack()
 
         parent.update_idletasks()
+        toast.update_idletasks()
+        tw = toast.winfo_reqwidth()
+        th = toast.winfo_reqheight()
         pw = parent.winfo_width()
         ph = parent.winfo_height()
-        x = parent.winfo_rootx() + pw - 380 - 16
-        y = parent.winfo_rooty() + ph - 44 - 16
-        toast.geometry(f"380x44+{x}+{y}")
-        toast.update_idletasks()
+        x = parent.winfo_rootx() + pw - tw - 16
+        y = parent.winfo_rooty() + ph - th - 16
+        toast.geometry(f"{tw}x{th}+{x}+{y}")
 
         self._toast = toast
         self._after_id = toast.after(duration, self._destroy)
