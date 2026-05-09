@@ -180,6 +180,14 @@
 
 > ⚠️ **Prerrequisito:** Haber completado Fase 0 (RES-02 y ANALY-01) para tener specs de Foundry API.
 
+### ECO-00 — Playit.gg Reference Analysis ✅
+
+- [x] Inspect `auto-mcs` source for Playit.gg API integration details.
+- [x] Document authentication management and `secret_key` persistence.
+- [x] Document JSON response mapping and API timeout/error handling.
+- [x] Document agent and tunnel creation flow.
+- [x] Produce technical report → `.planning/research/ECO-00-playit-analysis.md`.
+
 ### ECO-01 — Paper server type
 
 - [ ] Consult spec from ANALY-01 for Paper API endpoints
@@ -324,10 +332,10 @@
 | 0. Cimientos ✅ | RES-01, RES-02, RES-03, ANALY-01 | ~23 | ✅ Completed |
 | 1. Auto-Healing | STAB-01, AUTO-01, AUTO-02, AUTO-03, AUTO-04 | ~44 | ✅ Implemented (core + toasts) |
 | 2. Arquitectura | ARCH-01, ARCH-02, ARCH-03, ARCH-04, CONV-01 | ~37 | 🚧 In Progress |
-| 3. Ecosistema | ECO-01, ECO-02, ECO-03, ECO-04 | ~28 | 🔲 Not started |
+| 3. Ecosistema | ECO-00, ECO-01, ECO-02, ECO-03, ECO-04 | ~33 | 🚧 In Progress |
 | 4. Provisioning | PROV-01–05, INTEG-03, REND-01, UI-01 | ~40 | 🔲 Not started |
-| **Total** | **23 requirements** | **~172 subtasks** | **~100 / 172 ✅** |
+| **Total** | **24 requirements** | **~177 subtasks** | **~105 / 177 ✅** |
 
 ---
 
-*Last updated: 2026-05-09 — ARCH-01, ARCH-02, and ARCH-03 completed. ARCH-04 (Lazy rendering) in progress. Preparing for Phase 3 (Ecosistema).*
+*Last updated: 2026-05-09 — Phase 2 finalized (ARCH-03, ARCH-04). Phase 3 started with ECO-00 (Playit reference analysis).*
