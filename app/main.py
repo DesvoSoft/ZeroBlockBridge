@@ -741,9 +741,8 @@ class MCTunnelApp(ctk.CTk):
                     jar_path = os.path.join(server_dir, "server.jar")
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")
-                    timeout = 5.0
-                    start_time = time.time()
-                    while time.time() - start_time < timeout:
+                    import time
+                    for _ in range(10):
                         if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                             break
                         time.sleep(0.5)
@@ -802,30 +801,17 @@ class MCTunnelApp(ctk.CTk):
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
-            # REND-02: DNS display state machine
-            has_claim = bool(self.claim_url) if hasattr(self, 'claim_url') else False
-            resolving = status in ("Starting...", "Online") and not dns and not ip
-            waiting_claim = has_claim and not dns and not self.zbb_manager.playit_manager.is_linked if hasattr(self, 'zbb_manager') else False
-            
             if dns:
                 self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif ip and any(domain in ip for domain in [".ply.gg", ".playit.gg", ".joinmc.link"]):
-                self.lbl_dns_display.configure(text=ip, text_color="#3b82f6")
-                self.btn_copy_ip.configure(state="normal")
-                self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif waiting_claim:
-                self.lbl_dns_display.configure(text="Vínculo Requerido", text_color="#f97316")
-                self.btn_copy_ip.configure(state="disabled")
-                self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif resolving:
-                self.lbl_dns_display.configure(text="Asignando dirección...", text_color="#3b82f6")
-                self.btn_copy_ip.configure(state="disabled")
-                self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            else:
+            elif status == "Offline":
                 self.lbl_dns_display.configure(text="")
                 self.btn_copy_ip.pack_forget()
+            else:
+                self.lbl_dns_display.configure(text="Vínculo pendiente...", text_color="#f97316")
+                self.btn_copy_ip.configure(state="disabled")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
             
             self.lbl_public_ip.configure(
                 text=f"Public IP: {ip}" if ip else "Public IP: N/A"
@@ -856,18 +842,11 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, _show_ui)
 
     def _copy_ip_to_clipboard(self):
-        ip_text = self.lbl_public_ip.cget("text")
-        dns_text = self.lbl_dns_display.cget("text")
-        copy_value = None
-        blocked_states = ("Asignando dirección...", "Vínculo Requerido")
-        if dns_text and dns_text not in blocked_states:
-            copy_value = dns_text
-        elif ip_text and "N/A" not in ip_text:
-            copy_value = ip_text.replace("Public IP: ", "")
-        if copy_value:
+        dns_value = self.lbl_dns_display.cget("text")
+        if dns_value and dns_value != "Vínculo pendiente...":
             self.clipboard_clear()
-            self.clipboard_append(copy_value)
-            Toast.show(self, f"¡IP copiada con éxito! {copy_value}", toast_type="success", duration=2500)
+            self.clipboard_append(dns_value)
+            Toast.show(self, f"¡IP copiada con éxito! {dns_value}", toast_type="success", duration=2500)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:

@@ -155,9 +155,8 @@ class ZBBManager:
             jar_path = os.path.join(server_dir, "server.jar")
             # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
-            timeout = 5.0
-            start_time = time.time()
-            while time.time() - start_time < timeout:
+            import time
+            for _ in range(10):
                 if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                     break
                 time.sleep(0.5)

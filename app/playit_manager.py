@@ -89,17 +89,21 @@ class PlayitManager:
     def _try_api_link(self, claim_code: str) -> bool:
         """Attempt to exchange a CLI claim code for API credentials.
         Returns True if linking succeeded."""
-        try:
-            self.console_callback("[Playit] Exchanging claim code via API...")
-            success = self.api_client.link_account(claim_code)
-            if success:
-                self.is_linked = True
-                self.console_callback("[Playit] Account linked successfully via API.")
-                return True
-        except PlayitApiException as e:
-            self.console_callback(f"[Playit] API link exchange failed: {e}")
-        except Exception as e:
-            self.console_callback(f"[Playit] Unexpected error during API link: {e}")
+        for attempt in range(1, 4):
+            try:
+                self.console_callback(f"[Playit] Exchanging claim code via API (Attempt {attempt}/3)...")
+                success = self.api_client.link_account(claim_code)
+                if success:
+                    self.is_linked = True
+                    self.console_callback("[Playit] Account linked successfully via API.")
+                    return True
+            except PlayitApiException as e:
+                self.console_callback(f"[Playit] API link exchange failed: {e}")
+            except Exception as e:
+                self.console_callback(f"[Playit] Unexpected error during API link: {e}")
+            
+            if attempt < 3:
+                time.sleep(2)
         return False
 
     def get_or_create_tunnel(self, port: int) -> str:
@@ -192,10 +196,11 @@ class PlayitManager:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
 
-            cmd = [str(self.binary_path), "--stdout", "--secret_path", f'"{self.secret_dir}"']
+            cmd_str = f'"{self.binary_path}" --stdout --secret_path "{self.toml_path}"'
 
             self.process = subprocess.Popen(
-                cmd,
+                cmd_str,
+                shell=True,
                 cwd=os.path.abspath(CONFIG_DIR),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,

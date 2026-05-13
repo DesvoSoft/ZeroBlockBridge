@@ -283,10 +283,17 @@ def normalize_server_jar(server_dir):
                     break
 
     # Final verification: ensure the created symlink/copy is readable
-    if result and os.path.exists(server_jar_path):
+    if result:
         try:
-            if os.path.getsize(server_jar_path) <= 100:
-                logger.warning("normalize_server_jar: %s is too small (%d bytes)", server_jar_path, os.path.getsize(server_jar_path))
+            import time
+            for _ in range(10):
+                if os.path.exists(server_jar_path) and os.path.getsize(server_jar_path) > 100:
+                    break
+                time.sleep(0.5)
+
+            if not os.path.exists(server_jar_path) or os.path.getsize(server_jar_path) <= 100:
+                size = os.path.getsize(server_jar_path) if os.path.exists(server_jar_path) else 0
+                logger.warning("normalize_server_jar: %s is missing or too small (%d bytes)", server_jar_path, size)
                 result = False
             else:
                 with open(server_jar_path, "rb") as _f:

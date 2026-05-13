@@ -51,8 +51,9 @@ class VersionManager:
     def __init__(self):
         if getattr(self, '_initialized', False):
             return
-        # Safe Init: Define cache first to prevent AttributeError in background threads
-        self.cache = {}
+        # Safe Init: Define caches first to prevent AttributeError in background threads
+        self.fallback_cache = self._get_default_cache()
+        self.cache = self.fallback_cache
         self.cache = self._load_cache()
         self.refresh_thread = None
         self.callbacks = []
