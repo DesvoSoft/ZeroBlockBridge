@@ -68,7 +68,7 @@ class PlayitApiClient:
 
         if response.status_code >= 400:
             if "AgentDisabledOverLimit" in response.text:
-                raise PlayitApiException("AgentDisabledOverLimit: Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard")
+                raise PlayitApiException("AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard")
             error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
             raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
 

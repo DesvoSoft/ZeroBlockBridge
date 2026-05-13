@@ -339,7 +339,7 @@ class PlayitManager:
         if "agent registered" in line and not self.is_linked:
             self.is_linked = True
             self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
-            self.status_callback("Starting...", "Conectando...")
+            self.status_callback("Starting...", "Connecting...")
             
             # Pausa de propagacion
             time.sleep(1.5)

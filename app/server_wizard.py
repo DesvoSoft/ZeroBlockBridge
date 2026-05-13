@@ -42,9 +42,9 @@ class ServerWizard(ctk.CTkToplevel):
         # Header
         self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.header_frame.grid(row=0, column=0, sticky="ew")
-        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Paso 1 de 4", font=ctk.CTkFont(size=14))
+        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 4", font=ctk.CTkFont(size=14))
         self.lbl_step.pack(side="left", padx=20, pady=10)
-        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identidad", font=ctk.CTkFont(size=16, weight="bold"))
+        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity", font=ctk.CTkFont(size=16, weight="bold"))
         self.lbl_title.pack(side="right", padx=20, pady=10)
         
         # Content Frame
@@ -55,10 +55,10 @@ class ServerWizard(ctk.CTkToplevel):
         self.footer_frame = ctk.CTkFrame(self, height=60, corner_radius=0)
         self.footer_frame.grid(row=2, column=0, sticky="ew")
         
-        self.btn_back = ctk.CTkButton(self.footer_frame, text="Atrás", command=self.go_back, state="disabled", corner_radius=12)
+        self.btn_back = ctk.CTkButton(self.footer_frame, text="Back", command=self.go_back, state="disabled", corner_radius=12)
         self.btn_back.pack(side="left", padx=20, pady=15)
         
-        self.btn_next = ctk.CTkButton(self.footer_frame, text="Siguiente", command=self.go_next, corner_radius=12)
+        self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next, corner_radius=12)
         self.btn_next.pack(side="right", padx=20, pady=15)
         
         self.vm = VersionManager()
@@ -71,7 +71,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.grab_set()
 
     def update_header(self, title):
-        self.lbl_step.configure(text=f"Paso {self.current_step} de {self.total_steps}")
+        self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps}")
         self.lbl_title.configure(text=title)
         
         if self.current_step == 1:
@@ -80,9 +80,9 @@ class ServerWizard(ctk.CTkToplevel):
             self.btn_back.configure(state="normal")
             
         if self.current_step == self.total_steps:
-            self.btn_next.configure(text="Crear Servidor", fg_color="green", hover_color="darkgreen")
+            self.btn_next.configure(text="Create Server", fg_color="green", hover_color="darkgreen")
         else:
-            self.btn_next.configure(text="Siguiente", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
+            self.btn_next.configure(text="Next", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
 
     def clear_content(self):
         for widget in self.content_frame.winfo_children():
@@ -95,15 +95,15 @@ class ServerWizard(ctk.CTkToplevel):
     # --- Step 1: Identidad ---
     def show_step_1(self):
         self.clear_content()
-        self.update_header("Identidad del Servidor")
+        self.update_header("Server Identity")
         
-        ctk.CTkLabel(self.content_frame, text="Nombre del Servidor:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Server Name:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server", corner_radius=12, height=36)
         self.entry_name.pack(fill="x", pady=(0, 15))
         if self.wizard_data["name"]:
             self.entry_name.insert(0, self.wizard_data["name"])
             
-        ctk.CTkLabel(self.content_frame, text="Ubicación Personalizada:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Custom Location:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         loc_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         loc_frame.pack(fill="x", pady=(0, 15))
         
@@ -111,23 +111,23 @@ class ServerWizard(ctk.CTkToplevel):
         self.entry_location.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.entry_location.insert(0, self.wizard_data["location"])
         
-        btn_browse_loc = ctk.CTkButton(loc_frame, text="Explorar...", command=self.browse_location, corner_radius=12, width=80, fg_color="gray", hover_color="gray30")
+        btn_browse_loc = ctk.CTkButton(loc_frame, text="Browse...", command=self.browse_location, corner_radius=12, width=80, fg_color="gray", hover_color="gray30")
         btn_browse_loc.pack(side="right")
             
-        ctk.CTkLabel(self.content_frame, text="Icono del Servidor (Opcional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
+        ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
         
-        self.icon_preview = ctk.CTkLabel(self.content_frame, text="Sin Icono", width=100, height=100, fg_color="gray30", corner_radius=12)
+        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon", width=100, height=100, fg_color="gray30", corner_radius=12)
         self.icon_preview.pack(pady=10)
         
         if self.wizard_data["icon_path"]:
             self._update_icon_preview(self.wizard_data["icon_path"])
             
-        btn_browse = ctk.CTkButton(self.content_frame, text="Buscar Imagen...", command=self.browse_icon, corner_radius=12, fg_color="gray", hover_color="gray30")
+        btn_browse = ctk.CTkButton(self.content_frame, text="Select Image...", command=self.browse_icon, corner_radius=12, fg_color="gray", hover_color="gray30")
         btn_browse.pack(pady=10)
 
     def browse_location(self):
         from tkinter import filedialog
-        dir_path = filedialog.askdirectory(title="Seleccionar Carpeta Raíz")
+        dir_path = filedialog.askdirectory(title="Select Root Folder")
         if dir_path:
             self.wizard_data["location"] = dir_path
             self.entry_location.delete(0, "end")
@@ -150,7 +150,7 @@ class ServerWizard(ctk.CTkToplevel):
     # --- Step 2: Motor ---
     def show_step_2(self):
         self.clear_content()
-        self.update_header("Motor & Versión")
+        self.update_header("Engine & Version")
         
         # Engine Selection
         engines_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -168,8 +168,8 @@ class ServerWizard(ctk.CTkToplevel):
             rb.pack(side="left", padx=(0, 15))
             
         # Version Search
-        ctk.CTkLabel(self.content_frame, text="Buscar Versión:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_search = ctk.CTkEntry(self.content_frame, placeholder_text="Ej. 1.20.1", corner_radius=12, height=36)
+        ctk.CTkLabel(self.content_frame, text="Search Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_search = ctk.CTkEntry(self.content_frame, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
         self.entry_search.pack(fill="x", pady=(0, 10))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
         
@@ -210,7 +210,7 @@ class ServerWizard(ctk.CTkToplevel):
         filtered = [v for v in versions if search_q in v.lower()]
         
         if not filtered:
-            ctk.CTkLabel(self.scroll_versions, text="No se encontraron versiones.").pack(pady=20)
+            ctk.CTkLabel(self.scroll_versions, text="No versions found.").pack(pady=20)
             return
             
         for v in filtered[:100]: # Allow more versions to be shown
@@ -225,12 +225,12 @@ class ServerWizard(ctk.CTkToplevel):
     # --- Step 3: Hardware ---
     def show_step_3(self):
         self.clear_content()
-        self.update_header("Hardware (RAM & Red)")
+        self.update_header("Hardware (RAM & Network)")
         
         total_ram = psutil.virtual_memory().total / (1024 * 1024)
         max_slider = min(16384, total_ram - 1024)
         
-        ctk.CTkLabel(self.content_frame, text="Memoria RAM (MB):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="RAM Memory (MB):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         
         input_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         input_frame.pack(fill="x", pady=(0, 10))
@@ -265,16 +265,16 @@ class ServerWizard(ctk.CTkToplevel):
     # --- Step 4: Reglas y Mundo ---
     def show_step_4(self):
         self.clear_content()
-        self.update_header("Reglas y Mundo")
+        self.update_header("Rules & World")
         
         # Game Mode
-        ctk.CTkLabel(self.content_frame, text="Modo de Juego:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.combo_gamemode = ctk.CTkComboBox(self.content_frame, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
         self.combo_gamemode.pack(fill="x", pady=(0, 10))
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         
         # Difficulty
-        ctk.CTkLabel(self.content_frame, text="Dificultad:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.combo_difficulty = ctk.CTkComboBox(self.content_frame, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
@@ -292,25 +292,41 @@ class ServerWizard(ctk.CTkToplevel):
         self.chk_whitelist.pack(side="left")
         
         # Seed
-        ctk.CTkLabel(self.content_frame, text="Semilla (Seed) (Opcional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(self.content_frame, placeholder_text="Dejar vacío para aleatoria", corner_radius=12, height=36)
+        ctk.CTkLabel(self.content_frame, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_seed = ctk.CTkEntry(self.content_frame, placeholder_text="Leave blank for random", corner_radius=12, height=36)
         self.entry_seed.pack(fill="x", pady=(0, 10))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
             
-        # Distances
+        # Distances (Sliders)
         dist_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         dist_frame.pack(fill="x", pady=(0, 10))
         
+        # View Distance
         ctk.CTkLabel(dist_frame, text="View Distance:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.entry_view = ctk.CTkEntry(dist_frame, width=60, corner_radius=12, height=36)
-        self.entry_view.grid(row=1, column=0, sticky="w", padx=(0, 20))
-        self.entry_view.insert(0, str(self.wizard_data["view_distance"]))
+        self.lbl_view_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["view_distance"]))
+        self.lbl_view_val.grid(row=0, column=1, sticky="w", padx=(10, 20))
         
-        ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, sticky="w", pady=(0, 5))
-        self.entry_sim = ctk.CTkEntry(dist_frame, width=60, corner_radius=12, height=36)
-        self.entry_sim.grid(row=1, column=1, sticky="w")
-        self.entry_sim.insert(0, str(self.wizard_data["simulation_distance"]))
+        self.slider_view = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_view_label)
+        self.slider_view.set(int(self.wizard_data["view_distance"]))
+        self.slider_view.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 20))
+        
+        # Simulation Distance
+        ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=ctk.CTkFont(weight="bold")).grid(row=2, column=0, sticky="w", pady=(10, 5))
+        self.lbl_sim_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["simulation_distance"]))
+        self.lbl_sim_val.grid(row=2, column=1, sticky="w", padx=10)
+        
+        self.slider_sim = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_sim_label)
+        self.slider_sim.set(int(self.wizard_data["simulation_distance"]))
+        self.slider_sim.grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 20))
+
+    def update_view_label(self, value):
+        self.wizard_data["view_distance"] = str(int(value))
+        self.lbl_view_val.configure(text=str(int(value)))
+
+    def update_sim_label(self, value):
+        self.wizard_data["simulation_distance"] = str(int(value))
+        self.lbl_sim_val.configure(text=str(int(value)))
 
     # --- Navigation ---
     def go_next(self):
@@ -338,8 +354,6 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["hardcore"] = self.var_hardcore.get()
             self.wizard_data["whitelist"] = self.var_whitelist.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
-            self.wizard_data["view_distance"] = self.entry_view.get().strip()
-            self.wizard_data["simulation_distance"] = self.entry_sim.get().strip()
             
             self.on_complete_callback(self.wizard_data)
             self.destroy()
@@ -355,8 +369,6 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["hardcore"] = self.var_hardcore.get()
             self.wizard_data["whitelist"] = self.var_whitelist.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
-            self.wizard_data["view_distance"] = self.entry_view.get().strip()
-            self.wizard_data["simulation_distance"] = self.entry_sim.get().strip()
             
         self.current_step -= 1
         self.show_step()

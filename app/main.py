@@ -124,7 +124,9 @@ class MCTunnelApp(ctk.CTk):
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
-        self.main_frame.grid_rowconfigure(2, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=0) # Status bar
+        self.main_frame.grid_rowconfigure(1, weight=1) # Dashboard (3 management cards)
+        self.main_frame.grid_rowconfigure(2, weight=2) # Console tabs & Mods (60% approx)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self._build_status_bar()
         self._build_dashboard()
@@ -405,6 +407,11 @@ class MCTunnelApp(ctk.CTk):
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
 
     def on_server_select(self, server_name):
+        # UI Locking: Block switching if current server is active
+        if self.zbb_manager.is_running() and self.current_server != server_name:
+            Toast.show(self, "Stop the current server before switching", toast_type="warning")
+            return
+
         self.current_server = server_name
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
@@ -878,7 +885,7 @@ class MCTunnelApp(ctk.CTk):
             else:
                 self.lbl_public_ip.pack(side="left", padx=5)
                 self.lbl_public_ip.configure(text=f"Public IP: {ip}" if ip else "Public IP: N/A")
-                self.lbl_dns_display.configure(text="Vínculo pendiente...", text_color="#f97316")
+                self.lbl_dns_display.configure(text="Pending link...", text_color="#f97316")
                 self.btn_copy_ip.configure(state="disabled")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             if ip:
@@ -900,7 +907,7 @@ class MCTunnelApp(ctk.CTk):
             self.tunnel_console.log(f"[System] Manual claim required: {url}")
             Toast.show(
                 self,
-                f"Link requerido. Codigo: {claim_code}",
+                f"Link required. Code: {claim_code}",
                 toast_type="warning",
                 duration=8000,
             )
@@ -908,10 +915,10 @@ class MCTunnelApp(ctk.CTk):
 
     def _copy_ip_to_clipboard(self):
         dns_value = self.lbl_dns_display.cget("text")
-        if dns_value and dns_value not in ["Vínculo pendiente...", "Conectando..."]:
+        if dns_value and dns_value not in ["Pending link...", "Connecting..."]:
             self.clipboard_clear()
             self.clipboard_append(dns_value)
-            Toast.show(self, "¡Dirección pública copiada al portapapeles!", toast_type="success", duration=3000)
+            Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:

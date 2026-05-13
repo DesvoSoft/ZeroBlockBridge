@@ -84,8 +84,8 @@ class ZBBManager:
             if any(s in ip for s in domain_suffixes):
                 dns = ip
                 display_ip = ""
-            elif ip == "Conectando...":
-                dns = "Conectando..."
+            elif ip == "Connecting...":
+                dns = "Connecting..."
                 display_ip = ""
         # Saved DNS from config is the last-resort fallback, not the override
         if status == "Online" and not dns and config.get("playit_dns"):
