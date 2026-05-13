@@ -25,7 +25,7 @@ The application functions through two primary systems:
 Located in `app/core.py`, this class manages the lifecycle of all servers, tunnels, and background monitors. It is the central authority for state management.
 
 ### The Nervous System: `EventBus`
-Located in `app/server_events.py`, this is a robust pub/sub system. Every significant event (Server start, console line, error) flows through here. **Never use direct method calls for UI updates; subscribe to the EventBus instead.**
+Located in `app/server_events.py`, this is a robust pub/sub system. Every significant event (Server start, console line, error) flows through here. **Never use direct method calls for UI updates; subscribe to the EventBus instead. Queda explícitamente prohibido el uso de `.on()` en favor de `.subscribe()`.**
 
 ---
 

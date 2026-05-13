@@ -43,7 +43,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
 - **One-Click Tunnel Setup**: Auto-opens claim link in browser.
 - **Public IP Display**: Share the provided public address.
-- **Auto-Update**: Agent stays up to date automatically.
+- **Stable Agent**: Pinned to v0.16.5 for maximum reliability.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
 
@@ -51,7 +51,7 @@ Note: playit.gg is a global proxy that allows anyone to host a server without po
 
 - **Modern GUI**: Clean dark theme built with CustomTkinter.
 - **Cross-Platform Sound**: Reliable notifications on Windows and Linux.
-- **Java 17+ Support**: Fully compatible with latest Java versions (17, 21, etc.).
+- **Java Stability Range**: Optimized for Java 17-21 (Blocks > 21 to prevent startup crashes).
 - **Error Handling**: Comprehensive validation and user feedback.
 - **Organized Structure**: Dedicated folders for each server.
 
@@ -320,7 +320,7 @@ Zero Block Bridge uses **dynamic version fetching** to automatically support hun
 
 - **OS**: Windows/Linux
 - **Python**: 3.10 or higher
-- **Java**: 17 minimum (This might also depend on your desired Minecraft server version)
+- **Java**: 17-21 (Stability range enforced: block if > 21 or < required).
 - **RAM**: 2GB minimum (4GB+ recommended for modded servers)
 - **Disk**: 37 MB for core app and dependencies + ~107MB per server (vanilla, it might vary for modded servers) + world size
 

@@ -8,7 +8,7 @@ This document defines the technical identity, architectural philosophy, and codi
 ZBB is built on a strict **decoupled architecture** to ensure the core logic can run independently of any specific interface.
 
 *   **Model-View-Controller (MVC) Hybrid**: The UI (`app/main.py`) must never contain business logic. It serves only as a visual shell.
-*   **Event-Driven Communication**: All communication between the UI and the Core (`app/core.py`) must occur through the `EventBus`.
+*   **Event-Driven Communication**: All communication between the UI and the Core (`app/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
 *   **Headless-Ready**: Every feature must be implemented such that it could function via a CLI or REST API without a GUI. 
 *   **Single Source of Truth**: `ZBBManager` is the orchestrator. No other component should directly manage server lifecycles or global configurations.
 
@@ -30,6 +30,8 @@ ZBB is a multi-threaded application handling multiple server processes and netwo
 *   **Daemon Threads**: All background threads (monitors, listeners, API pollers) **must** be initialized with `daemon=True` to ensure the application exits cleanly.
 *   **Non-Blocking UI**: Never perform I/O, heavy computation, or network requests on the main thread. Use `threading.Thread` for these tasks.
 *   **Race Condition Prevention**: Always use context managers (`with self._lock:`) when accessing shared resources.
+*   **Protocolo de Sincronía "Atomic-First" (Bytecode & IO)**:
+    *   **Integridad de Archivos**: Antes de invocar cualquier analizador de archivos (Bytecode, Logs, Configs), es OBLIGATORIO realizar un bucle de verificación de existencia en disco (`os.path.exists`) y tamaño (`os.path.getsize > 0`) con un timeout de 5s. Los eventos de hilos no son suficientes para garantizar que el SO ha liberado el archivo.
 
 ---
 
