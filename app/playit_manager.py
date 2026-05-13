@@ -87,23 +87,7 @@ class PlayitManager:
 
     # --- API-First Tunnel Management ---
     def _try_api_link(self, claim_code: str) -> bool:
-        """Attempt to exchange a CLI claim code for API credentials.
-        Returns True if linking succeeded."""
-        for attempt in range(1, 4):
-            try:
-                self.console_callback(f"[Playit] Exchanging claim code via API (Attempt {attempt}/3)...")
-                success = self.api_client.link_account(claim_code)
-                if success:
-                    self.is_linked = True
-                    self.console_callback("[Playit] Account linked successfully via API.")
-                    return True
-            except PlayitApiException as e:
-                self.console_callback(f"[Playit] API link exchange failed: {e}")
-            except Exception as e:
-                self.console_callback(f"[Playit] Unexpected error during API link: {e}")
-            
-            if attempt < 3:
-                time.sleep(2)
+        """Deprecated API link exchange method. Handled by CLI directly to avoid CodeNotFound."""
         return False
 
     def get_or_create_tunnel(self, port: int) -> str:
@@ -332,21 +316,10 @@ class PlayitManager:
                 if not self._claim_code:
                     self._claim_code = claim_code
                     self.console_callback(f"[Playit] Claim code detected: {claim_code}")
+                    self.console_callback("[Playit] Waiting for manual browser confirmation...")
                     
-                    # Try API-based linking first (no browser needed!)
-                    if self._try_api_link(claim_code):
-                        # Success -- now try to get/create tunnel
-                        try:
-                            if self.api_client.initialize():
-                                # We'll pick up DNS on next get_or_create_tunnel call
-                                self.console_callback("[Playit] API session ready after linking.")
-                        except Exception as e:
-                            logger.warning(f"Post-link initialization incomplete: {e}")
-                        return
-                    else:
-                        # API exchange failed -- notify UI for manual fallback
-                        full_url = f"https://playit.gg/claim/{claim_code}"
-                        self.claim_callback(full_url)
+                    full_url = f"https://playit.gg/claim/{claim_code}"
+                    self.claim_callback(full_url)
                 return
 
         # --- Network unreachable -- agent will auto-retry via IPv4 ---

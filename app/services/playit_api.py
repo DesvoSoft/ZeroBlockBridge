@@ -70,11 +70,9 @@ class PlayitApiClient:
         return data
 
     # --- Account Linking ---
-    def link_account(self, claim_code: str, agent_name: str = "ZeroBlockBridge") -> bool:
-        """Link to a playit account using a claim code from the CLI.
-        
-        The playit CLI outputs a claim URL like https://playit.gg/claim/XXXX.
-        We extract the code and exchange it for a secret key via the API.
+    def link_account(self, setup_code: str, agent_name: str = "ZeroBlockBridge") -> bool:
+        """Link to a playit account using a setup code from the third-party web flow.
+        (Based on the auto-mcs reference project flow).
         Returns True if linking succeeded and playit.toml was written.
         """
         os_name = platform.system().lower()
@@ -82,36 +80,35 @@ class PlayitApiClient:
             os_name = "macos"
 
         payload = {
-            "code": claim_code,
+            "account_setup_code": setup_code,
             "agent_name": agent_name,
             "platform": os_name,
+            "version_major": 0,
+            "version_minor": 17,
+            "version_patch": 1,
         }
         
         try:
-            response = self.session.post(
-                f"{self.api_base}/claim/exchange",
+            response = requests.post(
+                "https://playit.auto-mcs.com/link",
                 json=payload,
                 timeout=20,
             )
             data = response.json()
         except requests.RequestException as e:
-            raise PlayitApiException(f"Failed to exchange claim code: {e}")
+            raise PlayitApiException(f"Failed to link account via reference worker: {e}")
         except ValueError:
-            raise PlayitApiException(
-                f"Invalid JSON from claim exchange (HTTP {response.status_code})"
-            )
+            raise PlayitApiException("Invalid JSON from claim exchange")
         
         if data.get("status") != "success":
             error = data.get("error") or data.get("message") or str(data)
             raise PlayitApiException(f"Claim exchange failed: {error}")
         
-        secret_key = data.get("data", {}).get("secret_key")
+        secret_key = data.get("data", {}).get("agent_secret_key")
         agent_id = data.get("data", {}).get("agent_id")
         
         if not secret_key:
-            raise PlayitApiException(
-                f"Claim exchange did not return a secret key: {data}"
-            )
+            raise PlayitApiException(f"Claim exchange did not return a secret key: {data}")
         
         # Write playit.toml
         os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
@@ -121,7 +118,7 @@ class PlayitApiClient:
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
-        logger.info("Successfully linked playit account via claim exchange")
+        logger.info("Successfully linked playit account via auto-mcs worker")
         return True
 
     # --- Agent Info ---
