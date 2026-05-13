@@ -38,6 +38,11 @@ ctk.set_default_color_theme("blue")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
+        from app.services.settings_manager import SettingsManager
+        self.settings = SettingsManager()
+        theme = self.settings.get("theme", "Dark")
+        ctk.set_appearance_mode(theme)
+        
         super().__init__()
         self._init_window_config()
         self._init_state_variables()
@@ -256,7 +261,7 @@ class MCTunnelApp(ctk.CTk):
         self.entry_restart_time = ctk.CTkEntry(sched_controls, width=60, placeholder_text=AppConfig.DEFAULT_RESTART_TIME, corner_radius=8, height=32)
         self.entry_restart_time.bind("<KeyRelease>", self._format_time_input)
         
-        self.btn_apply_schedule = ctk.CTkButton(sched_controls, text="Apply", width=60, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
+        self.btn_apply_schedule = ctk.CTkButton(sched_controls, text="Apply", width=60, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=12, height=32)
         self.btn_apply_schedule.grid(row=0, column=4, sticky="e", padx=(10, 0))
 
         self.var_backup_on_restart = ctk.BooleanVar()
@@ -274,7 +279,7 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last: None", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
         self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=15, pady=0)
         
-        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=8, height=32)
+        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=12, height=32)
         self.btn_quick_backup.grid(row=2, column=0, sticky="w", padx=15, pady=(10, 15))
 
         # 3. Server Settings Card
@@ -285,10 +290,10 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_settings_title = ctk.CTkLabel(self.settings_frame, text="Server Settings", font=AppConfig.FONT_HEADING_SMALL)
         self.lbl_settings_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
         
-        self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
+        self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
         self.btn_edit_properties.grid(row=1, column=0, sticky="w", padx=15, pady=5)
 
-        self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=8, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
+        self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
         self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=5)
 
         # Advanced View Toggle
@@ -317,7 +322,7 @@ class MCTunnelApp(ctk.CTk):
         self.console_tabs.add("Console")
         self.console_tabs.add("Tunnel Log")
         
-        self.server_console = ConsoleWidget(self.console_tabs.tab("Console"))
+        self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
         self.server_console.pack(fill="both", expand=True)
         
         self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=10, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
@@ -330,7 +335,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         self.btn_send.pack(side="right", padx=10, pady=5)
         
-        self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"))
+        self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
         self.tunnel_console.pack(fill="both", expand=True)
 
         # --- Mods Tab (Modrinth Browser) ---
@@ -639,14 +644,20 @@ class MCTunnelApp(ctk.CTk):
     def quick_backup_action(self):
         if not self.current_server: return
         self.server_console.log("[System] Creating backup...")
-        def _run():
-            manager = logic.BackupManager(self.current_server)
-            path, error = manager.create_backup()
-            if path:
-                self.server_console.log(f"[System] Backup created: {os.path.basename(path)}")
+        from app.services.backup_manager import BackupManager
+        backups_dir = os.path.join(SERVERS_DIR, self.current_server, "backups")
+        manager = BackupManager(str(SERVERS_DIR), backups_dir)
+        
+        def _on_complete(success, filepath):
+            if success:
+                self.server_console.log(f"[System] Backup created: {os.path.basename(filepath)}")
+                self.after(0, lambda: Toast.show(self, f"Respaldo creado: {os.path.basename(filepath)}", toast_type="success"))
                 self.after(0, self.update_management_ui)
-            else: self.server_console.log(f"[Error] Backup failed: {error}")
-        threading.Thread(target=_run, daemon=True).start()
+            else: 
+                self.server_console.log(f"[Error] Backup failed.")
+                self.after(0, lambda: Toast.show(self, "Error al crear respaldo.", toast_type="error"))
+                
+        manager.create_backup(self.current_server, _on_complete)
 
     def edit_server_properties(self):
         if not self.current_server: return

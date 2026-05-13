@@ -13,6 +13,7 @@ from app.playit_manager import PlayitManager
 from app.scheduler_service import SchedulerService
 from app.services.console_buffer import CircularBuffer
 from app.app_config import AppConfig
+from app.version_manager import VersionManager
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,12 @@ class ZBBManager:
 
     def send_command(self, cmd: str):
         if self.server_runner and self.server_runner.running:
+            from app.services.sanitizer import is_safe_command
+            safe, reason = is_safe_command(cmd)
+            if not safe:
+                logger.warning(f"Blocked unsafe command: '{cmd}' - Reason: {reason}")
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] Blocked unsafe command: {reason}")
+                return
             self.server_runner.send_command(cmd)
 
     def is_running(self):
