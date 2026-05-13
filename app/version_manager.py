@@ -49,9 +49,10 @@ class VersionManager:
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
+        if getattr(self, '_initialized', False):
             return
-        # Set cache FIRST so concurrent threads never see _initialized=True without cache
+        # Safe Init: Define cache first to prevent AttributeError in background threads
+        self.cache = {}
         self.cache = self._load_cache()
         self.refresh_thread = None
         self.callbacks = []

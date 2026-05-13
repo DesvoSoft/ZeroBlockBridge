@@ -739,11 +739,16 @@ class MCTunnelApp(ctk.CTk):
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
                     from app.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
-                    # Sync guarantee: wait until server.jar exists (handles Forge normalization race)
-                    if not os.path.exists(jar_path):
-                        self.server_console.log("[System] Waiting for server.jar normalization...")
-                        if not wait_for_jar_ready(server_dir, timeout=5.0):
-                            self.server_console.log("[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
+                    # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
+                    self.server_console.log("[System] Waiting for server.jar normalization...")
+                    timeout = 5.0
+                    start_time = time.time()
+                    while time.time() - start_time < timeout:
+                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                            break
+                        time.sleep(0.5)
+                    else:
+                        self.server_console.log("[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
                     required_java = analyze_jar_bytecode(jar_path)
                     if required_java:
                         self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")

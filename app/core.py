@@ -153,11 +153,16 @@ class ZBBManager:
             # 1. Determine required Java version
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
             jar_path = os.path.join(server_dir, "server.jar")
-            # Sync guarantee: wait until server.jar exists (handles Forge normalization race)
-            if not os.path.exists(jar_path):
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
-                if not wait_for_jar_ready(server_dir, timeout=5.0):
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
+            # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
+            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
+            timeout = 5.0
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                    break
+                time.sleep(0.5)
+            else:
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
             bytecode_java = analyze_jar_bytecode(jar_path)
             required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
             source = "bytecode" if bytecode_java else "version-map"
