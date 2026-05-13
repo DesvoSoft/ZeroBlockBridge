@@ -24,6 +24,7 @@ class ServerEvent:
     REQUEST_RESTART = "request_restart"
     TUNNEL_STATUS = "tunnel_status"
     PLAYIT_CLAIM = "playit_claim"
+    RESOURCE_USAGE = "resource_usage"
 
 
 @dataclass

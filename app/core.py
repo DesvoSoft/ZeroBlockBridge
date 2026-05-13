@@ -41,6 +41,7 @@ class ZBBManager:
         self.tunnel_buffer = CircularBuffer(max_size=1000)
         
         # External Services
+        self.version_manager = VersionManager()
         self.playit_manager = PlayitManager(
             console_callback=lambda txt: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, txt),
             status_callback=self._on_playit_status,
@@ -53,6 +54,25 @@ class ZBBManager:
         self.events.subscribe(ServerEvent.REQUEST_RESTART, self._handle_restart_request)
         self.events.subscribe(ServerEvent.CONSOLE_LINE, lambda line: self.console_buffer.append(line))
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
+        
+        self._start_resource_monitor()
+
+    def _start_resource_monitor(self):
+        def _monitor():
+            import psutil
+            import time
+            while True:
+                time.sleep(2)
+                if getattr(self, 'server_runner', None) and self.server_runner.running and getattr(self.server_runner, 'process', None):
+                    try:
+                        p = psutil.Process(self.server_runner.process.pid)
+                        cpu = p.cpu_percent(interval=None)
+                        ram = p.memory_info().rss / (1024 * 1024)
+                        self.events.emit(ServerEvent.RESOURCE_USAGE, {"cpu": cpu, "ram": ram})
+                    except Exception:
+                        pass
+        import threading
+        threading.Thread(target=_monitor, daemon=True).start()
 
     def _on_playit_status(self, status, ip):
         config = self.get_config()
@@ -62,9 +82,10 @@ class ZBBManager:
             domain_suffixes = (".ply.gg", ".playit.gg", ".joinmc.link")
             if any(s in ip for s in domain_suffixes):
                 dns = ip
-                display_ip = ip
+                display_ip = ""
             elif ip == "Conectando...":
                 dns = "Conectando..."
+                display_ip = ""
         # Saved DNS from config is the last-resort fallback, not the override
         if status == "Online" and not dns and config.get("playit_dns"):
             dns = config["playit_dns"]

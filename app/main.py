@@ -802,6 +802,7 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
             if dns:
+                self.lbl_public_ip.pack_forget()
                 if ".gg" in dns or ".link" in dns:
                     self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
                     self.btn_copy_ip.configure(state="normal")
@@ -812,16 +813,16 @@ class MCTunnelApp(ctk.CTk):
                     self.btn_copy_ip.configure(state="disabled")
                     self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Offline":
+                self.lbl_public_ip.pack(side="left", padx=5)
+                self.lbl_public_ip.configure(text="Public IP: N/A")
                 self.lbl_dns_display.configure(text="")
                 self.btn_copy_ip.pack_forget()
             else:
+                self.lbl_public_ip.pack(side="left", padx=5)
+                self.lbl_public_ip.configure(text=f"Public IP: {ip}" if ip else "Public IP: N/A")
                 self.lbl_dns_display.configure(text="Vínculo pendiente...", text_color="#f97316")
                 self.btn_copy_ip.configure(state="disabled")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            
-            self.lbl_public_ip.configure(
-                text=f"Public IP: {ip}" if ip else "Public IP: N/A"
-            )
             if ip:
                 self.btn_claim.pack_forget()
                 
