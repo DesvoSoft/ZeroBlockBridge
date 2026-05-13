@@ -20,7 +20,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, TunnelSetupDialog
+from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
 from app.logic import check_java, download_server, accept_eula, install_fabric, BackupManager, Scheduler
 import app.logic as logic
 from app.constants import SERVERS_DIR, ASSETS_DIR
@@ -841,28 +841,13 @@ class MCTunnelApp(ctk.CTk):
         claim_code = url.split("/")[-1] if url else ""
         def _show_ui():
             self.btn_claim.pack(side="right", padx=10)
-            self.tunnel_console.log(f"[System] Playit setup required: {url}")
+            self.tunnel_console.log(f"[System] Manual claim required: {url}")
             Toast.show(
                 self,
-                f"Vincula tu cuenta: {claim_code}",
-                toast_type="info",
+                f"Link requerido. Codigo: {claim_code}",
+                toast_type="warning",
                 duration=8000,
             )
-            
-            def _ask_dns():
-                dialog = TunnelSetupDialog(self, claim_url=url, title="Tunnel DNS Name")
-                dns_name = dialog.get_input()
-                if dns_name:
-                    dns_name = dns_name.strip().rstrip('.')
-                    self.zbb_manager.update_config("playit_dns", dns_name)
-                    self.server_console.log(f"[System] Saved Playit DNS: {dns_name}")
-                    if self.zbb_manager.get_tunnel_ip():
-                        self.lbl_public_ip.configure(text=f"Public IP: {dns_name}")
-                else:
-                    self.server_console.log("[System] DNS entry skipped.")
-            
-            self.after(1000, _ask_dns)
-            
         self.after(0, _show_ui)
 
     def _copy_ip_to_clipboard(self):

@@ -24,9 +24,6 @@ jobs:
             SEP: ";"
             ICON: "../assets/logo.ico"
             EXT: ".exe"
-    defaults:
-      run:
-        working-directory: ./app
     steps:
       # 1. Checkout code
       - uses: actions/checkout@v4
@@ -38,21 +35,29 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      # 3. Install dependencies
+      # 3. Install system dependencies (Linux only)
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-dev libtk8.6 libxcb-xinerama0 libxcb-cursor0
+
+      # 4. Install Python dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 4. Debug: show folder structure
+      # 5. Debug: show folder structure
       - name: Show folder structure
-        working-directory: .
-        run: ls -R
+        run: |
+          python -c "import os; [print(os.path.join(dp, f)) for dp, dn, fn in os.walk('.') for f in fn if '.git' not in dp]"
 
-      # 5a. Build on Linux
+      # 6a. Build on Linux
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
+        working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
             --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
@@ -61,9 +66,10 @@ jobs:
             --icon "${{ matrix.ICON }}" \
             main.py
 
-      # 5b. Build on Windows (PowerShell safe syntax)
+      # 6b. Build on Windows (PowerShell safe syntax)
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
+        working-directory: ./app
         run: >
           pyinstaller --noconsole --onefile
           --name "ZeroBlockBridge-${{ matrix.TARGET }}"
@@ -72,14 +78,14 @@ jobs:
           --icon "${{ matrix.ICON }}"
           main.py
 
-      # 6. Upload artifacts
+      # 7. Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
           path: app/dist/*
 
-      # 7. Auto-Release
+      # 8. Auto-Release
       - name: Create Release and Upload Assets
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

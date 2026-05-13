@@ -61,8 +61,10 @@ class ZBBManager:
             domain_suffixes = (".ply.gg", ".playit.gg", ".joinmc.link")
             if any(s in ip for s in domain_suffixes):
                 dns = ip
-        if status == "Online" and config.get("playit_dns"):
-            dns = dns or config["playit_dns"]
+                display_ip = ip
+        # Saved DNS from config is the last-resort fallback, not the override
+        if status == "Online" and not dns and config.get("playit_dns"):
+            dns = config["playit_dns"]
             display_ip = config["playit_dns"]
         self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns})
 

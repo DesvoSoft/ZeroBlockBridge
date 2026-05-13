@@ -21,7 +21,6 @@ class PlayitManager:
         self.process = None
         self.running = False
         self.binary_path = self._get_binary_path()
-        self.claim_url_detected = False
         self.current_address = None
         self.is_linked = False
         self.secret_dir = str(CONFIG_DIR)
@@ -31,6 +30,8 @@ class PlayitManager:
         self.api_client = PlayitApiClient()
         self.in_use_count = 0
         self._lock = threading.Lock()
+        self._api_dns = None       # Authoritative DNS from API -- never overwritten by stdout
+        self._claim_code = None    # Captured claim code from CLI stdout
 
     def _get_binary_path(self):
         system = platform.system()
@@ -59,7 +60,7 @@ class PlayitManager:
                 self.console_callback(f"[Playit] Version check failed ({e}). Redownloading...")
                 try:
                     os.remove(self.binary_path)
-                except:
+                except Exception:
                     pass
 
         if self.binary_path.exists():
@@ -84,11 +85,28 @@ class PlayitManager:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
 
+    # --- API-First Tunnel Management ---
+    def _try_api_link(self, claim_code: str) -> bool:
+        """Attempt to exchange a CLI claim code for API credentials.
+        Returns True if linking succeeded."""
+        try:
+            self.console_callback("[Playit] Exchanging claim code via API...")
+            success = self.api_client.link_account(claim_code)
+            if success:
+                self.is_linked = True
+                self.console_callback("[Playit] Account linked successfully via API.")
+                return True
+        except PlayitApiException as e:
+            self.console_callback(f"[Playit] API link exchange failed: {e}")
+        except Exception as e:
+            self.console_callback(f"[Playit] Unexpected error during API link: {e}")
+        return False
+
     def get_or_create_tunnel(self, port: int) -> str:
-        """Uses API to find an existing tunnel for the port, or creates one. Returns DNS."""
+        """Uses API to find an existing tunnel for the port, or creates one.
+        Returns the full connectable address (domain:port) or None."""
         if not self.api_client.load_secret_key():
-            # If no secret key, we must rely on the CLI to claim first.
-            self.console_callback("[Playit] Agent not linked yet. Please start tunnel manually to link.")
+            self.console_callback("[Playit] Agent not linked yet. Will attempt linking on start.")
             return None
             
         try:
@@ -96,16 +114,19 @@ class PlayitManager:
             for t in tunnels:
                 origin_port = t.get("origin", {}).get("data", {}).get("local_port")
                 if origin_port == port:
-                    domain = t.get("alloc", {}).get("data", {}).get("assigned_domain")
-                    if domain:
-                        return domain
+                    address = self.api_client.get_tunnel_address(t)
+                    if address:
+                        self._api_dns = address
+                        return address
                         
             # Not found, create it
             self.console_callback(f"[Playit] Creating new tunnel for port {port}...")
             tunnel = self.api_client.create_tunnel(port=port)
-            domain = tunnel.get("alloc", {}).get("data", {}).get("assigned_domain")
-            self.console_callback(f"[Playit] Tunnel created automatically: {domain}")
-            return domain
+            address = self.api_client.get_tunnel_address(tunnel)
+            if address:
+                self._api_dns = address
+                self.console_callback(f"[Playit] Tunnel created: {address}")
+            return address
         except PlayitApiException as e:
             self.console_callback(f"[Playit] API Error: {e}")
             return None
@@ -117,16 +138,25 @@ class PlayitManager:
             if self.running:
                 self.console_callback(f"[Debug] Agent already running (In use: {self.in_use_count}).")
                 
+                # If we already have API DNS, just report it
+                if self._api_dns:
+                    self.current_address = self._api_dns
+                    self.status_callback("Online", self._api_dns)
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+                    return
+                
                 # Try to get or create tunnel via API if linked
-                domain = self.get_or_create_tunnel(port)
-                if domain:
-                    self.current_address = domain
-                    self.status_callback("Online", domain)
+                address = self.get_or_create_tunnel(port)
+                if address:
+                    self.current_address = address
+                    self.status_callback("Online", address)
                     if self.on_ready_callback:
                         self.on_ready_callback()
                 return
 
-        self.claim_url_detected = False
+        self._api_dns = None
+        self._claim_code = None
         self.current_address = None
 
         if not self.ensure_binary():
@@ -138,16 +168,26 @@ class PlayitManager:
             os.makedirs(CONFIG_DIR)
         self.secret_dir = str(CONFIG_DIR)
 
-        try:
-            domain = self.get_or_create_tunnel(port)
-            if domain:
-                self.current_address = domain
-                self.status_callback("Online", domain)
-                if self.on_ready_callback:
-                    self.on_ready_callback()
-        except Exception as e:
-            logger.error(f"Failed to auto-create tunnel: {e}")
+        # Check if already linked and try API initialization
+        self.is_linked = os.path.exists(self.toml_path)
+        if self.is_linked:
+            try:
+                # Initialize the full API session
+                if self.api_client.initialize():
+                    self.console_callback("[Playit] API session initialized.")
+                
+                # Get or create tunnel via API
+                address = self.get_or_create_tunnel(port)
+                if address:
+                    self._api_dns = address
+                    self.current_address = address
+                    self.status_callback("Online", address)
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+            except Exception as e:
+                logger.error(f"Failed to auto-create tunnel: {e}")
 
+        # Start the agent process (needed for actual traffic relay)
         try:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
@@ -165,7 +205,6 @@ class PlayitManager:
                 env=env
             )
             self.running = True
-            self.is_linked = os.path.exists(self.toml_path)
             if not self.current_address:
                 self.status_callback("Starting...", None)
             
@@ -198,6 +237,7 @@ class PlayitManager:
         
         self.running = False
         self.current_address = None
+        self._api_dns = None
         self.status_callback("Offline", None)
 
     def reset(self):
@@ -209,7 +249,7 @@ class PlayitManager:
             try:
                 self.process.terminate()
                 self.process.wait(timeout=2)
-            except:
+            except Exception:
                 pass
                 
         self.console_callback("[Playit] Resetting agent configuration...")
@@ -226,10 +266,12 @@ class PlayitManager:
                 os.remove(self.toml_path)
                 self.console_callback("[Playit] Deleted playit.toml secret.")
             self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
-            self.claim_url_detected = False
+            self._claim_code = None
+            self._api_dns = None
             self.current_address = None
             self.is_linked = False
             self.api_client._secret_key = None
+            self.api_client._agent_id = None
             self.running = False
             self.status_callback("Offline", None)
         except Exception as e:
@@ -256,7 +298,7 @@ class PlayitManager:
                     if buffer:
                         try:
                             line = buffer.decode('utf-8', errors='replace').strip()
-                        except:
+                        except Exception:
                             line = ""
                         if line:
                             clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
@@ -272,41 +314,58 @@ class PlayitManager:
         finally:
             self.running = False
             self.process = None
-            self.current_address = None
+            if not self._api_dns:
+                self.current_address = None
             self.status_callback("Offline", None)
 
     def _parse_line(self, line):
-        # --- Claim URL detection (only if not already linked) ---
+        # --- Claim code detection (only if not already linked) ---
         if not self.is_linked:
-            claim_match = re.search(r"(https://playit\.gg/claim/[a-zA-Z0-9]+)", line)
+            claim_match = re.search(r"https://playit\.gg/claim/([a-zA-Z0-9]+)", line)
             if claim_match:
-                url = claim_match.group(1)
-                if not self.claim_url_detected:
-                    self.claim_url_detected = True
-                    self.claim_callback(url)
+                claim_code = claim_match.group(1)
+                if not self._claim_code:
+                    self._claim_code = claim_code
+                    self.console_callback(f"[Playit] Claim code detected: {claim_code}")
+                    
+                    # Try API-based linking first (no browser needed!)
+                    if self._try_api_link(claim_code):
+                        # Success -- now try to get/create tunnel
+                        try:
+                            if self.api_client.initialize():
+                                # We'll pick up DNS on next get_or_create_tunnel call
+                                self.console_callback("[Playit] API session ready after linking.")
+                        except Exception as e:
+                            logger.warning(f"Post-link initialization incomplete: {e}")
+                        return
+                    else:
+                        # API exchange failed -- notify UI for manual fallback
+                        full_url = f"https://playit.gg/claim/{claim_code}"
+                        self.claim_callback(full_url)
+                return
 
-        # --- Network unreachable — agent will auto-retry via IPv4 ---
+        # --- Network unreachable -- agent will auto-retry via IPv4 ---
         if "NetworkUnreachable" in line or "Os { code: 10051" in line or "Os { code: 101" in line:
-            self.console_callback("[Playit] Network unreachable (IPv6), letting agent fallback to IPv4...")
             return
 
         # --- Account limit error ---
         if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
             self.status_callback("Error", None)
-            self.console_callback("[Playit] ❌ ERROR: Account limit reached!")
-            self.console_callback("[Playit] You have too many agents. Please go to https://playit.gg/dashboard/agents and delete unused agents.")
+            self.console_callback("[Playit] ERROR: Account limit reached!")
+            self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
             return
 
-        # --- Agent registered → LINKED state confirmed ---
+        # --- Agent registered -- LINKED state confirmed ---
         if "agent registered" in line and not self.is_linked:
             self.is_linked = True
             self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
             self.api_client.load_secret_key()
-            # Refresh DNS detection in case address was assigned while linking
-            if not self.current_address:
-                self.status_callback("Online", "checking...")
 
-        # --- DNS / address detection (only after LINKED) ---
+        # --- DNS from stdout (ONLY if API didn't already provide it) ---
+        if self._api_dns:
+            # API already provided the authoritative address. Do not overwrite.
+            return
+
         if not self.is_linked:
             return
 
