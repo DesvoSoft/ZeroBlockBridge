@@ -192,7 +192,7 @@ class PlayitManager:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
 
-            cmd = [str(self.binary_path), "--stdout", "--secret-path", self.secret_dir]
+            cmd = [str(self.binary_path), "--stdout", "--secret_path", f'"{self.secret_dir}"']
 
             self.process = subprocess.Popen(
                 cmd,

@@ -862,7 +862,7 @@ class MCTunnelApp(ctk.CTk):
         if copy_value:
             self.clipboard_clear()
             self.clipboard_append(copy_value)
-            Toast.show(self, f"¡IP copiada al portapapeles!: {copy_value}", toast_type="info", duration=2500)
+            Toast.show(self, f"¡IP copiada con éxito! {copy_value}", toast_type="success", duration=2500)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:

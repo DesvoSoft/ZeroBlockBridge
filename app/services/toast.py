@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Toast type -> (bg_color, border_color, icon)
 _TOAST_STYLES = {
     "info":    ("#1e293b", "#3b82f6", "i"),       # Slate-800 + Blue-500
+    "success": ("#1e293b", "#22c55e", "\u2713"),   # Slate-800 + Green-500
     "warning": ("#1e293b", "#f97316", "!"),        # Slate-800 + Orange-500
     "error":   ("#1e293b", "#ef4444", "x"),        # Slate-800 + Red-500
 }
@@ -28,7 +29,7 @@ _COLOR_TYPE_MAP = {
     "#f97316": "warning",
     "blue": "info",
     "#3b82f6": "info",
-    "green": "info",
+    "green": "success",
     "white": "info",
 }
 
