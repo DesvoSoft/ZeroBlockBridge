@@ -189,7 +189,7 @@ class VersionManager:
             if resp.status_code == 200:
                 data = resp.json()
                 versions = [v["id"] for v in data.get("versions", []) if v["type"] == "release"]
-                new_cache["Vanilla"] = versions[:20] # Keep top 20 latest
+                new_cache["Vanilla"] = versions[:100] # Increased limit for older versions like 1.8.9
         except Exception as e:
             logger.warning("Failed to fetch Vanilla versions: %s", e)
 
@@ -200,7 +200,7 @@ class VersionManager:
                 data = resp.json()
                 # Fabric meta returns list of objects with "version"
                 versions = [v["version"] for v in data if v.get("stable")]
-                new_cache["Fabric"] = versions[:20]
+                new_cache["Fabric"] = versions[:100]
         except Exception as e:
             logger.warning("Failed to fetch Fabric versions: %s", e)
 
@@ -229,7 +229,7 @@ class VersionManager:
                         return (0,)
 
                 sorted_versions = sorted(list(forge_versions), key=version_key, reverse=True)
-                new_cache["Forge"] = sorted_versions[:50]
+                new_cache["Forge"] = sorted_versions[:100]
         except Exception as e:
             logger.warning("Failed to fetch Forge versions: %s", e)
 
@@ -240,7 +240,7 @@ class VersionManager:
                 data = resp.json()
                 versions = data.get("versions", [])
                 versions.reverse() # Reverse to get newest first
-                new_cache["Paper"] = versions[:30]
+                new_cache["Paper"] = versions[:100]
         except Exception as e:
             logger.warning("Failed to fetch Paper versions: %s", e)
 
@@ -251,7 +251,7 @@ class VersionManager:
                 data = resp.json()
                 versions = data.get("versions", [])
                 versions.reverse() # Reverse to get newest first
-                new_cache["Purpur"] = versions[:30]
+                new_cache["Purpur"] = versions[:100]
         except Exception as e:
             logger.warning("Failed to fetch Purpur versions: %s", e)
 

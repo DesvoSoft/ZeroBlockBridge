@@ -181,13 +181,20 @@ class ZBBManager:
             # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
             import time
-            for _ in range(10):
-                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 100:
+            bytecode_java = None
+            for _ in range(20):
+                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                     break
                 time.sleep(0.5)
             else:
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
-            bytecode_java = analyze_jar_bytecode(jar_path)
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not found after 10s. Aborting bytecode analysis.")
+            
+            if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                try:
+                    bytecode_java = analyze_jar_bytecode(jar_path)
+                except Exception as e:
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
+
             required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
             source = "bytecode" if bytecode_java else "version-map"
             self.events.emit(

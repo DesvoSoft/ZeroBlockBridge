@@ -727,6 +727,21 @@ class MCTunnelApp(ctk.CTk):
         if os.path.exists(os.path.join(SERVERS_DIR, config["name"])):
             self.server_console.log(f"[Error] Server '{config['name']}' already exists.")
             return
+            
+        custom_loc = config.get("location", str(SERVERS_DIR))
+        if custom_loc and os.path.normpath(custom_loc) != os.path.normpath(str(SERVERS_DIR)):
+            target_path = os.path.join(custom_loc, config["name"])
+            link_path = os.path.join(SERVERS_DIR, config["name"])
+            try:
+                os.makedirs(target_path, exist_ok=True)
+                # Create directory junction on Windows
+                import _winapi
+                _winapi.CreateJunction(target_path, link_path)
+                self.server_console.log(f"[System] Created junction for custom location: {target_path}")
+            except Exception as e:
+                self.server_console.log(f"[Error] Failed to map custom location: {e}")
+                return
+
         threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
 
     def start_download_process(self, config):
@@ -760,8 +775,6 @@ class MCTunnelApp(ctk.CTk):
                 
                 if success:
                     self.server_console.log(f"[System] Installation success. Applying settings...")
-                    logic.apply_server_settings(name, config["ram"], config["seed"], config["game_mode"], 
-                                              config["difficulty"], config["view_distance"], config["simulation_distance"])
                     if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
 
                     # --- PROV-02: Pre-Boot Scaffolding ---
@@ -769,7 +782,7 @@ class MCTunnelApp(ctk.CTk):
                     from app.services.scaffolder import pre_boot_scaffold
                     server_dir = os.path.join(SERVERS_DIR, name)
                     port = self.zbb_manager.get_server_port(name)
-                    pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
+                    pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
                     self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
 
                     # --- PROV-03: Bytecode Analysis ---
@@ -780,13 +793,20 @@ class MCTunnelApp(ctk.CTk):
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")
                     import time
-                    for _ in range(10):
-                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 100:
+                    required_java = None
+                    for _ in range(20):
+                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                             break
                         time.sleep(0.5)
                     else:
-                        self.server_console.log("[Warning] server.jar not ready after 5s; attempting bytecode analysis anyway...")
-                    required_java = analyze_jar_bytecode(jar_path)
+                        self.server_console.log("[Warning] server.jar not found after 10s. Aborting bytecode analysis.")
+                    
+                    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                        try:
+                            required_java = analyze_jar_bytecode(jar_path)
+                        except Exception as e:
+                            self.server_console.log(f"[Warning] Bytecode analysis crashed: {e}")
+
                     if required_java:
                         self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
                     else:
@@ -891,7 +911,7 @@ class MCTunnelApp(ctk.CTk):
         if dns_value and dns_value not in ["Vínculo pendiente...", "Conectando..."]:
             self.clipboard_clear()
             self.clipboard_append(dns_value)
-            Toast.show(self, f"¡IP copiada con éxito! {dns_value}", toast_type="success", duration=2500)
+            Toast.show(self, "¡Dirección pública copiada al portapapeles!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
         if hasattr(self, 'claim_url') and self.claim_url:

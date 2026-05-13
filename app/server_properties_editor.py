@@ -454,7 +454,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         }
         for code, hex_color in mc_colors.items():
             self.motd_preview.tag_config(f"mc_{code}", foreground=hex_color)
-        self.motd_preview.tag_config("mc_l", font=("Consolas", 12, "bold"))
+        # Removed font argument from mc_l due to CTk scaling limitations
             
         self.widgets["motd"] = (self.entry_motd, "entry")
         self._update_motd_preview()
