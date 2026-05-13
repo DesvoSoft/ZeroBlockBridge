@@ -69,6 +69,7 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
         self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        self.events.subscribe(ServerEvent.RESOURCE_USAGE, self.on_resource_usage_update)
         
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
@@ -145,7 +146,22 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_player_count.pack(side="left", padx=(0, 15))
         
         self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_java_ver.pack(side="left")
+        self.lbl_java_ver.pack(side="left", padx=(0, 15))
+
+        self.stats_frame = ctk.CTkFrame(self.status_right_frame, fg_color="transparent")
+        self.stats_frame.pack(side="left", padx=(0, 15))
+        
+        self.lbl_cpu = ctk.CTkLabel(self.stats_frame, text="CPU: 0%", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 10))
+        self.lbl_cpu.pack(side="top", anchor="w")
+        self.bar_cpu = ctk.CTkProgressBar(self.stats_frame, width=60, height=5, progress_color="#3b82f6")
+        self.bar_cpu.pack(side="top", pady=(0, 2))
+        self.bar_cpu.set(0)
+
+        self.lbl_ram = ctk.CTkLabel(self.stats_frame, text="RAM: 0 MB", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 10))
+        self.lbl_ram.pack(side="top", anchor="w")
+        self.bar_ram = ctk.CTkProgressBar(self.stats_frame, width=60, height=5, progress_color="#22c55e")
+        self.bar_ram.pack(side="top")
+        self.bar_ram.set(0)
 
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
@@ -555,6 +571,17 @@ class MCTunnelApp(ctk.CTk):
             self.entry_scheduler_interval.grid_forget()
             self.lbl_interval_unit.grid_forget()
             self.entry_restart_time.grid(row=0, column=2, sticky="w", padx=(5, 0), columnspan=2)
+
+    def on_resource_usage_update(self, data):
+        if not data: return
+        cpu = data.get("cpu", 0)
+        ram = data.get("ram", 0)
+        def _update():
+            self.lbl_cpu.configure(text=f"CPU: {cpu:.1f}%")
+            self.bar_cpu.set(min(cpu / 100.0, 1.0))
+            self.lbl_ram.configure(text=f"RAM: {ram:.0f} MB")
+            self.bar_ram.set(min(ram / 8192.0, 1.0))
+        self.after(0, _update)
 
     def _format_time_input(self, event=None):
         """Auto-format time entry to HH:MM. Strips non-numeric chars

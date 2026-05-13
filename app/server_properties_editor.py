@@ -425,7 +425,39 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                             width=100, height=28, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"))
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
-        self.add_field_to_section(card_identity, "motd", "Message of the Day")
+        current_row = card_identity.grid_size()[1]
+        sep = ctk.CTkFrame(card_identity, height=1, fg_color=("gray90", "gray25"))
+        sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
+        current_row += 1
+
+        ctk.CTkLabel(card_identity, text="Message of the Day", font=self.font_bold, anchor="w").grid(row=current_row, column=0, sticky="nw", padx=(12, 5), pady=8)
+        
+        motd_frame = ctk.CTkFrame(card_identity, fg_color="transparent")
+        motd_frame.grid(row=current_row, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+        
+        self.entry_motd = ctk.CTkEntry(motd_frame, width=200, height=28)
+        self.entry_motd.pack(fill="x", pady=(0, 5))
+        self.entry_motd.insert(0, self.properties.get("motd", "A Minecraft Server"))
+        self.entry_motd.bind("<KeyRelease>", self._update_motd_preview)
+
+        self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color="#1d1d1d", corner_radius=0, border_width=2, border_color="#3e3e3e")
+        self.preview_motd_frame.pack(fill="x", pady=(0, 0))
+        
+        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color="#1d1d1d", text_color="#aaaaaa", font=("Consolas", 12), wrap="word")
+        self.motd_preview.pack(fill="both", expand=True, padx=2, pady=2)
+        
+        mc_colors = {
+            '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA',
+            '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA',
+            '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF',
+            'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF'
+        }
+        for code, hex_color in mc_colors.items():
+            self.motd_preview.tag_config(f"mc_{code}", foreground=hex_color)
+        self.motd_preview.tag_config("mc_l", font=("Consolas", 12, "bold"))
+            
+        self.widgets["motd"] = (self.entry_motd, "entry")
+        self._update_motd_preview()
 
         # 2. Resources Section
         card_res = self.create_section_frame(self.frame_general, "Resources")
@@ -477,6 +509,23 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if file_path:
             if self.logic.save_server_icon(self.server_name, file_path):
                 pass
+
+    def _update_motd_preview(self, event=None):
+        text = self.entry_motd.get()
+        self.motd_preview.configure(state="normal")
+        self.motd_preview.delete("1.0", "end")
+        
+        import re
+        parts = re.split(r'([§&][0-9a-fk-or])', text)
+        current_tag = "mc_7" # default gray
+        for p in parts:
+            if re.match(r'^[§&][0-9a-fk-or]$', p):
+                code = p[1].lower()
+                if code in '0123456789abcdef':
+                    current_tag = f"mc_{code}"
+            else:
+                self.motd_preview.insert("end", p, current_tag)
+        self.motd_preview.configure(state="disabled")
 
     def save_properties(self):
         # 1. Validate RAM (General Tab)

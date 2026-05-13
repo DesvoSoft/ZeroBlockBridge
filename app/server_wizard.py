@@ -3,23 +3,24 @@ import os
 import psutil
 from app.constants import SERVERS_DIR
 from app.version_manager import VersionManager
+from PIL import Image
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
         super().__init__(parent)
         self.title("Create New Server - Zero Block Bridge")
-        self.geometry("600x500")
+        self.geometry("600x550")
         self.resizable(False, False)
         
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 6
+        self.total_steps = 3
         
         # Data storage
         self.wizard_data = {
             "name": "",
             "type": "Vanilla",
-            "version": "", # Will be set dynamically
+            "version": "",
             "ram": 2048,
             "seed": "",
             "game_mode": "survival",
@@ -30,7 +31,6 @@ class ServerWizard(ctk.CTkToplevel):
             "icon_path": None
         }
         
-        
         # Layout
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0) # Header
@@ -40,9 +40,9 @@ class ServerWizard(ctk.CTkToplevel):
         # Header
         self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.header_frame.grid(row=0, column=0, sticky="ew")
-        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 5", font=ctk.CTkFont(size=14))
+        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Paso 1 de 3", font=ctk.CTkFont(size=14))
         self.lbl_step.pack(side="left", padx=20, pady=10)
-        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Server Details", font=ctk.CTkFont(size=16, weight="bold"))
+        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identidad", font=ctk.CTkFont(size=16, weight="bold"))
         self.lbl_title.pack(side="right", padx=20, pady=10)
         
         # Content Frame
@@ -53,26 +53,23 @@ class ServerWizard(ctk.CTkToplevel):
         self.footer_frame = ctk.CTkFrame(self, height=60, corner_radius=0)
         self.footer_frame.grid(row=2, column=0, sticky="ew")
         
-        self.btn_back = ctk.CTkButton(self.footer_frame, text="Back", command=self.go_back, state="disabled")
+        self.btn_back = ctk.CTkButton(self.footer_frame, text="Atrás", command=self.go_back, state="disabled", corner_radius=12)
         self.btn_back.pack(side="left", padx=20, pady=15)
         
-        self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next)
+        self.btn_next = ctk.CTkButton(self.footer_frame, text="Siguiente", command=self.go_next, corner_radius=12)
         self.btn_next.pack(side="right", padx=20, pady=15)
         
-        # Initialize VersionManager
         self.vm = VersionManager()
         self.vm.add_callback(self.on_versions_refreshed)
         
-        # Initialize Step 1
         self.show_step_1()
         
-        # Make modal
         self.transient(parent)
         self.wait_visibility()
         self.grab_set()
-        
+
     def update_header(self, title):
-        self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps}")
+        self.lbl_step.configure(text=f"Paso {self.current_step} de {self.total_steps}")
         self.lbl_title.configure(text=title)
         
         if self.current_step == 1:
@@ -81,380 +78,181 @@ class ServerWizard(ctk.CTkToplevel):
             self.btn_back.configure(state="normal")
             
         if self.current_step == self.total_steps:
-            self.btn_next.configure(text="Create Server", fg_color="green", hover_color="darkgreen")
+            self.btn_next.configure(text="Crear Servidor", fg_color="green", hover_color="darkgreen")
         else:
-            self.btn_next.configure(text="Next", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
+            self.btn_next.configure(text="Siguiente", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
 
     def clear_content(self):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
 
     def on_versions_refreshed(self):
-        """Called when VersionManager finishes fetching new versions."""
-        self.after(0, self._refresh_ui_versions)
+        if self.current_step == 2:
+            self.after(0, self._render_versions)
 
-    def _refresh_ui_versions(self):
-        """Updates the version dropdown if currently on Step 1."""
-        if self.current_step == 1 and hasattr(self, 'combo_type'):
-            current_type = self.combo_type.get()
-            self.update_version_list(current_type)
-
-    # --- Steps ---
-    
+    # --- Step 1: Identidad ---
     def show_step_1(self):
         self.clear_content()
-        self.update_header("Server Type & Name")
+        self.update_header("Identidad del Servidor")
         
-        # Name
-        ctk.CTkLabel(self.content_frame, text="Server Name:").pack(anchor="w", pady=(0, 5))
-        self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server")
+        ctk.CTkLabel(self.content_frame, text="Nombre del Servidor:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server", corner_radius=12, height=36)
         self.entry_name.pack(fill="x", pady=(0, 20))
         if self.wizard_data["name"]:
             self.entry_name.insert(0, self.wizard_data["name"])
             
-        # Type
-        ctk.CTkLabel(self.content_frame, text="Server Type:").pack(anchor="w", pady=(0, 5))
-        # Get available types from VersionManager cache keys (excluding metadata)
-        types = [k for k in self.vm.cache.keys() if k != "last_updated"]
-        if not types: types = ["Vanilla", "Fabric", "Forge"] # Fallback
+        ctk.CTkLabel(self.content_frame, text="Icono del Servidor (Opcional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
         
-        self.combo_type = ctk.CTkComboBox(self.content_frame, values=types, 
-                                         command=self.update_version_list, state="readonly")
-        self.combo_type.set(self.wizard_data["type"])
-        self.combo_type.pack(fill="x", pady=(0, 20))
-        # Fix: Make clickable anywhere and prevent text selection
-        self.combo_type._entry.bind("<Button-1>", lambda e: self.combo_type._open_dropdown_menu())
-        self.combo_type._entry.bind("<B1-Motion>", lambda e: "break")
-        self.combo_type._entry.bind("<Double-Button-1>", lambda e: "break")
-        self.combo_type._entry.configure(cursor="arrow")
-        
-        # Version
-        ctk.CTkLabel(self.content_frame, text="Minecraft Version:").pack(anchor="w", pady=(0, 5))
-        self.combo_version = ctk.CTkComboBox(self.content_frame, state="readonly")
-        self.combo_version.pack(fill="x", pady=(0, 5))
-        # Fix: Make clickable anywhere and prevent text selection
-        self.combo_version._entry.bind("<Button-1>", lambda e: self.combo_version._open_dropdown_menu())
-        self.combo_version._entry.bind("<B1-Motion>", lambda e: "break")
-        self.combo_version._entry.bind("<Double-Button-1>", lambda e: "break")
-        self.combo_version._entry.configure(cursor="arrow")
-        
-        # Initialize versions
-        self.update_version_list(self.wizard_data["type"])
-        
-        # Pre-select version if available
-        if self.wizard_data["version"] in self.combo_version.cget("values"):
-             self.combo_version.set(self.wizard_data["version"])
-
-    def update_version_list(self, server_type):
-        versions = self.vm.get_versions(server_type)
-        
-        def version_key(v):
-            try:
-                parts = []
-                for part in v.split('.'):
-                    if part.isdigit():
-                        parts.append(int(part))
-                    else:
-                        import re
-                        match = re.match(r"(\d+)", part)
-                        if match:
-                            parts.append(int(match.group(1)))
-                        else:
-                            parts.append(0)
-                return tuple(parts)
-            except:
-                return (0, 0, 0)
-
-        # Sort full list first to identify "latest" correctly
-        versions.sort(key=version_key, reverse=True)
-
-        POPULAR_VERSIONS = ["1.20.4", "1.20.1", "1.18.2", "1.16.5", "1.16.1", "1.12.2", "1.8.9", "1.7.10", "1.7.2"]
-        
-        filtered_versions = []
-        if versions:
-            # Top 5 latest
-            filtered_versions.extend(versions[:5])
-            
-            # Add popular ones if available and not already added
-            for v in POPULAR_VERSIONS:
-                if v in versions and v not in filtered_versions:
-                    filtered_versions.append(v)
-            
-            # Re-sort the filtered list
-            filtered_versions.sort(key=version_key, reverse=True)
-            
-        self.combo_version.configure(values=filtered_versions if filtered_versions else ["No versions found"])
-        
-        current_selection = self.combo_version.get()
-        if filtered_versions:
-            if current_selection in filtered_versions:
-                self.combo_version.set(current_selection)
-            else:
-                self.combo_version.set(filtered_versions[0])
-        else:
-            self.combo_version.set("No versions found")
-        
-    def show_step_2(self):
-        self.clear_content()
-        self.update_header("Performance (RAM)")
-        
-        # RAM Slider
-        total_ram = psutil.virtual_memory().total / (1024 * 1024) # MB
-        max_slider = min(16384, total_ram - 1024) # Leave 1GB for OS
-        
-        ctk.CTkLabel(self.content_frame, text=f"RAM Allocation (MB):").pack(anchor="w", pady=(0, 5))
-        
-        # Manual entry and slider in same row
-        input_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        input_frame.pack(fill="x", pady=(0, 10))
-        
-        self.entry_ram = ctk.CTkEntry(input_frame, width=100, placeholder_text="MB")
-        self.entry_ram.pack(side="left", padx=(0, 10))
-        self.entry_ram.insert(0, str(self.wizard_data['ram']))
-        self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
-        
-        self.lbl_ram_value = ctk.CTkLabel(input_frame, text=f"or use slider")
-        self.lbl_ram_value.pack(side="left")
-        
-        self.slider_ram = ctk.CTkSlider(self.content_frame, from_=512, to=max_slider, number_of_steps=100,
-                                       command=self.update_ram_label)
-        self.slider_ram.set(self.wizard_data["ram"])
-        self.slider_ram.pack(fill="x", pady=(0, 20))
-        
-        # Validation label
-        self.lbl_ram_error = ctk.CTkLabel(self.content_frame, text="", text_color="red")
-        self.lbl_ram_error.pack(anchor="w")
-        
-        # Recommendations
-        rec_frame = ctk.CTkFrame(self.content_frame)
-        rec_frame.pack(fill="x", pady=10)
-        ctk.CTkLabel(rec_frame, text="Recommendations:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
-        ctk.CTkLabel(rec_frame, text="• Vanilla: 2048 - 4096 MB").pack(anchor="w", padx=10)
-        ctk.CTkLabel(rec_frame, text="• Modded (Fabric): 6144 - 8192 MB").pack(anchor="w", padx=10)
-        
-    def update_ram_from_entry(self, event=None):
-        try:
-            value = int(self.entry_ram.get())
-            total_ram = psutil.virtual_memory().total / (1024 * 1024)
-            max_ram = min(16384, total_ram - 1024)
-            
-            if value < 512:
-                self.lbl_ram_error.configure(text="⚠ Minimum: 512 MB")
-                return
-            elif value > max_ram:
-                self.lbl_ram_error.configure(text=f"⚠ Maximum: {int(max_ram)} MB")
-                return
-            else:
-                self.lbl_ram_error.configure(text="")
-                self.wizard_data["ram"] = value
-                self.slider_ram.set(value)
-        except ValueError:
-            if self.entry_ram.get():  # Only show error if not empty
-                self.lbl_ram_error.configure(text="⚠ Enter a valid number")
-        
-    def update_ram_label(self, value):
-        self.wizard_data["ram"] = int(value)
-        self.entry_ram.delete(0, "end")
-        self.entry_ram.insert(0, str(int(value)))
-        self.lbl_ram_error.configure(text="")
-
-    def show_step_3(self):
-        self.clear_content()
-        self.update_header("World Settings")
-        
-        # --- Top Row: Seed & Gamemode ---
-        top_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        top_frame.pack(fill="x", expand=True)
-        top_frame.grid_columnconfigure((0, 1), weight=1)
-
-        # Seed
-        seed_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
-        seed_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        ctk.CTkLabel(seed_frame, text="World Seed (Optional):").pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(seed_frame, placeholder_text="Leave empty for random")
-        self.entry_seed.pack(fill="x")
-        if self.wizard_data["seed"]: self.entry_seed.insert(0, self.wizard_data["seed"])
-            
-        # Game Mode
-        gamemode_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
-        gamemode_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-        ctk.CTkLabel(gamemode_frame, text="Default Game Mode:").pack(anchor="w", pady=(0, 5))
-        self.combo_gamemode = ctk.CTkComboBox(gamemode_frame, values=["survival", "creative", "adventure", "spectator"], state="readonly")
-        self.combo_gamemode.set(self.wizard_data["game_mode"])
-        self.combo_gamemode.pack(fill="x")
-        # Fix: Make clickable anywhere and prevent text selection
-        self.combo_gamemode._entry.bind("<Button-1>", lambda e: self.combo_gamemode._open_dropdown_menu())
-        self.combo_gamemode._entry.bind("<B1-Motion>", lambda e: "break")
-        self.combo_gamemode._entry.bind("<Double-Button-1>", lambda e: "break")
-        self.combo_gamemode._entry.configure(cursor="arrow")
-
-        # --- Middle Row: Difficulty, View, Sim ---
-        middle_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        middle_frame.pack(fill="x", expand=True, pady=(20, 0))
-        middle_frame.grid_columnconfigure((0, 1, 2), weight=1)
-        
-        # Difficulty
-        difficulty_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
-        difficulty_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        ctk.CTkLabel(difficulty_frame, text="Difficulty:").pack(anchor="w", pady=(0, 5))
-        self.combo_difficulty = ctk.CTkComboBox(difficulty_frame, values=["peaceful", "easy", "normal", "hard"], state="readonly")
-        self.combo_difficulty.set(self.wizard_data["difficulty"])
-        self.combo_difficulty.pack(fill="x")
-        # Fix: Make clickable anywhere and prevent text selection
-        self.combo_difficulty._entry.bind("<Button-1>", lambda e: self.combo_difficulty._open_dropdown_menu())
-        self.combo_difficulty._entry.bind("<B1-Motion>", lambda e: "break")
-        self.combo_difficulty._entry.bind("<Double-Button-1>", lambda e: "break")
-        self.combo_difficulty._entry.configure(cursor="arrow")
-
-        # View Distance
-        view_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
-        view_dist_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 10))
-        ctk.CTkLabel(view_dist_frame, text="View Distance (chunks):").pack(anchor="w", pady=(0, 5))
-        self.entry_view_distance = ctk.CTkEntry(view_dist_frame, placeholder_text="Default: 10")
-        self.entry_view_distance.pack(fill="x")
-        if self.wizard_data["view_distance"]: self.entry_view_distance.insert(0, self.wizard_data["view_distance"])
-
-        # Simulation Distance
-        sim_dist_frame = ctk.CTkFrame(middle_frame, fg_color="transparent")
-        sim_dist_frame.grid(row=0, column=2, sticky="nsew", padx=(10, 0))
-        ctk.CTkLabel(sim_dist_frame, text="Simulation Distance (chunks):").pack(anchor="w", pady=(0, 5))
-        self.entry_sim_distance = ctk.CTkEntry(sim_dist_frame, placeholder_text="Default: 10")
-        self.entry_sim_distance.pack(fill="x")
-        if self.wizard_data["simulation_distance"]: self.entry_sim_distance.insert(0, self.wizard_data["simulation_distance"])
-
-
-
-    def show_step_4(self):
-        self.clear_content()
-        self.update_header("Server Icon")
-        
-        ctk.CTkLabel(self.content_frame, text="Choose a server icon (Optional):").pack(anchor="w", pady=(0, 10))
-        
-        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon Selected", 
-                                        width=100, height=100, fg_color="gray30", corner_radius=10)
+        self.icon_preview = ctk.CTkLabel(self.content_frame, text="Sin Icono", width=100, height=100, fg_color="gray30", corner_radius=12)
         self.icon_preview.pack(pady=10)
         
         if self.wizard_data["icon_path"]:
             self._update_icon_preview(self.wizard_data["icon_path"])
             
-        btn_browse = ctk.CTkButton(self.content_frame, text="Browse Image...", command=self.browse_icon)
+        btn_browse = ctk.CTkButton(self.content_frame, text="Buscar Imagen...", command=self.browse_icon, corner_radius=12, fg_color="gray", hover_color="gray30")
         btn_browse.pack(pady=10)
-        
-        ctk.CTkLabel(self.content_frame, text="Supported formats: PNG, JPG (will be resized to 64x64)", 
-                    text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
 
     def browse_icon(self):
         from tkinter import filedialog
-        file_path = filedialog.askopenfilename(
-            title="Select Server Icon",
-            filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
-        )
+        file_path = filedialog.askopenfilename(title="Seleccionar Icono", filetypes=[("Images", "*.png;*.jpg;*.jpeg")])
         if file_path:
             self.wizard_data["icon_path"] = file_path
             self._update_icon_preview(file_path)
             
     def _update_icon_preview(self, path):
         try:
-            from PIL import Image
             img = ctk.CTkImage(Image.open(path), size=(100, 100))
             self.icon_preview.configure(image=img, text="")
-        except Exception as e:
-            self.icon_preview.configure(text="Error loading image")
+        except Exception:
+            self.icon_preview.configure(text="Error")
 
-    def show_step_5(self):
+    # --- Step 2: Motor ---
+    def show_step_2(self):
         self.clear_content()
-        self.update_header("Storage Location")
+        self.update_header("Motor & Versión")
         
-        ctk.CTkLabel(self.content_frame, text="Save Location:").pack(anchor="w", pady=(0, 5))
+        # Engine Selection
+        engines_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        engines_frame.pack(fill="x", pady=(0, 15))
         
-        server_path = SERVERS_DIR / self.wizard_data['name']
-        self.lbl_location = ctk.CTkLabel(self.content_frame, text=str(server_path), 
-                                        fg_color="gray20", corner_radius=6, padx=10, pady=5)
-        self.lbl_location.pack(fill="x", pady=(0, 20))
+        self.engine_var = ctk.StringVar(value=self.wizard_data["type"])
+        engines = [("Vanilla", "🌿 Vanilla"), ("Forge", "🔨 Forge"), ("Fabric", "🧶 Fabric")]
         
-        ctk.CTkLabel(self.content_frame, text="Note: Custom locations coming soon.", text_color="gray").pack(anchor="w")
-
-    def show_step_6(self):
-        self.clear_content()
-        self.update_header("Review & Create")
-        
-        icon_status = "Default"
-        if self.wizard_data["icon_path"]:
-            icon_status = os.path.basename(self.wizard_data["icon_path"])
+        for val, name in engines:
+            rb = ctk.CTkRadioButton(engines_frame, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
+            rb.pack(side="left", padx=(0, 20))
             
-        summary = (
-            f"Server Name: {self.wizard_data['name']}\n"
-            f"Type: {self.wizard_data['type']} {self.wizard_data['version']}\n"
-            f"RAM: {self.wizard_data['ram']} MB\n\n"
-            f"World Seed: {self.wizard_data['seed'] or 'Random'}\n"
-            f"Game Mode: {self.wizard_data['game_mode']}\n"
-            f"Difficulty: {self.wizard_data['difficulty']}\n"
-            f"View Distance: {self.wizard_data['view_distance']}\n"
-            f"Simulation Distance: {self.wizard_data['simulation_distance']}\n\n"
-            f"Icon: {icon_status}\n"
-            f"Location: {SERVERS_DIR / self.wizard_data['name']}"
-        )
+        # Version Search
+        ctk.CTkLabel(self.content_frame, text="Buscar Versión:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_search = ctk.CTkEntry(self.content_frame, placeholder_text="Ej. 1.20.1", corner_radius=12, height=36)
+        self.entry_search.pack(fill="x", pady=(0, 10))
+        self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
         
-        ctk.CTkLabel(self.content_frame, text="Please review your settings:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
+        # Versions List
+        self.scroll_versions = ctk.CTkScrollableFrame(self.content_frame, corner_radius=12, fg_color=("gray90", "gray15"))
+        self.scroll_versions.pack(fill="both", expand=True)
         
-        lbl_summary = ctk.CTkLabel(self.content_frame, text=summary, justify="left", anchor="w", 
-                                  fg_color="gray20", corner_radius=6, padx=15, pady=15)
-        lbl_summary.pack(fill="x")
+        self.version_var = ctk.StringVar(value=self.wizard_data["version"])
+        self._render_versions()
+        
+    def _on_engine_change(self):
+        self.wizard_data["type"] = self.engine_var.get()
+        self._render_versions()
+        
+    def _render_versions(self):
+        for widget in self.scroll_versions.winfo_children():
+            widget.destroy()
+            
+        engine = self.engine_var.get()
+        versions = self.vm.get_versions(engine)
+        search_q = self.entry_search.get().lower()
+        
+        def version_key(v):
+            try:
+                import re
+                parts = []
+                for part in v.split('.'):
+                    if part.isdigit():
+                        parts.append(int(part))
+                    else:
+                        match = re.match(r"(\d+)", part)
+                        parts.append(int(match.group(1)) if match else 0)
+                return tuple(parts)
+            except:
+                return (0, 0, 0)
+
+        versions.sort(key=version_key, reverse=True)
+        filtered = [v for v in versions if search_q in v.lower()]
+        
+        if not filtered:
+            ctk.CTkLabel(self.scroll_versions, text="No se encontraron versiones.").pack(pady=20)
+            return
+            
+        for v in filtered[:50]: # Limit to avoid lag
+            rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var, value=v)
+            rb.pack(anchor="w", padx=10, pady=5)
+            
+        if self.wizard_data["version"] in filtered:
+            self.version_var.set(self.wizard_data["version"])
+        elif filtered:
+            self.version_var.set(filtered[0])
+
+    # --- Step 3: Hardware ---
+    def show_step_3(self):
+        self.clear_content()
+        self.update_header("Hardware (RAM & Red)")
+        
+        total_ram = psutil.virtual_memory().total / (1024 * 1024)
+        max_slider = min(16384, total_ram - 1024)
+        
+        ctk.CTkLabel(self.content_frame, text="Memoria RAM (MB):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        
+        input_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        input_frame.pack(fill="x", pady=(0, 10))
+        
+        self.entry_ram = ctk.CTkEntry(input_frame, width=100, corner_radius=12, height=36)
+        self.entry_ram.pack(side="left", padx=(0, 10))
+        self.entry_ram.insert(0, str(self.wizard_data['ram']))
+        self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
+        
+        self.slider_ram = ctk.CTkSlider(self.content_frame, from_=512, to=max_slider, number_of_steps=100, command=self.update_ram_label)
+        self.slider_ram.set(self.wizard_data["ram"])
+        self.slider_ram.pack(fill="x", pady=(0, 20))
+        
+        self.lbl_ram_error = ctk.CTkLabel(self.content_frame, text="", text_color="red")
+        self.lbl_ram_error.pack(anchor="w")
+
+    def update_ram_from_entry(self, event=None):
+        try:
+            val = int(self.entry_ram.get())
+            if 512 <= val <= 32768:
+                self.slider_ram.set(val)
+                self.wizard_data["ram"] = val
+                self.lbl_ram_error.configure(text="")
+        except ValueError:
+            pass
+            
+    def update_ram_label(self, value):
+        self.wizard_data["ram"] = int(value)
+        self.entry_ram.delete(0, "end")
+        self.entry_ram.insert(0, str(int(value)))
 
     # --- Navigation ---
-    
     def go_next(self):
-        # Save data from current step
         if self.current_step == 1:
             name = self.entry_name.get().strip()
             if not name:
-                # Simple validation
                 self.entry_name.configure(border_color="red")
-                self.entry_name.focus()
                 return
-            else:
-                self.entry_name.configure(border_color=["#979da2", "#565b5e"]) # Reset to default (light/dark)
             self.wizard_data["name"] = name
-            self.wizard_data["type"] = self.combo_type.get()
-            self.wizard_data["version"] = self.combo_version.get()
             
         elif self.current_step == 2:
-            # RAM already updated via callback
-            pass
-            
-        elif self.current_step == 3:
-            self.wizard_data["seed"] = self.entry_seed.get().strip()
-            self.wizard_data["game_mode"] = self.combo_gamemode.get()
-            self.wizard_data["difficulty"] = self.combo_difficulty.get()
-            # Validate distances
-            v_dist = self.entry_view_distance.get().strip() or "10"
-            s_dist = self.entry_sim_distance.get().strip() or "10"
-            
-            try:
-                v_val = int(v_dist)
-                s_val = int(s_dist)
-                
-                if not (2 <= v_val <= 32):
-                    raise ValueError("View distance must be between 2 and 32")
-                if not (2 <= s_val <= 32):
-                    raise ValueError("Simulation distance must be between 2 and 32")
-                    
-                self.wizard_data["view_distance"] = str(v_val)
-                self.wizard_data["simulation_distance"] = str(s_val)
-                
-                # Reset borders
-                self.entry_view_distance.configure(border_color=["#979da2", "#565b5e"])
-                self.entry_sim_distance.configure(border_color=["#979da2", "#565b5e"])
-                
-            except ValueError:
-                # Show error visually (red borders)
-                self.entry_view_distance.configure(border_color="red")
-                self.entry_sim_distance.configure(border_color="red")
+            self.wizard_data["type"] = self.engine_var.get()
+            self.wizard_data["version"] = self.version_var.get()
+            if not self.wizard_data["version"]:
                 return
-            
-            
-        elif self.current_step == 6:
-            # Finish
+                
+        elif self.current_step == 3:
             self.on_complete_callback(self.wizard_data)
             self.destroy()
             return
@@ -470,7 +268,3 @@ class ServerWizard(ctk.CTkToplevel):
         if self.current_step == 1: self.show_step_1()
         elif self.current_step == 2: self.show_step_2()
         elif self.current_step == 3: self.show_step_3()
-        elif self.current_step == 4: self.show_step_4()
-        elif self.current_step == 5: self.show_step_5()
-        elif self.current_step == 6: self.show_step_6()
-
