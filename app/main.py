@@ -743,7 +743,7 @@ class MCTunnelApp(ctk.CTk):
                     self.server_console.log("[System] Waiting for server.jar normalization...")
                     import time
                     for _ in range(10):
-                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 100:
                             break
                         time.sleep(0.5)
                     else:
@@ -802,9 +802,14 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
             if dns:
-                self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
-                self.btn_copy_ip.configure(state="normal")
-                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+                if dns == "Conectando...":
+                    self.lbl_dns_display.configure(text="Conectando...", text_color="#3b82f6")
+                    self.btn_copy_ip.configure(state="disabled")
+                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
+                else:
+                    self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
+                    self.btn_copy_ip.configure(state="normal")
+                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Offline":
                 self.lbl_dns_display.configure(text="")
                 self.btn_copy_ip.pack_forget()
@@ -843,7 +848,7 @@ class MCTunnelApp(ctk.CTk):
 
     def _copy_ip_to_clipboard(self):
         dns_value = self.lbl_dns_display.cget("text")
-        if dns_value and dns_value != "Vínculo pendiente...":
+        if dns_value and dns_value not in ["Vínculo pendiente...", "Conectando..."]:
             self.clipboard_clear()
             self.clipboard_append(dns_value)
             Toast.show(self, f"¡IP copiada con éxito! {dns_value}", toast_type="success", duration=2500)

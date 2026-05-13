@@ -62,6 +62,8 @@ class ZBBManager:
             if any(s in ip for s in domain_suffixes):
                 dns = ip
                 display_ip = ip
+            elif ip == "Conectando...":
+                dns = "Conectando..."
         # Saved DNS from config is the last-resort fallback, not the override
         if status == "Online" and not dns and config.get("playit_dns"):
             dns = config["playit_dns"]
@@ -157,7 +159,7 @@ class ZBBManager:
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
             import time
             for _ in range(10):
-                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 100:
                     break
                 time.sleep(0.5)
             else:

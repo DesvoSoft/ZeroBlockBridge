@@ -146,6 +146,7 @@ class PlayitManager:
         self._api_dns = None
         self._claim_code = None
         self.current_address = None
+        self._current_port = port
 
         if not self.ensure_binary():
             self.console_callback("[Debug] Binary check failed.")
@@ -337,7 +338,23 @@ class PlayitManager:
         if "agent registered" in line and not self.is_linked:
             self.is_linked = True
             self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
+            self.status_callback("Starting...", "Conectando...")
             self.api_client.load_secret_key()
+            
+            # DNS Authoritative Detection
+            try:
+                if self.api_client.initialize():
+                    port = getattr(self, '_current_port', 25565)
+                    self.console_callback(f"[Playit] Fetching authoritative DNS from API for port {port}...")
+                    address = self.get_or_create_tunnel(port)
+                    if address:
+                        self._api_dns = address
+                        self.current_address = address
+                        self.status_callback("Online", address)
+                        if self.on_ready_callback:
+                            self.on_ready_callback()
+            except Exception as e:
+                self.console_callback(f"[Playit] API DNS fetch failed: {e}. Falling back to console regex.")
 
         # --- DNS from stdout (ONLY if API didn't already provide it) ---
         if self._api_dns:
