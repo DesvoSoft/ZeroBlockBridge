@@ -45,7 +45,8 @@ class ZBBManager:
             console_callback=lambda txt: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, txt),
             status_callback=self._on_playit_status,
             claim_callback=lambda url: self.events.emit(ServerEvent.PLAYIT_CLAIM, url),
-            on_ready_callback=lambda: self.events.emit(ServerEvent.READY)
+            on_ready_callback=lambda: self.events.emit(ServerEvent.READY),
+            notification_callback=lambda msg, t_type: self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": t_type})
         )
         
         # Internal Subscriptions

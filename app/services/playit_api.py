@@ -34,14 +34,17 @@ class PlayitApiClient:
             
         try:
             with open(self.toml_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    if "=" in line:
-                        k, v = line.split("=", 1)
-                        if k.strip() == "secret_key":
-                            self._secret_key = v.strip().strip("'\"")
-                            self.session.headers["Authorization"] = f"agent-key {self._secret_key}"
-                            self._last_mtime = mtime
-                            return True
+                content = f.read()
+            import re
+            match = re.search(r'secret_key\s*=\s*[\'"]?([a-zA-Z0-9_-]+)[\'"]?', content)
+            if match:
+                self._secret_key = match.group(1)
+                self.session.headers["Authorization"] = f"agent-key {self._secret_key}"
+                self._last_mtime = mtime
+                # Reset identity so it fetches again
+                self._agent_id = None
+                self._proto_key = None
+                return True
         except Exception as e:
             logger.error(f"Failed to read playit.toml: {e}")
         return False
@@ -64,7 +67,9 @@ class PlayitApiClient:
             raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {response.status_code})")
 
         if response.status_code >= 400:
-            error_detail = data.get("error") or data.get("message") or data.get("detail") or "Unknown API error"
+            if "AgentDisabledOverLimit" in response.text:
+                raise PlayitApiException("AgentDisabledOverLimit: Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard")
+            error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
             raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
 
         return data

@@ -802,13 +802,14 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
             if dns:
-                if dns == "Conectando...":
-                    self.lbl_dns_display.configure(text="Conectando...", text_color="#3b82f6")
-                    self.btn_copy_ip.configure(state="disabled")
-                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
-                else:
+                if ".gg" in dns or ".link" in dns:
                     self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
                     self.btn_copy_ip.configure(state="normal")
+                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
+                else:
+                    # Could be "Conectando..." or some other string
+                    self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
+                    self.btn_copy_ip.configure(state="disabled")
                     self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Offline":
                 self.lbl_dns_display.configure(text="")

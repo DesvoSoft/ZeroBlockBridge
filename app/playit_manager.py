@@ -13,11 +13,12 @@ from app.services.playit_api import PlayitApiClient, PlayitApiException
 logger = logging.getLogger(__name__)
 
 class PlayitManager:
-    def __init__(self, console_callback, status_callback, claim_callback, on_ready_callback=None):
+    def __init__(self, console_callback, status_callback, claim_callback, on_ready_callback=None, notification_callback=None):
         self.console_callback = console_callback
         self.status_callback = status_callback
         self.claim_callback = claim_callback
         self.on_ready_callback = on_ready_callback
+        self.notification_callback = notification_callback
         self.process = None
         self.running = False
         self.binary_path = self._get_binary_path()
@@ -339,6 +340,9 @@ class PlayitManager:
             self.is_linked = True
             self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
             self.status_callback("Starting...", "Conectando...")
+            
+            # Pausa de propagacion
+            time.sleep(1.5)
             self.api_client.load_secret_key()
             
             # DNS Authoritative Detection
@@ -355,10 +359,12 @@ class PlayitManager:
                             self.on_ready_callback()
             except Exception as e:
                 self.console_callback(f"[Playit] API DNS fetch failed: {e}. Falling back to console regex.")
+                if "AgentDisabledOverLimit" in str(e) and self.notification_callback:
+                    self.notification_callback("Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard", "error")
 
         # --- DNS from stdout (ONLY if API didn't already provide it) ---
-        if self._api_dns:
-            # API already provided the authoritative address. Do not overwrite.
+        if self._api_dns or self.is_linked:
+            # Enforce API DNS Priority: Once linked, ONLY API DNS is authoritative
             return
 
         if not self.is_linked:
