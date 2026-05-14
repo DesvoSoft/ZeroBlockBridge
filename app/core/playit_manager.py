@@ -90,11 +90,24 @@ class PlayitManager:
     # --- API-First Tunnel Management ---
     def _try_api_link(self, claim_code: str) -> bool:
         """Exchanges the claim code for a guest secret key via auto-mcs worker."""
-        try:
-            return self.api_client.link_account(claim_code)
-        except Exception as e:
-            logger.error(f"Failed to auto-claim guest account: {e}")
-            return False
+        for attempt in range(4):
+            try:
+                if self.api_client.link_account(claim_code):
+                    return True
+            except PlayitApiException as e:
+                err_str = str(e)
+                if "SetupCodeNotFound" in err_str and attempt < 3:
+                    self.console_callback(f"[Debug] Setup code not ready yet, retrying in 2s (Attempt {attempt+1}/4)...")
+                    time.sleep(2)
+                    continue
+                logger.error(f"Failed to auto-claim guest account: {e}")
+                self.console_callback(f"[Playit] Auto-claim failed: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to auto-claim guest account: {e}")
+                self.console_callback(f"[Playit] Auto-claim error: {e}")
+                return False
+        return False
 
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
