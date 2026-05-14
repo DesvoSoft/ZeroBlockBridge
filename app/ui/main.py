@@ -489,7 +489,6 @@ class MCTunnelApp(ctk.CTk):
         """Return (server_name, mc_version, loader) for the current server."""
         if not self.current_server:
             return None
-        from app.services.bytecode_analyzer import detect_loader
         server_path = os.path.join(SERVERS_DIR, self.current_server)
         meta_path = os.path.join(server_path, "metadata.json")
         mc_version = "1.20.1"
@@ -506,16 +505,6 @@ class MCTunnelApp(ctk.CTk):
                     loader = stype
             except Exception:
                 pass
-        
-        # Bytecode Analysis Override: check the actual jar
-        jar_path = os.path.join(server_path, "server.jar")
-        if os.path.exists(jar_path):
-            detected = detect_loader(jar_path)
-            if detected:
-                logger.info(f"Loader detected via bytecode for {self.current_server}: {detected}")
-                loader = detected
-            else:
-                logger.warning(f"Could not detect loader via bytecode for {self.current_server} (server.jar exists)")
         
         logger.info(f"Server Info for Mod Search: {self.current_server} | MC: {mc_version} | Loader: {loader}")
         return (self.current_server, mc_version, loader)
@@ -782,27 +771,9 @@ class MCTunnelApp(ctk.CTk):
 
     def _on_download_complete(self, dialog, name):
         self.load_servers()
-        self.server_console.log(f"[System] Auto-starting '{name}' to initialize server files...")
+        self.server_console.log(f"[System] Setup complete for '{name}'. You can now start it manually.")
         self.on_server_select(name)
-        dialog.update_progress("Initializing Server Engine (Generating World)...", 0.95)
-        
-        # Start server manually
-        self.start_server_action()
-        
-        def on_ready(data):
-            if data == name:
-                self.server_console.log(f"[System] First boot complete. Stopping server...")
-                self.after(0, lambda: dialog.update_progress("Finalizing setup...", 1.0))
-                self.zbb_manager.stop_server()
-                
-        def on_stopped(data):
-            if data == name:
-                self.zbb_manager.events.unsubscribe(ServerEvent.READY, on_ready)
-                self.zbb_manager.events.unsubscribe(ServerEvent.STOPPED, on_stopped)
-                self.after(0, dialog.close)
-
-        self.zbb_manager.events.subscribe(ServerEvent.READY, on_ready)
-        self.zbb_manager.events.subscribe(ServerEvent.STOPPED, on_stopped)
+        dialog.close()
 
     def start_tunnel(self):
         self.btn_tunnel_start.configure(state="disabled")

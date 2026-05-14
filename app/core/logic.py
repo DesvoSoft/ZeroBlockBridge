@@ -78,7 +78,7 @@ def check_java():
     except FileNotFoundError:
         return None
 
-def create_server_directory(server_name):
+def create_server_directory(server_name, server_type="Vanilla", version="1.20.1"):
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
@@ -87,7 +87,7 @@ def create_server_directory(server_name):
     metadata_path = os.path.join(path, "metadata.json")
     if not os.path.exists(metadata_path):
         with open(metadata_path, "w") as f:
-            json.dump({"name": server_name, "ram": 2048}, f, indent=4)
+            json.dump({"name": server_name, "ram": 2048, "type": server_type, "version": version}, f, indent=4)
     return path
 
 def download_server(server_name, server_type, version, progress_callback=None):
@@ -98,7 +98,7 @@ def download_server(server_name, server_type, version, progress_callback=None):
     if not url:
         raise ValueError(f"URL not found for {server_type} {version}")
 
-    server_path = create_server_directory(server_name)
+    server_path = create_server_directory(server_name, server_type, version)
     jar_path = os.path.join(server_path, "server.jar")
 
     # Try to get expected SHA1 from Vanilla manifest
@@ -154,7 +154,7 @@ def accept_eula(server_name):
 
 def install_fabric(server_name, mc_version, progress_callback=None):
     """Installs Fabric."""
-    server_path = create_server_directory(server_name)
+    server_path = create_server_directory(server_name, "Fabric", mc_version)
     vm = VersionManager()
     installer_url = vm.get_download_url("Fabric", mc_version)
     
@@ -309,7 +309,7 @@ def normalize_server_jar(server_dir):
 
 def install_forge(server_name, mc_version, progress_callback=None):
     """Installs Forge."""
-    server_path = create_server_directory(server_name)
+    server_path = create_server_directory(server_name, "Forge", mc_version)
     vm = VersionManager()
     installer_url = vm.get_download_url("Forge", mc_version)
     
@@ -807,15 +807,22 @@ class Scheduler:
 
 def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
     server_path = os.path.join(SERVERS_DIR, server_name)
-    metadata = {
-        "ram": ram,
-        "created": datetime.datetime.now().isoformat(),
-        "pending_settings": {
-            "seed": seed, "game_mode": game_mode, "difficulty": difficulty,
-            "view_distance": view_distance, "simulation_distance": simulation_distance
-        }
-    }
     metadata_path = os.path.join(server_path, "metadata.json")
+    
+    metadata = {}
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+        except: pass
+        
+    metadata["ram"] = ram
+    metadata["created"] = datetime.datetime.now().isoformat()
+    metadata["pending_settings"] = {
+        "seed": seed, "game_mode": game_mode, "difficulty": difficulty,
+        "view_distance": view_distance, "simulation_distance": simulation_distance
+    }
+    
     with open(metadata_path, "w") as f: json.dump(metadata, f, indent=4)
     accept_eula(server_name)
     props = {
