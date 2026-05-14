@@ -118,7 +118,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_load_server.grid(row=2, column=0, padx=20, pady=(2, 10), sticky="ew")
 
         self.lbl_servers = ctk.CTkLabel(self.sidebar_frame, text="Your Servers:", anchor="w", font=AppConfig.FONT_BODY)
-        self.lbl_servers.grid(row=3, column=0, padx=20, pady=(5, 0))
+        self.lbl_servers.grid(row=3, column=0, padx=20, pady=(2, 0))
 
         self.server_list_frame = ctk.CTkScrollableFrame(self.sidebar_frame, label_text="", corner_radius=10, border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.server_list_frame.grid(row=4, column=0, padx=20, pady=10, sticky="nsew")

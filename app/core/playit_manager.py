@@ -114,6 +114,7 @@ class PlayitManager:
             # Not found, create it via API
             self.console_callback(f"[Playit] No tunnel for port {port}. Creating via API...")
             tunnel = self.api_client.create_tunnel(port=port)
+            address = self.api_client.get_tunnel_address(tunnel)
             return address
             
         except PlayitApiException as e:
