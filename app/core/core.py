@@ -288,7 +288,7 @@ class ZBBManager:
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
         import os, sys, json
-        from app.core.app_config import SERVERS_DIR
+        from app.core.constants import SERVERS_DIR
         
         server_name = os.path.basename(folder_path.rstrip("\\/"))
         link_path = os.path.join(SERVERS_DIR, server_name)

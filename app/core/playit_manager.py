@@ -93,8 +93,6 @@ class PlayitManager:
 
 
 
-
-
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
         Returns the full connectable address (domain:port) or None."""
@@ -116,10 +114,6 @@ class PlayitManager:
             # Not found, create it via API
             self.console_callback(f"[Playit] No tunnel for port {port}. Creating via API...")
             tunnel = self.api_client.create_tunnel(port=port)
-            address = self.api_client.get_tunnel_address(tunnel)
-            if address:
-                self._api_dns = address
-                self.console_callback(f"[Playit] Tunnel created: {address}")
             return address
             
         except PlayitApiException as e:
@@ -391,8 +385,8 @@ class PlayitManager:
 
         # Only match real Playit DNS domains — never raw IPs (those are false positives from Pong)
         dns_patterns = [
-            r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg(?::\d+)?)",
-            r"([a-z0-9][a-z0-9-]*\.joinmc\.link(?::\d+)?)",
+            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?(?:ply|playit)\.gg(?::\d+)?)",
+            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?joinmc\.link(?::\d+)?)",
         ]
         for pattern in dns_patterns:
             dns_match = re.search(pattern, line)
