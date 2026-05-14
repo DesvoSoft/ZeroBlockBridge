@@ -89,14 +89,30 @@ class PlayitManager:
 
 
 
+    def _inject_toml_mapping(self, port: int):
+        """Appends a [[mapping]] block to playit.toml so the agent automatically creates a tunnel."""
+        try:
+            if not os.path.exists(self.toml_path):
+                return
+            with open(self.toml_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if "[[mapping]]" not in content:
+                mapping_block = (
+                    "\n\n[[mapping]]\n"
+                    "local_ip = \"127.0.0.1\"\n"
+                    "port_type = \"tcp\"\n"
+                    f"local_port = {port}\n"
+                )
+                with open(self.toml_path, "a", encoding="utf-8") as f:
+                    f.write(mapping_block)
+                logger.info("Injected [[mapping]] into playit.toml for auto-tunnel creation.")
+        except Exception as e:
+            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
+
     def get_or_create_tunnel(self, port: int) -> str:
-        """Uses API to find an existing tunnel for the port, or creates one.
-        Returns the full connectable address (domain:port) or None."""
+        """Uses API to find an existing tunnel for the port.
+        If not found, injects a TOML mapping to force the CLI to create one."""
         
-        if self.api_client.is_read_only:
-            self.console_callback("[Playit] ERROR: Guest accounts are no longer supported. Please reset and link a real account.")
-            return None
-                
         if not self.api_client.load_secret_key():
             self.console_callback("[Playit] Agent not linked yet. Using fallback mode.")
             return None
@@ -111,20 +127,13 @@ class PlayitManager:
                         self._api_dns = address
                         return address
                         
-            # Not found, create it
-            self.console_callback(f"[Playit] Creating new tunnel for port {port}...")
-            tunnel = self.api_client.create_tunnel(port=port)
-            address = self.api_client.get_tunnel_address(tunnel)
-            if address:
-                self._api_dns = address
-                self.console_callback(f"[Playit] Tunnel created: {address}")
-            return address
+            # Not found, inject TOML mapping so the agent creates it
+            self.console_callback(f"[Playit] Creating new tunnel for port {port} via local mapping...")
+            self._inject_toml_mapping(port)
+            return None
+            
         except PlayitApiException as e:
-            if "NotAllowedWithReadOnly" in str(e):
-                self.api_client.is_read_only = True
-                self.console_callback("[Playit] ERROR: Guest accounts are no longer supported. Please reset and link a real account.")
-            else:
-                self.console_callback(f"[Playit] API Error: {e}")
+            self.console_callback(f"[Playit] API Error: {e}")
             return None
 
     def start(self, port: int = 25565):
@@ -165,24 +174,11 @@ class PlayitManager:
             os.makedirs(CONFIG_DIR)
         self.secret_dir = str(CONFIG_DIR)
 
-        # Check if already linked and try API initialization
+        # If already linked, inject mapping for auto-tunnel creation
         self.is_linked = os.path.exists(self.toml_path)
         if self.is_linked:
-            try:
-                # Initialize the full API session
-                if self.api_client.initialize():
-                    self.console_callback("[Playit] API session initialized.")
-                
-                # Get or create tunnel via API
-                address = self.get_or_create_tunnel(port)
-                if address:
-                    self._api_dns = address
-                    self.current_address = address
-                    self.status_callback("Online", address)
-                    if self.on_ready_callback:
-                        self.on_ready_callback()
-            except Exception as e:
-                logger.error(f"Failed to auto-create tunnel: {e}")
+            self._inject_toml_mapping(port)
+            self.console_callback("[Playit] Existing config found. Starting agent...")
 
         # Start the agent process (needed for actual traffic relay)
         try:
@@ -354,43 +350,22 @@ class PlayitManager:
         if "agent registered" in line:
             if not self.is_linked:
                 self.is_linked = True
-                self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
-                self.status_callback("Starting...", "Connecting...")
+                self.console_callback("[Playit] Agent linked successfully.")
+                if self.notification_callback:
+                    self.notification_callback("Agent linked! Setting up tunnel...", "success")
+                self.status_callback("Connecting...", None)
                 
-                # Pausa de propagacion
-                time.sleep(1.5)
-                self.api_client.load_secret_key()
-                
-                # DNS Authoritative Detection
-                try:
-                    if self.api_client.initialize():
-                        port = getattr(self, '_current_port', 25565)
-                        self.console_callback(f"[Playit] Fetching authoritative DNS from API for port {port}...")
-                        address = self.get_or_create_tunnel(port)
-                        if address:
-                            self._api_dns = address
-                            self.current_address = address
-                            self.status_callback("Online", address)
-                            if self.on_ready_callback:
-                                self.on_ready_callback()
-                except Exception as e:
-                    self.console_callback(f"[Playit] API DNS fetch failed: {e}. Falling back to console regex.")
-                    if "AgentDisabledOverLimit" in str(e) and self.notification_callback:
-                        self.notification_callback("Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard", "error")
+                # Inject TOML mapping so the agent auto-creates the tunnel on restart
+                port = getattr(self, '_current_port', 25565)
+                self._inject_toml_mapping(port)
+                self.console_callback(f"[Playit] Tunnel mapping injected for port {port}. Waiting for DNS...")
 
-        # --- DNS from stdout (ONLY if API didn't already provide it) ---
-        if self._api_dns:
+        # --- DNS from stdout (always scrape when linked) ---
+        if not self.is_linked:
             return
         
-        # If linked AND not read-only, we prefer API but if API failed we can still try scraping 
-        # as a last resort. However, for Guest (read-only), scraping is our ONLY way.
-        if self.is_linked and not self.api_client.is_read_only:
-            # We already tried API in 'agent registered', if it's not ready yet, 
-            # we might want to wait or scrape. Let's allow scraping if current_address is None.
-            if self.current_address:
-                return
-
-        if not self.is_linked:
+        # Skip if we already have a confirmed address
+        if self._api_dns:
             return
 
         dns_patterns = [
@@ -404,15 +379,22 @@ class PlayitManager:
                 address = dns_match.group(1).rstrip('.')
                 if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
                     continue
+                # Check for port in line
+                port_match = re.search(r':(\d{4,5})', line)
+                if port_match and ":" not in address:
+                    address = f"{address}:{port_match.group(1)}"
                 if address != self.current_address:
-                    was_none = self.current_address is None
+                    self._api_dns = address
                     self.current_address = address
                     self.status_callback("Online", address)
-                    if was_none and self.on_ready_callback:
+                    self.console_callback(f"[Playit] Public address: {address}")
+                    if self.notification_callback:
+                        self.notification_callback(f"Tunnel online: {address}", "success")
+                    if self.on_ready_callback:
                         self.on_ready_callback()
                 return
 
         # Fallback: "tunnel running" but no explicit address yet
         if "tunnel running" in line and not self.current_address:
-            self.status_callback("Online", "checking...")
-            self.console_callback("[Playit] Tunnel running, waiting for DNS assignment...")
+            self.status_callback("Connecting...", None)
+            self.console_callback("[Playit] Tunnel active, waiting for DNS assignment...")

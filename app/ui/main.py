@@ -801,13 +801,9 @@ class MCTunnelApp(ctk.CTk):
             color = "green" if status == "Online" else "gray"
             icon = "●"
             if status == "Error": color, icon = "red", "✖"
-            elif status == "Starting...": color, icon = "orange", "⏳"
-            
-            display_status = status
-            if status == "Online":
-                display_status = f"{status} (Linked)"
+            elif status in ("Starting...", "Connecting..."): color, icon = "orange", "⏳"
                 
-            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {display_status}", text_color=color)
+            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
             if dns:
                 self.lbl_public_ip.pack_forget()
@@ -831,7 +827,7 @@ class MCTunnelApp(ctk.CTk):
             else:
                 self.lbl_public_ip.pack(side="left", padx=5)
                 self.lbl_public_ip.configure(text=f"Public IP: {ip}" if ip else "Public IP: N/A")
-                self.lbl_dns_display.configure(text="Pending link...", text_color="#f97316")
+                self.lbl_dns_display.configure(text="Connecting...", text_color="#f97316")
                 self.btn_copy_ip.configure(state="disabled")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             
@@ -862,7 +858,7 @@ class MCTunnelApp(ctk.CTk):
 
     def _copy_ip_to_clipboard(self):
         dns_value = self.lbl_dns_display.cget("text")
-        if dns_value and dns_value not in ["Pending link...", "Connecting..."]:
+        if dns_value and dns_value not in ["Connecting...", ""]:
             self.clipboard_clear()
             self.clipboard_append(dns_value)
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
