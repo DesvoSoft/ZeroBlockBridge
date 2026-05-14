@@ -838,6 +838,7 @@ class MCTunnelApp(ctk.CTk):
             
             if ip:
                 if is_guest:
+                    self.btn_claim.configure(text="⭐ Link Account")
                     self.btn_claim.pack(side="left", padx=2)
                 else:
                     self.btn_claim.pack_forget()
@@ -853,6 +854,7 @@ class MCTunnelApp(ctk.CTk):
     def on_playit_claim(self, url):
         self.claim_url = url
         def _show_ui():
+            self.btn_claim.configure(text="🔗 Open Approval Page")
             self.btn_claim.pack(side="left", padx=2)
             self.tunnel_console.log(f"[System] Action Required: Please approve the agent in your browser.")
             Toast.show(
@@ -871,6 +873,14 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
+        # If the button says "Open Approval Page", just open the current URL
+        if self.btn_claim.cget("text") == "🔗 Open Approval Page":
+            if hasattr(self, 'claim_url') and self.claim_url:
+                self.tunnel_console.log(f"[UI] Manually opening claim URL...")
+                webbrowser.open(self.claim_url)
+            return
+
+        # Otherwise, it's a guest upgrade, so prompt for reset
         import tkinter.messagebox as messagebox
         if messagebox.askyesno("Link Account", "Linking your account will reset the current guest tunnel and change your public IP.\n\nDo you want to continue?"):
             self.tunnel_console.log(f"[System] Requesting manual link...")
