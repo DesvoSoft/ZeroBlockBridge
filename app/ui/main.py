@@ -228,7 +228,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.pack(side="left", padx=2)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_tunnel_stop.pack(side="left", padx=2)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="🔗", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=45, corner_radius=8, height=36)
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Link Account", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
@@ -798,12 +798,17 @@ class MCTunnelApp(ctk.CTk):
         dns = data.get("dns", None)
         
         def _update():
+            is_guest = data.get("is_guest", False)
             color = "green" if status == "Online" else "gray"
             icon = "●"
             if status == "Error": color, icon = "red", "✖"
             elif status == "Starting...": color, icon = "orange", "⏳"
             
-            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
+            display_status = status
+            if status == "Online":
+                display_status = f"{status} (Guest)" if is_guest else f"{status} (Linked)"
+                
+            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {display_status}", text_color=color)
             
             if dns:
                 self.lbl_public_ip.pack_forget()
@@ -830,8 +835,12 @@ class MCTunnelApp(ctk.CTk):
                 self.lbl_dns_display.configure(text="Pending link...", text_color="#f97316")
                 self.btn_copy_ip.configure(state="disabled")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            
             if ip:
-                self.btn_claim.pack_forget()
+                if is_guest:
+                    self.btn_claim.pack(side="left", padx=2)
+                else:
+                    self.btn_claim.pack_forget()
                 
             if status == "Offline":
                 self.btn_tunnel_start.configure(state="normal")
@@ -845,7 +854,7 @@ class MCTunnelApp(ctk.CTk):
         self.claim_url = url
         claim_code = url.split("/")[-1] if url else ""
         def _show_ui():
-            self.btn_claim.pack(side="right", padx=10)
+            self.btn_claim.pack(side="left", padx=2)
             self.tunnel_console.log(f"[System] Manual claim required: {url}")
             Toast.show(
                 self,

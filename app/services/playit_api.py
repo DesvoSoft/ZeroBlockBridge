@@ -20,6 +20,7 @@ class PlayitApiClient:
         self._secret_key = None
         self._agent_id = None
         self._proto_key = None
+        self.is_read_only = False
         self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
 
     def load_secret_key(self) -> bool:
@@ -69,6 +70,9 @@ class PlayitApiClient:
         if response.status_code >= 400:
             if "AgentDisabledOverLimit" in response.text:
                 raise PlayitApiException("AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard")
+            if "NotAllowedWithReadOnly" in response.text:
+                self.is_read_only = True
+                raise PlayitApiException("NotAllowedWithReadOnly: Account is in Guest mode (Read-Only). Use CLI for tunnel management.")
             error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
             raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
 

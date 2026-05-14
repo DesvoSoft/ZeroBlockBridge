@@ -91,7 +91,9 @@ class ZBBManager:
         if status == "Online" and not dns and config.get("playit_dns"):
             dns = config["playit_dns"]
             display_ip = config["playit_dns"]
-        self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns})
+        
+        is_guest = self.playit_manager.api_client.is_read_only
+        self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns, "is_guest": is_guest})
 
     # --- Configuration ---
     def get_config(self):

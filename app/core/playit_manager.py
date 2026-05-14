@@ -6,6 +6,7 @@ import requests
 import re
 import time
 import logging
+import webbrowser
 
 from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
 from app.services.playit_api import PlayitApiClient, PlayitApiException
@@ -94,8 +95,11 @@ class PlayitManager:
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
         Returns the full connectable address (domain:port) or None."""
-        if not self.api_client.load_secret_key():
-            self.console_callback("[Playit] Agent not linked yet. Will attempt linking on start.")
+        if not self.api_client.load_secret_key() or self.api_client.is_read_only:
+            if self.api_client.is_read_only:
+                self.console_callback("[Playit] Account is in Guest mode (Read-Only). Management via API is disabled.")
+            else:
+                self.console_callback("[Playit] Agent not linked yet. Using Guest mode.")
             return None
             
         try:
@@ -117,7 +121,11 @@ class PlayitManager:
                 self.console_callback(f"[Playit] Tunnel created: {address}")
             return address
         except PlayitApiException as e:
-            self.console_callback(f"[Playit] API Error: {e}")
+            if "NotAllowedWithReadOnly" in str(e):
+                self.api_client.is_read_only = True
+                self.console_callback("[Playit] Switching to Guest Mode (Read-Only API).")
+            else:
+                self.console_callback(f"[Playit] API Error: {e}")
             return None
 
     def start(self, port: int = 25565):
@@ -322,6 +330,13 @@ class PlayitManager:
                     
                     full_url = f"https://playit.gg/claim/{claim_code}"
                     self.claim_callback(full_url)
+                    
+                    # UX: Auto-open browser for linking
+                    try:
+                        self.console_callback(f"[UI] Opening claim URL in browser: {full_url}")
+                        webbrowser.open(full_url)
+                    except Exception as e:
+                        logger.error(f"Failed to auto-open browser: {e}")
                 return
 
         # --- Network unreachable -- agent will auto-retry via IPv4 ---
@@ -336,9 +351,11 @@ class PlayitManager:
             return
 
         # --- Agent registered -- LINKED state confirmed ---
-        if "agent registered" in line and not self.is_linked:
-            self.is_linked = True
-            self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
+        if "agent registered" in line:
+            if not self.is_linked:
+                self.is_linked = True
+                self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
+            
             self.status_callback("Starting...", "Connecting...")
             
             # Pausa de propagacion
@@ -363,9 +380,16 @@ class PlayitManager:
                     self.notification_callback("Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard", "error")
 
         # --- DNS from stdout (ONLY if API didn't already provide it) ---
-        if self._api_dns or self.is_linked:
-            # Enforce API DNS Priority: Once linked, ONLY API DNS is authoritative
+        if self._api_dns:
             return
+        
+        # If linked AND not read-only, we prefer API but if API failed we can still try scraping 
+        # as a last resort. However, for Guest (read-only), scraping is our ONLY way.
+        if self.is_linked and not self.api_client.is_read_only:
+            # We already tried API in 'agent registered', if it's not ready yet, 
+            # we might want to wait or scrape. Let's allow scraping if current_address is None.
+            if self.current_address:
+                return
 
         if not self.is_linked:
             return
