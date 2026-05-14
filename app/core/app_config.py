@@ -58,3 +58,7 @@ class AppConfig:
     SERVER_STOP_TIMEOUT = 30
     SERVER_START_WAIT = 10
     RESTART_COOLDOWN = 5
+
+    # Playit
+    PLAYIT_BRIDGE_URL = "https://playit.auto-mcs.com/link"
+    PLAYIT_WIZARD_URL = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other"

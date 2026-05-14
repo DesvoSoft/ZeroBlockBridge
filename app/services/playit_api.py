@@ -97,27 +97,28 @@ class PlayitApiClient:
             "version_patch": 1,
         }
         
+        from app.core.app_config import AppConfig
         try:
             response = requests.post(
-                "https://playit.auto-mcs.com/link",
+                AppConfig.PLAYIT_BRIDGE_URL,
                 json=payload,
                 timeout=20,
             )
             data = response.json()
         except requests.RequestException as e:
-            raise PlayitApiException(f"Failed to link account via reference worker: {e}")
+            raise PlayitApiException(f"Failed to link account via internal bridge: {e}")
         except ValueError:
-            raise PlayitApiException("Invalid JSON from claim exchange")
+            raise PlayitApiException("Invalid JSON from bridge response")
         
         if data.get("status") != "success":
             error = data.get("error") or data.get("message") or str(data)
-            raise PlayitApiException(f"Claim exchange failed: {error}")
+            raise PlayitApiException(f"Bridge exchange failed: {error}")
         
         secret_key = data.get("data", {}).get("agent_secret_key")
         agent_id = data.get("data", {}).get("agent_id")
         
         if not secret_key:
-            raise PlayitApiException(f"Claim exchange did not return a secret key: {data}")
+            raise PlayitApiException(f"Bridge did not return a secret key: {data}")
         
         # Write playit.toml
         os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
@@ -127,7 +128,7 @@ class PlayitApiClient:
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
-        logger.info("Successfully linked playit account via auto-mcs worker")
+        logger.info("Successfully linked playit account via internal bridge.")
         return True
 
     # --- Agent Info ---

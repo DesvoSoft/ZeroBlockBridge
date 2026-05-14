@@ -899,26 +899,28 @@ class MCTunnelApp(ctk.CTk):
 
     def open_claim_url(self):
         """Opens the official Playit wizard and switches to setup code input."""
-        url = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other"
-        self.tunnel_console.log(f"[UI] Opening Playit Wizard: {url}")
+        url = AppConfig.PLAYIT_WIZARD_URL
+        self.tunnel_console.log(f"[UI] Opening Playit Setup Wizard...")
         webbrowser.open(url)
         self._show_setup_input = True
         self.on_tunnel_status({"status": "Offline"}) # Refresh UI
-        Toast.show(self, "Copy the Setup Code from Playit and paste it here.", toast_type="info")
+        Toast.show(self, "1. Get your Setup Code from Playit\n2. Paste it here to link.", toast_type="info", duration=5000)
 
     def _link_with_setup_code(self):
         code = self.entry_setup_code.get().strip()
         if not code:
-            Toast.show(self, "Please enter a Setup Code.", toast_type="error")
+            Toast.show(self, "Please enter a valid Setup Code.", toast_type="error")
             return
             
-        self.tunnel_console.log(f"[System] Linking account with code: {code}")
+        self.tunnel_console.log(f"[System] Linking account...")
+        Toast.show(self, "Connecting to Playit...", toast_type="info")
+        
         if self.zbb_manager.link_playit_manually(code):
-            Toast.show(self, "Account linked successfully!", toast_type="success")
+            Toast.show(self, "Success! Account linked and tunnel starting.", toast_type="success")
             self.entry_setup_code.delete(0, 'end')
             self._show_setup_input = False
         else:
-            Toast.show(self, "Failed to link account. Check logs.", toast_type="error")
+            Toast.show(self, "Link failed. Verify your code and try again.", toast_type="error")
 
     def on_close(self):
         self.zbb_manager.shutdown()

@@ -285,9 +285,9 @@ class PlayitManager:
     def link_manually(self, setup_code: str):
         """Link the account manually using a setup code from the web wizard."""
         try:
-            self.console_callback(f"[Playit] Exchanging setup code '{setup_code}' for secret key...")
+            self.console_callback(f"[Playit] Exchanging setup code with secure bridge...")
             if self.api_client.link_account(setup_code):
-                self.console_callback("[Playit] Account linked successfully via setup code!")
+                self.console_callback("[Playit] Account linked successfully! Starting agent...")
                 self.is_linked = True
                 self.api_client.is_read_only = False
                 
@@ -299,7 +299,7 @@ class PlayitManager:
                 self.start(getattr(self, '_current_port', 25565))
                 return True
         except Exception as e:
-            self.console_callback(f"[Playit] Manual link failed: {e}")
+            self.console_callback(f"[Playit] Link failed: {e}")
             if self.notification_callback:
                 self.notification_callback(f"Link failed: {e}", "error")
         return False
