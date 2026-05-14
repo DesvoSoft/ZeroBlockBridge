@@ -39,6 +39,10 @@ class PlayitManager:
             self.is_linked = True
             logger.info("Playit linked state persisted from playit.toml")
 
+        # Register global cleanup
+        import atexit
+        atexit.register(self.stop, force=True)
+
     def _get_binary_path(self):
         system = platform.system()
         filename = "playit.exe" if system == "Windows" else "playit"
@@ -252,11 +256,14 @@ class PlayitManager:
                     for child in parent.children(recursive=True):
                         child.kill()
                     parent.kill()
-                except Exception as e:
-                    # Fallback to simple terminate if psutil fails or process already gone
+                except Exception:
+                    # Fallback to taskkill on Windows
+                    if platform.system() == "Windows":
+                        import subprocess
+                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], 
+                                     capture_output=True, check=False)
                     try: self.process.terminate()
                     except: pass
-                    logger.debug(f"Process stop error: {e}")
                     
                 self.process = None
             

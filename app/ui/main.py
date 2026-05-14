@@ -835,7 +835,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
-    def reset_tunnel_action(self):
+    def reset_tunnel(self):
         msg = (
             "This will wipe your local Playit configuration and delete the tunnel.\n\n"
             "Note: Due to Playit API restrictions, the Agent might still appear in your "
