@@ -69,7 +69,6 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, self.update_tunnel_console)
         self.events.subscribe(ServerEvent.TUNNEL_STATUS, self.on_tunnel_status)
-        self.events.subscribe(ServerEvent.PLAYIT_CLAIM, self.on_playit_claim)
         self.events.subscribe(ServerEvent.READY, self.on_server_ready)
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
@@ -228,7 +227,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.pack(side="left", padx=2)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_tunnel_stop.pack(side="left", padx=2)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Link Account", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        
+        # Setup Code Input (Initially hidden/collapsed)
+        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=100, height=36, corner_radius=8)
+        self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=8, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        self.btn_claim.pack(side="left", padx=2)
+        
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
@@ -833,28 +839,26 @@ class MCTunnelApp(ctk.CTk):
             
             if ip:
                 self.btn_claim.pack_forget()
+                self.entry_setup_code.pack_forget()
+                self.btn_link_code.pack_forget()
                 
             if status == "Offline":
                 self.btn_tunnel_start.configure(state="normal")
                 self.btn_tunnel_stop.configure(state="disabled")
-                self.btn_claim.pack_forget()
+                
+                # Only show link controls if not already linked
+                if not self.zbb_manager.playit_manager.is_linked:
+                    self.btn_claim.pack(side="left", padx=2)
+                    self.entry_setup_code.pack(side="left", padx=2)
+                    self.btn_link_code.pack(side="left", padx=2)
+                else:
+                    self.btn_claim.pack_forget()
+                    self.entry_setup_code.pack_forget()
+                    self.btn_link_code.pack_forget()
+                
                 self.lbl_dns_display.configure(text="")
                 self.btn_copy_ip.pack_forget()
         self.after(0, _update)
-
-    def on_playit_claim(self, url):
-        self.claim_url = url
-        def _show_ui():
-            self.btn_claim.configure(text="🔗 Approve")
-            self.btn_claim.pack(side="left", padx=2)
-            self.tunnel_console.log(f"[System] Action Required: Please approve the agent in your browser.")
-            Toast.show(
-                self,
-                f"Browser approval required to start tunnel.",
-                toast_type="warning",
-                duration=6000,
-            )
-        self.after(0, _show_ui)
 
     def _copy_ip_to_clipboard(self):
         dns_value = self.lbl_dns_display.cget("text")
@@ -864,10 +868,24 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        # The button only appears during pending state to open the approval page
-        if hasattr(self, 'claim_url') and self.claim_url:
-            self.tunnel_console.log(f"[UI] Manually opening claim URL...")
-            webbrowser.open(self.claim_url)
+        """Opens the official Playit wizard to get a setup code."""
+        url = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other"
+        self.tunnel_console.log(f"[UI] Opening Playit Wizard: {url}")
+        webbrowser.open(url)
+        Toast.show(self, "Paste the Setup Code from the browser here.", toast_type="info")
+
+    def _link_with_setup_code(self):
+        code = self.entry_setup_code.get().strip()
+        if not code:
+            Toast.show(self, "Please enter a Setup Code.", toast_type="error")
+            return
+            
+        self.tunnel_console.log(f"[System] Linking account with code: {code}")
+        if self.zbb_manager.link_playit_manually(code):
+            Toast.show(self, "Account linked successfully!", toast_type="success")
+            self.entry_setup_code.delete(0, 'end')
+        else:
+            Toast.show(self, "Failed to link account. Check logs.", toast_type="error")
 
     def on_close(self):
         self.zbb_manager.shutdown()

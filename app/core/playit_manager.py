@@ -14,10 +14,9 @@ from app.services.playit_api import PlayitApiClient, PlayitApiException
 logger = logging.getLogger(__name__)
 
 class PlayitManager:
-    def __init__(self, console_callback, status_callback, claim_callback, on_ready_callback=None, notification_callback=None):
+    def __init__(self, console_callback, status_callback, on_ready_callback=None, notification_callback=None):
         self.console_callback = console_callback
         self.status_callback = status_callback
-        self.claim_callback = claim_callback
         self.on_ready_callback = on_ready_callback
         self.notification_callback = notification_callback
         self.process = None
@@ -137,7 +136,13 @@ class PlayitManager:
             return address
             
         except PlayitApiException as e:
-            self.console_callback(f"[Playit] API Error: {e}")
+            if "NotAllowedWithReadOnly" in str(e):
+                self.console_callback("[Playit] ERROR: Account is in Guest mode (Read-Only).")
+                self.console_callback("[Playit] Please use 'Get Code' + 'Link' with a Setup Code to enable tunnel creation.")
+                if self.notification_callback:
+                    self.notification_callback("Account Read-Only. Use Setup Code to link.", "error")
+            else:
+                self.console_callback(f"[Playit] API Error: {e}")
             return None
 
     def start(self, port: int = 25565):
@@ -293,6 +298,28 @@ class PlayitManager:
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
+    def link_manually(self, setup_code: str):
+        """Link the account manually using a setup code from the web wizard."""
+        try:
+            self.console_callback(f"[Playit] Exchanging setup code '{setup_code}' for secret key...")
+            if self.api_client.link_account(setup_code):
+                self.console_callback("[Playit] Account linked successfully via setup code!")
+                self.is_linked = True
+                self.api_client.is_read_only = False
+                
+                # Restart if already running
+                if self.running:
+                    self.stop()
+                    time.sleep(1)
+                
+                self.start(getattr(self, '_current_port', 25565))
+                return True
+        except Exception as e:
+            self.console_callback(f"[Playit] Manual link failed: {e}")
+            if self.notification_callback:
+                self.notification_callback(f"Link failed: {e}", "error")
+        return False
+
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",
         "send KeepAlive", "agent registered details", "authenticate control last_pong",
@@ -335,30 +362,6 @@ class PlayitManager:
             self.status_callback("Offline", None)
 
     def _parse_line(self, line):
-        # --- Claim code detection (only if not already linked) ---
-        if not self.is_linked:
-            claim_match = re.search(r"https://playit\.gg/claim/([a-zA-Z0-9]+)", line)
-            if claim_match:
-                claim_code = claim_match.group(1)
-                if not self._claim_code:
-                    self._claim_code = claim_code
-                    self.console_callback(f"[Playit] Claim code detected: {claim_code}")
-                    self.console_callback("[Playit] Waiting for manual browser confirmation...")
-                    self.console_callback("[System] Action Required: Please log in or create a Playit.gg account in your browser to approve the agent.")
-                    if self.notification_callback:
-                        self.notification_callback("Approve the agent in your browser to continue", "warning")
-                    
-                    full_url = f"https://playit.gg/claim/{claim_code}"
-                    # Store URL for the UI
-                    self.claim_callback(full_url)
-                    
-                    self.console_callback(f"[UI] Opening claim URL in browser: {full_url}")
-                    try:
-                        webbrowser.open(full_url)
-                    except Exception as e:
-                        logger.error(f"Failed to auto-open browser: {e}")
-                return
-
         # --- Network unreachable -- agent will auto-retry via IPv4 ---
         if "NetworkUnreachable" in line or "Os { code: 10051" in line or "Os { code: 101" in line:
             return

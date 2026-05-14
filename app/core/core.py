@@ -46,7 +46,6 @@ class ZBBManager:
         self.playit_manager = PlayitManager(
             console_callback=lambda txt: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, txt),
             status_callback=self._on_playit_status,
-            claim_callback=lambda url: self.events.emit(ServerEvent.PLAYIT_CLAIM, url),
             on_ready_callback=lambda: self.events.emit(ServerEvent.READY),
             notification_callback=lambda msg, t_type: self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": t_type})
         )
@@ -350,6 +349,10 @@ class ZBBManager:
 
     def get_tunnel_ip(self):
         return self.playit_manager.current_address
+
+    def link_playit_manually(self, setup_code: str):
+        """Link the account manually using a setup code."""
+        return self.playit_manager.link_manually(setup_code)
 
     # --- Scheduler & Lifecycle ---
     def _start_scheduler_loop(self):
