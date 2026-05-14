@@ -273,3 +273,13 @@ class PlayitApiClient:
         """Deletes a tunnel by ID."""
         data = self._request("tunnels/delete", json_data={"tunnel_id": tunnel_id})
         return data.get("status") == "success"
+
+    def delete_agent(self) -> bool:
+        """Deletes the current agent from the account."""
+        try:
+            agent_id = self.get_agent_id()
+            if not agent_id: return False
+            data = self._request("agents/delete", json_data={"agent_id": agent_id})
+            return data.get("status") == "success"
+        except Exception:
+            return False

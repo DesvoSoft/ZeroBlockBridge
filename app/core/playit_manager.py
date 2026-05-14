@@ -244,39 +244,41 @@ class PlayitManager:
         self.status_callback("Offline", None)
 
     def reset(self):
-        """Resets the playit agent configuration (clears secret and deletes playit.toml)."""
-        with self._lock:
-            self.in_use_count = 0
-            
-        if self.running and self.process:
-            try:
-                self.process.terminate()
-                self.process.wait(timeout=2)
-            except Exception:
-                pass
-                
-        self.console_callback("[Playit] Resetting agent configuration...")
+        """Wipes the playit configuration, stops any running agent, and cleans up API resources."""
         try:
-            subprocess.run(
-                [str(self.binary_path), "reset"],
-                cwd=os.path.abspath(CONFIG_DIR),
-                check=False,
-                capture_output=True,
-                text=True
-            )
-            # Delete secret file to force re-link on next start
+            self.console_callback("[Playit] Starting full reset...")
+            self.stop()
+            
+            if self.is_linked:
+                self.console_callback("[Playit] Attempting to clean up API resources...")
+                try:
+                    if self.api_client.initialize():
+                        tunnels = self.api_client.list_tunnels()
+                        for t in tunnels:
+                            tid = t.get("id")
+                            if tid:
+                                self.api_client.delete_tunnel(tid)
+                                self.console_callback(f"[Playit] Deleted remote tunnel: {tid}")
+                        
+                        if self.api_client.delete_agent():
+                            self.console_callback("[Playit] Remote agent deleted from account.")
+                except Exception as e:
+                    self.console_callback(f"[Playit] API cleanup failed (might be guest mode): {e}")
+
             if os.path.exists(self.toml_path):
                 os.remove(self.toml_path)
-                self.console_callback("[Playit] Deleted playit.toml secret.")
-            self.console_callback("[Playit] Agent reset complete. You can now start a new tunnel.")
-            self._claim_code = None
-            self._api_dns = None
-            self.current_address = None
+                self.console_callback("[Playit] Local config playit.toml removed.")
+            
             self.is_linked = False
+            self.current_address = None
+            self._api_dns = None
+            self.api_client.is_read_only = False
             self.api_client._secret_key = None
             self.api_client._agent_id = None
-            self.running = False
-            self.status_callback("Offline", None)
+            self.console_callback("[Playit] Reset complete. Account unlinked.")
+            
+            if self.notification_callback:
+                self.notification_callback("Playit account unlinked and reset.", "success")
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 

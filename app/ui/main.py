@@ -59,8 +59,8 @@ class MCTunnelApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
 
     def _init_state_variables(self):
-        self.current_server = None
         self.claim_url = None
+        self._show_setup_input = False
         
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
@@ -229,7 +229,7 @@ class MCTunnelApp(ctk.CTk):
         # Setup Code Input & Link Button
         self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=120, height=36, corner_radius=8)
         self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=8, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=100, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Link Playit.gg", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=8, height=36, font=("Roboto Medium", 12))
         
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
@@ -791,8 +791,10 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_stop.configure(state="disabled")
 
     def reset_tunnel(self):
-        if ctk.CTkInputDialog(text="Type 'yes' to confirm reset:", title="Confirm Reset").get_input() != "yes": return
+        if ctk.CTkInputDialog(text="Type 'yes' to confirm FULL RESET (Unlinks account and deletes agent/tunnels):", title="Confirm Reset").get_input() != "yes": return
         self.zbb_manager.reset_tunnel()
+        self._show_setup_input = False
+        self.on_tunnel_status({"status": "Offline"})
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
@@ -846,10 +848,16 @@ class MCTunnelApp(ctk.CTk):
                 if not self.zbb_manager.playit_manager.is_linked:
                     self.btn_tunnel_start.pack_forget()
                     self.btn_tunnel_stop.pack_forget()
+                    self.btn_reset.pack_forget()
                     
-                    self.btn_claim.pack(side="left", padx=2)
-                    self.entry_setup_code.pack(side="left", padx=2)
-                    self.btn_link_code.pack(side="left", padx=2)
+                    if not self._show_setup_input:
+                        self.btn_claim.pack(side="left", padx=2)
+                        self.entry_setup_code.pack_forget()
+                        self.btn_link_code.pack_forget()
+                    else:
+                        self.btn_claim.pack_forget()
+                        self.entry_setup_code.pack(side="left", padx=2)
+                        self.btn_link_code.pack(side="left", padx=2)
                 else:
                     self.btn_claim.pack_forget()
                     self.entry_setup_code.pack_forget()
@@ -857,6 +865,7 @@ class MCTunnelApp(ctk.CTk):
                     
                     self.btn_tunnel_start.pack(side="left", padx=2)
                     self.btn_tunnel_stop.pack(side="left", padx=2)
+                    self.btn_reset.pack(side="left", padx=2)
                     
                     self.btn_tunnel_start.configure(state="normal")
                     self.btn_tunnel_stop.configure(state="disabled")
@@ -871,6 +880,7 @@ class MCTunnelApp(ctk.CTk):
                 
                 self.btn_tunnel_start.pack(side="left", padx=2)
                 self.btn_tunnel_stop.pack(side="left", padx=2)
+                self.btn_reset.pack(side="left", padx=2)
                 
                 if status == "Online":
                     self.btn_tunnel_start.configure(state="disabled")
@@ -888,11 +898,13 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        """Opens the official Playit wizard to get a setup code."""
+        """Opens the official Playit wizard and switches to setup code input."""
         url = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other"
         self.tunnel_console.log(f"[UI] Opening Playit Wizard: {url}")
         webbrowser.open(url)
-        Toast.show(self, "Paste the Setup Code from the browser here.", toast_type="info")
+        self._show_setup_input = True
+        self.on_tunnel_status({"status": "Offline"}) # Refresh UI
+        Toast.show(self, "Copy the Setup Code from Playit and paste it here.", toast_type="info")
 
     def _link_with_setup_code(self):
         code = self.entry_setup_code.get().strip()
@@ -904,6 +916,7 @@ class MCTunnelApp(ctk.CTk):
         if self.zbb_manager.link_playit_manually(code):
             Toast.show(self, "Account linked successfully!", toast_type="success")
             self.entry_setup_code.delete(0, 'end')
+            self._show_setup_input = False
         else:
             Toast.show(self, "Failed to link account. Check logs.", toast_type="error")
 
