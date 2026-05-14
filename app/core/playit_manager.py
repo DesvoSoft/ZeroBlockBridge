@@ -160,6 +160,9 @@ class PlayitManager:
         self._claim_code = None
         self.current_address = None
         self._current_port = port
+        
+        if self.notification_callback:
+            self.notification_callback("Initializing tunnel relay...", "info")
 
         if not self.ensure_binary():
             self.console_callback("[Debug] Binary check failed.")
@@ -176,6 +179,7 @@ class PlayitManager:
             self.api_client.is_read_only = False  # Reset flag on fresh start
             self.console_callback("[Playit] Existing config found. Starting agent...")
             try:
+                # initialize() loads the secret and fetches rundata
                 if self.api_client.initialize():
                     address = self.get_or_create_tunnel(port)
                     if address:
@@ -183,16 +187,12 @@ class PlayitManager:
                         self.current_address = address
                         self.status_callback("Online", address)
                         self.console_callback(f"[Playit] Tunnel ready: {address}")
-                        if self.notification_callback:
-                            self.notification_callback(f"Tunnel online: {address}", "success")
                         if self.on_ready_callback:
                             self.on_ready_callback()
                     else:
-                        if self.notification_callback:
-                            self.notification_callback("Waiting for tunnel DNS assignment...", "info")
+                        self.console_callback("[Playit] Waiting for tunnel DNS assignment...")
             except Exception as e:
                 self.console_callback(f"[Playit] API tunnel setup: {e}")
-                logger.error(f"Failed to create tunnel via API: {e}")
 
         # Start the agent process (needed for actual traffic relay)
         try:
@@ -302,7 +302,6 @@ class PlayitManager:
                 # Restart if already running
                 if self.running:
                     self.stop()
-                    time.sleep(1)
                 
                 self.start(getattr(self, '_current_port', 25565))
                 return True

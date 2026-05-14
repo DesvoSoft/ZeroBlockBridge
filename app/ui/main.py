@@ -792,11 +792,19 @@ class MCTunnelApp(ctk.CTk):
 
     def reset_tunnel(self):
         if ctk.CTkInputDialog(text="Type 'yes' to confirm FULL RESET (Unlinks account and deletes agent/tunnels):", title="Confirm Reset").get_input() != "yes": return
-        self.zbb_manager.reset_tunnel()
-        self._show_setup_input = False
-        self.on_tunnel_status({"status": "Offline"})
-        self.btn_tunnel_start.configure(state="normal")
-        self.btn_tunnel_stop.configure(state="disabled")
+        
+        Toast.show(self, "Performing full account reset...", toast_type="info")
+        self.tunnel_console.log("[System] Initiating Playit account reset...")
+        
+        def _reset_task():
+            self.zbb_manager.reset_tunnel()
+            self.after(0, lambda: self.on_tunnel_status({"status": "Offline"}))
+            self.after(0, lambda: self.btn_tunnel_start.configure(state="normal"))
+            self.after(0, lambda: self.btn_tunnel_stop.configure(state="disabled"))
+            self.after(0, lambda: Toast.show(self, "Full reset complete. Account unlinked.", toast_type="success"))
+            self._show_setup_input = False
+
+        threading.Thread(target=_reset_task, daemon=True).start()
 
     def on_tunnel_status(self, data):
         if not data: return
@@ -913,14 +921,18 @@ class MCTunnelApp(ctk.CTk):
             return
             
         self.tunnel_console.log(f"[System] Linking account...")
-        Toast.show(self, "Connecting to Playit...", toast_type="info")
+        Toast.show(self, "Verifying code with Playit...", toast_type="info")
         
-        if self.zbb_manager.link_playit_manually(code):
-            Toast.show(self, "Success! Account linked and tunnel starting.", toast_type="success")
-            self.entry_setup_code.delete(0, 'end')
-            self._show_setup_input = False
-        else:
-            Toast.show(self, "Link failed. Verify your code and try again.", toast_type="error")
+        def _link_task():
+            success = self.zbb_manager.link_playit_manually(code)
+            if success:
+                self.after(0, lambda: Toast.show(self, "Success! Account linked. Tunnel starting...", toast_type="success"))
+                self.after(0, lambda: self.entry_setup_code.delete(0, 'end'))
+                self.after(0, lambda: setattr(self, '_show_setup_input', False))
+            else:
+                self.after(0, lambda: Toast.show(self, "Link failed. Verify your code.", toast_type="error"))
+        
+        threading.Thread(target=_link_task, daemon=True).start()
 
     def on_close(self):
         self.zbb_manager.shutdown()
