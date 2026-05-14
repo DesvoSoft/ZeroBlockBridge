@@ -33,6 +33,11 @@ class PlayitManager:
         self._lock = threading.Lock()
         self._api_dns = None       # Authoritative DNS from API -- never overwritten by stdout
         self._current_port = 25565
+        
+        # Persistence: Check if already linked
+        if self.api_client.load_secret_key():
+            self.is_linked = True
+            logger.info("Playit linked state persisted from playit.toml")
 
     def _get_binary_path(self):
         system = platform.system()

@@ -279,8 +279,14 @@ class PlayitApiClient:
         """Deletes the current agent from the account."""
         try:
             agent_id = self.get_agent_id()
-            if not agent_id: return False
+            if not agent_id: 
+                logger.warning("Cannot delete agent: No agent_id found.")
+                return False
             data = self._request("agents/delete", json_data={"agent_id": agent_id})
-            return data.get("status") == "success"
-        except Exception:
+            success = data.get("status") == "success"
+            if not success:
+                logger.error(f"Agent deletion failed: {data}")
+            return success
+        except Exception as e:
+            logger.error(f"Error during agent deletion: {e}")
             return False

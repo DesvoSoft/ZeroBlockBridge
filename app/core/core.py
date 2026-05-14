@@ -44,9 +44,9 @@ class ZBBManager:
         # External Services
         self.version_manager = VersionManager()
         self.playit_manager = PlayitManager(
-            console_callback=lambda txt: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, txt),
+            console_callback=lambda line: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, line),
             status_callback=self._on_playit_status,
-            on_ready_callback=lambda: self.events.emit(ServerEvent.READY),
+            on_ready_callback=None, # Tunnel readiness handled via status events
             notification_callback=lambda msg, t_type: self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": t_type})
         )
         
