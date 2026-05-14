@@ -224,19 +224,18 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_toolbar.pack(side="right", padx=10)
 
         self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
-        self.btn_tunnel_start.pack(side="left", padx=2)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
-        self.btn_tunnel_stop.pack(side="left", padx=2)
         
-        # Setup Code Input (Initially hidden/collapsed)
-        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=100, height=36, corner_radius=8)
+        # Setup Code Input & Link Button
+        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=120, height=36, corner_radius=8)
         self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=8, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
-        self.btn_claim.pack(side="left", padx=2)
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=100, corner_radius=8, height=36, font=("Roboto Medium", 12))
         
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
+        
+        # Initial UI State Check
+        self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
 
     def _build_management_controls(self):
         # Configure management_frame layout
@@ -843,11 +842,11 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_link_code.pack_forget()
                 
             if status == "Offline":
-                self.btn_tunnel_start.configure(state="normal")
-                self.btn_tunnel_stop.configure(state="disabled")
-                
                 # Only show link controls if not already linked
                 if not self.zbb_manager.playit_manager.is_linked:
+                    self.btn_tunnel_start.pack_forget()
+                    self.btn_tunnel_stop.pack_forget()
+                    
                     self.btn_claim.pack(side="left", padx=2)
                     self.entry_setup_code.pack(side="left", padx=2)
                     self.btn_link_code.pack(side="left", padx=2)
@@ -855,9 +854,30 @@ class MCTunnelApp(ctk.CTk):
                     self.btn_claim.pack_forget()
                     self.entry_setup_code.pack_forget()
                     self.btn_link_code.pack_forget()
+                    
+                    self.btn_tunnel_start.pack(side="left", padx=2)
+                    self.btn_tunnel_stop.pack(side="left", padx=2)
+                    
+                    self.btn_tunnel_start.configure(state="normal")
+                    self.btn_tunnel_stop.configure(state="disabled")
                 
                 self.lbl_dns_display.configure(text="")
                 self.btn_copy_ip.pack_forget()
+            else:
+                # Running/Connecting - show standard controls
+                self.btn_claim.pack_forget()
+                self.entry_setup_code.pack_forget()
+                self.btn_link_code.pack_forget()
+                
+                self.btn_tunnel_start.pack(side="left", padx=2)
+                self.btn_tunnel_stop.pack(side="left", padx=2)
+                
+                if status == "Online":
+                    self.btn_tunnel_start.configure(state="disabled")
+                    self.btn_tunnel_stop.configure(state="normal")
+                else:
+                    self.btn_tunnel_start.configure(state="disabled")
+                    self.btn_tunnel_stop.configure(state="disabled")
         self.after(0, _update)
 
     def _copy_ip_to_clipboard(self):
