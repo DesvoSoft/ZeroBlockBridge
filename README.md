@@ -165,7 +165,7 @@ pip install -r requirements.txt
 4- **Run the application**
 
 ```bash
-py launcher.py
+py app/launcher.py
 ```
 
 > **Note:** Depending on your operating system and environment configuration, you might need to adjust the command used to run Python. For example, use `py`, `python`, or `python3` as appropriate.

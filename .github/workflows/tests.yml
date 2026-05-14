@@ -12,9 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: ./app
+    # Defaults removed for clarity, explicit working-directory used in steps
     steps:
       - uses: actions/checkout@v4
 

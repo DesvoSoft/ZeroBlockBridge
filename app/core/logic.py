@@ -805,36 +805,6 @@ class Scheduler:
             data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
             self._save_metadata(data)
 
-def apply_server_settings(server_name, ram, seed, game_mode, difficulty, view_distance, simulation_distance):
-    server_path = os.path.join(SERVERS_DIR, server_name)
-    metadata_path = os.path.join(server_path, "metadata.json")
-    
-    metadata = {}
-    if os.path.exists(metadata_path):
-        try:
-            with open(metadata_path, "r") as f:
-                metadata = json.load(f)
-        except: pass
-        
-    metadata["ram"] = ram
-    metadata["created"] = datetime.datetime.now().isoformat()
-    metadata["pending_settings"] = {
-        "seed": seed, "game_mode": game_mode, "difficulty": difficulty,
-        "view_distance": view_distance, "simulation_distance": simulation_distance
-    }
-    
-    with open(metadata_path, "w") as f: json.dump(metadata, f, indent=4)
-    accept_eula(server_name)
-    props = {
-        "network-compression-threshold": "256", "sync-chunk-writes": "false",
-        "entity-broadcast-range-percentage": "75", "allow-flight": "true",
-        "level-seed": seed if seed else "", "gamemode": game_mode,
-        "force-gamemode": "true", "difficulty": difficulty,
-        "view-distance": view_distance, "simulation-distance": simulation_distance
-    }
-    save_server_properties(server_name, props)
-    metadata["pending_settings"] = {}
-    with open(metadata_path, "w") as f: json.dump(metadata, f, indent=4)
 
 def get_server_ram(server_name):
     try:

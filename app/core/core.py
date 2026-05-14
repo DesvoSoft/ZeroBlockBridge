@@ -151,11 +151,13 @@ class ZBBManager:
         mc_version = "1.20.1"
         java_path = "auto"
         use_aikars = True
+        required_java_cached = None
         try:
             if os.path.exists(meta_path):
                 with open(meta_path, "r") as f:
                     meta = json.load(f)
                     mc_version = meta.get("version", "1.20.1")
+                    required_java_cached = meta.get("required_java")
                     if meta.get("advanced_mode", False):
                         java_path = meta.get("java_path", "auto")
                         use_aikars = meta.get("use_aikars", True)
@@ -176,27 +178,38 @@ class ZBBManager:
             from app.core.logic import wait_for_jar_ready
 
             # 1. Determine required Java version
-            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
-            jar_path = os.path.join(server_dir, "server.jar")
-            # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
-            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Waiting for server.jar normalization...")
-            import time
-            bytecode_java = None
-            for _ in range(20):
-                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                    break
-                time.sleep(0.5)
+            if required_java_cached:
+                required_java = required_java_cached
+                source = "cached-metadata"
             else:
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[Warning] server.jar not found after 10s. Aborting bytecode analysis.")
-            
-            if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                try:
-                    bytecode_java = analyze_jar_bytecode(jar_path)
-                except Exception as e:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
+                jar_path = os.path.join(server_dir, "server.jar")
+                # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
+                import time
+                bytecode_java = None
+                for _ in range(10): # Reduced wait to 5s since scaffolding happened
+                    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                        break
+                    time.sleep(0.5)
+                
+                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                    try:
+                        from app.services.bytecode_analyzer import analyze_jar_bytecode
+                        bytecode_java = analyze_jar_bytecode(jar_path)
+                    except Exception as e:
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
 
-            required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
-            source = "bytecode" if bytecode_java else "version-map"
+                required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
+                source = "bytecode" if bytecode_java else "version-map"
+                
+                # Cache the result
+                try:
+                    if os.path.exists(meta_path):
+                        with open(meta_path, "r") as f: meta = json.load(f)
+                        meta["required_java"] = required_java
+                        with open(meta_path, "w") as f: json.dump(meta, f, indent=4)
+                except: pass
+
             self.events.emit(
                 ServerEvent.CONSOLE_LINE,
                 f"[System] Java {required_java} required (source: {source})"

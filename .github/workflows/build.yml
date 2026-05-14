@@ -17,12 +17,12 @@ jobs:
           - os: ubuntu-latest
             TARGET: linux
             SEP: ":"
-            ICON: "../assets/logo.png"
+            ICON: "assets/logo.png"
             EXT: ""
           - os: windows-latest
             TARGET: windows
             SEP: ";"
-            ICON: "../assets/logo.ico"
+            ICON: "assets/logo.ico"
             EXT: ".exe"
     steps:
       # 1. Checkout code
@@ -57,37 +57,35 @@ jobs:
       # 6a. Build on Linux
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
-        working-directory: ./app
         run: |
           pyinstaller --noconsole --onefile \
             --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
-            --add-data "../assets${{ matrix.SEP }}assets" \
+            --add-data "assets${{ matrix.SEP }}assets" \
             --collect-all "customtkinter" \
             --icon "${{ matrix.ICON }}" \
-            main.py
+            app/launcher.py
 
       # 6b. Build on Windows (PowerShell safe syntax)
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
-        working-directory: ./app
         run: >
           pyinstaller --noconsole --onefile
           --name "ZeroBlockBridge-${{ matrix.TARGET }}"
-          --add-data "../assets${{ matrix.SEP }}assets"
+          --add-data "assets${{ matrix.SEP }}assets"
           --collect-all "customtkinter"
           --icon "${{ matrix.ICON }}"
-          main.py
+          app/launcher.py
 
       # 7. Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
-          path: app/dist/*
+          path: dist/*
 
       # 8. Auto-Release
       - name: Create Release and Upload Assets
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/dist/ZeroBlockBridge-${{ matrix.TARGET }}${{ matrix.EXT }}
+          files: dist/ZeroBlockBridge-${{ matrix.TARGET }}${{ matrix.EXT }}
