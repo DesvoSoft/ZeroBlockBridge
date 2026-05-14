@@ -90,12 +90,25 @@ class PlayitManager:
 
 
     def _prepare_local_tunnel(self):
-        """Helper to create a guest tunnel via the local CLI when API is read-only."""
+        """Helper to create a guest tunnel via the local CLI config when API is read-only.
+        Since `playit tunnels prepare` panics in 0.16.5, we append a mapping to playit.toml."""
         try:
-            cmd_prep = f'"{self.binary_path}" tunnels prepare tcp 1 --secret_path "{self.toml_path}"'
-            subprocess.run(cmd_prep, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if not os.path.exists(self.toml_path):
+                return
+            with open(self.toml_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if "[[mapping]]" not in content:
+                mapping_block = (
+                    "\n\n[[mapping]]\n"
+                    "local_ip = \"127.0.0.1\"\n"
+                    "port_type = \"tcp\"\n"
+                    f"local_port = {getattr(self, '_current_port', 25565)}\n"
+                )
+                with open(self.toml_path, "a", encoding="utf-8") as f:
+                    f.write(mapping_block)
+                logger.info("Injected [[mapping]] into playit.toml for Guest Mode.")
         except Exception as e:
-            logger.error(f"Failed to prepare tunnel via CLI: {e}")
+            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
 
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
