@@ -852,16 +852,9 @@ class MCTunnelApp(ctk.CTk):
 
     def on_playit_claim(self, url):
         self.claim_url = url
-        claim_code = url.split("/")[-1] if url else ""
         def _show_ui():
             self.btn_claim.pack(side="left", padx=2)
-            self.tunnel_console.log(f"[System] Manual claim required: {url}")
-            Toast.show(
-                self,
-                f"Link required. Code: {claim_code}",
-                toast_type="warning",
-                duration=8000,
-            )
+            self.tunnel_console.log(f"[System] Wait while we link a guest account... (or click Link Account to use your own)")
         self.after(0, _show_ui)
 
     def _copy_ip_to_clipboard(self):
@@ -872,10 +865,11 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        if hasattr(self, 'claim_url') and self.claim_url:
-            self.tunnel_console.log(f"[UI] Manually opening claim URL...")
-            webbrowser.open(self.claim_url)
-        else: self.tunnel_console.log(f"[Error] No claim URL available yet.")
+        import tkinter.messagebox as messagebox
+        if messagebox.askyesno("Link Account", "Linking your account will reset the current guest tunnel and change your public IP.\n\nDo you want to continue?"):
+            self.tunnel_console.log(f"[System] Requesting manual link...")
+            self.btn_claim.pack_forget()
+            self.zbb_manager.request_manual_playit_link()
 
     def on_close(self):
         self.zbb_manager.shutdown()
