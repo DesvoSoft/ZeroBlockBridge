@@ -267,8 +267,14 @@ class PlayitManager:
                                 if tid:
                                     if self.api_client.delete_tunnel(tid):
                                         self.console_callback(f"[Playit] Deleted remote tunnel: {tid}")
+                    else:
+                        self.console_callback("[Playit] API key invalid or expired. Skipping remote cleanup.")
                 except Exception as e:
-                    self.console_callback(f"[Playit] API cleanup failed: {e}")
+                    if "401" in str(e):
+                        self.console_callback("[Playit] Authentication failed (401). Your agent key may have been revoked.")
+                        self.console_callback("[Playit] Please verify and delete unused agents at https://playit.gg/dashboard/agents")
+                    else:
+                        self.console_callback(f"[Playit] API cleanup failed: {e}")
 
             if os.path.exists(self.toml_path):
                 os.remove(self.toml_path)

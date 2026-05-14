@@ -59,7 +59,12 @@ class ZBBManager:
 
     def _start_resource_monitor(self):
         def _monitor():
-            import psutil
+            try:
+                import psutil
+            except ImportError:
+                logger.warning("psutil not installed. Resource monitoring disabled.")
+                return
+                
             import time
             while True:
                 time.sleep(2)

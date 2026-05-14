@@ -272,8 +272,14 @@ class PlayitApiClient:
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
         """Deletes a tunnel by ID."""
-        data = self._request("tunnels/delete", json_data={"tunnel_id": tunnel_id})
-        return data.get("status") == "success"
+        try:
+            data = self._request("tunnels/delete", json_data={"tunnel_id": tunnel_id})
+            return data.get("status") == "success"
+        except PlayitApiException as e:
+            if "401" in str(e):
+                logger.warning(f"Tunnel {tunnel_id} already inaccessible (401). Treating as deleted.")
+                return True
+            raise e
 
     def delete_agent(self) -> bool:
         """Deletes the current agent from the account."""
@@ -287,6 +293,12 @@ class PlayitApiClient:
             if not success:
                 logger.error(f"Agent deletion failed: {data}")
             return success
-        except Exception as e:
+        except PlayitApiException as e:
+            if "401" in str(e):
+                logger.warning("Agent already inaccessible (401). Proceeding with local reset.")
+                return True
             logger.error(f"Error during agent deletion: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during agent deletion: {e}")
             return False

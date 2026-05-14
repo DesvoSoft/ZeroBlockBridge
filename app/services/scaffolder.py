@@ -97,15 +97,20 @@ def _generate_properties(server_dir: str, port: int, config: dict = None):
             lines = f.readlines()
 
         # Update existing lines
+        existing_keys = set()
         for i, line in enumerate(lines):
             line = line.strip()
             if not line or line.startswith("#"): continue
             key = line.split("=")[0]
-            if key in props_to_write:
+            existing_keys.add(key)
+            if key == "server-port":
                 lines[i] = f"{key}={props_to_write[key]}\n"
                 del props_to_write[key]
+            elif key in props_to_write:
+                # Keep existing value for other keys, just remove from props_to_write so it's not appended
+                del props_to_write[key]
 
-        # Add remaining new lines
+        # Add missing required lines
         for k, v in props_to_write.items():
             lines.append(f"{k}={v}\n")
 
