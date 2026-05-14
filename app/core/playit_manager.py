@@ -151,10 +151,22 @@ class PlayitManager:
                         self.on_ready_callback()
                 return
 
+        try:
+            self._start_internal(port)
+        except Exception as e:
+            logger.error(f"[PlayitManager] Fatal error in start thread: {e}")
+            self.console_callback(f"[Playit] Internal start failure: {e}")
+            self.status_callback("Error", None)
+            with self._lock: self.in_use_count -= 1
+
+    def _start_internal(self, port: int):
         self._api_dns = None
         self._claim_code = None
         self.current_address = None
         self._current_port = port
+        
+        # Immediate feedback
+        self.status_callback("Starting...", None)
         
         if self.notification_callback:
             self.notification_callback("Initializing tunnel relay...", "info")
@@ -221,29 +233,37 @@ class PlayitManager:
             self.status_callback("Error", None)
             with self._lock: self.in_use_count -= 1
 
-    def stop(self):
-        """Stops the playit agent using reference counting."""
+    def stop(self, force=False):
+        """Stops the playit agent using reference counting or force."""
         with self._lock:
-            if self.in_use_count > 0:
-                self.in_use_count -= 1
+            if not force:
+                if self.in_use_count > 0:
+                    self.in_use_count -= 1
+                
+                if self.in_use_count > 0:
+                    self.console_callback(f"[Playit] Agent kept alive (In use: {self.in_use_count}).")
+                    return
             
-            if self.in_use_count > 0:
-                self.console_callback(f"[Playit] Agent kept alive (In use: {self.in_use_count}).")
-                return
-
-        if not self.running or not self.process:
-            return
-
-        self.console_callback("[Playit] Stopping agent...")
-        try:
-            self.process.terminate()
-        except Exception as e:
-            self.console_callback(f"[Playit] Error stopping: {e}")
-        
-        self.running = False
-        self.current_address = None
-        self._api_dns = None
-        self.status_callback("Offline", None)
+            if self.process:
+                self.console_callback("[Playit] Stopping agent...")
+                try:
+                    import psutil
+                    parent = psutil.Process(self.process.pid)
+                    for child in parent.children(recursive=True):
+                        child.kill()
+                    parent.kill()
+                except Exception as e:
+                    # Fallback to simple terminate if psutil fails or process already gone
+                    try: self.process.terminate()
+                    except: pass
+                    logger.debug(f"Process stop error: {e}")
+                    
+                self.process = None
+            
+            self.running = False
+            self.current_address = None
+            self._api_dns = None
+            self.status_callback("Offline", None)
 
     def reset(self):
         """Wipes the playit configuration, stops any running agent, and cleans up API resources."""
@@ -382,11 +402,11 @@ class PlayitManager:
                 threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
                 return
 
-        # --- DNS from stdout (always scrape when linked) ---
-        if not self.is_linked:
-            return
+        # --- CRITICAL DNS SCRAPING LOGIC (DO NOT TOUCH!) ---
+        # This logic extracts the official playit DNS from the agent output.
+        # It is the primary way we obtain the public domain for the UI.
         
-        # Skip if we already have a confirmed address
+        # Skip if we already have a confirmed address from API
         if self._api_dns:
             return
 

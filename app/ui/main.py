@@ -92,7 +92,7 @@ class MCTunnelApp(ctk.CTk):
     def _build_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=300, corner_radius=0, fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(3, weight=1)
+        self.sidebar_frame.grid_rowconfigure(4, weight=1) # List frame should expand, NOT the label
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
         # Logo
@@ -140,7 +140,7 @@ class MCTunnelApp(ctk.CTk):
             self.sidebar_frame, text="YOUR SERVERS", 
             anchor="w", font=("Roboto Medium", 11), text_color=AppConfig.COLOR_TEXT_GRAY
         )
-        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(10, 0), sticky="w")
+        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="w")
 
         self.server_list_frame = ctk.CTkScrollableFrame(
             self.sidebar_frame, label_text="", corner_radius=12, 
@@ -232,14 +232,9 @@ class MCTunnelApp(ctk.CTk):
 
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
-        self.lbl_public_ip = ctk.CTkLabel(self.ip_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
-        self.lbl_public_ip.pack(side="left", padx=5)
 
         self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 13), text_color="#3b82f6")
         self.lbl_dns_display.pack(side="left", padx=(5, 0))
-
-        self.lbl_port_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto", 11), text_color=AppConfig.COLOR_TEXT_GRAY)
-        self.lbl_port_display.pack(side="left", padx=(2, 5))
 
         self.btn_copy_ip = ctk.CTkButton(
             self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
@@ -504,10 +499,23 @@ class MCTunnelApp(ctk.CTk):
         self.update_management_ui()
 
     def open_server_folder(self):
-        if not self.current_server: return
+        def _open_folder(p):
+            import subprocess
+            if sys.platform == "win32":
+                os.startfile(p)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(p)])
+            else:
+                subprocess.run(["xdg-open", str(p)])
+
+        if not self.current_server:
+            path = SERVERS_DIR
+            _open_folder(path)
+            return
+            
         server_path = os.path.join(SERVERS_DIR, self.current_server)
         if os.path.exists(server_path):
-            os.startfile(server_path)
+            _open_folder(server_path)
 
     def open_mods_folder_action(self):
         if not self.current_server: return
@@ -517,7 +525,14 @@ class MCTunnelApp(ctk.CTk):
         target = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
         path = os.path.join(SERVERS_DIR, self.current_server, target)
         os.makedirs(path, exist_ok=True)
-        os.startfile(path)
+        
+        import subprocess
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)])
+        else:
+            subprocess.run(["xdg-open", str(path)])
 
     def _get_current_server_info(self):
         """Return (server_name, mc_version, loader) for the current server."""
@@ -820,8 +835,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.configure(state="normal")
         self.btn_tunnel_stop.configure(state="disabled")
 
-    def reset_tunnel(self):
-        if ctk.CTkInputDialog(text="Type 'yes' to confirm FULL RESET (Unlinks account and deletes agent/tunnels):", title="Confirm Reset").get_input() != "yes": return
+    def reset_tunnel_action(self):
+        msg = (
+            "This will wipe your local Playit configuration and delete the tunnel.\n\n"
+            "Note: Due to Playit API restrictions, the Agent might still appear in your "
+            "web dashboard and will need to be deleted manually there if desired.\n\n"
+            "Are you sure you want to proceed?"
+        )
+        if not tkinter.messagebox.askyesno("Reset Playit", msg): return
         
         Toast.show(self, "Performing full account reset...", toast_type="info")
         self.tunnel_console.log("[System] Initiating Playit account reset...")
@@ -843,75 +864,58 @@ class MCTunnelApp(ctk.CTk):
         dns = data.get("dns", None)
         
         def _update():
-            color = "green" if status == "Online" else "gray"
+            # 1. Update Status Label and Colors
+            color = "gray"
             icon = "●"
-            if status == "Error": color, icon = "red", "✖"
+            if status == "Online": color = "green"
+            elif status == "Error": color, icon = "red", "✖"
             elif status in ("Starting...", "Connecting..."): color, icon = "orange", "⏳"
-                
+            
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
-            if dns:
-                self.lbl_public_ip.pack_forget()
-                if ".gg" in dns or ".link" in dns:
-                    host = dns.split(":")[0] if ":" in dns else dns
-                    port = dns.split(":")[1] if ":" in dns else ""
-                    self.lbl_dns_display.configure(text=host, text_color="#3b82f6")
-                    self.lbl_port_display.configure(text=f":{port}" if port else "")
-                    self.btn_copy_ip.configure(state="normal")
-                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
-                else:
-                    self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
-                    self.lbl_port_display.configure(text="")
-                    self.btn_copy_ip.configure(state="disabled")
-                    self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif status == "Offline":
-                self.lbl_public_ip.pack(side="left", padx=5)
-                self.lbl_public_ip.configure(text="Public IP: N/A")
-                self.lbl_dns_display.configure(text="")
-                self.btn_copy_ip.pack_forget()
-            else:
-                self.lbl_public_ip.pack(side="left", padx=5)
-                self.lbl_public_ip.configure(text=f"Public IP: {ip}" if ip else "Public IP: N/A")
-                self.lbl_dns_display.configure(text="Connecting...", text_color="#f97316")
-                self.btn_copy_ip.configure(state="disabled")
-                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
+            # This logic ensures the public address appears immediately 
+            # and hides redundant/stale labels. 
+            display_dns = dns or ip
             
-            if ip:
-                self.btn_claim.pack_forget()
-                self.entry_setup_code.pack_forget()
-                self.btn_link_code.pack_forget()
+            # Hide labels first to be clean
+            self.lbl_dns_display.pack_forget()
+            self.btn_copy_ip.pack_forget()
+            
+            if status == "Online" and display_dns:
+                self._last_full_ip = display_dns
+                host = display_dns.split(":")[0] if ":" in display_dns else display_dns
+                self.lbl_dns_display.configure(text=host, text_color="#3b82f6")
+                self.lbl_dns_display.pack(side="left", padx=5)
+                self.btn_copy_ip.configure(state="normal")
+                self.btn_copy_ip.pack(side="left", padx=(5, 0))
+            elif status in ("Starting...", "Connecting..."):
+                self.lbl_dns_display.configure(text="Connecting...", text_color="#f97316")
+                self.lbl_dns_display.pack(side="left", padx=5)
+            elif status == "Error":
+                self.lbl_dns_display.configure(text="Error", text_color="#ef4444")
+                self.lbl_dns_display.pack(side="left", padx=5)
+            else: # Offline
+                self.lbl_dns_display.configure(text="")
+                self._last_full_ip = None
+
+            # 3. Update Buttons Visibility and State
+            is_linked = self.zbb_manager.playit_manager.is_linked
+            
+            if not is_linked:
+                self.btn_tunnel_start.pack_forget()
+                self.btn_tunnel_stop.pack_forget()
+                self.btn_reset.pack_forget()
                 
-            if status == "Offline":
-                # Only show link controls if not already linked
-                if not self.zbb_manager.playit_manager.is_linked:
-                    self.btn_tunnel_start.pack_forget()
-                    self.btn_tunnel_stop.pack_forget()
-                    self.btn_reset.pack_forget()
-                    
-                    if not self._show_setup_input:
-                        self.btn_claim.pack(side="left", padx=2)
-                        self.entry_setup_code.pack_forget()
-                        self.btn_link_code.pack_forget()
-                    else:
-                        self.btn_claim.pack_forget()
-                        self.entry_setup_code.pack(side="left", padx=2)
-                        self.btn_link_code.pack(side="left", padx=2)
-                else:
-                    self.btn_claim.pack_forget()
+                if not getattr(self, "_show_setup_input", False):
+                    self.btn_claim.pack(side="left", padx=2)
                     self.entry_setup_code.pack_forget()
                     self.btn_link_code.pack_forget()
-                    
-                    self.btn_tunnel_start.pack(side="left", padx=2)
-                    self.btn_tunnel_stop.pack(side="left", padx=2)
-                    self.btn_reset.pack(side="left", padx=2)
-                    
-                    self.btn_tunnel_start.configure(state="normal")
-                    self.btn_tunnel_stop.configure(state="disabled")
-                
-                self.lbl_dns_display.configure(text="")
-                self.btn_copy_ip.pack_forget()
+                else:
+                    self.btn_claim.pack_forget()
+                    self.entry_setup_code.pack(side="left", padx=2)
+                    self.btn_link_code.pack(side="left", padx=2)
             else:
-                # Running/Connecting - show standard controls
                 self.btn_claim.pack_forget()
                 self.entry_setup_code.pack_forget()
                 self.btn_link_code.pack_forget()
@@ -923,17 +927,21 @@ class MCTunnelApp(ctk.CTk):
                 if status == "Online":
                     self.btn_tunnel_start.configure(state="disabled")
                     self.btn_tunnel_stop.configure(state="normal")
-                else:
+                elif status in ("Starting...", "Connecting..."):
                     self.btn_tunnel_start.configure(state="disabled")
                     self.btn_tunnel_stop.configure(state="disabled")
+                else:
+                    self.btn_tunnel_start.configure(state="normal")
+                    self.btn_tunnel_stop.configure(state="disabled")
+
         self.after(0, _update)
 
     def _copy_ip_to_clipboard(self):
-        dns_value = self.lbl_dns_display.cget("text")
-        if dns_value and dns_value not in ["Connecting...", ""]:
+        full_ip = getattr(self, "_last_full_ip", None)
+        if full_ip and full_ip not in ["Connecting...", ""]:
             self.clipboard_clear()
-            self.clipboard_append(dns_value)
-            Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
+            self.clipboard_append(full_ip)
+            Toast.show(self, "Full address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
         """Opens the official Playit wizard and switches to setup code input."""

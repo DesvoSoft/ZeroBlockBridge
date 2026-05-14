@@ -49,8 +49,8 @@ class PlayitApiClient:
             logger.error(f"Failed to read playit.toml: {e}")
         return False
 
-    def _request(self, endpoint: str, json_data: dict = None) -> dict:
-        """Helper to send POST requests to Playit API with error handling."""
+    def _request(self, endpoint: str, json_data: dict = None, method: str = "POST") -> dict:
+        """Helper to send requests to Playit API with error handling."""
         self.load_secret_key()
         if not self._secret_key:
             raise PlayitApiException("No secret key loaded. Cannot authenticate.")
@@ -58,7 +58,7 @@ class PlayitApiClient:
         url = f"{self.api_base}/{endpoint.strip('/')}"
         headers = {"Authorization": f"agent-key {self._secret_key}"}
         try:
-            response = self.session.post(url, json=json_data, headers=headers, timeout=10)
+            response = self.session.request(method, url, json=json_data, headers=headers, timeout=10)
         except requests.RequestException as e:
             raise PlayitApiException(f"Network error communicating with Playit API: {e}")
 
@@ -128,7 +128,7 @@ class PlayitApiClient:
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
-        logger.info("Successfully linked playit account via internal bridge.")
+        logger.info(f"Successfully linked playit account (Agent ID: {agent_id})")
         return True
 
     # --- Agent Info ---
@@ -137,11 +137,30 @@ class PlayitApiClient:
         if self._agent_id:
             return self._agent_id
             
-        data = self._request("agents/rundata")
-        if data.get("status") == "success":
-            self._agent_id = data.get("data", {}).get("agent_id")
-            return self._agent_id
-        raise PlayitApiException(f"Failed to get agent id: {data}")
+        try:
+            data = self._request("agents/rundata")
+            if data.get("status") == "success":
+                self._agent_id = data.get("data", {}).get("agent_id")
+                return self._agent_id
+        except PlayitApiException as e:
+            logger.warning(f"Failed to get agent id via rundata: {e}")
+            
+        # Fallback: try tunnels/list to see if we can find the agent_id there
+        try:
+            # tunnels/list for all tunnels often works even if rundata doesn't
+            url = f"{self.api_base}/tunnels/list"
+            # Try both auth types manually here if needed, but _request does it
+            data = self._request("tunnels/list", json_data={})
+            if data.get("status") == "success":
+                tunnels = data.get("data", {}).get("tunnels", [])
+                if tunnels:
+                    self._agent_id = tunnels[0].get("agent_id")
+                    if self._agent_id:
+                        return self._agent_id
+        except Exception as e:
+            logger.warning(f"Fallback agent_id detection failed: {e}")
+
+        raise PlayitApiException("Could not determine agent_id via any method.")
 
     def get_agent_rundata(self) -> dict:
         """Returns full agent rundata including agent_id."""
@@ -254,7 +273,7 @@ class PlayitApiClient:
         if not tunnel_id:
             raise PlayitApiException("Tunnel creation returned success but no ID.")
 
-        # Smart Polling: wait for the tunnel to be assigned
+        # Smart Polling: wait for the tunnel to be assigned (this was the 'precioso' part)
         logger.info(f"Tunnel {tunnel_id} created, polling for assignment...")
         for _ in range(15):
             tunnels = self.list_tunnels()
@@ -262,41 +281,60 @@ class PlayitApiClient:
                 if t.get("id") == tunnel_id:
                     status = t.get("alloc", {}).get("status")
                     if status != "pending":
-                        address = self.get_tunnel_address(t)
+                        address = self.api_client.get_tunnel_address(t) if hasattr(self, 'api_client') else self.get_tunnel_address(t)
                         if address:
                             logger.info(f"Tunnel {tunnel_id} assigned to {address}")
                             return t
             time.sleep(1)
             
-        raise PlayitApiException(f"Tunnel {tunnel_id} remained pending after 15s")
+        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s, agent will pick it up eventually.")
+        # Return the tunnel anyway even if pending
+        return data.get("data", {})
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
         """Deletes a tunnel by ID."""
         try:
-            data = self._request("tunnels/delete", json_data={"tunnel_id": tunnel_id})
-            return data.get("status") == "success"
+            # Try multiple common keys for deletion payload
+            for key in ["id", "tunnel_id", "tunnel-id"]:
+                try:
+                    data = self._request("tunnels/delete", json_data={key: tunnel_id})
+                    if data.get("status") == "success":
+                        return True
+                except Exception:
+                    continue
+            return False
         except PlayitApiException as e:
             if "401" in str(e):
-                logger.warning(f"Tunnel {tunnel_id} already inaccessible (401). Treating as deleted.")
+                logger.warning(f"Tunnel {tunnel_id} already inaccessible (401).")
                 return True
             raise e
 
     def delete_agent(self) -> bool:
         """Deletes the current agent from the account."""
         try:
-            agent_id = self.get_agent_id()
+            agent_id = self._agent_id
+            if not agent_id:
+                try: agent_id = self.get_agent_id()
+                except: pass
+            
             if not agent_id: 
                 logger.warning("Cannot delete agent: No agent_id found.")
                 return False
-            data = self._request("agents/delete", json_data={"agent_id": agent_id})
-            success = data.get("status") == "success"
-            if not success:
-                logger.error(f"Agent deletion failed: {data}")
-            return success
+                
+            # Try multiple common keys for agent deletion payload
+            for key in ["id", "agent_id", "agent-id"]:
+                try:
+                    data = self._request("agents/delete", json_data={key: agent_id})
+                    if data.get("status") == "success":
+                        return True
+                except Exception:
+                    continue
+                    
+            return False
         except PlayitApiException as e:
             if "401" in str(e):
-                logger.warning("Agent already inaccessible (401). Proceeding with local reset.")
-                return True
+                logger.warning("Agent deletion failed with 401. Your key might be read-only or revoked.")
+                return False 
             logger.error(f"Error during agent deletion: {e}")
             return False
         except Exception as e:

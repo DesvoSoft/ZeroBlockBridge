@@ -49,6 +49,13 @@ Adhere to this cycle for every task:
 3.  **No Prints**: Use the logger.
 4.  **Update the Checklist**: Mark tasks as completed (✅) or in progress (🚧) as you work.
 
+### Playit.gg Integration & Lifecycle
+ZeroBlockBridge uses a robust API-first integration with Playit.gg.
+- **Linking**: Uses a setup code flow to exchange for a `secret_key` persisted in `config/playit.toml`.
+- **Process Management**: Uses `psutil` to ensure the `playit.exe` process tree is killed on application exit.
+- **Deletion Restrictions**: Due to Playit API security policies, "Agent Keys" (guest keys) often lack permission to delete the Agent itself from the account.
+- **Reset Protocol**: Performing a "Reset" in ZBB wipes the local config and remote tunnels. If the Agent persists in the web dashboard, it must be removed manually by the user.
+
 ---
 
 **Protocol initiated. Welcome to ZBB.**

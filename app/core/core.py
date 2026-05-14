@@ -394,7 +394,12 @@ class ZBBManager:
         threading.Thread(target=self.playit_manager.start, args=(port,), daemon=True).start()
 
     def stop_tunnel(self):
-        self.playit_manager.stop()
+        self.playit_manager.stop(force=True)
+
+    def stop_all(self):
+        """Stops all running services (Server, Tunnel, etc.). Used for app exit."""
+        self.stop_server()
+        self.stop_tunnel()
 
     def reset_tunnel(self):
         self.playit_manager.reset()
@@ -496,5 +501,4 @@ class ZBBManager:
         self._scheduler_running = False
         self.stop_server()
         self._stop_monitors()
-        if self.playit_manager:
-            self.playit_manager.stop()
+        self.stop_tunnel()
