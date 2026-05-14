@@ -257,15 +257,18 @@ class PlayitApiClient:
         # Smart Polling: wait for the tunnel to be assigned
         logger.info(f"Tunnel {tunnel_id} created, polling for assignment...")
         for _ in range(15):
-            tunnels = self.list_tunnels()
-            for t in tunnels:
-                if t.get("id") == tunnel_id:
-                    status = t.get("alloc", {}).get("status")
-                    if status != "pending":
-                        address = self.get_tunnel_address(t)
+            try:
+                t = self._request("tunnels/get", json_data={"tunnel_id": tunnel_id})
+                if t.get("status") == "success":
+                    t_data = t.get("data", {})
+                    alloc_status = t_data.get("alloc", {}).get("status")
+                    if alloc_status != "pending":
+                        address = self.get_tunnel_address(t_data)
                         if address:
                             logger.info(f"Tunnel {tunnel_id} assigned to {address}")
-                            return t
+                            return t_data
+            except Exception:
+                pass
             time.sleep(1)
             
         raise PlayitApiException(f"Tunnel {tunnel_id} remained pending after 15s")

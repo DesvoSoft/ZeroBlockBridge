@@ -112,13 +112,16 @@ class MCTunnelApp(ctk.CTk):
         self.logo_label.grid(row=0, column=0, padx=20, pady=(15, 5))
 
         self.btn_create_server = ctk.CTkButton(self.sidebar_frame, text="Create Server", command=self.create_server_dialog, corner_radius=8, height=36)
-        self.btn_create_server.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+        self.btn_create_server.grid(row=1, column=0, padx=20, pady=(10, 5), sticky="ew")
+
+        self.btn_load_server = ctk.CTkButton(self.sidebar_frame, text="📁 Load Existing", command=self.load_existing_server_action, corner_radius=8, height=32, fg_color="transparent", border_width=1, border_color=AppConfig.COLOR_BORDER_DARK)
+        self.btn_load_server.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         self.lbl_servers = ctk.CTkLabel(self.sidebar_frame, text="Your Servers:", anchor="w", font=AppConfig.FONT_BODY)
-        self.lbl_servers.grid(row=2, column=0, padx=20, pady=(10, 0))
+        self.lbl_servers.grid(row=3, column=0, padx=20, pady=(10, 0))
 
         self.server_list_frame = ctk.CTkScrollableFrame(self.sidebar_frame, label_text="", corner_radius=10, border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
-        self.server_list_frame.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+        self.server_list_frame.grid(row=4, column=0, padx=20, pady=10, sticky="nsew")
 
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
@@ -933,6 +936,24 @@ class MCTunnelApp(ctk.CTk):
                 self.after(0, lambda: Toast.show(self, "Link failed. Verify your code.", toast_type="error"))
         
         threading.Thread(target=_link_task, daemon=True).start()
+
+    def load_existing_server_action(self):
+        folder = ctk.filedialog.askdirectory(title="Select Existing Server Folder")
+        if not folder: return
+        
+        # Quick validation: check for any .jar
+        try:
+            files = os.listdir(folder)
+            jars = [f for f in files if f.endswith(".jar")]
+            if not jars:
+                Toast.show(self, "No .jar file found in the selected folder.", toast_type="error")
+                return
+                
+            if self.zbb_manager.load_server_manually(folder):
+                self.load_servers() # Refresh list
+                Toast.show(self, "Server loaded successfully!", toast_type="success")
+        except Exception as e:
+            Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
     def on_close(self):
         self.zbb_manager.shutdown()

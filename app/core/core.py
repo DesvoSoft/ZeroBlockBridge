@@ -285,6 +285,53 @@ class ZBBManager:
         self.events.emit(ServerEvent.STARTING)
         return True
 
+    def load_server_manually(self, folder_path: str) -> bool:
+        """Imports an existing server by creating a link in the servers directory."""
+        import os, sys, json
+        from app.core.app_config import SERVERS_DIR
+        
+        server_name = os.path.basename(folder_path.rstrip("\\/"))
+        link_path = os.path.join(SERVERS_DIR, server_name)
+        
+        if os.path.exists(link_path):
+            raise Exception(f"A server named '{server_name}' already exists.")
+            
+        try:
+            # Create the link (junction on windows)
+            if sys.platform == "win32":
+                import _winapi
+                _winapi.CreateJunction(folder_path, link_path)
+            else:
+                os.symlink(folder_path, link_path)
+                
+            # Create a default metadata.json if missing
+            meta_path = os.path.join(link_path, "metadata.json")
+            if not os.path.exists(meta_path):
+                # Try to guess version from jar name or bytecode
+                jar_name = "server.jar"
+                if not os.path.exists(os.path.join(link_path, jar_name)):
+                    jars = [f for f in os.listdir(link_path) if f.endswith(".jar")]
+                    if jars: jar_name = jars[0]
+                
+                meta = {
+                    "name": server_name,
+                    "type": "Vanilla",
+                    "version": "Unknown",
+                    "java_path": "auto",
+                    "advanced_mode": False,
+                    "use_aikars": True,
+                    "custom_jar": jar_name
+                }
+                with open(meta_path, "w") as f:
+                    json.dump(meta, f, indent=4)
+            
+            return True
+        except Exception as e:
+            if os.path.exists(link_path):
+                try: os.rmdir(link_path)
+                except: pass
+            raise e
+
     def stop_server(self):
         if self.server_runner:
             self.server_runner.stop()

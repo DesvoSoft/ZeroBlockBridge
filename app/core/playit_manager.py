@@ -187,6 +187,8 @@ class PlayitManager:
                         self.current_address = address
                         self.status_callback("Online", address)
                         self.console_callback(f"[Playit] Tunnel ready: {address}")
+                        if self.notification_callback:
+                            self.notification_callback(f"Tunnel Online: {address}", "success")
                         if self.on_ready_callback:
                             self.on_ready_callback()
                     else:
