@@ -179,39 +179,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.lbl_count.pack(side="right", padx=12, pady=3)
 
     # ------------------------------------------------------------------
-    # Server Initialization Guard
-    # ------------------------------------------------------------------
-    def _is_server_initialized(self) -> bool:
-        """Checks if the currently selected server has been started at least once."""
-        if not self.get_server_info: return False
-        try:
-            info = self.get_server_info()
-            if not info: return False
-            server_name = info[0]
-            server_path = os.path.join(SERVERS_DIR, server_name)
-            jar_path = os.path.join(server_path, "server.jar")
-            logs_file = os.path.join(server_path, "logs", "latest.log")
-            eula_file = os.path.join(server_path, "eula.txt")
-            
-            # Strict Check: JAR must exist AND (logs generated OR eula generated)
-            if not os.path.exists(jar_path): return False
-            if not os.path.exists(logs_file) and not os.path.exists(eula_file): return False
-            return True
-        except Exception:
-            return False
-
-    def _show_uninitialized_warning(self):
-        self._show_placeholder("🔒 Server Not Initialized\n\nPlease start the server at least once\nto install the engine before exploring mods.")
-        self._set_status("⚠ First boot required")
-
-    # ------------------------------------------------------------------
     # Search logic
     # ------------------------------------------------------------------
     def _on_search(self, event=None):
-        if not self._is_server_initialized():
-            self._show_uninitialized_warning()
-            return
-            
         query = self.entry_search.get().strip()
         if not query:
             return
@@ -250,7 +220,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._render_results(self._current_hits, total))
             except ModrinthException as exc:
                 logger.error("Modrinth search failed: %s", exc)
-                self.after(0, lambda: self._show_placeholder(f"Search failed:\n{exc}"))
+                msg = f"Search failed:\n{exc}"
+                self.after(0, lambda m=msg: self._show_placeholder(m))
             finally:
                 self.after(0, lambda: self.btn_search.configure(state="normal"))
                 self.after(0, lambda: self._set_status("Ready"))
@@ -260,10 +231,6 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _load_popular_mods(self):
         """Fetch and show popular mods."""
-        if not self._is_server_initialized():
-            self._show_uninitialized_warning()
-            return
-            
         mc_version = None
         loader = None
         if self.get_server_info:
@@ -409,8 +376,8 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Install action
     # ------------------------------------------------------------------
     def _on_install(self, hit: dict):
-        if not self._is_server_initialized():
-            self._show_uninitialized_warning()
+        if not self.get_server_info:
+            self._set_status("⚠ No server selected — cannot install.")
             return
 
         try:
@@ -444,15 +411,13 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self.after(0, lambda: self._set_status(f"✗ No compatible version of {title} found."))
             except Exception as exc:
                 logger.error("Install failed for %s: %s", title, exc)
-                self.after(0, lambda: self._set_status(f"✗ Install failed: {exc}"))
+                msg = f"✗ Install failed: {exc}"
+                self.after(0, lambda m=msg: self._set_status(m))
 
         threading.Thread(target=_do_install, daemon=True).start()
 
     def _on_install_optimizers(self):
-        if not self._is_server_initialized():
-            self._show_uninitialized_warning()
-            return
-            
+        if not self.get_server_info: return
         info = self.get_server_info()
         if not info:
             self._set_status("⚠ Select a server first.")

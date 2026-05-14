@@ -769,7 +769,7 @@ class MCTunnelApp(ctk.CTk):
 
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.zbb_manager.create_tunnel_for_server(name)
-                    self.after(0, lambda: self._on_download_complete(dialog))
+                    self.after(0, lambda: self._on_download_complete(dialog, name))
                 else:
                     self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
                     self.after(0, dialog.close)
@@ -780,9 +780,12 @@ class MCTunnelApp(ctk.CTk):
                 self.after(0, dialog.close)
         threading.Thread(target=run_install, daemon=True).start()
 
-    def _on_download_complete(self, dialog):
+    def _on_download_complete(self, dialog, name):
         dialog.close()
         self.load_servers()
+        self.server_console.log(f"[System] Auto-starting '{name}' to initialize server files...")
+        self.after(500, lambda: self.on_server_select(name))
+        self.after(1000, self.start_server_action)
 
     def start_tunnel(self):
         self.btn_tunnel_start.configure(state="disabled")

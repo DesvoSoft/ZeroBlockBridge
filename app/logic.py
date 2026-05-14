@@ -10,6 +10,7 @@ import sys
 import datetime
 import time
 import zipfile
+from pathlib import Path
 
 from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR, VANILLA_MANIFEST_URL
 from app.server_events import ServerEvent, ServerEventEmitter
