@@ -228,7 +228,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start.pack(side="left", padx=2)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_tunnel_stop.pack(side="left", padx=2)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Link Account", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="⭐ Link Account", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=8, height=36, font=("Roboto Medium", 12))
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
@@ -854,7 +854,7 @@ class MCTunnelApp(ctk.CTk):
     def on_playit_claim(self, url):
         self.claim_url = url
         def _show_ui():
-            self.btn_claim.configure(text="🔗 Open Approval Page")
+            self.btn_claim.configure(text="🔗 Approve")
             self.btn_claim.pack(side="left", padx=2)
             self.tunnel_console.log(f"[System] Action Required: Please approve the agent in your browser.")
             Toast.show(
@@ -873,8 +873,8 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        # If the button says "Open Approval Page", just open the current URL
-        if self.btn_claim.cget("text") == "🔗 Open Approval Page":
+        # If the button says "Approve", just open the current URL
+        if self.btn_claim.cget("text") == "🔗 Approve":
             if hasattr(self, 'claim_url') and self.claim_url:
                 self.tunnel_console.log(f"[UI] Manually opening claim URL...")
                 webbrowser.open(self.claim_url)

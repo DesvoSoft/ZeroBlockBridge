@@ -89,6 +89,14 @@ class PlayitManager:
 
 
 
+    def _prepare_local_tunnel(self):
+        """Helper to create a guest tunnel via the local CLI when API is read-only."""
+        try:
+            cmd_prep = f'"{self.binary_path}" tunnels prepare tcp 1 --secret_path "{self.toml_path}"'
+            subprocess.run(cmd_prep, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as e:
+            logger.error(f"Failed to prepare tunnel via CLI: {e}")
+
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
         Returns the full connectable address (domain:port) or None."""
@@ -97,13 +105,8 @@ class PlayitManager:
         if self.api_client.is_read_only:
             logger.info("Skipping API tunnel creation (Guest Mode). Using local CLI.")
             self.console_callback("[Playit] Guest mode detected. Preparing tunnel locally...")
-            try:
-                cmd_prep = f'"{self.binary_path}" tunnels prepare tcp 1 --secret_path "{self.toml_path}"'
-                subprocess.run(cmd_prep, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                return None
-            except Exception as e:
-                logger.error(f"Failed to prepare tunnel via CLI: {e}")
-                return None
+            self._prepare_local_tunnel()
+            return None
                 
         if not self.api_client.load_secret_key():
             self.console_callback("[Playit] Agent not linked yet. Using fallback mode.")
@@ -130,7 +133,8 @@ class PlayitManager:
         except PlayitApiException as e:
             if "NotAllowedWithReadOnly" in str(e):
                 self.api_client.is_read_only = True
-                self.console_callback("[Playit] Switching to Guest Mode (Read-Only API).")
+                self.console_callback("[Playit] Switching to Guest Mode (Read-Only API). Preparing tunnel locally...")
+                self._prepare_local_tunnel()
             else:
                 self.console_callback(f"[Playit] API Error: {e}")
             return None
