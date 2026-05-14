@@ -87,27 +87,7 @@ class PlayitManager:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
 
-    # --- API-First Tunnel Management ---
-    def _try_api_link(self, claim_code: str) -> bool:
-        """Exchanges the claim code for a guest secret key via auto-mcs worker."""
-        for attempt in range(4):
-            try:
-                if self.api_client.link_account(claim_code):
-                    return True
-            except PlayitApiException as e:
-                err_str = str(e)
-                if "SetupCodeNotFound" in err_str and attempt < 3:
-                    self.console_callback(f"[Debug] Setup code not ready yet, retrying in 2s (Attempt {attempt+1}/4)...")
-                    time.sleep(2)
-                    continue
-                logger.error(f"Failed to auto-claim guest account: {e}")
-                self.console_callback(f"[Playit] Auto-claim failed: {e}")
-                return False
-            except Exception as e:
-                logger.error(f"Failed to auto-claim guest account: {e}")
-                self.console_callback(f"[Playit] Auto-claim error: {e}")
-                return False
-        return False
+
 
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
@@ -294,8 +274,7 @@ class PlayitManager:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
     def request_manual_link(self):
-        """Sets flag to skip auto-claim and opens browser on next run, then resets."""
-        self.manual_link_requested = True
+        """Sets flag to open browser on next run, then resets."""
         self.reset()
         self.start(getattr(self, '_current_port', 25565))
 
@@ -350,23 +329,17 @@ class PlayitManager:
                     self._claim_code = claim_code
                     self.console_callback(f"[Playit] Claim code detected: {claim_code}")
                     self.console_callback("[Playit] Waiting for manual browser confirmation...")
+                    self.console_callback("[System] Please approve the agent in your browser. You can choose 'Guest' for a quick test, or 'Login' to keep your IP permanent.")
                     
                     full_url = f"https://playit.gg/claim/{claim_code}"
                     # Store URL for the UI
                     self.claim_callback(full_url)
                     
-                    if getattr(self, 'manual_link_requested', False):
-                        # User explicitly asked to link account
-                        self.console_callback(f"[UI] Opening claim URL in browser: {full_url}")
-                        try:
-                            webbrowser.open(full_url)
-                        except Exception as e:
-                            logger.error(f"Failed to auto-open browser: {e}")
-                        self.manual_link_requested = False
-                    else:
-                        # UX: Zero-Friction Auto-Claim as Guest
-                        self.console_callback("[System] Auto-claiming guest account for zero-friction mode...")
-                        threading.Thread(target=self._try_api_link, args=(claim_code,), daemon=True).start()
+                    self.console_callback(f"[UI] Opening claim URL in browser: {full_url}")
+                    try:
+                        webbrowser.open(full_url)
+                    except Exception as e:
+                        logger.error(f"Failed to auto-open browser: {e}")
                 return
 
         # --- Network unreachable -- agent will auto-retry via IPv4 ---

@@ -854,7 +854,13 @@ class MCTunnelApp(ctk.CTk):
         self.claim_url = url
         def _show_ui():
             self.btn_claim.pack(side="left", padx=2)
-            self.tunnel_console.log(f"[System] Wait while we link a guest account... (or click Link Account to use your own)")
+            self.tunnel_console.log(f"[System] Action Required: Please approve the agent in your browser.")
+            Toast.show(
+                self,
+                f"Browser approval required to start tunnel.",
+                toast_type="warning",
+                duration=6000,
+            )
         self.after(0, _show_ui)
 
     def _copy_ip_to_clipboard(self):
