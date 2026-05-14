@@ -188,8 +188,15 @@ class ModrinthBrowser(ctk.CTkFrame):
             info = self.get_server_info()
             if not info: return False
             server_name = info[0]
-            jar_path = os.path.join(SERVERS_DIR, server_name, "server.jar")
-            return os.path.exists(jar_path)
+            server_path = os.path.join(SERVERS_DIR, server_name)
+            jar_path = os.path.join(server_path, "server.jar")
+            logs_file = os.path.join(server_path, "logs", "latest.log")
+            eula_file = os.path.join(server_path, "eula.txt")
+            
+            # Strict Check: JAR must exist AND (logs generated OR eula generated)
+            if not os.path.exists(jar_path): return False
+            if not os.path.exists(logs_file) and not os.path.exists(eula_file): return False
+            return True
         except Exception:
             return False
 

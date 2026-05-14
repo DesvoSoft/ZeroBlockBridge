@@ -258,50 +258,79 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                                                 variable=self.var_auto_restart, command=self.toggle_automation_inputs)
         self.chk_auto_restart.grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=10)
         
+        # Backup on Restart Toggle
+        self.var_backup_restart = ctk.BooleanVar(value=schedule.get("backup_on_restart", False) if schedule else False)
+        self.chk_backup_restart = ctk.CTkSwitch(card, text="Backup before Restart", variable=self.var_backup_restart)
+        self.chk_backup_restart.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
+
         # Separator
-        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=1, column=0, columnspan=2, sticky="ew", padx=15)
+        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
         
+        # Mode Selection
+        ctk.CTkLabel(card, text="Schedule Mode:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=8)
+        self.var_schedule_mode = ctk.StringVar(value="Interval")
+        if schedule and schedule.get("type") == "time":
+            self.var_schedule_mode.set("Daily Time")
+            
+        self.combo_mode = ctk.CTkOptionMenu(card, values=["Interval", "Daily Time"], variable=self.var_schedule_mode, command=self.toggle_automation_inputs, height=28)
+        self.combo_mode.grid(row=3, column=2, sticky="e", padx=12, pady=5)
+
         # Interval Input
-        self.lbl_interval = ctk.CTkLabel(card, text="Restart Interval (Hours):", font=self.font_bold, anchor="w")
-        self.lbl_interval.grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
-        
-        # Column 1 is empty (no impact dot here)
-        
-        ctrl_frame = ctk.CTkFrame(card, fg_color="transparent", width=200, height=28)
-        ctrl_frame.grid(row=2, column=2, sticky="e", padx=12, pady=3)
-        ctrl_frame.pack_propagate(False)
+        self.lbl_interval = ctk.CTkLabel(card, text="Interval (Hours):", font=self.font_bold, anchor="w")
+        self.lbl_interval.grid(row=4, column=0, sticky="w", padx=(12, 5), pady=8)
         
         vcmd = (self.register(self.validate_int), '%P')
-        self.entry_interval = ctk.CTkEntry(ctrl_frame, height=28, validate="key", validatecommand=vcmd)
-        self.entry_interval.pack(fill="x")
+        self.entry_interval = ctk.CTkEntry(card, height=28, validate="key", validatecommand=vcmd, width=100)
+        self.entry_interval.grid(row=4, column=2, sticky="e", padx=12, pady=5)
+        self.entry_interval.insert(0, str(schedule.get("interval_hours", 6)) if schedule else "6")
         
-        if schedule and schedule["type"] == "interval":
-            self.entry_interval.insert(0, str(schedule["interval_hours"]))
-        else:
-            self.entry_interval.insert(0, "6") # Default
+        # Time Input
+        self.lbl_time = ctk.CTkLabel(card, text="Daily Time (HH:MM):", font=self.font_bold, anchor="w")
+        self.lbl_time.grid(row=5, column=0, sticky="w", padx=(12, 5), pady=8)
+        
+        self.entry_time = ctk.CTkEntry(card, height=28, width=100)
+        self.entry_time.grid(row=5, column=2, sticky="e", padx=12, pady=5)
+        self.entry_time.insert(0, schedule.get("restart_time", "03:00") if schedule else "03:00")
             
         self.toggle_automation_inputs()
 
-    def toggle_automation_inputs(self):
+    def toggle_automation_inputs(self, *args):
         if self.var_auto_restart.get():
-            self.entry_interval.configure(state="normal")
-            self.lbl_interval.configure(text_color=("black", "white"))
+            self.combo_mode.configure(state="normal")
+            self.chk_backup_restart.configure(state="normal")
+            if self.var_schedule_mode.get() == "Interval":
+                self.entry_interval.configure(state="normal")
+                self.lbl_interval.configure(text_color=("black", "white"))
+                self.entry_time.configure(state="disabled")
+                self.lbl_time.configure(text_color="gray")
+            else:
+                self.entry_interval.configure(state="disabled")
+                self.lbl_interval.configure(text_color="gray")
+                self.entry_time.configure(state="normal")
+                self.lbl_time.configure(text_color=("black", "white"))
         else:
+            self.combo_mode.configure(state="disabled")
+            self.chk_backup_restart.configure(state="disabled")
             self.entry_interval.configure(state="disabled")
             self.lbl_interval.configure(text_color="gray")
+            self.entry_time.configure(state="disabled")
+            self.lbl_time.configure(text_color="gray")
 
     def save_automation(self):
-        if not self.var_auto_restart:
-            return
+        if not self.var_auto_restart: return
             
         enabled = self.var_auto_restart.get()
-        interval = 6
-        try:
-            interval = int(self.entry_interval.get())
-        except:
-            pass
-            
-        self.scheduler.set_restart_schedule(enabled, interval)
+        backup = self.var_backup_restart.get()
+        mode = self.var_schedule_mode.get()
+        
+        if mode == "Interval":
+            interval = 6
+            try: interval = int(self.entry_interval.get())
+            except: pass
+            self.scheduler.set_restart_schedule(enabled, interval_hours=interval, backup_on_restart=backup)
+        else:
+            time_val = self.entry_time.get()
+            self.scheduler.set_restart_schedule(enabled, restart_time=time_val, backup_on_restart=backup)
 
     def validate_int(self, P):
         """Callback to allow only digits."""

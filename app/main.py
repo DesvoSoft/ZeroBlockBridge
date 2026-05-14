@@ -143,6 +143,14 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
         self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
 
+        self.btn_config = ctk.CTkButton(
+            self.status_frame, text="⚙", width=36, height=36, 
+            corner_radius=18, fg_color="transparent", hover_color="#334155",
+            font=("Roboto", 18), command=self.edit_server_properties,
+            state="disabled"
+        )
+        self.btn_config.pack(side="left", padx=5)
+
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", padx=20, pady=8)
         
@@ -189,14 +197,6 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_stop.pack(side="left", padx=2)
-        
-        self.btn_config = ctk.CTkButton(
-            self.controls_frame, text="⚙ Server Settings & Backups", 
-            corner_radius=8, height=36, fg_color="#475569", hover_color="#334155",
-            font=("Roboto Medium", 12), command=self.edit_server_properties,
-            state="disabled"
-        )
-        self.btn_config.pack(side="left", padx=(15, 5))
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
