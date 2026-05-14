@@ -165,7 +165,7 @@ pip install -r requirements.txt
 4- **Run the application**
 
 ```bash
-py main.py
+py launcher.py
 ```
 
 > **Note:** Depending on your operating system and environment configuration, you might need to adjust the command used to run Python. For example, use `py`, `python`, or `python3` as appropriate.
@@ -175,8 +175,9 @@ py main.py
 1. Click **"Create Server"** in the sidebar.
 2. Follow the 6-step wizard to configure your server.
 3. Select the server from the list.
-4. Click **"Start"**. On the very first run, the server will start, create necessary files, and then you can stop it. On the second start, your settings from the wizard will be applied.
-5. **Optional**: Enable tunneling to play with friends online.
+4. The server will automatically start, initialize the core files (world, logs, mods), and stop by itself.
+5. Click **"Start"** to launch your fully configured server.
+6. **Optional**: Enable tunneling to play with friends online.
 
 Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will lead to their website and the respecitve dashboard to connect the agent, the tunnel, and to confirm your shearable IP (One time process).
 
