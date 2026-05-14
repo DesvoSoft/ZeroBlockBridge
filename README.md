@@ -21,7 +21,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ### Server Management
 
-- **Creation Wizard**: 6-step guided setup with preview and validation.
+- **Creation & Import**: Guided 6-step wizard for new servers or **Instant Load** for existing folders (via symbolic links).
 - **Multi-Version Support**: Vanilla, Fabric, and Forge with dynamic version fetching (hundreds of versions).
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
@@ -42,7 +42,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
 - **Manual Tunnel Setup**: Get a Setup Code from Playit.gg and link it instantly.
-- **Public IP Display**: Share the provided public address (e.g., your-server.ply.gg).
+- **Persistent Sessions**: Your account link persists across app restarts; no need to re-verify.
 - **Stable Agent**: Pinned to v0.16.5 for maximum reliability.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.

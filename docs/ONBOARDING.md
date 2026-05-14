@@ -52,3 +52,13 @@ Adhere to this cycle for every task:
 ---
 
 **Protocol initiated. Welcome to ZBB.**
+
+---
+
+## 5. Advanced Feature Guides
+
+### Importing Existing Servers
+ZBB uses **NTFS Junctions** (on Windows) or **Symlinks** (on Linux) to import servers without duplicating data. 
+- When a user selects "Load Existing Folder", ZBB creates a pointer in the `servers/` directory.
+- A `metadata.json` is automatically generated if missing, allowing ZBB to track the server version and type.
+- **Warning**: Deleting a server in ZBB will only remove the link, not your original folder.
