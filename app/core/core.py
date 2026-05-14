@@ -348,11 +348,6 @@ class ZBBManager:
     def reset_tunnel(self):
         self.playit_manager.reset()
 
-    def request_manual_playit_link(self):
-        """Passes the manual link request to the playit manager."""
-        self.playit_manager.request_manual_link()
-        self.remove_config_key("playit_dns")
-
     def get_tunnel_ip(self):
         return self.playit_manager.current_address
 

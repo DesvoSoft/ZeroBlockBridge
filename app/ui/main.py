@@ -798,7 +798,6 @@ class MCTunnelApp(ctk.CTk):
         dns = data.get("dns", None)
         
         def _update():
-            is_guest = data.get("is_guest", False)
             color = "green" if status == "Online" else "gray"
             icon = "●"
             if status == "Error": color, icon = "red", "✖"
@@ -806,7 +805,7 @@ class MCTunnelApp(ctk.CTk):
             
             display_status = status
             if status == "Online":
-                display_status = f"{status} (Guest)" if is_guest else f"{status} (Linked)"
+                display_status = f"{status} (Linked)"
                 
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {display_status}", text_color=color)
             
@@ -837,11 +836,7 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             
             if ip:
-                if is_guest:
-                    self.btn_claim.configure(text="⭐ Link Account")
-                    self.btn_claim.pack(side="left", padx=2)
-                else:
-                    self.btn_claim.pack_forget()
+                self.btn_claim.pack_forget()
                 
             if status == "Offline":
                 self.btn_tunnel_start.configure(state="normal")
@@ -873,19 +868,10 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Public address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        # If the button says "Approve", just open the current URL
-        if self.btn_claim.cget("text") == "🔗 Approve":
-            if hasattr(self, 'claim_url') and self.claim_url:
-                self.tunnel_console.log(f"[UI] Manually opening claim URL...")
-                webbrowser.open(self.claim_url)
-            return
-
-        # Otherwise, it's a guest upgrade, so prompt for reset
-        import tkinter.messagebox as messagebox
-        if messagebox.askyesno("Link Account", "Linking your account will reset the current guest tunnel and change your public IP.\n\nDo you want to continue?"):
-            self.tunnel_console.log(f"[System] Requesting manual link...")
-            self.btn_claim.pack_forget()
-            self.zbb_manager.request_manual_playit_link()
+        # The button only appears during pending state to open the approval page
+        if hasattr(self, 'claim_url') and self.claim_url:
+            self.tunnel_console.log(f"[UI] Manually opening claim URL...")
+            webbrowser.open(self.claim_url)
 
     def on_close(self):
         self.zbb_manager.shutdown()

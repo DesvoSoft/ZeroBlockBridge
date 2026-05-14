@@ -89,36 +89,12 @@ class PlayitManager:
 
 
 
-    def _prepare_local_tunnel(self):
-        """Helper to create a guest tunnel via the local CLI config when API is read-only.
-        Since `playit tunnels prepare` panics in 0.16.5, we append a mapping to playit.toml."""
-        try:
-            if not os.path.exists(self.toml_path):
-                return
-            with open(self.toml_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            if "[[mapping]]" not in content:
-                mapping_block = (
-                    "\n\n[[mapping]]\n"
-                    "local_ip = \"127.0.0.1\"\n"
-                    "port_type = \"tcp\"\n"
-                    f"local_port = {getattr(self, '_current_port', 25565)}\n"
-                )
-                with open(self.toml_path, "a", encoding="utf-8") as f:
-                    f.write(mapping_block)
-                logger.info("Injected [[mapping]] into playit.toml for Guest Mode.")
-        except Exception as e:
-            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
-
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
         Returns the full connectable address (domain:port) or None."""
         
-        # Guest Mode bypasses API management and uses the CLI prepare command
         if self.api_client.is_read_only:
-            logger.info("Skipping API tunnel creation (Guest Mode). Using local CLI.")
-            self.console_callback("[Playit] Guest mode detected. Preparing tunnel locally...")
-            self._prepare_local_tunnel()
+            self.console_callback("[Playit] ERROR: Guest accounts are no longer supported. Please reset and link a real account.")
             return None
                 
         if not self.api_client.load_secret_key():
@@ -146,8 +122,7 @@ class PlayitManager:
         except PlayitApiException as e:
             if "NotAllowedWithReadOnly" in str(e):
                 self.api_client.is_read_only = True
-                self.console_callback("[Playit] Switching to Guest Mode (Read-Only API). Preparing tunnel locally...")
-                self._prepare_local_tunnel()
+                self.console_callback("[Playit] ERROR: Guest accounts are no longer supported. Please reset and link a real account.")
             else:
                 self.console_callback(f"[Playit] API Error: {e}")
             return None
@@ -299,11 +274,6 @@ class PlayitManager:
             self.status_callback("Offline", None)
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
-
-    def request_manual_link(self):
-        """Sets flag to open browser on next run, then resets."""
-        self.reset()
-        self.start(getattr(self, '_current_port', 25565))
 
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",
