@@ -110,11 +110,11 @@ class PlayitManager:
             logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
 
     def get_or_create_tunnel(self, port: int) -> str:
-        """Uses API to find an existing tunnel for the port.
-        If not found, injects a TOML mapping to force the CLI to create one."""
+        """Uses API to find an existing tunnel for the port, or creates one.
+        Returns the full connectable address (domain:port) or None."""
         
         if not self.api_client.load_secret_key():
-            self.console_callback("[Playit] Agent not linked yet. Using fallback mode.")
+            self.console_callback("[Playit] Agent not linked yet.")
             return None
             
         try:
@@ -127,10 +127,14 @@ class PlayitManager:
                         self._api_dns = address
                         return address
                         
-            # Not found, inject TOML mapping so the agent creates it
-            self.console_callback(f"[Playit] Creating new tunnel for port {port} via local mapping...")
-            self._inject_toml_mapping(port)
-            return None
+            # Not found, create it via API
+            self.console_callback(f"[Playit] No tunnel for port {port}. Creating via API...")
+            tunnel = self.api_client.create_tunnel(port=port)
+            address = self.api_client.get_tunnel_address(tunnel)
+            if address:
+                self._api_dns = address
+                self.console_callback(f"[Playit] Tunnel created: {address}")
+            return address
             
         except PlayitApiException as e:
             self.console_callback(f"[Playit] API Error: {e}")
@@ -174,11 +178,29 @@ class PlayitManager:
             os.makedirs(CONFIG_DIR)
         self.secret_dir = str(CONFIG_DIR)
 
-        # If already linked, inject mapping for auto-tunnel creation
+        # If already linked, try to create tunnel via API
         self.is_linked = os.path.exists(self.toml_path)
         if self.is_linked:
-            self._inject_toml_mapping(port)
+            self.api_client.is_read_only = False  # Reset flag on fresh start
             self.console_callback("[Playit] Existing config found. Starting agent...")
+            try:
+                if self.api_client.initialize():
+                    address = self.get_or_create_tunnel(port)
+                    if address:
+                        self._api_dns = address
+                        self.current_address = address
+                        self.status_callback("Online", address)
+                        self.console_callback(f"[Playit] Tunnel ready: {address}")
+                        if self.notification_callback:
+                            self.notification_callback(f"Tunnel online: {address}", "success")
+                        if self.on_ready_callback:
+                            self.on_ready_callback()
+                    else:
+                        if self.notification_callback:
+                            self.notification_callback("Waiting for tunnel DNS assignment...", "info")
+            except Exception as e:
+                self.console_callback(f"[Playit] API tunnel setup: {e}")
+                logger.error(f"Failed to create tunnel via API: {e}")
 
         # Start the agent process (needed for actual traffic relay)
         try:
@@ -354,16 +376,12 @@ class PlayitManager:
                 self.is_linked = True
                 self.console_callback("[Playit] Agent linked successfully.")
                 if self.notification_callback:
-                    self.notification_callback("Agent linked! Restarting to apply tunnel config...", "success")
+                    self.notification_callback("Agent linked! Creating tunnel...", "success")
                 self.status_callback("Connecting...", None)
                 
-                # Inject TOML mapping so the agent auto-creates the tunnel on restart
+                # Restart the agent so start() can use the API to create the tunnel
                 port = getattr(self, '_current_port', 25565)
-                self._inject_toml_mapping(port)
-                self.console_callback(f"[Playit] Tunnel mapping injected for port {port}.")
-                
-                # Restart the agent so it picks up the new [[mapping]]
-                self.console_callback("[Playit] Restarting agent to activate tunnel...")
+                self.console_callback("[Playit] Restarting agent to create tunnel...")
                 threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
                 return
 
