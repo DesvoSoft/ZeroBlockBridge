@@ -323,6 +323,8 @@ class PlayitManager:
                     self.console_callback(f"[Playit] Claim code detected: {claim_code}")
                     self.console_callback("[Playit] Waiting for manual browser confirmation...")
                     self.console_callback("[System] Action Required: Please log in or create a Playit.gg account in your browser to approve the agent.")
+                    if self.notification_callback:
+                        self.notification_callback("Approve the agent in your browser to continue", "warning")
                     
                     full_url = f"https://playit.gg/claim/{claim_code}"
                     # Store URL for the UI
@@ -352,13 +354,18 @@ class PlayitManager:
                 self.is_linked = True
                 self.console_callback("[Playit] Agent linked successfully.")
                 if self.notification_callback:
-                    self.notification_callback("Agent linked! Setting up tunnel...", "success")
+                    self.notification_callback("Agent linked! Restarting to apply tunnel config...", "success")
                 self.status_callback("Connecting...", None)
                 
                 # Inject TOML mapping so the agent auto-creates the tunnel on restart
                 port = getattr(self, '_current_port', 25565)
                 self._inject_toml_mapping(port)
-                self.console_callback(f"[Playit] Tunnel mapping injected for port {port}. Waiting for DNS...")
+                self.console_callback(f"[Playit] Tunnel mapping injected for port {port}.")
+                
+                # Restart the agent so it picks up the new [[mapping]]
+                self.console_callback("[Playit] Restarting agent to activate tunnel...")
+                threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
+                return
 
         # --- DNS from stdout (always scrape when linked) ---
         if not self.is_linked:
@@ -368,21 +375,15 @@ class PlayitManager:
         if self._api_dns:
             return
 
+        # Only match real Playit DNS domains — never raw IPs (those are false positives from Pong)
         dns_patterns = [
-            r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg)",
-            r"([a-z0-9][a-z0-9-]*\.joinmc\.link)",
-            r"(\d+\.\d+\.\d+\.\d+:\d+)",
+            r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg(?::\d+)?)",
+            r"([a-z0-9][a-z0-9-]*\.joinmc\.link(?::\d+)?)",
         ]
         for pattern in dns_patterns:
             dns_match = re.search(pattern, line)
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
-                if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
-                    continue
-                # Check for port in line
-                port_match = re.search(r':(\d{4,5})', line)
-                if port_match and ":" not in address:
-                    address = f"{address}:{port_match.group(1)}"
                 if address != self.current_address:
                     self._api_dns = address
                     self.current_address = address
@@ -398,3 +399,28 @@ class PlayitManager:
         if "tunnel running" in line and not self.current_address:
             self.status_callback("Connecting...", None)
             self.console_callback("[Playit] Tunnel active, waiting for DNS assignment...")
+
+    def _restart_with_mapping(self, port: int):
+        """Restarts the agent process after mapping injection so the CLI picks up the new tunnel config."""
+        time.sleep(1)
+        # Kill current process
+        if self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=3)
+            except Exception:
+                pass
+            self.process = None
+        
+        self.running = False
+        time.sleep(0.5)
+        
+        # Restart
+        self.console_callback("[Playit] Restarting agent with tunnel configuration...")
+        if self.notification_callback:
+            self.notification_callback("Restarting tunnel agent...", "info")
+        
+        with self._lock:
+            self.in_use_count = max(0, self.in_use_count - 1)
+        
+        self.start(port)
