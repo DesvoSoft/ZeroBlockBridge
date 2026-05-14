@@ -903,7 +903,7 @@ class MCTunnelApp(ctk.CTk):
         self.destroy()
         sys.exit(0)
 
-if __name__ == "__main__":
+def main():
     # --- CONV-01: Structured Logging Configuration ---
     logging.basicConfig(
         level=logging.INFO,
@@ -929,3 +929,6 @@ if __name__ == "__main__":
     app._instance_lock = instance_lock
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
+
+if __name__ == "__main__":
+    main()
