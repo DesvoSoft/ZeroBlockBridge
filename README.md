@@ -41,8 +41,8 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 ### Tunneling & Sharing
 
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
-- **One-Click Tunnel Setup**: Auto-opens claim link in browser.
-- **Public IP Display**: Share the provided public address.
+- **Manual Tunnel Setup**: Get a Setup Code from Playit.gg and link it instantly.
+- **Public IP Display**: Share the provided public address (e.g., your-server.ply.gg).
 - **Stable Agent**: Pinned to v0.16.5 for maximum reliability.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
@@ -179,7 +179,7 @@ py app/launcher.py
 5. Click **"Start"** to launch your fully configured server.
 6. **Optional**: Enable tunneling to play with friends online.
 
-Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will lead to their website and the respecitve dashboard to connect the agent, the tunnel, and to confirm your shearable IP (One time process).
+Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will guide you to their "Third Party" setup wizard to obtain a Setup Code, which you then paste into the app to securely link your account (One-time process).
 
 ---
 

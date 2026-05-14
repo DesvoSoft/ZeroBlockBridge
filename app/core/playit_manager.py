@@ -32,7 +32,7 @@ class PlayitManager:
         self.in_use_count = 0
         self._lock = threading.Lock()
         self._api_dns = None       # Authoritative DNS from API -- never overwritten by stdout
-        self._claim_code = None    # Captured claim code from CLI stdout
+        self._current_port = 25565
 
     def _get_binary_path(self):
         system = platform.system()
@@ -88,25 +88,7 @@ class PlayitManager:
 
 
 
-    def _inject_toml_mapping(self, port: int):
-        """Appends a [[mapping]] block to playit.toml so the agent automatically creates a tunnel."""
-        try:
-            if not os.path.exists(self.toml_path):
-                return
-            with open(self.toml_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            if "[[mapping]]" not in content:
-                mapping_block = (
-                    "\n\n[[mapping]]\n"
-                    "local_ip = \"127.0.0.1\"\n"
-                    "port_type = \"tcp\"\n"
-                    f"local_port = {port}\n"
-                )
-                with open(self.toml_path, "a", encoding="utf-8") as f:
-                    f.write(mapping_block)
-                logger.info("Injected [[mapping]] into playit.toml for auto-tunnel creation.")
-        except Exception as e:
-            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
+
 
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
@@ -422,7 +404,7 @@ class PlayitManager:
             self.console_callback("[Playit] Tunnel active, waiting for DNS assignment...")
 
     def _restart_with_mapping(self, port: int):
-        """Restarts the agent process after mapping injection so the CLI picks up the new tunnel config."""
+        """Restarts the agent process to pick up new tunnel configurations."""
         time.sleep(1)
         # Kill current process
         if self.process:

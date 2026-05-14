@@ -278,29 +278,25 @@ Players receive in-game warnings at:
 
 ### Starting the Tunnel
 
-1. **Click** the **"Start Tunnel"** button
-2. **Watch the Tunnel Log** tab for:
-
-   ```text
-   [Playit] Downloading agent v0.16.5...
-   [Playit] Starting agent...
-   [Playit] Visit link to setup https://playit.gg/claim/...
-   ```
-
-3. **Browser opens automatically** with the claim URL
-   - If it doesn't, click the **"Link"** button
+1. **Click** the **"Get Code"** button.
+2. **Watch the Tunnel Log** tab for connection status.
+3. **Browser opens automatically** with the Playit setup wizard.
+   - If it doesn't, visit the wizard URL: `https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other`
 
 ### Linking Your Account
 
-1. **Sign in** to Playit.gg (or create a free account)
-2. **Click "Approve"** to link this agent
-3. **Return to the application**
+1. **Sign in** to Playit.gg.
+2. Follow the wizard steps to generate a **Setup Code**.
+3. **Copy the code** and return to ZeroBlockBridge.
+4. **Paste the code** into the "Setup Code" field in the tunnel toolbar.
+5. **Click "Link"**.
 
-The tunnel completes setup automatically:
+Once linked, the agent will initialize and create your tunnel automatically:
 
 ```text
-[Playit] Program approved :)
-[Playit] tunnel running, 1 tunnels registered
+[Playit] Account linked successfully!
+[Playit] Tunnel created: your-server.ply.gg
+[Playit] Public address: your-server.ply.gg
 ```
 
 ### Getting Your Public IP
