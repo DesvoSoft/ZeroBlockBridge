@@ -177,7 +177,7 @@ class PlayitApiClient:
 
     def initialize(self) -> bool:
         """Full initialization: load secret, get agent ID, register protocol.
-        Returns True if the API session is ready."""
+        Returns True if the API session is ready or in Guest Mode."""
         if not self.load_secret_key():
             return False
         
@@ -186,6 +186,9 @@ class PlayitApiClient:
             self.proto_register()
             return True
         except PlayitApiException as e:
+            if self.is_read_only:
+                logger.info("Playit API initialized in Guest mode (Read-Only).")
+                return True
             logger.error(f"Playit API initialization failed: {e}")
             return False
 

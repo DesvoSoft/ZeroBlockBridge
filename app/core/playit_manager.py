@@ -92,11 +92,21 @@ class PlayitManager:
     def get_or_create_tunnel(self, port: int) -> str:
         """Uses API to find an existing tunnel for the port, or creates one.
         Returns the full connectable address (domain:port) or None."""
-        if not self.api_client.load_secret_key() or self.api_client.is_read_only:
-            if self.api_client.is_read_only:
-                self.console_callback("[Playit] Account is in Guest mode (Read-Only). Management via API is disabled.")
-            else:
-                self.console_callback("[Playit] Agent not linked yet. Using Guest mode.")
+        
+        # Guest Mode bypasses API management and uses the CLI prepare command
+        if self.api_client.is_read_only:
+            logger.info("Skipping API tunnel creation (Guest Mode). Using local CLI.")
+            self.console_callback("[Playit] Guest mode detected. Preparing tunnel locally...")
+            try:
+                cmd_prep = f'"{self.binary_path}" tunnels prepare tcp 1 --secret_path "{self.toml_path}"'
+                subprocess.run(cmd_prep, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                return None
+            except Exception as e:
+                logger.error(f"Failed to prepare tunnel via CLI: {e}")
+                return None
+                
+        if not self.api_client.load_secret_key():
+            self.console_callback("[Playit] Agent not linked yet. Using fallback mode.")
             return None
             
         try:
@@ -358,29 +368,28 @@ class PlayitManager:
             if not self.is_linked:
                 self.is_linked = True
                 self.console_callback("[Playit] Agent linked successfully. Secret persisted.")
-            
-            self.status_callback("Starting...", "Connecting...")
-            
-            # Pausa de propagacion
-            time.sleep(1.5)
-            self.api_client.load_secret_key()
-            
-            # DNS Authoritative Detection
-            try:
-                if self.api_client.initialize():
-                    port = getattr(self, '_current_port', 25565)
-                    self.console_callback(f"[Playit] Fetching authoritative DNS from API for port {port}...")
-                    address = self.get_or_create_tunnel(port)
-                    if address:
-                        self._api_dns = address
-                        self.current_address = address
-                        self.status_callback("Online", address)
-                        if self.on_ready_callback:
-                            self.on_ready_callback()
-            except Exception as e:
-                self.console_callback(f"[Playit] API DNS fetch failed: {e}. Falling back to console regex.")
-                if "AgentDisabledOverLimit" in str(e) and self.notification_callback:
-                    self.notification_callback("Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard", "error")
+                self.status_callback("Starting...", "Connecting...")
+                
+                # Pausa de propagacion
+                time.sleep(1.5)
+                self.api_client.load_secret_key()
+                
+                # DNS Authoritative Detection
+                try:
+                    if self.api_client.initialize():
+                        port = getattr(self, '_current_port', 25565)
+                        self.console_callback(f"[Playit] Fetching authoritative DNS from API for port {port}...")
+                        address = self.get_or_create_tunnel(port)
+                        if address:
+                            self._api_dns = address
+                            self.current_address = address
+                            self.status_callback("Online", address)
+                            if self.on_ready_callback:
+                                self.on_ready_callback()
+                except Exception as e:
+                    self.console_callback(f"[Playit] API DNS fetch failed: {e}. Falling back to console regex.")
+                    if "AgentDisabledOverLimit" in str(e) and self.notification_callback:
+                        self.notification_callback("Límite de agentes alcanzado. Borra agentes antiguos en playit.gg/dashboard", "error")
 
         # --- DNS from stdout (ONLY if API didn't already provide it) ---
         if self._api_dns:
