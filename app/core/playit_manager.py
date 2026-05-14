@@ -356,7 +356,7 @@ class PlayitManager:
                     self._claim_code = claim_code
                     self.console_callback(f"[Playit] Claim code detected: {claim_code}")
                     self.console_callback("[Playit] Waiting for manual browser confirmation...")
-                    self.console_callback("[System] Please approve the agent in your browser. You can choose 'Guest' for a quick test, or 'Login' to keep your IP permanent.")
+                    self.console_callback("[System] Action Required: Please log in or create a Playit.gg account in your browser to approve the agent.")
                     
                     full_url = f"https://playit.gg/claim/{claim_code}"
                     # Store URL for the UI
