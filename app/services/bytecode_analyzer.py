@@ -180,12 +180,22 @@ def detect_loader(jar_path: str) -> Optional[str]:
 
             # Check Manifest for hints
             try:
-                manifest = zf.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
-                if "fabric-loader" in manifest.lower(): return "fabric"
-                if "forge" in manifest.lower(): return "forge"
-                if "paper" in manifest.lower(): return "paper"
+                manifest = zf.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace").lower()
+                if "fabric-loader" in manifest: return "fabric"
+                if "forge" in manifest: return "forge"
+                if "paper" in manifest: return "paper"
+                if "purpur" in manifest: return "purpur"
+                if "spigot" in manifest: return "spigot"
             except:
                 pass
+
+            # Deep search for unique signatures
+            all_text = "".join(names).lower()
+            if "fabric" in all_text or "net/fabricmc/" in all_text: return "fabric"
+            if "fml" in all_text or "forge" in all_text or "net/minecraftforge/" in all_text: return "forge"
+            if "papermc" in all_text or "io/papermc/" in all_text: return "paper"
+            if "purpur" in all_text: return "purpur"
+            if "spigot" in all_text or "org/spigotmc/" in all_text: return "spigot"
                 
     except Exception as e:
         logger.debug("Loader detection failed for %s: %s", jar_path, e)

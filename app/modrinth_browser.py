@@ -65,6 +65,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._build_search_bar()
         self._build_results_area()
         self._build_status_bar()
+        
+        # Load popular mods on startup
+        self.after(500, self._load_popular_mods)
 
     # ------------------------------------------------------------------
     # Layout: Search Bar
@@ -176,9 +179,32 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.lbl_count.pack(side="right", padx=12, pady=3)
 
     # ------------------------------------------------------------------
+    # Server Initialization Guard
+    # ------------------------------------------------------------------
+    def _is_server_initialized(self) -> bool:
+        """Checks if the currently selected server has been started at least once."""
+        if not self.get_server_info: return False
+        try:
+            info = self.get_server_info()
+            if not info: return False
+            server_name = info[0]
+            jar_path = os.path.join(SERVERS_DIR, server_name, "server.jar")
+            return os.path.exists(jar_path)
+        except Exception:
+            return False
+
+    def _show_uninitialized_warning(self):
+        self._show_placeholder("🔒 Server Not Initialized\n\nPlease start the server at least once\nto install the engine before exploring mods.")
+        self._set_status("⚠ First boot required")
+
+    # ------------------------------------------------------------------
     # Search logic
     # ------------------------------------------------------------------
     def _on_search(self, event=None):
+        if not self._is_server_initialized():
+            self._show_uninitialized_warning()
+            return
+            
         query = self.entry_search.get().strip()
         if not query:
             return
@@ -199,16 +225,21 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._set_status("Searching…", busy=True)
         self.btn_search.configure(state="disabled")
 
-        def _do_search():
+        def _do_search(q, mv, ld):
             try:
                 hits = self.provider.search_mods(
-                    query,
-                    mc_version=mc_version,
-                    loader=loader,
+                    q,
+                    mc_version=mv,
+                    loader=ld,
                     limit=25,
                 )
+                
+                # Fallback: if loader is vanilla and no results, try without loader or with fabric
+                if not hits and ld == "vanilla":
+                    hits = self.provider.search_mods(q, mc_version=mv, loader=None, limit=25)
+                
                 self._current_hits = hits
-                total = len(hits) # Search returns hits directly now
+                total = len(hits)
                 self.after(0, lambda: self._render_results(self._current_hits, total))
             except ModrinthException as exc:
                 logger.error("Modrinth search failed: %s", exc)
@@ -217,8 +248,37 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self.btn_search.configure(state="normal"))
                 self.after(0, lambda: self._set_status("Ready"))
 
-        self._search_thread = threading.Thread(target=_do_search, daemon=True)
+        self._search_thread = threading.Thread(target=_do_search, args=(query, mc_version, loader), daemon=True)
         self._search_thread.start()
+
+    def _load_popular_mods(self):
+        """Fetch and show popular mods."""
+        if not self._is_server_initialized():
+            self._show_uninitialized_warning()
+            return
+            
+        mc_version = None
+        loader = None
+        if self.get_server_info:
+            try:
+                info = self.get_server_info()
+                if info: _, mc_version, loader = info
+            except: pass
+
+        self._set_status("Loading popular mods...", busy=True)
+        
+        def _do_load():
+            try:
+                # If vanilla, search popular without loader filter to show useful things
+                search_loader = loader if loader != "vanilla" else None
+                hits = self.provider.get_popular_mods(mc_version=mc_version, loader=search_loader)
+                self.after(0, lambda: self._render_results(hits, len(hits)))
+            except Exception as e:
+                logger.error(f"Failed to load popular mods: {e}")
+            finally:
+                self.after(0, lambda: self._set_status("Ready"))
+                
+        threading.Thread(target=_do_load, daemon=True).start()
 
     def _set_status(self, text: str, busy: bool = False):
         self.lbl_status.configure(text=text)
@@ -342,8 +402,8 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Install action
     # ------------------------------------------------------------------
     def _on_install(self, hit: dict):
-        if not self.get_server_info:
-            self._set_status("⚠ No server selected — cannot install.")
+        if not self._is_server_initialized():
+            self._show_uninitialized_warning()
             return
 
         try:
@@ -382,7 +442,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         threading.Thread(target=_do_install, daemon=True).start()
 
     def _on_install_optimizers(self):
-        if not self.get_server_info: return
+        if not self._is_server_initialized():
+            self._show_uninitialized_warning()
+            return
+            
         info = self.get_server_info()
         if not info:
             self._set_status("⚠ Select a server first.")

@@ -269,13 +269,13 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Game Mode
         ctk.CTkLabel(self.content_frame, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_gamemode = ctk.CTkComboBox(self.content_frame, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
+        self.combo_gamemode = ctk.CTkOptionMenu(self.content_frame, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
         self.combo_gamemode.pack(fill="x", pady=(0, 10))
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         
         # Difficulty
         ctk.CTkLabel(self.content_frame, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_difficulty = ctk.CTkComboBox(self.content_frame, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
+        self.combo_difficulty = ctk.CTkOptionMenu(self.content_frame, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         

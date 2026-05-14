@@ -125,8 +125,8 @@ class MCTunnelApp(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
         self.main_frame.grid_rowconfigure(0, weight=0) # Status bar
-        self.main_frame.grid_rowconfigure(1, weight=1) # Dashboard (4 management cards)
-        self.main_frame.grid_rowconfigure(2, weight=4) # Console tabs & Mods (Prominent - ~80%)
+        self.main_frame.grid_rowconfigure(1, weight=0) # Compact Dashboard (Controls & Tunnel)
+        self.main_frame.grid_rowconfigure(2, weight=1) # Console tabs & Mods (Prominent)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self._build_status_bar()
         self._build_dashboard()
@@ -141,7 +141,7 @@ class MCTunnelApp(ctk.CTk):
 
         # Moved from dashboard to save space
         self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(side="left", padx=(0, 20), pady=8)
+        self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", padx=20, pady=8)
@@ -171,7 +171,7 @@ class MCTunnelApp(ctk.CTk):
         self.bar_ram.set(0)
 
     def _build_dashboard(self):
-        self.dashboard_frame = ctk.CTkFrame(self.main_frame, height=100, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
         
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
@@ -182,10 +182,6 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_frame.pack(pady=5, fill="x")
         self._build_tunnel_controls()
 
-        self.management_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.management_frame.pack(pady=(4, 8), fill="x")
-        self._build_management_controls()
-
     def _build_server_controls(self):
         self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
         self.btn_start_all.pack(side="left", padx=5)
@@ -193,6 +189,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
         self.btn_stop.pack(side="left", padx=2)
+        
+        self.btn_config = ctk.CTkButton(
+            self.controls_frame, text="⚙ Server Settings & Backups", 
+            corner_radius=8, height=36, fg_color="#475569", hover_color="#334155",
+            font=("Roboto Medium", 12), command=self.edit_server_properties,
+            state="disabled"
+        )
+        self.btn_config.pack(side="left", padx=(15, 5))
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
@@ -254,7 +258,7 @@ class MCTunnelApp(ctk.CTk):
         self.chk_scheduler = ctk.CTkSwitch(sched_controls, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, width=40)
         self.chk_scheduler.grid(row=0, column=0, sticky="w", pady=5)
         
-        self.combo_schedule_mode = ctk.CTkComboBox(sched_controls, values=["Interval", "Daily Time"], width=110, command=self.toggle_schedule_mode, corner_radius=8, state="readonly", height=32)
+        self.combo_schedule_mode = ctk.CTkOptionMenu(sched_controls, values=["Interval", "Daily Time"], width=110, command=self.toggle_schedule_mode)
         self.combo_schedule_mode.grid(row=0, column=1, sticky="w", padx=(5, 0))
         self.combo_schedule_mode.set("Interval")
 
@@ -461,15 +465,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start_all.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
         
-        if is_running:
-            self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE)
-            self.btn_edit_properties.configure(state="disabled")
-        else:
-            self.lbl_status.configure(text="⚪ Offline", text_color="white")
-            props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
-            self.btn_edit_properties.configure(state="normal" if os.path.exists(props_path) else "disabled")
-
-        self.btn_open_server_folder.configure(state="normal")
+        self.btn_config.configure(state="normal")
         self.server_console.log(f"[UI] Selected server: {server_name}")
         self.update_management_ui()
 
@@ -516,8 +512,12 @@ class MCTunnelApp(ctk.CTk):
         if os.path.exists(jar_path):
             detected = detect_loader(jar_path)
             if detected:
+                logger.info(f"Loader detected via bytecode for {self.current_server}: {detected}")
                 loader = detected
-                
+            else:
+                logger.warning(f"Could not detect loader via bytecode for {self.current_server} (server.jar exists)")
+        
+        logger.info(f"Server Info for Mod Search: {self.current_server} | MC: {mc_version} | Loader: {loader}")
         return (self.current_server, mc_version, loader)
 
     def start_all_action(self):
@@ -527,81 +527,8 @@ class MCTunnelApp(ctk.CTk):
             self.start_tunnel()
 
     def update_management_ui(self):
-        if not self.current_server: return
-        scheduler = logic.Scheduler(self.current_server)
-        schedule = scheduler.get_schedule()
-        if schedule:
-            self.var_scheduler_enabled.set(True)
-            if schedule["type"] == "interval":
-                self.combo_schedule_mode.set("Interval")
-                self.entry_scheduler_interval.delete(0, "end")
-                self.entry_scheduler_interval.insert(0, str(schedule["interval_hours"]))
-                self.toggle_schedule_mode("Interval")
-            elif schedule["type"] == "time":
-                self.combo_schedule_mode.set("Daily Time")
-                self.entry_restart_time.delete(0, "end")
-                self.entry_restart_time.insert(0, schedule["restart_time"])
-                self.toggle_schedule_mode("Daily Time")
-            
-            self.var_backup_on_restart.set(schedule.get("backup_on_restart", False))
-        
-        self.toggle_scheduler_inputs()
-        
-        # Update last backup date
-        manager = logic.BackupManager(self.current_server)
-        latest = manager.get_latest_backup()
-        if latest:
-            self.lbl_last_backup.configure(text=f"Last: {latest['date']}")
-        else:
-            self.lbl_last_backup.configure(text="Last: None")
-
-        # Update Advanced Settings
-        import json
-        from app.services.java_detector import JavaDetector
-        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            self.var_advanced_mode.set(meta.get("advanced_mode", False))
-            self.var_java_path.set(meta.get("java_path", "auto"))
-            self.var_use_aikars.set(meta.get("use_aikars", True))
-        except Exception:
-            self.var_advanced_mode.set(False)
-            self.var_java_path.set("auto")
-            self.var_use_aikars.set(True)
-
-        detector = JavaDetector()
-        javas = detector.detect_all()
-        
-        self._java_label_to_path = {"Auto-Detect": "auto"}
-        self._java_path_to_label = {"auto": "Auto-Detect"}
-        
-        for j in javas:
-            self._java_label_to_path[j.label] = j.path
-            self._java_path_to_label[j.path] = j.label
-
-        options = list(self._java_label_to_path.keys())
-        self.combo_java.configure(values=options)
-        
-        saved_path = meta.get("java_path", "auto") if 'meta' in locals() else "auto"
-        self.var_java_path.set(self._java_path_to_label.get(saved_path, "Auto-Detect"))
-        
-        self.toggle_advanced_view()
-
-    def toggle_scheduler_inputs(self):
-        state = "normal" if self.var_scheduler_enabled.get() else "disabled"
-        self.combo_schedule_mode.configure(state=state)
-        self.entry_scheduler_interval.configure(state=state)
-        self.entry_restart_time.configure(state=state)
-        self.btn_apply_schedule.configure(state=state)
-        self.chk_backup_on_restart.configure(state=state)
-
-    def toggle_advanced_view(self):
-        if self.var_advanced_mode.get():
-            self.advanced_frame.grid(row=4, column=0, sticky="w", padx=15, pady=5)
-        else:
-            self.advanced_frame.grid_forget()
-        self.save_advanced_settings()
+        # Redundant: logic moved to ServerPropertiesEditor
+        pass
 
     def save_advanced_settings(self, *args):
         if not self.current_server: return
@@ -681,40 +608,11 @@ class MCTunnelApp(ctk.CTk):
                 pass
 
     def save_scheduler_dashboard(self):
-        if not self.current_server: return
-        enabled = self.var_scheduler_enabled.get()
-        mode = self.combo_schedule_mode.get()
-        scheduler = logic.Scheduler(self.current_server)
-        backup_on_restart = self.var_backup_on_restart.get()
-        
-        if mode == "Interval":
-            interval = AppConfig.DEFAULT_INTERVAL_HOURS
-            try: interval = int(self.entry_scheduler_interval.get())
-            except: pass
-            scheduler.set_restart_schedule(enabled, interval_hours=interval, backup_on_restart=backup_on_restart)
-            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Every {interval}h, Auto-Backup: {backup_on_restart})")
-        else:
-            restart_time = self.entry_restart_time.get() or AppConfig.DEFAULT_RESTART_TIME
-            scheduler.set_restart_schedule(enabled, restart_time=restart_time, backup_on_restart=backup_on_restart)
-            self.server_console.log(f"[System] Scheduler updated: {'Enabled' if enabled else 'Disabled'} (Daily at {restart_time}, Auto-Backup: {backup_on_restart})")
+        pass
 
     def quick_backup_action(self):
-        if not self.current_server: return
-        self.server_console.log("[System] Creating backup...")
-        from app.services.backup_manager import BackupManager
-        backups_dir = os.path.join(SERVERS_DIR, self.current_server, "backups")
-        manager = BackupManager(str(SERVERS_DIR), backups_dir)
-        
-        def _on_complete(success, filepath):
-            if success:
-                self.server_console.log(f"[System] Backup created: {os.path.basename(filepath)}")
-                self.after(0, lambda: Toast.show(self, f"Respaldo creado: {os.path.basename(filepath)}", toast_type="success"))
-                self.after(0, self.update_management_ui)
-            else: 
-                self.server_console.log(f"[Error] Backup failed.")
-                self.after(0, lambda: Toast.show(self, "Error al crear respaldo.", toast_type="error"))
-                
-        manager.create_backup(self.current_server, _on_complete)
+        # Redundant: moved to Properties Editor
+        pass
 
     def edit_server_properties(self):
         if not self.current_server: return

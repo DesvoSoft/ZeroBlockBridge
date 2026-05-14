@@ -44,6 +44,22 @@ class ModProvider:
         """Returns a list of recommended optimization mods."""
         return self.OPTIMIZERS
 
+    def get_popular_mods(self, mc_version: str = None, loader: str = None, limit: int = 20) -> List[Dict]:
+        """Fetch popular mods from Modrinth."""
+        try:
+            # Empty query + sorting by relevance/downloads often works as "popular"
+            results = self.client.search(
+                "",
+                mc_version=mc_version,
+                loader=loader,
+                project_type="mod",
+                limit=limit
+            )
+            return results.get("hits", [])
+        except ModrinthException as e:
+            logger.error(f"Failed to fetch popular mods: {e}")
+            return []
+
     def install_optimizer_bundle(self, server_name: str, mc_version: str, loader: str, status_callback: Callable = None):
         """Installs a standard set of optimizers in a background thread."""
         def _run():

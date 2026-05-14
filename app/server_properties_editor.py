@@ -99,6 +99,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.tab_advanced = self.tabview.add("Advanced")
         self.tab_backups = self.tabview.add("Backups")
         self.tab_automation = self.tabview.add("Automation")
+        self.tab_launch = self.tabview.add("Launch")
         
         # Set tab change command for optimization
         self.tabview.configure(command=self._on_tab_changed)
@@ -121,6 +122,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         self.frame_automation = ctk.CTkFrame(self.tab_automation, fg_color="transparent")
         self.frame_automation.pack(fill="both", expand=True)
+
+        self.frame_launch = ctk.CTkScrollableFrame(self.tab_launch)
+        self.frame_launch.pack(fill="both", expand=True)
         
         # Tracking
         self.widgets = {}
@@ -168,6 +172,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         elif tab == "Backups":
             self.setup_backups_tab()
             self.refresh_backups()
+        elif tab == "Launch":
+            self.setup_launch_tab()
             
         self.loaded_tabs.add(tab)
 
@@ -319,14 +325,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 widget.select()
             widget.pack(anchor="e", pady=0)
         elif widget_type == "dropdown":
-            widget = ctk.CTkComboBox(parent, values=options, state="readonly", height=compact_height)
+            widget = ctk.CTkOptionMenu(parent, values=options, height=compact_height)
             if val in options:
                 widget.set(val)
             widget.pack(fill="x", expand=True, pady=0)
-            widget._entry.bind("<Button-1>", lambda e: widget._open_dropdown_menu())
-            widget._entry.bind("<B1-Motion>", lambda e: "break")
-            widget._entry.bind("<Double-Button-1>", lambda e: "break")
-            widget._entry.configure(cursor="arrow")
         return widget
 
     def create_section_frame(self, parent, title):
@@ -566,4 +568,70 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 new_props[key] = widget.get()
                 
         self.logic.save_server_properties(self.server_name, new_props)
+        if "Launch" in self.loaded_tabs:
+            self.save_launch_settings()
         self.destroy()
+    def setup_launch_tab(self):
+        """Setup Java and Launch arguments tab."""
+        from app.services.java_detector import JavaDetector
+        
+        card = self.create_section_frame(self.frame_launch, "Java & Runtime")
+        
+        # Java Path
+        ctk.CTkLabel(card, text="Java Version:", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        
+        detector = JavaDetector()
+        javas = detector.detect_all()
+        self._java_label_to_path = {"Auto-Detect": "auto"}
+        self._java_path_to_label = {"auto": "Auto-Detect"}
+        for j in javas:
+            self._java_label_to_path[j.label] = j.path
+            self._java_path_to_label[j.path] = j.label
+            
+        options = list(self._java_label_to_path.keys())
+        
+        meta_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name, "metadata.json")
+        meta = {}
+        if os.path.exists(meta_path):
+            import json
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+        
+        saved_path = meta.get("java_path", "auto")
+        self.var_java_path = ctk.StringVar(value=self._java_path_to_label.get(saved_path, "Auto-Detect"))
+        
+        self.combo_java = ctk.CTkOptionMenu(card, values=options, variable=self.var_java_path, height=28)
+        self.combo_java.grid(row=0, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+
+        # Aikar's Flags
+        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
+        
+        ctk.CTkLabel(card, text="Use Aikar's Flags:", font=self.font_bold, anchor="w").grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
+        self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
+        self.chk_aikars = ctk.CTkSwitch(card, text="", variable=self.var_use_aikars)
+        self.chk_aikars.grid(row=2, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+        
+        # Tools
+        card_tools = self.create_section_frame(self.frame_launch, "Utilities")
+        ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder, fg_color="gray30", height=32).pack(fill="x", padx=15, pady=10)
+
+    def open_folder(self):
+        server_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name)
+        if os.path.exists(server_path):
+            os.startfile(server_path)
+
+    def save_launch_settings(self):
+        meta_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name, "metadata.json")
+        if not os.path.exists(meta_path): return
+        
+        import json
+        with open(meta_path, "r") as f:
+            meta = json.load(f)
+            
+        label = self.var_java_path.get()
+        path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
+        meta["java_path"] = path
+        meta["use_aikars"] = self.var_use_aikars.get()
+        
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=4)
