@@ -26,8 +26,7 @@ class PlayitApiClient:
     def load_secret_key(self) -> bool:
         """Loads secret key from playit.toml. Returns True if successful."""
         if not os.path.exists(self.toml_path):
-            self._secret_key = None
-            return False
+            return self._secret_key is not None
             
         mtime = os.path.getmtime(self.toml_path)
         if getattr(self, '_last_mtime', None) == mtime and self._secret_key:
@@ -57,8 +56,9 @@ class PlayitApiClient:
             raise PlayitApiException("No secret key loaded. Cannot authenticate.")
             
         url = f"{self.api_base}/{endpoint.strip('/')}"
+        headers = {"Authorization": f"agent-key {self._secret_key}"}
         try:
-            response = self.session.post(url, json=json_data, timeout=10)
+            response = self.session.post(url, json=json_data, headers=headers, timeout=10)
         except requests.RequestException as e:
             raise PlayitApiException(f"Network error communicating with Playit API: {e}")
 

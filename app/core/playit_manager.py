@@ -258,17 +258,20 @@ class PlayitManager:
                 self.console_callback("[Playit] Attempting to clean up API resources...")
                 try:
                     if self.api_client.initialize():
-                        tunnels = self.api_client.list_tunnels()
-                        for t in tunnels:
-                            tid = t.get("id")
-                            if tid:
-                                self.api_client.delete_tunnel(tid)
-                                self.console_callback(f"[Playit] Deleted remote tunnel: {tid}")
-                        
+                        # Try deleting the agent first (should cascade-delete tunnels)
                         if self.api_client.delete_agent():
-                            self.console_callback("[Playit] Remote agent deleted from account.")
+                            self.console_callback("[Playit] Remote agent deleted successfully (all tunnels cleared).")
+                        else:
+                            # Fallback: Delete tunnels individually
+                            self.console_callback("[Playit] Agent deletion restricted. Cleaning up tunnels individually...")
+                            tunnels = self.api_client.list_tunnels()
+                            for t in tunnels:
+                                tid = t.get("id")
+                                if tid:
+                                    if self.api_client.delete_tunnel(tid):
+                                        self.console_callback(f"[Playit] Deleted remote tunnel: {tid}")
                 except Exception as e:
-                    self.console_callback(f"[Playit] API cleanup failed (might be guest mode): {e}")
+                    self.console_callback(f"[Playit] API cleanup failed: {e}")
 
             if os.path.exists(self.toml_path):
                 os.remove(self.toml_path)
