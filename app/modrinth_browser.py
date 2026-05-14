@@ -14,7 +14,8 @@ from typing import Callable, Optional
 
 from app.app_config import AppConfig
 from app.constants import SERVERS_DIR
-from app.services.modrinth import ModrinthClient, ModrinthException
+from app.services.mod_provider import ModProvider
+from app.services.modrinth import ModrinthException
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         """
         super().__init__(master, fg_color="transparent", **kwargs)
         self.get_server_info = get_server_info
-        self.client = ModrinthClient()
+        self.provider = ModProvider()
         self._current_hits = []
         self._search_thread = None
 
@@ -112,7 +113,17 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_search,
         )
-        self.btn_search.grid(row=0, column=3, padx=(4, 12), pady=8)
+        self.btn_search.grid(row=0, column=3, padx=4, pady=8)
+
+        # Optimizer button
+        self.btn_opt = ctk.CTkButton(
+            bar, text="⚡ Optimizers", width=100, height=36,
+            corner_radius=8,
+            fg_color="#3b82f6", hover_color="#2563eb",
+            text_color="white", font=("Roboto Medium", 12),
+            command=self._on_install_optimizers,
+        )
+        self.btn_opt.grid(row=0, column=4, padx=(4, 12), pady=8)
 
     # ------------------------------------------------------------------
     # Layout: Results Area (scrollable)
@@ -190,15 +201,14 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _do_search():
             try:
-                results = self.client.search(
+                hits = self.provider.search_mods(
                     query,
                     mc_version=mc_version,
                     loader=loader,
-                    project_type=project_type,
                     limit=25,
                 )
-                self._current_hits = results.get("hits", [])
-                total = results.get("total_hits", 0)
+                self._current_hits = hits
+                total = len(hits) # Search returns hits directly now
                 self.after(0, lambda: self._render_results(self._current_hits, total))
             except ModrinthException as exc:
                 logger.error("Modrinth search failed: %s", exc)
@@ -353,7 +363,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _do_install():
             try:
-                path = self.client.download_mod(
+                path = self.provider.download_mod(
                     slug, server_name, mc_version, loader,
                     progress_callback=lambda p: self.after(
                         0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
@@ -370,6 +380,20 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._set_status(f"✗ Install failed: {exc}"))
 
         threading.Thread(target=_do_install, daemon=True).start()
+
+    def _on_install_optimizers(self):
+        if not self.get_server_info: return
+        info = self.get_server_info()
+        if not info:
+            self._set_status("⚠ Select a server first.")
+            return
+        server_name, mc_version, loader = info
+        
+        self._set_status("Installing Optimizer Bundle...", busy=True)
+        self.provider.install_optimizer_bundle(
+            server_name, mc_version, loader,
+            status_callback=lambda s: self.after(0, lambda: self._set_status(s))
+        )
 
     # ------------------------------------------------------------------
     # Utilities

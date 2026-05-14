@@ -145,3 +145,49 @@ def analyze_jar_bytecode(jar_path: str) -> Optional[int]:
     except Exception as e:
         logger.error("Bytecode analyzer: unexpected error for %s: %s", jar_path, e)
         return None
+
+def detect_loader(jar_path: str) -> Optional[str]:
+    """Detect the server loader (Fabric, Forge, Quilt, Paper) from jar contents.
+    
+    Args:
+        jar_path: Absolute path to the server .jar file.
+        
+    Returns:
+        One of 'fabric', 'forge', 'quilt', 'paper', or None.
+    """
+    if not os.path.isfile(jar_path):
+        return None
+
+    try:
+        with zipfile.ZipFile(jar_path, "r") as zf:
+            names = zf.namelist()
+            
+            # Fabric/Quilt detection
+            if "fabric.mod.json" in names:
+                return "fabric"
+            if "quilt.mod.json" in names:
+                return "quilt"
+                
+            # Forge detection (standard patterns)
+            if any("fml" in name.lower() for name in names) or "META-INF/forge.logging.mojmap.converters.json" in names:
+                return "forge"
+            
+            # Paper/Spigot detection
+            if "paper-api" in "".join(names).lower() or "io/papermc/paper" in "".join(names):
+                return "paper"
+            if "spigot.yml" in names or "org/spigotmc/spigot" in "".join(names):
+                return "spigot"
+
+            # Check Manifest for hints
+            try:
+                manifest = zf.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
+                if "fabric-loader" in manifest.lower(): return "fabric"
+                if "forge" in manifest.lower(): return "forge"
+                if "paper" in manifest.lower(): return "paper"
+            except:
+                pass
+                
+    except Exception as e:
+        logger.debug("Loader detection failed for %s: %s", jar_path, e)
+    
+    return None

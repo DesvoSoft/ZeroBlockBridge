@@ -125,8 +125,8 @@ class MCTunnelApp(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_frame.grid(row=0, column=1, sticky="nsew")
         self.main_frame.grid_rowconfigure(0, weight=0) # Status bar
-        self.main_frame.grid_rowconfigure(1, weight=1) # Dashboard (3 management cards)
-        self.main_frame.grid_rowconfigure(2, weight=2) # Console tabs & Mods (60% approx)
+        self.main_frame.grid_rowconfigure(1, weight=1) # Dashboard (4 management cards)
+        self.main_frame.grid_rowconfigure(2, weight=4) # Console tabs & Mods (Prominent - ~80%)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self._build_status_bar()
         self._build_dashboard()
@@ -203,8 +203,11 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_public_ip = ctk.CTkLabel(self.ip_frame, text="Public IP: N/A", font=("Roboto Medium", 12))
         self.lbl_public_ip.pack(side="left", padx=5)
 
-        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 12), text_color="#3b82f6")
-        self.lbl_dns_display.pack(side="left", padx=5)
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 13), text_color="#3b82f6")
+        self.lbl_dns_display.pack(side="left", padx=(5, 0))
+
+        self.lbl_port_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto", 11), text_color=AppConfig.COLOR_TEXT_GRAY)
+        self.lbl_port_display.pack(side="left", padx=(2, 5))
 
         self.btn_copy_ip = ctk.CTkButton(
             self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
@@ -230,6 +233,7 @@ class MCTunnelApp(ctk.CTk):
         self.management_frame.grid_columnconfigure(0, weight=1)
         self.management_frame.grid_columnconfigure(1, weight=1)
         self.management_frame.grid_columnconfigure(2, weight=1)
+        self.management_frame.grid_columnconfigure(3, weight=1)
         
         card_fg = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK)
         
@@ -294,6 +298,32 @@ class MCTunnelApp(ctk.CTk):
         
         self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
         self.btn_edit_properties.grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        # 4. Advanced Tools Card
+        self.tools_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
+        self.tools_frame.grid(row=0, column=3, padx=5, pady=5, sticky="nsew")
+        self.tools_frame.grid_columnconfigure(0, weight=1)
+
+        self.lbl_tools_title = ctk.CTkLabel(self.tools_frame, text="Advanced Tools", font=AppConfig.FONT_HEADING_SMALL)
+        self.lbl_tools_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+
+        self.btn_browse_mods = ctk.CTkButton(
+            self.tools_frame, text="📦 Browse Mods", 
+            command=lambda: self.console_tabs.set("Mods"),
+            corner_radius=8, height=36,
+            fg_color="#8b5cf6", hover_color="#7c3aed",
+            font=("Roboto Medium", 12)
+        )
+        self.btn_browse_mods.grid(row=1, column=0, sticky="ew", padx=15, pady=5)
+
+        self.btn_open_folder = ctk.CTkButton(
+            self.tools_frame, text="📁 Open Folder", 
+            command=self.open_server_folder,
+            corner_radius=8, height=32,
+            fg_color="gray", hover_color="gray30",
+            font=("Roboto", 11)
+        )
+        self.btn_open_folder.grid(row=2, column=0, sticky="ew", padx=15, pady=(5, 15))
 
         self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
         self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=5)
@@ -443,31 +473,51 @@ class MCTunnelApp(ctk.CTk):
         self.server_console.log(f"[UI] Selected server: {server_name}")
         self.update_management_ui()
 
+    def open_server_folder(self):
+        if not self.current_server: return
+        server_path = os.path.join(SERVERS_DIR, self.current_server)
+        if os.path.exists(server_path):
+            os.startfile(server_path)
+
+    def open_mods_folder_action(self):
+        if not self.current_server: return
+        info = self._get_current_server_info()
+        if not info: return
+        _, _, loader = info
+        target = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
+        path = os.path.join(SERVERS_DIR, self.current_server, target)
+        os.makedirs(path, exist_ok=True)
+        os.startfile(path)
+
     def _get_current_server_info(self):
         """Return (server_name, mc_version, loader) for the current server."""
         if not self.current_server:
             return None
+        from app.services.bytecode_analyzer import detect_loader
         server_path = os.path.join(SERVERS_DIR, self.current_server)
         meta_path = os.path.join(server_path, "metadata.json")
-        mc_version = None
-        loader = None
+        mc_version = "1.20.1"
+        loader = "vanilla"
+        
         if os.path.exists(meta_path):
             try:
                 import json
                 with open(meta_path, "r") as f:
                     meta = json.load(f)
-                mc_version = meta.get("version")
+                mc_version = meta.get("version", "1.20.1")
                 stype = meta.get("type", "Vanilla").lower()
-                if stype in ("fabric",):
-                    loader = "fabric"
-                elif stype in ("forge",):
-                    loader = "forge"
-                elif stype in ("paper", "purpur", "spigot"):
+                if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
                     loader = stype
-                else:
-                    loader = None
             except Exception:
                 pass
+        
+        # Bytecode Analysis Override: check the actual jar
+        jar_path = os.path.join(server_path, "server.jar")
+        if os.path.exists(jar_path):
+            detected = detect_loader(jar_path)
+            if detected:
+                loader = detected
+                
         return (self.current_server, mc_version, loader)
 
     def start_all_action(self):
@@ -869,12 +919,15 @@ class MCTunnelApp(ctk.CTk):
             if dns:
                 self.lbl_public_ip.pack_forget()
                 if ".gg" in dns or ".link" in dns:
-                    self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
+                    host = dns.split(":")[0] if ":" in dns else dns
+                    port = dns.split(":")[1] if ":" in dns else ""
+                    self.lbl_dns_display.configure(text=host, text_color="#3b82f6")
+                    self.lbl_port_display.configure(text=f":{port}" if port else "")
                     self.btn_copy_ip.configure(state="normal")
                     self.btn_copy_ip.pack(side="left", padx=(5, 0))
                 else:
-                    # Could be "Conectando..." or some other string
                     self.lbl_dns_display.configure(text=dns, text_color="#3b82f6")
+                    self.lbl_port_display.configure(text="")
                     self.btn_copy_ip.configure(state="disabled")
                     self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Offline":
