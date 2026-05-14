@@ -7,7 +7,7 @@ import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-from app.constants import (
+from app.core.constants import (
     VERSIONS_CACHE_FILE, 
     VANILLA_MANIFEST_URL, 
     FABRIC_META_URL, 

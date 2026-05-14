@@ -2,8 +2,8 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
 import threading
-from app.app_config import AppConfig
-from app.ui_components import ToolTip
+from app.core.app_config import AppConfig
+from app.ui.ui_components import ToolTip
 
 
 SETTINGS_METADATA = {

@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from app.constants import SERVERS_DIR
+from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
 

@@ -20,18 +20,18 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.logic import check_java, download_server, accept_eula, install_fabric, BackupManager, Scheduler
-import app.logic as logic
-from app.constants import SERVERS_DIR, ASSETS_DIR
-from app.server_wizard import ServerWizard
-from app.server_properties_editor import ServerPropertiesEditor
-from app.server_events import ServerEvent, EventBus
-from app.app_config import AppConfig
-from app.modrinth_browser import ModrinthBrowser
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
+from app.core.logic import check_java, download_server, accept_eula, install_fabric, BackupManager, Scheduler
+import app.core.logic as logic
+from app.core.constants import SERVERS_DIR, ASSETS_DIR
+from app.ui.server_wizard import ServerWizard
+from app.ui.server_properties_editor import ServerPropertiesEditor
+from app.core.server_events import ServerEvent, EventBus
+from app.core.app_config import AppConfig
+from app.ui.modrinth_browser import ModrinthBrowser
 from app.services.sanitizer import is_safe_command
 from app.services.toast import Toast
-from app.core import ZBBManager
+from app.core.core import ZBBManager
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -743,7 +743,7 @@ class MCTunnelApp(ctk.CTk):
                     # --- PROV-03: Bytecode Analysis ---
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
-                    from app.logic import wait_for_jar_ready
+                    from app.core.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")
@@ -781,11 +781,28 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=run_install, daemon=True).start()
 
     def _on_download_complete(self, dialog, name):
-        dialog.close()
         self.load_servers()
         self.server_console.log(f"[System] Auto-starting '{name}' to initialize server files...")
-        self.after(500, lambda: self.on_server_select(name))
-        self.after(1000, self.start_server_action)
+        self.on_server_select(name)
+        dialog.update_progress("Initializing Server Engine (Generating World)...", 0.95)
+        
+        # Start server manually
+        self.start_server_action()
+        
+        def on_ready(data):
+            if data == name:
+                self.server_console.log(f"[System] First boot complete. Stopping server...")
+                self.after(0, lambda: dialog.update_progress("Finalizing setup...", 1.0))
+                self.zbb_manager.stop_server()
+                
+        def on_stopped(data):
+            if data == name:
+                self.zbb_manager.events.unsubscribe(ServerEvent.READY, on_ready)
+                self.zbb_manager.events.unsubscribe(ServerEvent.STOPPED, on_stopped)
+                self.after(0, dialog.close)
+
+        self.zbb_manager.events.subscribe(ServerEvent.READY, on_ready)
+        self.zbb_manager.events.subscribe(ServerEvent.STOPPED, on_stopped)
 
     def start_tunnel(self):
         self.btn_tunnel_start.configure(state="disabled")
@@ -895,8 +912,8 @@ if __name__ == "__main__":
     )
 
     # Single-instance lock: prevent multiple app instances
-    from app.single_instance import SingleInstanceLock
-    from app.constants import CONFIG_DIR
+    from app.core.single_instance import SingleInstanceLock
+    from app.core.constants import CONFIG_DIR
 
     instance_lock = SingleInstanceLock(CONFIG_DIR / ".zbb.lock")
     if not instance_lock.try_acquire():

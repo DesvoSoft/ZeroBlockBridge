@@ -4,16 +4,16 @@ import time
 import os
 from typing import Optional
 
-from app.server_events import EventBus, ServerEvent
-from app.logic import ServerRunner, load_config, save_config, BackupManager, Scheduler
+from app.core.server_events import EventBus, ServerEvent
+from app.core.logic import ServerRunner, load_config, save_config, BackupManager, Scheduler
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
-from app.playit_manager import PlayitManager
-from app.scheduler_service import SchedulerService
+from app.core.playit_manager import PlayitManager
+from app.core.scheduler_service import SchedulerService
 from app.services.console_buffer import CircularBuffer
-from app.app_config import AppConfig
-from app.version_manager import VersionManager
+from app.core.app_config import AppConfig
+from app.core.version_manager import VersionManager
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class ZBBManager:
     def _pre_warm_version_cache(self):
         """REND-01: Pre-warm version caches from all providers in background."""
         def _warm():
-            from app.version_manager import VersionManager
+            from app.core.version_manager import VersionManager
             vm = VersionManager()
             vm.get_versions("Vanilla")
             logger.info("[ZBBManager] Version cache pre-warmed.")
@@ -145,7 +145,7 @@ class ZBBManager:
 
         # Load metadata to find java/version settings
         import json
-        from app.constants import SERVERS_DIR
+        from app.core.constants import SERVERS_DIR
         meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
         server_dir = os.path.join(SERVERS_DIR, self.current_server)
         mc_version = "1.20.1"
@@ -173,7 +173,7 @@ class ZBBManager:
         if java_path == "auto":
             from app.services.java_detector import JavaDetector, get_required_java
             from app.services.bytecode_analyzer import analyze_jar_bytecode
-            from app.logic import wait_for_jar_ready
+            from app.core.logic import wait_for_jar_ready
 
             # 1. Determine required Java version
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
@@ -308,7 +308,7 @@ class ZBBManager:
     def get_server_port(self, server_name: str = None) -> int:
         target = server_name or self.current_server
         if not target: return 25565
-        from app.logic import read_properties
+        from app.core.logic import read_properties
         props = read_properties(target)
         return int(props.get("server-port", 25565))
 

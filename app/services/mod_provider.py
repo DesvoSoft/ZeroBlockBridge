@@ -3,7 +3,7 @@ import os
 import threading
 from typing import List, Dict, Optional, Callable
 from app.services.modrinth import ModrinthClient, ModrinthException
-from app.constants import SERVERS_DIR
+from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
 

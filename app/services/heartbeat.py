@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 
-from app.server_events import ServerEvent
+from app.core.server_events import ServerEvent
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 import datetime
-import app.logic as logic
+import app.core.logic as logic
 
 class SchedulerService:
     """Handles the business logic for server restart scheduling."""

@@ -5,7 +5,7 @@ import time
 import platform
 import logging
 from typing import Dict, List, Optional
-from app.constants import CONFIG_DIR, PLAYIT_VERSION
+from app.core.constants import CONFIG_DIR, PLAYIT_VERSION
 
 logger = logging.getLogger(__name__)
 

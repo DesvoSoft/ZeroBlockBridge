@@ -7,7 +7,7 @@ import re
 import time
 import logging
 
-from app.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
+from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
 from app.services.playit_api import PlayitApiClient, PlayitApiException
 
 logger = logging.getLogger(__name__)

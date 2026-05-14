@@ -1,8 +1,8 @@
 import customtkinter as ctk
 import os
 import psutil
-from app.constants import SERVERS_DIR
-from app.version_manager import VersionManager
+from app.core.constants import SERVERS_DIR
+from app.core.version_manager import VersionManager
 from PIL import Image
 
 class ServerWizard(ctk.CTkToplevel):

@@ -12,8 +12,8 @@ import os
 import threading
 from typing import Callable, Optional
 
-from app.app_config import AppConfig
-from app.constants import SERVERS_DIR
+from app.core.app_config import AppConfig
+from app.core.constants import SERVERS_DIR
 from app.services.mod_provider import ModProvider
 from app.services.modrinth import ModrinthException
 

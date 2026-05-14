@@ -12,9 +12,9 @@ import time
 import zipfile
 from pathlib import Path
 
-from app.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR, VANILLA_MANIFEST_URL
-from app.server_events import ServerEvent, ServerEventEmitter
-from app.version_manager import VersionManager
+from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR, VANILLA_MANIFEST_URL
+from app.core.server_events import ServerEvent, ServerEventEmitter
+from app.core.version_manager import VersionManager
 
 # Per-server threading.Events for jar normalization synchronization
 _jar_ready_events: dict[str, threading.Event] = {}
