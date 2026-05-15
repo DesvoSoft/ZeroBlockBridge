@@ -366,9 +366,9 @@ class PlayitApiClient:
             logger.info(f"Tunnel {tunnel_id} assigned to {address}")
             return tunnel
 
-        # Poll briefly if tunnel is still pending
+        # Poll until assigned (typically takes 5-10s)
         logger.info(f"Tunnel {tunnel_id} pending, polling...")
-        for _ in range(5):
+        for _ in range(15):
             time.sleep(1)
             tunnels = self.list_tunnels()
             for t in tunnels:
@@ -378,7 +378,7 @@ class PlayitApiClient:
                         logger.info(f"Tunnel {tunnel_id} assigned to {address}")
                         return t
 
-        logger.warning(f"Tunnel {tunnel_id} remained pending after 5s.")
+        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s.")
         return tunnel
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
