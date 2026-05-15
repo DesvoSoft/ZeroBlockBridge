@@ -250,7 +250,6 @@ class PlayitManager:
             cmd = [
                 str(self.binary_path),
                 "--stdout",
-                "--network", "ipv4",
                 "--secret_path", str(self.toml_path),
             ]
 
@@ -268,6 +267,7 @@ class PlayitManager:
 
             threading.Thread(target=self._read_output, daemon=True).start()
             threading.Thread(target=self._status_polling_loop, daemon=True).start()
+            threading.Thread(target=self._dns_polling_loop, daemon=True).start()
             threading.Thread(target=self._heartbeat_loop, daemon=True).start()
 
         except OSError as e:
@@ -403,6 +403,34 @@ class PlayitManager:
             except Exception:
                 pass
             time.sleep(5)
+
+    def _dns_polling_loop(self):
+        waited = 0
+        while self.running and waited < 60:
+            time.sleep(5)
+            waited += 5
+            if not self.running:
+                return
+            if self._api_dns or self._stdout_dns:
+                return
+            try:
+                addresses = self.api_client.get_tunnels()
+                if addresses:
+                    address = addresses[0]
+                    with self._lock:
+                        if address == self.current_address:
+                            continue
+                        self.current_address = address
+                        self._api_dns = address
+                    self.status_callback("Online", address)
+                    self.console_callback(f"[Playit] Public address: {address}")
+                    if self.notification_callback:
+                        self.notification_callback(f"Tunnel online: {address}", "success")
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+                    return
+            except Exception:
+                pass
 
     def _heartbeat_loop(self):
         max_failures = 3

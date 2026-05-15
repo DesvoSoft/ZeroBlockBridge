@@ -131,6 +131,7 @@ class PlayitApiClient:
         variant = self._get_platform_variant()
         payload = {
             "account_setup_code": setup_code,
+            "agent_name": "ZeroBlockBridge",
             "agent_type": "program",
             "version_major": 0,
             "version_minor": 17,
