@@ -1,11 +1,13 @@
 import requests
 import json
 import os
+import sys
 import time
 import platform
+import uuid
 import logging
 from typing import Dict, List, Optional
-from app.core.constants import CONFIG_DIR, PLAYIT_VERSION
+from app.core.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +19,13 @@ class PlayitApiClient:
     def __init__(self):
         self.api_base = "https://api.playit.gg"
         self.session = requests.Session()
+        self.session.headers["User-Agent"] = "ZeroBlockBridge/1.0"
         self._secret_key = None
         self._agent_id = None
         self._proto_key = None
         self.is_read_only = False
         self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
+        self.client_id = str(uuid.uuid4())
 
     def load_secret_key(self) -> bool:
         """Loads secret key from playit.toml. Returns True if successful."""
@@ -95,59 +99,97 @@ class PlayitApiClient:
         except Exception:
             return False
 
+    def _get_platform_variant(self) -> str:
+        """Variante según nomenclatura de GitHub para v0.17.1.
+        Windows → windows-x86_64, Linux → linux-amd64.
+        """
+        machine = platform.machine().lower()
+        sys_name = platform.system().lower()
+
+        if sys_name == "windows":
+            return "windows-x86_64"
+        elif sys_name == "linux":
+            if "arm64" in machine or "aarch64" in machine:
+                return "linux-aarch64"
+            return "linux-amd64"
+        elif sys_name == "darwin":
+            if "arm64" in machine or "aarch64" in machine:
+                return "macos-aarch64"
+            return "macos-amd64"
+
+        return f"{sys_name}-{machine}"
+
     # --- Account Linking ---
     def link_account(self, setup_code: str, agent_name: str = "ZeroBlockBridge") -> bool:
-        """Link to a playit account using a setup code from the third-party web flow.
-        (Based on the auto-mcs reference project flow).
+        """Link to a playit account using a setup code.
+        Payload plano requerido por el Bridge:
+        account_setup_code, agent_type="program", version_major/minor/patch (ints),
+        variant, client_id.
+        Si el Bridge responde 400 recurrente, el setup_code queda invalidado.
         Returns True if linking succeeded and playit.toml was written.
         """
-        os_name = platform.system().lower()
-        if os_name == "darwin":
-            os_name = "macos"
-
+        variant = self._get_platform_variant()
         payload = {
             "account_setup_code": setup_code,
-            "agent_name": agent_name,
-            "platform": os_name,
+            "agent_type": "program",
             "version_major": 0,
-            "version_minor": 20,
+            "version_minor": 17,
             "version_patch": 1,
+            "variant": variant,
+            "client_id": self.client_id,
         }
-        
+
         from app.core.app_config import AppConfig
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        logger.info("[Playit] Claiming agent — variant=%s, client_id=%s", variant, self.client_id)
+        logger.info("[Playit] Full payload: %s", json.dumps(payload))
+
         try:
             response = requests.post(
                 AppConfig.PLAYIT_BRIDGE_URL,
                 json=payload,
+                headers=headers,
                 timeout=20,
             )
             data = response.json()
         except requests.RequestException as e:
-            raise PlayitApiException(f"Failed to link account via internal bridge: {e}")
+            raise PlayitApiException(f"Failed to connect to bridge: {e}")
         except ValueError:
-            raise PlayitApiException("Invalid JSON from bridge response")
-        
-        if data.get("status") != "success":
-            error = data.get("error") or data.get("message") or str(data)
-            raise PlayitApiException(f"Bridge exchange failed: {error}")
-        
-        secret_key = data.get("data", {}).get("agent_secret_key")
-        agent_id = data.get("data", {}).get("agent_id")
-        
+            raise PlayitApiException(f"Invalid JSON from bridge (HTTP {response.status_code}): {response.text[:500]}")
+
+        if response.status_code >= 400 or data.get("status") == "fail":
+            logger.error("Bridge returned HTTP %d: %s", response.status_code, response.text)
+            if response.status_code == 400:
+                raise PlayitApiException(
+                    f"Bridge rejected the setup code (HTTP 400). It may be invalidated. "
+                    f"Generate a new code at {AppConfig.PLAYIT_WIZARD_URL} and try again."
+                )
+            raise PlayitApiException(f"Bridge exchange failed (HTTP {response.status_code}): {response.text[:500]}")
+
+        # Extract credentials — handle both bridge and direct API response shapes
+        result = data.get("data", data)
+        secret_key = result.get("agent_secret_key") or result.get("secret_key")
+        agent_id = result.get("agent_id")
+
         if not secret_key:
+            logger.error("Bridge response body: %s", data)
             raise PlayitApiException(f"Bridge did not return a secret key: {data}")
-        
-        # Write playit.toml
+
+        # Write playit.toml — persistencia crítica del secret_key
         os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
         with open(self.toml_path, "w", encoding="utf-8") as f:
             f.write(f'secret_key = "{secret_key}"\n')
         if platform.system() != "Windows":
             os.chmod(self.toml_path, 0o600)
-        
+
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
-        logger.info(f"Successfully linked playit account (Agent ID: {agent_id})")
+        logger.info("Successfully linked playit account (Agent ID: %s)", agent_id)
         return True
 
     # --- Agent Info ---
@@ -191,21 +233,19 @@ class PlayitApiClient:
 
     def proto_register(self) -> Optional[str]:
         """Register client protocol version with the playit server."""
-        os_name = platform.system().lower()
-        if os_name == "darwin":
-            os_name = "macos"
-        
         proto_data = {
             "agent_version": {
                 "official": True,
                 "details_website": None,
+                "variant": self._get_platform_variant(),
                 "version": {
-                    "platform": os_name,
-                    "version": PLAYIT_VERSION
-                }
+                    "major": 0,
+                    "minor": 20,
+                    "patch": 1,
+                },
             },
             "client_addr": "0.0.0.0:0",
-            "tunnel_addr": "0.0.0.0:0"
+            "tunnel_addr": "0.0.0.0:0",
         }
         
         data = self._request("proto/register", json_data=proto_data)
