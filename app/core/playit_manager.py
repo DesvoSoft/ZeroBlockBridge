@@ -173,7 +173,7 @@ class PlayitManager:
         self.is_linked = os.path.exists(self.toml_path)
         if self.is_linked:
             self.api_client.is_read_only = False
-            self.console_callback("[Playit] Existing config found. Starting agent...")
+            self.console_callback("[Playit] Launching tunnel agent...")
             try:
                 if self.api_client.initialize():
                     address = self.get_or_create_tunnel(port)
