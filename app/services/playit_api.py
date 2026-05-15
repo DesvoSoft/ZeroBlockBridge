@@ -240,14 +240,13 @@ class PlayitApiClient:
         return None
 
     def initialize(self) -> bool:
-        """Full initialization: load secret, get agent ID, register protocol.
-        Returns True if the API session is ready or in Guest Mode."""
+        """Load secret and get agent ID for API session.
+        Returns True if the API session is ready."""
         if not self.load_secret_key():
             return False
 
         try:
             self.get_agent_rundata()
-            self.proto_register()
             return True
         except PlayitApiException as e:
             if self.is_read_only:
@@ -356,12 +355,21 @@ class PlayitApiClient:
         if data.get("status") != "success":
             raise PlayitApiException(f"Failed to create tunnel: {data}")
 
-        tunnel_id = data.get("data", {}).get("id")
+        tunnel = data.get("data", {})
+        tunnel_id = tunnel.get("id")
         if not tunnel_id:
             raise PlayitApiException("Tunnel creation returned success but no ID.")
 
-        logger.info(f"Tunnel {tunnel_id} created, polling for assignment...")
-        for _ in range(15):
+        # Try address directly from create response
+        address = self.get_tunnel_address(tunnel)
+        if address:
+            logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+            return tunnel
+
+        # Poll briefly if tunnel is still pending
+        logger.info(f"Tunnel {tunnel_id} pending, polling...")
+        for _ in range(5):
+            time.sleep(1)
             tunnels = self.list_tunnels()
             for t in tunnels:
                 if t.get("id") == tunnel_id:
@@ -369,10 +377,9 @@ class PlayitApiClient:
                     if address:
                         logger.info(f"Tunnel {tunnel_id} assigned to {address}")
                         return t
-            time.sleep(1)
 
-        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s.")
-        return data.get("data", {})
+        logger.warning(f"Tunnel {tunnel_id} remained pending after 5s.")
+        return tunnel
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
         """Deletes a tunnel by ID using v2 API."""

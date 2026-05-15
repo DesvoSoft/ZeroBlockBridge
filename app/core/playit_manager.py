@@ -317,6 +317,9 @@ class PlayitManager:
                 self.notification_callback("Invalid setup code.", "error")
             return False
 
+        # Download binary proactively before linking
+        self.ensure_binary()
+
         clean_code = setup_code.strip()
         try:
             self.console_callback(f"[Playit] Exchanging setup code with secure bridge...")
@@ -380,32 +383,26 @@ class PlayitManager:
 
     def _read_output(self):
         try:
-            buffer = bytearray()
             while self.running and self.process:
                 try:
-                    byte = self.process.stdout.read(1)
+                    raw = self.process.stdout.readline()
                 except Exception:
                     break
-                if not byte:
+                if not raw:
                     break
-                if byte in (b'\n', b'\r'):
-                    if buffer:
-                        try:
-                            line = buffer.decode('utf-8', errors='replace').strip()
-                        except Exception:
-                            line = ""
-                        if line:
-                            clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
-                            is_spam = any(s in clean_line for s in self.SPAM_LOGS)
-                            if not is_spam or "ERROR" in clean_line:
-                                self.console_callback(f"[Playit] {clean_line}")
-                            if "AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line:
-                                self.status_callback("Error", None)
-                                self.console_callback("[Playit] ERROR: Account limit reached!")
-                                self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
-                        buffer = bytearray()
-                else:
-                    buffer.extend(byte)
+                try:
+                    line = raw.decode('utf-8', errors='replace').strip()
+                except Exception:
+                    continue
+                if line:
+                    clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
+                    is_spam = any(s in clean_line for s in self.SPAM_LOGS)
+                    if not is_spam or "ERROR" in clean_line:
+                        self.console_callback(f"[Playit] {clean_line}")
+                    if "AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line:
+                        self.status_callback("Error", None)
+                        self.console_callback("[Playit] ERROR: Account limit reached!")
+                        self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:
