@@ -151,6 +151,7 @@ class ZBBManager:
         java_path = "auto"
         use_aikars = True
         required_java_cached = None
+        auto_install_jdk = True
         self._jdk_source = "unknown"
         try:
             if os.path.exists(meta_path):
