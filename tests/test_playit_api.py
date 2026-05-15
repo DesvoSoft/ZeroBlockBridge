@@ -54,22 +54,6 @@ def test_get_agent_id_caching(client):
         assert client.get_agent_id() == "abc"
         assert mock_request.call_count == 1  # Cached
 
-@patch("time.sleep", return_value=None)
-def test_create_tunnel_polling(mock_sleep, client):
-    client._agent_id = "agent_1"
-    
-    with patch.object(client, '_request') as mock_req:
-        mock_req.side_effect = [
-            {"status": "success", "data": {"id": "tunnel_1"}},
-            {"status": "success", "data": {"tunnels": [{"id": "tunnel_1", "alloc": {"status": "pending"}}]}},
-            {"status": "success", "data": {"tunnels": [{"id": "tunnel_1", "alloc": {"status": "allocated", "data": {"assigned_domain": "test.playit.gg"}}}]}}
-        ]
-        
-        tunnel = client.create_tunnel()
-        assert tunnel["id"] == "tunnel_1"
-        assert tunnel["alloc"]["data"]["assigned_domain"] == "test.playit.gg"
-        assert mock_req.call_count == 3
-
 @pytest.mark.parametrize("system, machine, expected", [
     ("Windows", "AMD64", "windows-x86_64"),
     ("Windows", "x86_64", "windows-x86_64"),

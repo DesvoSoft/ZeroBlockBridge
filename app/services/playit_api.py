@@ -328,56 +328,6 @@ class PlayitApiClient:
         except PlayitApiException:
             return []
 
-    def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
-        """Creates a new tunnel and polls up to 15s for the assigned domain."""
-        agent_id = self.get_agent_id()
-        import random
-        import string
-        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-
-        tunnel_data = {
-            "name": f"{tunnel_type}_{suffix}",
-            "tunnel_type": tunnel_type,
-            "port_type": "tcp",
-            "port_count": 1,
-            "enabled": True,
-            "proxy_protocol": proxy_protocol,
-            "origin": {
-                "type": "agent",
-                "data": {
-                    "agent_id": agent_id,
-                    "local_ip": "127.0.0.1",
-                    "local_port": port,
-                },
-            },
-        }
-
-        data = self._request("tunnels/create", json_data=tunnel_data)
-        if data.get("status") != "success":
-            raise PlayitApiException(f"Failed to create tunnel: {data}")
-            
-        tunnel_id = data.get("data", {}).get("id")
-        if not tunnel_id:
-            raise PlayitApiException("Tunnel creation returned success but no ID.")
-
-        # Smart Polling: wait for the tunnel to be assigned (this was the 'precioso' part)
-        logger.info(f"Tunnel {tunnel_id} created, polling for assignment...")
-        for _ in range(15):
-            tunnels = self.list_tunnels()
-            for t in tunnels:
-                if t.get("id") == tunnel_id:
-                    status = t.get("alloc", {}).get("status")
-                    if status != "pending":
-                        address = self.get_tunnel_address(t)
-                        if address:
-                            logger.info(f"Tunnel {tunnel_id} assigned to {address}")
-                            return t
-            time.sleep(1)
-            
-        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s, agent will pick it up eventually.")
-        # Return the tunnel anyway even if pending
-        return data.get("data", {})
-
     def delete_tunnel(self, tunnel_id: str) -> bool:
         """Deletes a tunnel by ID using v2 API."""
         try:

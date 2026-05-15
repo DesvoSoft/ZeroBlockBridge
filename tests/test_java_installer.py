@@ -51,7 +51,7 @@ class TestHelpers:
     def test_find_java_binary_found(self, tmp_path):
         java_dir = tmp_path / "jdk17" / "bin"
         java_dir.mkdir(parents=True)
-        exe = java_dir / "java.exe"
+        exe = java_dir / _java_exe_name()
         exe.write_text("")
         result = _find_java_binary(tmp_path / "jdk17")
         assert result == exe
@@ -85,7 +85,7 @@ class TestJdkManager:
         cache_dir = tmp_path / "jdks" / "jdk17"
         bin_dir = cache_dir / "bin"
         bin_dir.mkdir(parents=True)
-        exe = bin_dir / "java.exe"
+        exe = bin_dir / _java_exe_name()
         exe.write_text("")
 
         with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "jdks"):
@@ -107,7 +107,7 @@ class TestJdkManager:
         cache_dir = tmp_path / "jdks" / "jdk17"
         bin_dir = cache_dir / "bin"
         bin_dir.mkdir(parents=True)
-        exe = bin_dir / "java.exe"
+        exe = bin_dir / _java_exe_name()
         exe.write_text("")
 
         with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "jdks"):
@@ -189,8 +189,8 @@ class TestJdkManager:
     def test_purge_cache_single_version(self, tmp_path):
         cache_dir = tmp_path / "jdks" / "jdk17"
         cache_dir.mkdir(parents=True)
-        (cache_dir / "bin" / "java.exe").parent.mkdir(parents=True)
-        (cache_dir / "bin" / "java.exe").write_text("")
+        (cache_dir / "bin" / _java_exe_name()).parent.mkdir(parents=True)
+        (cache_dir / "bin" / _java_exe_name()).write_text("")
 
         with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "jdks"):
             mgr = JdkManager()
