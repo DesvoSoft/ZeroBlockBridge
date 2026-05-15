@@ -287,24 +287,46 @@ class PlayitApiClient:
 
     def get_tunnel_address(self, tunnel_data: dict) -> Optional[str]:
         """Extract the full connectable address from tunnel API data.
-        Returns 'domain:port' for shared tunnels, just 'domain' for dedicated.
-        Returns None if the tunnel is pending or has no assigned domain."""
+        Navega por alloc.data.assigned_domain + port_start o address.public_dns.
+        Returns 'domain:port' string or None."""
         alloc = tunnel_data.get("alloc", {})
         if alloc.get("status") == "pending":
             return None
-        
+
         alloc_data = alloc.get("data", {})
+
+        # Try address.public_dns first (campo directo de la API)
+        public_dns = alloc_data.get("address", {}).get("public_dns") if isinstance(alloc_data.get("address"), dict) else None
+        if public_dns:
+            if ":" in public_dns:
+                return public_dns
+            port_start = alloc_data.get("port_start")
+            if port_start:
+                return f"{public_dns}:{port_start}"
+            return public_dns
+
+        # Fallback: assigned_domain + port_start
         domain = alloc_data.get("assigned_domain")
-        port_start = alloc_data.get("port_start")
-        
         if not domain:
             return None
-        
-        # Include the port for all tunnels (playit shared IPs need it)
+        port_start = alloc_data.get("port_start")
         if port_start:
             return f"{domain}:{port_start}"
-        
         return domain
+
+    def get_tunnels(self) -> List[str]:
+        """Obtiene todas las direcciones públicas de los túneles vía API.
+        Devuelve lista de strings 'domain:port'. Vacía si no hay túneles asignados."""
+        try:
+            tunnels = self.list_tunnels()
+            addresses = []
+            for t in tunnels:
+                addr = self.get_tunnel_address(t)
+                if addr:
+                    addresses.append(addr)
+            return addresses
+        except PlayitApiException:
+            return []
 
     def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
         """Creates a new tunnel and polls up to 15s for the assigned domain."""
