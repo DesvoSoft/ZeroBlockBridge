@@ -7,7 +7,7 @@ import platform
 import uuid
 import logging
 from typing import Dict, List, Optional
-from app.core.constants import CONFIG_DIR
+from app.core.constants import CONFIG_DIR, PLAYIT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -232,16 +232,21 @@ class PlayitApiClient:
         raise PlayitApiException(f"Failed to get agent rundata: {data}")
 
     def proto_register(self) -> Optional[str]:
-        """Register client protocol version with the playit server."""
+        """Register client protocol version with the playit server.
+        Usa estructura simple (platform + version string) que la v0.17.1 entiende.
+        """
+        os_name = platform.system().lower()
+        if os_name == "darwin":
+            os_name = "macos"
+
         proto_data = {
             "agent_version": {
                 "official": True,
                 "details_website": None,
                 "variant": self._get_platform_variant(),
                 "version": {
-                    "major": 0,
-                    "minor": 20,
-                    "patch": 1,
+                    "platform": os_name,
+                    "version": PLAYIT_VERSION,
                 },
             },
             "client_addr": "0.0.0.0:0",

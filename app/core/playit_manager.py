@@ -483,17 +483,18 @@ class PlayitManager:
         if self._api_dns:
             return
 
+        skip_keywords = ["tunnel_addr", "trying to establish", "pong", "tunnel server", "client_addr"]
+        if any(kw in line for kw in skip_keywords):
+            return
+
         dns_patterns = [
             r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg)",
             r"([a-z0-9][a-z0-9-]*\.joinmc\.link)",
-            r"(\d+\.\d+\.\d+\.\d+:\d+)",
         ]
         for pattern in dns_patterns:
             dns_match = re.search(pattern, line)
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
-                if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
-                    continue
                 port_match = re.search(r':(\d{4,5})', line)
                 if port_match and ":" not in address:
                     address = f"{address}:{port_match.group(1)}"
