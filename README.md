@@ -21,7 +21,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ### Server Management
 
-- **Creation & Import**: Guided 6-step wizard for new servers or **Instant Load** for existing folders (via symbolic links).
+- **Creation & Import**: Guided 3-step wizard for new servers or **Instant Load** for existing folders (via symbolic links).
 - **Multi-Version Support**: Vanilla, Fabric, and Forge with dynamic version fetching (hundreds of versions).
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
@@ -43,17 +43,27 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
 - **Manual Tunnel Setup**: Get a Setup Code from Playit.gg and link it instantly.
 - **Persistent Sessions**: Your account link persists across app restarts; no need to re-verify.
-- **Stable Agent**: Pinned to v0.16.5 for maximum reliability.
+- **Non-Destructive Reset**: Reuses existing agent if secret key is valid — avoids `AgentDisabledOverLimit` errors.
+- **Local API Status Polling**: Tunnel status sourced from local JSON-RPC (`127.0.0.1:25374/status`) instead of fragile stdout regex.
+- **Heartbeat Monitoring**: Auto-restarts the agent if the process dies unexpectedly.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
 
 ### Developer Experience
 
-- **Modern GUI**: Clean dark theme built with CustomTkinter.
-- **Cross-Platform Sound**: Reliable notifications on Windows and Linux.
-- **Java Stability Range**: Optimized for Java 17-21 (Blocks > 21 to prevent startup crashes).
-- **Error Handling**: Comprehensive validation and user feedback.
+- **Modern GUI**: Clean dark theme built with CustomTkinter with Neo-Modern design (uniform `corner_radius=12`).
+- **JDK Auto-Installer**: Automatically downloads and caches the required JDK from Adoptium if no suitable Java is found.
+- **Java Stability Range**: Optimized for Java 17-21 (Blocks > 21 to prevent startup crashes, auto-installs proper version).
+- **Event-Driven Architecture**: Decoupled UI and Core via `EventBus` — headless ready.
+- **Error Handling**: Comprehensive validation and user feedback with zero bare `except:` blocks.
 - **Organized Structure**: Dedicated folders for each server.
+
+### Architecture & Quality
+
+- **Decoupled Core/UI**: `ZBBManager` serves as the single orchestrator. The UI only subscribes to events — no direct file I/O.
+- **Single Source of Truth**: Server state flows through `EventBus` (`STARTING`, `READY`, `STOPPED`, `TUNNEL_STATUS`).
+- **Thread Safety**: All shared state protected with `threading.RLock`. Background threads use `daemon=True`.
+- **Command Sanitization**: Every console command passes through an allowlist-based sanitizer — no raw shell execution.
 
 ---
 
@@ -173,7 +183,7 @@ py app/launcher.py
 ### First Server
 
 1. Click **"Create Server"** in the sidebar.
-2. Follow the 6-step wizard to configure your server.
+2. Follow the 3-step wizard to configure your server.
 3. Select the server from the list.
 4. The server will automatically start, initialize the core files (world, logs, mods), and stop by itself.
 5. Click **"Start"** to launch your fully configured server.
@@ -185,8 +195,9 @@ Note: The tunneling feature uses the free third party services from [Playit.GG](
 
 ## Documentation
 
-- **[USAGE.md](docs/USAGE.md)** - Complete user guide with all features.
-- **[TESTING.md](docs/TESTING.md)** - Test cases and verification steps.
+- **[SKILL.md](docs/SKILL.md)** - AI assistant guidelines for development.
+- **[STANDARDS.md](docs/STANDARDS.md)** - Master technical standards and architecture guide.
+- **[ROADMAP.md](roadmap.md)** - Development roadmap and phase tracking.
 
 ---
 
@@ -196,12 +207,9 @@ Note: The tunneling feature uses the free third party services from [Playit.GG](
 
 The wizard guides you through:
 
-1. **Type & Name**: Choose Vanilla/Fabric/Forge and select Minecraft version, then name your server.
-2. **RAM**: Use slider or type exact MB value (with validation).
-3. **World Settings**: Seed, game mode, difficulty, view distance, simulation distance.
-4. **Server Icon**: Upload custom PNG/JPG icon (optional, resized to 64x64).
-5. **Location**: View save location (custom paths coming soon).
-6. **Review**: Confirm all settings before creation.
+1. **Identity**: Server name, custom location, and optional icon.
+2. **Engine & Resources**: Choose Vanilla/Fabric/Paper/Purpur/Forge, select version, set RAM.
+3. **Rules & World**: Game mode, difficulty, seed, view/simulation distance, auto-install JDK toggle.
 
 ### Automated Restarts
 
@@ -252,53 +260,67 @@ The project follows a clean architecture, separating UI, business logic, and ser
 ```text
 ZeroBlockBridge/
 ├── app/
-│   ├── main.py                    # Main application, UI layout, and coordination
-│   ├── logic.py                   # Core business logic & Sound Utility
-│   ├── constants.py               # File paths, URLs, and configuration constants
-│   ├── app_config.py              # UI configuration (colors, fonts, window settings)
-│   ├── version_manager.py         # Dynamic version fetching, caching, and URL resolution
-│   ├── server_events.py           # Event system for server state notifications
-│   ├── scheduler_service.py       # Handles the logic for automated restarts
-│   ├── playit_manager.py          # Manages the playit.gg tunneling agent
-│   ├── server_wizard.py           # UI and logic for the 6-step creation wizard
-│   ├── server_properties_editor.py # UI for the server properties editor
-│   ├── ui_components.py           # Reusable UI widgets (console, list items)
-│   ├── single_instance.py         # PID lockfile to prevent duplicate app instances
+│   ├── ui/                        # Presentation Layer (UI only)
+│   │   ├── main.py                # Main window, layout, event subscriptions
+│   │   ├── server_wizard.py       # 3-step creation wizard
+│   │   ├── server_properties_editor.py # Tabbed properties editor
+│   │   ├── modrinth_browser.py    # Modrinth mod browser
+│   │   └── ui_components.py       # Reusable widgets (Console, ServerList, ToolTip)
 │   │
-│   └── services/                  # Auto-Healing & Utility Services
-│       ├── __init__.py
-│       ├── watchdog.py            # Crash detection, classification & auto-restart
-│       ├── heartbeat.py           # Zombie server detection via periodic probes
-│       ├── lag_monitor.py         # TPS lag spike detection with sliding window
-│       ├── sanitizer.py           # OS command injection prevention
+│   ├── core/                      # Orchestration & Business Logic
+│   │   ├── core.py                # ZBBManager — central orchestrator
+│   │   ├── logic.py               # ServerRunner, Scheduler, file downloads
+│   │   ├── constants.py           # File paths, URLs, config constants
+│   │   ├── app_config.py          # UI config (colors, fonts, window)
+│   │   ├── version_manager.py     # Dynamic version fetching & caching
+│   │   ├── server_events.py       # EventBus, ServerEvent definitions
+│   │   ├── scheduler_service.py   # Automated restart logic
+│   │   ├── playit_manager.py      # Playit.gg agent lifecycle & tunnel
+│   │   └── single_instance.py     # PID lockfile (prevents duplicates)
+│   │
+│   └── services/                  # Specialized Services & Auto-Healing
+│       ├── scaffolder.py          # Server directory scaffolding
+│       ├── server_properties.py   # server.properties read/write
+│       ├── java_installer.py      # JDK auto-download from Adoptium
+│       ├── java_detector.py       # System Java detection
+│       ├── bytecode_analyzer.py   # JAR bytecode Java version analysis
+│       ├── aikars_flags.py        # Aikars JVM flag calculator
+│       ├── console_buffer.py      # Thread-safe circular console buffer
+│       ├── sanitizer.py           # Command injection prevention
+│       ├── watchdog.py            # Crash detection & auto-restart
+│       ├── heartbeat.py           # Zombie server detection
+│       ├── lag_monitor.py         # TPS lag spike detection
+│       ├── backup_manager.py      # ZIP backup create/restore
+│       ├── modrinth.py            # Modrinth API client
+│       ├── sha1_validator.py      # SHA1 download verification
 │       └── toast.py               # Non-blocking notification overlay
 │
-├── requirements.txt               # Project dependencies for pip
+├── requirements.txt               # Project dependencies
 │
-├── assets/                        # Other misc files
-│   ├── notification.wav           # Notification sound effect
-|   ├── icon.ico                   # App icon
-|   └── logo.png                   # Project logo
+├── assets/                        # Misc files
+│   ├── icon.ico                   # App icon
+│   └── logo.png                   # Project logo
 |
 ├── docs/
-│   ├── USAGE.md                   # User guide
-|   └── TESTING.md                 # Test documentation
+│   ├── SKILL.md                   # AI assistant guidelines
+│   ├── STANDARDS.md               # Technical standards & architecture
+│   └── roadmap.md                 # Development roadmap
 |
-├── servers/                       # (Generated) Created servers are stored here
+├── servers/                       # (Generated) Per-server directories
 │   └── <server-name>/
 │       ├── server.jar
 │       ├── server.properties
-│       └── metadata.json          # Stores RAM, scheduler config, and wizard settings
+│       └── metadata.json
 │
-├── backups/                       # (Generated) Server backups stored here
+├── backups/                       # (Generated) ZIP backups
 │   └── <server-name>/
 │       └── YYYY-MM-DD_HH-MM-SS.zip
 │
-├── bin/                           # (Generated) Binaries like the playit agent
+├── bin/                           # (Generated) playit agent binary
 │
-├── config/                        # (Generated) Playit.gg agent configuration
-│   ├── config.json                # (Generated) App-level configuration
-│   └── versions_cache.json        # (Generated) Cached Minecraft versions
+├── config/                        # (Generated) App configuration
+│   ├── config.json
+│   └── versions_cache.json
 │
 └── README.md                      # This file c:
 ```
@@ -327,14 +349,13 @@ Zero Block Bridge uses **dynamic version fetching** to automatically support hun
 
 ### Dependencies
 
-All required Python packages are listed in `requirements.txt` at the project root. The dependencies are:
+All required Python packages are listed in `requirements.txt` at the project root:
 
-- **customtkinter** – Modern graphical user interface framework for Python.
-- **requests** – Handles HTTP requests for downloading server files and updates.
-- **psutil** – Provides system information (CPU, RAM, processes) for resource management.
-- **packaging** – Utilities for version parsing and dependency handling.
-- **playsound==1.2.2** – Lightweight library for playing notification sounds.
-- **Pillow** – Image processing library, used for server icon feature.
+- **customtkinter** – Modern GUI framework (forks/extends Tkinter).
+- **requests** – HTTP client for downloads and API calls.
+- **psutil** – System resource monitoring (RAM, processes).
+- **packaging** – Version parsing utilities.
+- **Pillow** – Image processing (server icons).
 
 ---
 

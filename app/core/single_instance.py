@@ -1,7 +1,10 @@
 import atexit
+import logging
 import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class SingleInstanceLock:

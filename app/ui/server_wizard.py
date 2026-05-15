@@ -1,9 +1,12 @@
 import customtkinter as ctk
+import logging
 import os
 import psutil
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):

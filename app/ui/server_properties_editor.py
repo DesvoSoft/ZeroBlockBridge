@@ -1,8 +1,11 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+import logging
 import os
 import threading
 from app.core.app_config import AppConfig
+
+logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
