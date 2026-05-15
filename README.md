@@ -298,7 +298,7 @@ ZeroBlockBridge/
 ├── requirements.txt               # Project dependencies
 │
 ├── assets/                        # Misc files
-│   ├── icon.ico                   # App icon
+│   ├── logo.ico                   # App icon
 │   └── logo.png                   # Project logo
 |
 ├── docs/
@@ -354,7 +354,6 @@ All required Python packages are listed in `requirements.txt` at the project roo
 - **customtkinter** – Modern GUI framework (forks/extends Tkinter).
 - **requests** – HTTP client for downloads and API calls.
 - **psutil** – System resource monitoring (RAM, processes).
-- **packaging** – Version parsing utilities.
 - **Pillow** – Image processing (server icons).
 
 ---
@@ -393,7 +392,6 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
 ## Support
 
-- **Documentation**: See [docs/USAGE.md](docs/USAGE.md) for detailed instructions.
 - **Issues**: Report bugs or request features via GitHub Issues.
 - **Discussions**: Share your server setups and get help from the community.
 

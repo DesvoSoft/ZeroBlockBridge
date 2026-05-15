@@ -46,8 +46,8 @@ ZeroBlockBridge (ZBB) is a Python-based Minecraft Server Management application.
 - **Regla**: Todos los atributos de datos (como `self.cache`, `self.settings`) DEBEN inicializarse en la primera línea del `__init__`, antes de disparar cualquier hilo de fondo (`_warm`, `_monitor`) o suscripción al EventBus. Esto evita errores de `AttributeError`.
 
 ## UI Guidelines (CustomTkinter)
-- Use the established dark theme tokens in `app/app_config.py`.
-- Maintain the 6-step Wizard pattern for server creation.
+- Use the established dark theme tokens in `app/core/app_config.py`.
+- Maintain the 3-step Wizard pattern for server creation (Identity → Engine & Resources → Rules & World).
 - Ensure all GUI operations are non-blocking (use threading/asynchronous tasks for I/O).
 
 ## Conventions
@@ -67,8 +67,9 @@ ZeroBlockBridge (ZBB) is a Python-based Minecraft Server Management application.
 - **Fallback chain**: System Java → JDK Cache → Download → Error.
 
 ## Key Files
-- `app/main.py`: Main entry point and UI coordination.
-- `app/logic.py`: Core business logic.
-- `app/constants.py`: Global constants and paths.
+- `app/ui/main.py`: Main entry point and UI coordination.
+- `app/core/logic.py`: Core business logic.
+- `app/core/constants.py`: Global constants and paths.
+- `app/core/core.py`: Central orchestrator (ZBBManager).
 - `app/services/watchdog.py`: Crash detection logic.
 - `app/services/sanitizer.py`: Command security.

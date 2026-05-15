@@ -37,7 +37,7 @@ jobs:
           # exit-zero treats all errors as warnings.
           flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      - name: Run Tests (placeholder)
+      - name: Run Tests
         working-directory: .
         run: |
-          echo "No tests defined yet."
+          pytest tests/

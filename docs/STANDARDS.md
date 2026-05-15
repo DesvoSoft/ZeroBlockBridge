@@ -7,8 +7,8 @@ This document defines the technical identity, architectural philosophy, and codi
 ## 1. Architectural Philosophy: Event-Driven & Decoupled
 ZBB is built on a strict **decoupled architecture** to ensure the core logic can run independently of any specific interface.
 
-*   **Model-View-Controller (MVC) Hybrid**: The UI (`app/main.py`) must never contain business logic. It serves only as a visual shell.
-*   **Event-Driven Communication**: All communication between the UI and the Core (`app/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
+*   **Model-View-Controller (MVC) Hybrid**: The UI (`app/ui/main.py`) must never contain business logic. It serves only as a visual shell.
+*   **Event-Driven Communication**: All communication between the UI and the Core (`app/core/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
 *   **Headless-Ready**: Every feature must be implemented such that it could function via a CLI or REST API without a GUI. 
 *   **Single Source of Truth**: `ZBBManager` is the orchestrator. No other component should directly manage server lifecycles or global configurations.
 
@@ -63,7 +63,7 @@ The ZBB interface follows a **Neo-Modern** aesthetic designed to feel premium an
 ## 5. Code Quality & Verification
 Quality is non-negotiable. ZBB maintains a robust testing culture.
 
-*   **Test-Driven Execution**: The full `pytest` suite (currently 91+ tests) **must** pass with 100% success before any code is committed.
+*   **Linting First**: All code **must** pass `flake8 --select=E9,F63,F7,F82` with zero errors before committing.
 *   **Linting**: Adhere to PEP 8 standards. Use `flake8` for static analysis to ensure code cleanliness.
 *   **Documentation Integrity**: Preserving existing comments and docstrings is mandatory. New features must be documented using Google-style docstrings.
 

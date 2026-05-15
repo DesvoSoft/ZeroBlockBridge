@@ -44,7 +44,6 @@ config
 # Project Specific - App Directory
 app/servers/
 app/config.json
-app/__pycache__/
 app/bin/
 
 # Logs
@@ -75,7 +74,10 @@ bin/*
 AI reference/
 CHECKLIST.md
 .planning/research/
-tests/
+
+
+# pytest
+.pytest_cache/
 
 # Agent workspace
 .opencode/
