@@ -89,15 +89,15 @@
 - [ ] **`services/platform_utils.py`** — Crear `create_link(src, dst, is_directory=False)`:
       - Windows → `_winapi.CreateJunction(src, dst)` (si es directorio) o `os.symlink`
       - Linux/Mac → `os.symlink(src, dst)`
-- [ ] **`main.py:517`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por `platform_utils.create_link()`
+- [x] **`main.py:517`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por guard `sys.platform == "win32"` + `os.symlink` fallback ✅
 - [ ] **`core.py:369`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por `platform_utils.create_link()`
 
 ### 2b.3 Manejo de Señales (SIGTERM en Linux)
 **Contexto**: En Linux, `subprocess.Popen` no recibe SIGTERM automáticamente. Si el proceso padre muere, el agente Playit puede quedar zombie.
 
+- [x] **`playit_manager.py`** — Agregar `preexec_fn=os.setsid` al `subprocess.Popen` del agente para evitar orphans en Linux ✅
 - [ ] **`playit_manager.py`** — Registrar `signal.signal(signal.SIGTERM, handler)` que ejecute `self.stop()` limpiamente
 - [ ] **`playit_manager.py:stop()`** — Asegurar que `process.terminate()` → `process.wait(timeout=5)` → `process.kill()` funcione en Linux (SIGTERM → SIGKILL)
-- [ ] **`core.py`** — Propagar `SIGTERM` a procesos hijo vía `preexec_fn=os.setpgrp` en Linux para kills en grupo
 - [ ] **`single_instance.py`** — Verificar que `atexit.register` capture `SIGTERM` además de `sys.exit()` normal
 
 ---
@@ -180,6 +180,13 @@
 - [x] Simplificar `_read_output`: quitar `_parse_line()`, mantener solo filtro spam + log ✅
 - [x] Reducir threads en `_start_internal`: solo `_read_output` + `_heartbeat_loop` ✅
 - [x] Simplificar `_heartbeat_loop`: restart directo vía `self.start()` en vez de `_restart_with_mapping` ✅
+- [x] Eliminar `proto_register()` de `initialize()` (no necesario para tunnel CRUD) ✅
+- [x] Simplificar `create_tunnel()`: intentar address de respuesta directa, poll 5s solo si pending ✅
+- [x] Mover `ensure_binary()` temprano en `link_manually()` (descargar antes del bridge exchange) ✅
+- [x] Cambiar `_read_output` de `read(1)` a `readline()` para eficiencia ✅
+- [x] Fix Linux HIGH: guardar `_winapi.CreateJunction` en `main.py` con `sys.platform` ✅
+- [x] Fix Linux HIGH: guardar `os.startfile` en `server_properties_editor.py` con branching completo ✅
+- [x] Fix Linux MEDIUM: `preexec_fn=os.setsid` en subprocess playit para evitar orphans ✅
 - [x] Correr tests (200/200 pasan) ✅
 - [ ] Merge a `dev`
 
