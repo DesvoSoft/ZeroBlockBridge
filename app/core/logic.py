@@ -162,7 +162,7 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     
     try:
         if progress_callback: progress_callback(0.1)
-        response = requests.get(installer_url, stream=True)
+        response = requests.get(installer_url, stream=True, timeout=30)
         response.raise_for_status()
         with open(installer_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -319,7 +319,7 @@ def install_forge(server_name, mc_version, progress_callback=None):
     
     try:
         if progress_callback: progress_callback(0.1)
-        response = requests.get(installer_url, stream=True)
+        response = requests.get(installer_url, stream=True, timeout=30)
         response.raise_for_status()
         with open(installer_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):

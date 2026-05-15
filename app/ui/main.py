@@ -818,6 +818,11 @@ def main():
     app = MCTunnelApp()
     app._instance_lock = instance_lock
     app.protocol("WM_DELETE_WINDOW", app.on_close)
+
+    import signal
+    signal.signal(signal.SIGTERM, lambda sig, frame: app.after(0, app.on_close))
+    signal.signal(signal.SIGINT, lambda sig, frame: app.after(0, app.on_close))
+
     app.mainloop()
 
 if __name__ == "__main__":
