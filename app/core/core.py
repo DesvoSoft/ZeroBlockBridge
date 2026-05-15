@@ -5,7 +5,8 @@ import os
 from typing import Optional
 
 from app.core.server_events import EventBus, ServerEvent
-from app.core.logic import ServerRunner, load_config, save_config, BackupManager, Scheduler
+from app.services.backup_manager import BackupManager
+from app.core.logic import ServerRunner, load_config, save_config, Scheduler
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
@@ -46,7 +47,6 @@ class ZBBManager:
         self.playit_manager = PlayitManager(
             console_callback=lambda line: self.events.emit(ServerEvent.TUNNEL_CONSOLE_LINE, line),
             status_callback=self._on_playit_status,
-            on_ready_callback=None, # Tunnel readiness handled via status events
             notification_callback=lambda msg, t_type: self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": t_type})
         )
         
@@ -54,30 +54,6 @@ class ZBBManager:
         self.events.subscribe(ServerEvent.REQUEST_RESTART, self._handle_restart_request)
         self.events.subscribe(ServerEvent.CONSOLE_LINE, lambda line: self.console_buffer.append(line))
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
-        
-        self._start_resource_monitor()
-
-    def _start_resource_monitor(self):
-        def _monitor():
-            try:
-                import psutil
-            except ImportError:
-                logger.warning("psutil not installed. Resource monitoring disabled.")
-                return
-                
-            import time
-            while True:
-                time.sleep(2)
-                if getattr(self, 'server_runner', None) and self.server_runner.running and getattr(self.server_runner, 'process', None):
-                    try:
-                        p = psutil.Process(self.server_runner.process.pid)
-                        cpu = p.cpu_percent(interval=None)
-                        ram = p.memory_info().rss / (1024 * 1024)
-                        self.events.emit(ServerEvent.RESOURCE_USAGE, {"cpu": cpu, "ram": ram})
-                    except Exception:
-                        pass
-        import threading
-        threading.Thread(target=_monitor, daemon=True).start()
 
     def _on_playit_status(self, status, ip):
         config = self.get_config()
@@ -127,9 +103,7 @@ class ZBBManager:
     def _pre_warm_version_cache(self):
         """REND-01: Pre-warm version caches from all providers in background."""
         def _warm():
-            from app.core.version_manager import VersionManager
-            vm = VersionManager()
-            vm.get_versions("Vanilla")
+            self.version_manager.get_versions("Vanilla")
             logger.info("[ZBBManager] Version cache pre-warmed.")
         threading.Thread(target=_warm, daemon=True).start()
 
@@ -191,16 +165,14 @@ class ZBBManager:
                 self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
                 jar_path = os.path.join(server_dir, "server.jar")
                 # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
-                import time
                 bytecode_java = None
-                for _ in range(10): # Reduced wait to 5s since scaffolding happened
+                for _ in range(10):
                     if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                         break
                     time.sleep(0.5)
                 
                 if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                     try:
-                        from app.services.bytecode_analyzer import analyze_jar_bytecode
                         bytecode_java = analyze_jar_bytecode(jar_path)
                     except Exception as e:
                         self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
@@ -374,7 +346,7 @@ class ZBBManager:
     def get_server_port(self, server_name: str = None) -> int:
         target = server_name or self.current_server
         if not target: return 25565
-        from app.core.logic import read_properties
+        from app.services.server_properties import read_properties
         props = read_properties(target)
         return int(props.get("server-port", 25565))
 

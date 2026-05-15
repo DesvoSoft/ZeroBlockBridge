@@ -14,7 +14,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 4
+        self.total_steps = 3
         
         # Data storage
         self.wizard_data = {
@@ -42,7 +42,7 @@ class ServerWizard(ctk.CTkToplevel):
         # Header
         self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.header_frame.grid(row=0, column=0, sticky="ew")
-        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 4", font=ctk.CTkFont(size=14))
+        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 3", font=ctk.CTkFont(size=14))
         self.lbl_step.pack(side="left", padx=20, pady=10)
         self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity", font=ctk.CTkFont(size=16, weight="bold"))
         self.lbl_title.pack(side="right", padx=20, pady=10)
@@ -147,43 +147,113 @@ class ServerWizard(ctk.CTkToplevel):
         except Exception:
             self.icon_preview.configure(text="Error")
 
-    # --- Step 2: Motor ---
+    # --- Step 2: Engine & Resources ---
     def show_step_2(self):
         self.clear_content()
-        self.update_header("Engine & Version")
-        
+        self.update_header("Engine & Resources")
+
+        engine_res_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        engine_res_frame.pack(fill="both", expand=True)
+
         # Engine Selection
-        engines_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        engines_frame.pack(fill="x", pady=(0, 15))
-        
+        ctk.CTkLabel(engine_res_frame, text="Server Engine:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+
         self.engine_var = ctk.StringVar(value=self.wizard_data["type"])
-        engines = [("Vanilla", "🌿 Vanilla"), ("Forge", "🔨 Forge"), ("Fabric", "🧶 Fabric"), ("Paper", "🧻 Paper")]
-        
-        # 2 rows for radio buttons
-        row1 = ctk.CTkFrame(engines_frame, fg_color="transparent")
-        row1.pack(fill="x", pady=5)
-        
+        engines = [("Vanilla", "Vanilla"), ("Paper", "Paper"), ("Purpur", "Purpur"), ("Fabric", "Fabric"), ("Forge", "Forge")]
+
+        engine_row = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        engine_row.pack(fill="x", pady=(0, 15))
+
         for val, name in engines:
-            rb = ctk.CTkRadioButton(row1, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
-            rb.pack(side="left", padx=(0, 15))
-            
+            rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
+            rb.pack(side="left", padx=(0, 12))
+
+        self.lbl_ram_hint = ctk.CTkLabel(engine_res_frame, text="", text_color="gray", font=ctk.CTkFont(size=12))
+        self.lbl_ram_hint.pack(anchor="w", pady=(0, 5))
+
         # Version Search
-        ctk.CTkLabel(self.content_frame, text="Search Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_search = ctk.CTkEntry(self.content_frame, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
+        ctk.CTkLabel(engine_res_frame, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_search = ctk.CTkEntry(engine_res_frame, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
         self.entry_search.pack(fill="x", pady=(0, 10))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
-        
+
         # Versions List
-        self.scroll_versions = ctk.CTkScrollableFrame(self.content_frame, corner_radius=12, fg_color=("gray90", "gray15"))
-        self.scroll_versions.pack(fill="both", expand=True)
-        
+        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=12, fg_color=("gray90", "gray15"), height=120)
+        self.scroll_versions.pack(fill="x", pady=(0, 15))
+
         self.version_var = ctk.StringVar(value=self.wizard_data["version"])
         self._render_versions()
+
+        # RAM Memory
+        total_ram = psutil.virtual_memory().total / (1024 * 1024)
+        max_slider = min(16384, total_ram - 1024)
+        min_ram = 512
+
+        ram_label_frame = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        ram_label_frame.pack(fill="x", pady=(0, 5))
+
+        ctk.CTkLabel(ram_label_frame, text="RAM:", font=ctk.CTkFont(weight="bold")).pack(side="left")
+        self.lbl_ram_value = ctk.CTkLabel(ram_label_frame, text=f"{self.wizard_data['ram']} MB ({self.wizard_data['ram']//1024} GB)", font=ctk.CTkFont(size=13))
+        self.lbl_ram_value.pack(side="left", padx=(10, 0))
+
+        ram_input_frame = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        ram_input_frame.pack(fill="x", pady=(0, 2))
+
+        self.entry_ram = ctk.CTkEntry(ram_input_frame, width=90, corner_radius=12, height=32)
+        self.entry_ram.pack(side="left", padx=(0, 10))
+        self.entry_ram.insert(0, str(self.wizard_data['ram']))
+        self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
+
+        self.slider_ram = ctk.CTkSlider(engine_res_frame, from_=min_ram, to=max_slider, number_of_steps=100, command=self.update_ram_label, height=16, border_width=1)
+        self.slider_ram.set(self.wizard_data["ram"])
+        self.slider_ram.pack(fill="x", pady=(2, 2))
+
+        slider_range = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        slider_range.pack(fill="x")
+        ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=ctk.CTkFont(size=10), text_color="gray").pack(side="left")
+        self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color="gray")
+        self.lbl_ram_util.pack(side="right")
+
+        self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color="red", font=ctk.CTkFont(size=12))
+        self.lbl_ram_error.pack(anchor="w")
+
+        self._update_ram_hint()
         
     def _on_engine_change(self):
         self.wizard_data["type"] = self.engine_var.get()
         self._render_versions()
-        
+        self._update_ram_hint()
+
+    def _update_ram_hint(self):
+        engine = self.engine_var.get()
+        hints = {"Vanilla": "512 MB min", "Paper": "1 GB min", "Purpur": "1 GB min", "Fabric": "1 GB min", "Forge": "2 GB min"}
+        hint = hints.get(engine, "1 GB min")
+        self.lbl_ram_hint.configure(text=f"Recommended: {hint}")
+
+    def update_ram_from_entry(self, event=None):
+        try:
+            val = int(self.entry_ram.get())
+            if 512 <= val <= 32768:
+                self.slider_ram.set(val)
+                self.wizard_data["ram"] = val
+                self.lbl_ram_value.configure(text=f"{val} MB ({val//1024} GB)")
+                total = psutil.virtual_memory().total / (1024 * 1024)
+                pct = val / total
+                self.lbl_ram_util.configure(text=f"{pct*100:.0f}% of system RAM")
+                self.lbl_ram_error.configure(text="")
+        except ValueError:
+            pass
+
+    def update_ram_label(self, value):
+        ram = int(value)
+        self.wizard_data["ram"] = ram
+        self.entry_ram.delete(0, "end")
+        self.entry_ram.insert(0, str(ram))
+        self.lbl_ram_value.configure(text=f"{ram} MB ({ram//1024} GB)")
+        total = psutil.virtual_memory().total / (1024 * 1024)
+        pct = ram / total
+        self.lbl_ram_util.configure(text=f"{pct*100:.0f}% of system RAM")
+
     def _render_versions(self):
         for widget in self.scroll_versions.winfo_children():
             widget.destroy()
@@ -222,48 +292,8 @@ class ServerWizard(ctk.CTkToplevel):
         elif filtered:
             self.version_var.set(filtered[0])
 
-    # --- Step 3: Hardware ---
+    # --- Step 3: Rules & World ---
     def show_step_3(self):
-        self.clear_content()
-        self.update_header("Hardware (RAM & Network)")
-        
-        total_ram = psutil.virtual_memory().total / (1024 * 1024)
-        max_slider = min(16384, total_ram - 1024)
-        
-        ctk.CTkLabel(self.content_frame, text="RAM Memory (MB):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        
-        input_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        input_frame.pack(fill="x", pady=(0, 10))
-        
-        self.entry_ram = ctk.CTkEntry(input_frame, width=100, corner_radius=12, height=36)
-        self.entry_ram.pack(side="left", padx=(0, 10))
-        self.entry_ram.insert(0, str(self.wizard_data['ram']))
-        self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
-        
-        self.slider_ram = ctk.CTkSlider(self.content_frame, from_=512, to=max_slider, number_of_steps=100, command=self.update_ram_label)
-        self.slider_ram.set(self.wizard_data["ram"])
-        self.slider_ram.pack(fill="x", pady=(0, 20))
-        
-        self.lbl_ram_error = ctk.CTkLabel(self.content_frame, text="", text_color="red")
-        self.lbl_ram_error.pack(anchor="w")
-
-    def update_ram_from_entry(self, event=None):
-        try:
-            val = int(self.entry_ram.get())
-            if 512 <= val <= 32768:
-                self.slider_ram.set(val)
-                self.wizard_data["ram"] = val
-                self.lbl_ram_error.configure(text="")
-        except ValueError:
-            pass
-            
-    def update_ram_label(self, value):
-        self.wizard_data["ram"] = int(value)
-        self.entry_ram.delete(0, "end")
-        self.entry_ram.insert(0, str(int(value)))
-
-    # --- Step 4: Reglas y Mundo ---
-    def show_step_4(self):
         self.clear_content()
         self.update_header("Rules & World")
         
@@ -344,11 +374,8 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["version"] = self.version_var.get()
             if not self.wizard_data["version"]:
                 return
-                
+
         elif self.current_step == 3:
-            pass # RAM is saved automatically via events
-                
-        elif self.current_step == 4:
             self.wizard_data["game_mode"] = self.combo_gamemode.get()
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
             self.wizard_data["hardcore"] = self.var_hardcore.get()
@@ -363,7 +390,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.show_step()
         
     def go_back(self):
-        if self.current_step == 4:
+        if self.current_step == 3:
             self.wizard_data["game_mode"] = self.combo_gamemode.get()
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
             self.wizard_data["hardcore"] = self.var_hardcore.get()
@@ -377,4 +404,3 @@ class ServerWizard(ctk.CTkToplevel):
         if self.current_step == 1: self.show_step_1()
         elif self.current_step == 2: self.show_step_2()
         elif self.current_step == 3: self.show_step_3()
-        elif self.current_step == 4: self.show_step_4()

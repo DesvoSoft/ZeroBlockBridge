@@ -5,15 +5,14 @@ import subprocess
 import shutil
 import requests
 import threading
-import platform
+
 import sys
 import datetime
 import time
-import zipfile
 from pathlib import Path
 
-from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, BASE_DIR, VANILLA_MANIFEST_URL
-from app.core.server_events import ServerEvent, ServerEventEmitter
+from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL
+from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 
 # Per-server threading.Events for jar normalization synchronization
@@ -146,11 +145,10 @@ def download_server(server_name, server_type, version, progress_callback=None):
     return jar_path
 
 def accept_eula(server_name):
-    """Writes eula.txt=true."""
+    """Writes eula.txt=true by delegating to scaffolder."""
+    from app.services.scaffolder import _generate_eula
     server_path = os.path.join(SERVERS_DIR, server_name)
-    eula_path = os.path.join(server_path, "eula.txt")
-    with open(eula_path, "w") as f:
-        f.write("eula=true\n")
+    _generate_eula(server_path, accepted=True)
 
 def install_fabric(server_name, mc_version, progress_callback=None):
     """Installs Fabric."""
@@ -452,9 +450,6 @@ class ServerRunner:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Server jar not found: {jar_file}")
             return
 
-        # Build command — PROV-05: Aikar's Flags Integration
-        from app.services.aikars_flags import build_java_command
-
         # Parse RAM in MB for flags calculator
         ram_str = self.ram_allocation.rstrip("MmGg")
         try:
@@ -486,8 +481,6 @@ class ServerRunner:
             ]
         else:
             cmd = [self.java_bin] + aikars + [
-                "--enable-native-access=ALL-UNNAMED",
-                "-Dorg.lwjgl.util.NoChecks=true",
                 "-jar",
                 jar_file,
                 "nogui",
@@ -617,132 +610,7 @@ def check_eula(server_name):
     with open(eula_path, "r") as f:
         return "eula=true" in f.read()
 
-def load_server_properties(server_name):
-    props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
-    properties = {}
-    if not os.path.exists(props_path): return properties
-    with open(props_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                properties[key.strip()] = value.strip()
-    return properties
-
-def read_properties(server_name):
-    """Alias/Implementation for reading properties as requested in Fase 3/4."""
-    return load_server_properties(server_name)
-
-def save_server_properties(server_name, new_properties):
-    props_path = os.path.join(SERVERS_DIR, server_name, "server.properties")
-    if not os.path.exists(props_path):
-        with open(props_path, "w") as f:
-            for k, v in new_properties.items():
-                f.write(f"{k}={v}\n")
-        return
-    with open(props_path, "r") as f:
-        lines = f.readlines()
-    updated_keys = set()
-    new_lines = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            if key in new_properties:
-                new_lines.append(f"{key}={new_properties[key]}\n")
-                updated_keys.add(key)
-            else: new_lines.append(line)
-        else: new_lines.append(line)
-    for k, v in new_properties.items():
-        if k not in updated_keys: new_lines.append(f"{k}={v}\n")
-    with open(props_path, "w") as f:
-        f.writelines(new_lines)
-
-class BackupManager:
-    def __init__(self, server_name):
-        self.server_name = server_name
-        self.server_path = SERVERS_DIR / server_name
-        self.backup_dir = BASE_DIR / "backups" / server_name
-        if not self.backup_dir.exists():
-            self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-    def create_backup(self):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        backup_filename = f"{timestamp}.zip"
-        backup_path = self.backup_dir / backup_filename
-        abs_backup_dir = self.backup_dir.resolve()
-        try:
-            skipped_files = []
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(self.server_path):
-                    root_path = os.path.abspath(root)
-                    # Skip the backups directory if it's still inside (legacy support/safety)
-                    if "backups" in os.path.relpath(root_path, self.server_path).split(os.sep):
-                        continue
-                        
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Skip the backup file itself (shouldn't happen with new path, but good for safety)
-                        if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
-                            continue
-                            
-                        arcname = os.path.relpath(file_path, self.server_path)
-                        try:
-                            zipf.write(file_path, arcname)
-                        except (PermissionError, OSError) as e:
-                            if e.errno == 13: # Permission denied
-                                skipped_files.append(arcname)
-                                logger.warning("Skipped locked file: %s", arcname)
-                            else:
-                                raise e
-            
-            if skipped_files:
-                return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
-            return backup_path, None
-        except Exception as e:
-            if backup_path.exists():
-                try: backup_path.unlink()
-                except: pass
-            return None, str(e)
-
-    def list_backups(self):
-        backups = []
-        if not self.backup_dir.exists(): return backups
-        for f in self.backup_dir.iterdir():
-            if f.is_file() and f.suffix == ".zip":
-                size_mb = f.stat().st_size / (1024 * 1024)
-                backups.append({
-                    "name": f.name,
-                    "path": str(f),
-                    "size": f"{size_mb:.2f} MB",
-                    "date": datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
-                })
-        backups.sort(key=lambda x: x["name"], reverse=True)
-        return backups
-
-    def get_latest_backup(self):
-        if not self.backup_dir.exists(): return None
-        backups = [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"]
-        if not backups: return None
-        backups.sort(key=lambda x: x.name, reverse=True)
-        latest = backups[0]
-        return {
-            "name": latest.name,
-            "path": str(latest),
-            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
-        }
-
-    def restore_backup(self, backup_path_str):
-        backup_path = Path(backup_path_str)
-        if not backup_path.exists(): return False
-        try:
-            for item in self.server_path.iterdir():
-                if item.is_file() or item.is_symlink(): item.unlink()
-                elif item.is_dir(): shutil.rmtree(item)
-            with zipfile.ZipFile(backup_path, 'r') as zipf:
-                zipf.extractall(self.server_path)
-            return True
-        except: return False
+from app.services.server_properties import load_server_properties, save_server_properties, read_properties
 
 class Scheduler:
     def __init__(self, server_name):
@@ -823,18 +691,4 @@ def set_server_ram(server_name, ram_mb):
         return True
     except: return False
 
-def play_sound(sound_path):
-    if not os.path.exists(sound_path): return
-    system = platform.system()
-    try:
-        if system == "Windows":
-            import winsound
-            winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
-        elif system == "Linux":
-            players = [["paplay", str(sound_path)], ["aplay", str(sound_path)], ["canberra-gtk-play", "-f", str(sound_path)], ["mpg123", str(sound_path)]]
-            for cmd in players:
-                try:
-                    subprocess.run(cmd, check=True, capture_output=True)
-                    break
-                except: continue
-    except: pass
+

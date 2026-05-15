@@ -4,6 +4,8 @@ import os
 import threading
 from app.core.app_config import AppConfig
 from app.ui.ui_components import ToolTip
+from app.services.backup_manager import BackupManager
+from app.services.server_properties import load_server_properties, save_server_properties
 
 
 SETTINGS_METADATA = {
@@ -77,7 +79,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         self.server_name = server_name
         self.logic = logic_module
-        self.properties = self.logic.load_server_properties(server_name)
+        self.properties = load_server_properties(server_name)
         
         # Shared Fonts
         self.font_bold = ctk.CTkFont(family=AppConfig.FONT_BODY[0], size=13, weight="bold")
@@ -191,7 +193,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.backup_list_frame.pack(fill="both", expand=True, pady=5)
         
         self.backup_var = ctk.StringVar()
-        self.backup_manager = self.logic.BackupManager(self.server_name)
+        self.backup_manager = BackupManager(self.server_name)
 
     def refresh_backups(self):
         # Clear current list
@@ -596,7 +598,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             elif w_type == "dropdown":
                 new_props[key] = widget.get()
                 
-        self.logic.save_server_properties(self.server_name, new_props)
+        save_server_properties(self.server_name, new_props)
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()

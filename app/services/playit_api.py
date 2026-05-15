@@ -281,7 +281,7 @@ class PlayitApiClient:
                 if t.get("id") == tunnel_id:
                     status = t.get("alloc", {}).get("status")
                     if status != "pending":
-                        address = self.api_client.get_tunnel_address(t) if hasattr(self, 'api_client') else self.get_tunnel_address(t)
+                        address = self.get_tunnel_address(t)
                         if address:
                             logger.info(f"Tunnel {tunnel_id} assigned to {address}")
                             return t

@@ -6,6 +6,7 @@ import threading
 import webbrowser
 import time
 import subprocess
+import tkinter.messagebox
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.core.logic import check_java, download_server, accept_eula, install_fabric, BackupManager, Scheduler
+from app.services.backup_manager import BackupManager
+from app.core.logic import check_java, download_server, accept_eula, install_fabric, Scheduler
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
 from app.ui.server_wizard import ServerWizard
@@ -46,7 +48,6 @@ class MCTunnelApp(ctk.CTk):
         super().__init__()
         self._init_window_config()
         self._init_state_variables()
-        self._init_managers()
         self._build_layout()
         self._init_background_services()
 
@@ -73,17 +74,12 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
         self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
-        self.events.subscribe(ServerEvent.RESOURCE_USAGE, self.on_resource_usage_update)
         
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
             Toast.show(self, "Lag spike threshold exceeded", toast_type="warning"),
         )))
-
-    def _init_managers(self):
-        # Initialized inside ZBBManager now
-        pass
 
     def _build_layout(self):
         self._build_sidebar()
@@ -191,20 +187,7 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
         self.lbl_java_ver.pack(side="left", padx=(0, 15))
 
-        self.stats_frame = ctk.CTkFrame(self.status_right_frame, fg_color="transparent")
-        self.stats_frame.pack(side="left", padx=(0, 15))
-        
-        self.lbl_cpu = ctk.CTkLabel(self.stats_frame, text="CPU: 0%", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 10))
-        self.lbl_cpu.pack(side="top", anchor="w")
-        self.bar_cpu = ctk.CTkProgressBar(self.stats_frame, width=60, height=5, progress_color="#3b82f6")
-        self.bar_cpu.pack(side="top", pady=(0, 2))
-        self.bar_cpu.set(0)
 
-        self.lbl_ram = ctk.CTkLabel(self.stats_frame, text="RAM: 0 MB", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 10))
-        self.lbl_ram.pack(side="top", anchor="w")
-        self.bar_ram = ctk.CTkProgressBar(self.stats_frame, width=60, height=5, progress_color="#22c55e")
-        self.bar_ram.pack(side="top")
-        self.bar_ram.set(0)
 
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
@@ -452,7 +435,8 @@ class MCTunnelApp(ctk.CTk):
     def play_notification_sound(self):
         try:
             sound_path = ASSETS_DIR / "notification.wav"
-            threading.Thread(target=logic.play_sound, args=(sound_path,), daemon=True).start()
+            from app.services.audio import play_sound
+            threading.Thread(target=play_sound, args=(sound_path,), daemon=True).start()
         except Exception as e:
             self.server_console.log(f"[Error] Failed to play notification sound: {e}")
 
@@ -496,8 +480,6 @@ class MCTunnelApp(ctk.CTk):
         
         self.btn_config.configure(state="normal")
         self.server_console.log(f"[UI] Selected server: {server_name}")
-        self.update_management_ui()
-
     def open_server_folder(self):
         def _open_folder(p):
             import subprocess
@@ -516,23 +498,6 @@ class MCTunnelApp(ctk.CTk):
         server_path = os.path.join(SERVERS_DIR, self.current_server)
         if os.path.exists(server_path):
             _open_folder(server_path)
-
-    def open_mods_folder_action(self):
-        if not self.current_server: return
-        info = self._get_current_server_info()
-        if not info: return
-        _, _, loader = info
-        target = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
-        path = os.path.join(SERVERS_DIR, self.current_server, target)
-        os.makedirs(path, exist_ok=True)
-        
-        import subprocess
-        if sys.platform == "win32":
-            os.startfile(path)
-        elif sys.platform == "darwin":
-            subprocess.run(["open", str(path)])
-        else:
-            subprocess.run(["xdg-open", str(path)])
 
     def _get_current_server_info(self):
         """Return (server_name, mc_version, loader) for the current server."""
@@ -563,10 +528,6 @@ class MCTunnelApp(ctk.CTk):
         if self.start_server_action():
             self.update_console("[System] Starting server and tunnel...")
             self.start_tunnel()
-
-    def update_management_ui(self):
-        # Redundant: logic moved to ServerPropertiesEditor
-        pass
 
     def save_advanced_settings(self, *args):
         if not self.current_server: return
@@ -599,17 +560,6 @@ class MCTunnelApp(ctk.CTk):
             self.entry_scheduler_interval.grid_forget()
             self.lbl_interval_unit.grid_forget()
             self.entry_restart_time.grid(row=0, column=2, sticky="w", padx=(5, 0), columnspan=2)
-
-    def on_resource_usage_update(self, data):
-        if not data: return
-        cpu = data.get("cpu", 0)
-        ram = data.get("ram", 0)
-        def _update():
-            self.lbl_cpu.configure(text=f"CPU: {cpu:.1f}%")
-            self.bar_cpu.set(min(cpu / 100.0, 1.0))
-            self.lbl_ram.configure(text=f"RAM: {ram:.0f} MB")
-            self.bar_ram.set(min(ram / 8192.0, 1.0))
-        self.after(0, _update)
 
     def _format_time_input(self, event=None):
         """Auto-format time entry to HH:MM. Strips non-numeric chars

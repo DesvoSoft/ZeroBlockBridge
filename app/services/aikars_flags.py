@@ -88,11 +88,6 @@ def calculate_flags(ram_mb: int, java_major: int = 17) -> list:
 
 
 def flags_to_string(ram_mb: int) -> str:
-    """
-    Return Aikar's flags as a space-separated string.
-
-    Useful for display in Advanced View or raw editing.
-    """
     return " ".join(calculate_flags(ram_mb))
 
 

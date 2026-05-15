@@ -20,11 +20,8 @@ class ServerEvent:
     CONSOLE_LINE = "console_line"
     TUNNEL_CONSOLE_LINE = "tunnel_console_line"
     NOTIFICATION = "notification"
-    STATUS_CHANGED = "status_changed"
     REQUEST_RESTART = "request_restart"
     TUNNEL_STATUS = "tunnel_status"
-    PLAYIT_CLAIM = "playit_claim"
-    RESOURCE_USAGE = "resource_usage"
 
 
 @dataclass

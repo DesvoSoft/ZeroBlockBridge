@@ -36,15 +36,6 @@ class CircularBuffer:
         with self._lock:
             return self._buffer[-n:] if n > 0 else []
 
-    def get_lines_since(self, index: int) -> List[str]:
-        """
-        Read lines appended after a given abstract index.
-        Note: Since we drop from the front, absolute indexing is complex.
-        For UI lazy rendering, it's easier to just read the whole buffer
-        when restoring, or use a batch mechanism.
-        """
-        pass
-
     def clear(self):
         """Clear the buffer."""
         with self._lock:
