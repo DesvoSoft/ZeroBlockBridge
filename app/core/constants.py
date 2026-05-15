@@ -22,5 +22,5 @@ JDK_CACHE_DIR = BASE_DIR / ".zbb_cache" / "jdks"
 
 # Playit Configuration
 PLAYIT_VERSION = "0.20.1"
-PLAYIT_URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-x86_64-signed.exe"
+PLAYIT_URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-amd64.exe"
 PLAYIT_URL_LINUX = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-linux-amd64"
