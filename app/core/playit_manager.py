@@ -402,7 +402,7 @@ class PlayitManager:
                 if line:
                     clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
                     is_spam = any(s in clean_line for s in self.SPAM_LOGS)
-                    if not is_spam or "ERROR" in clean_line:
+                    if not is_spam:
                         self.console_callback(f"[Playit] {clean_line}")
                     if "AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line:
                         self.status_callback("Error", None)
