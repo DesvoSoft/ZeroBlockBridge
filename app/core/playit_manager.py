@@ -5,10 +5,8 @@ import subprocess
 import threading
 import requests
 import re
-import json
 import time
 import logging
-import webbrowser
 
 from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
 from app.services.playit_api import PlayitApiClient, PlayitApiException
@@ -33,7 +31,6 @@ class PlayitManager:
         self._lock = threading.RLock()
         self._api_dns = None
         self._current_port = 25565
-        self._restarting = False
 
         # Persistence: Check if already linked
         if self.api_client.load_secret_key():
@@ -103,52 +100,6 @@ class PlayitManager:
         except Exception as e:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
-
-    def _inject_toml_mapping(self, port: int):
-        """Appends a [[mapping]] block to playit.toml so the agent automatically creates a tunnel."""
-        try:
-            if not os.path.exists(self.toml_path):
-                return
-            with open(self.toml_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            if "[[mapping]]" not in content:
-                mapping_block = (
-                    "\n\n[[mapping]]\n"
-                    'local_ip = "127.0.0.1"\n'
-                    'port_type = "tcp"\n'
-                    f"local_port = {port}\n"
-                )
-                with open(self.toml_path, "a", encoding="utf-8") as f:
-                    f.write(mapping_block)
-                logger.info("Injected [[mapping]] into playit.toml for auto-tunnel creation.")
-        except Exception as e:
-            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
-
-    def get_local_status(self):
-        try:
-            resp = requests.get("http://127.0.0.1:25374/status", timeout=3)
-            if resp.status_code == 200:
-                return resp.json()
-        except Exception:
-            pass
-        return None
-
-    def _handle_local_status(self, data: dict):
-        tunnels = data.get("tunnels", [])
-        for t in tunnels:
-            domain = t.get("assigned_domain")
-            port = t.get("port")
-            if domain:
-                address = f"{domain}:{port}" if port else domain
-                if address != self.current_address:
-                    self.current_address = address
-                    self._api_dns = address
-                    self.status_callback("Online", address)
-                    self.console_callback(f"[Playit] Public address: {address}")
-                    if self.notification_callback:
-                        self.notification_callback(f"Tunnel online: {address}", "success")
-                    if self.on_ready_callback:
-                        self.on_ready_callback()
 
     def get_or_create_tunnel(self, port: int) -> str:
         if not self.api_client.load_secret_key():
@@ -269,8 +220,6 @@ class PlayitManager:
                 self.status_callback("Starting...", None)
 
             threading.Thread(target=self._read_output, daemon=True).start()
-            threading.Thread(target=self._status_polling_loop, daemon=True).start()
-            threading.Thread(target=self._dns_polling_loop, daemon=True).start()
             threading.Thread(target=self._heartbeat_loop, daemon=True).start()
 
         except OSError as e:
@@ -397,44 +346,6 @@ class PlayitManager:
             except Exception as e:
                 logger.warning(f"Could not fix playit.toml permissions: {e}")
 
-    def _status_polling_loop(self):
-        while self.running:
-            try:
-                data = self.get_local_status()
-                if data:
-                    self._handle_local_status(data)
-            except Exception:
-                pass
-            time.sleep(5)
-
-    def _dns_polling_loop(self):
-        waited = 0
-        while self.running and waited < 60:
-            time.sleep(5)
-            waited += 5
-            if not self.running:
-                return
-            if self._api_dns:
-                return
-            try:
-                addresses = self.api_client.get_tunnels()
-                if addresses:
-                    address = addresses[0]
-                    with self._lock:
-                        if address == self.current_address:
-                            continue
-                        self.current_address = address
-                        self._api_dns = address
-                    self.status_callback("Online", address)
-                    self.console_callback(f"[Playit] Public address: {address}")
-                    if self.notification_callback:
-                        self.notification_callback(f"Tunnel online: {address}", "success")
-                    if self.on_ready_callback:
-                        self.on_ready_callback()
-                    return
-            except Exception:
-                pass
-
     def _heartbeat_loop(self):
         max_failures = 3
         fail_count = 0
@@ -451,8 +362,7 @@ class PlayitManager:
                         if self.notification_callback:
                             self.notification_callback("Playit agent crashed. Restarting...", "error")
                         port = getattr(self, '_current_port', 25565)
-                        self._restarting = True
-                        threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
+                        threading.Thread(target=self.start, args=(port,), daemon=True).start()
                         fail_count = 0
                         break
                 else:
@@ -489,7 +399,10 @@ class PlayitManager:
                             is_spam = any(s in clean_line for s in self.SPAM_LOGS)
                             if not is_spam or "ERROR" in clean_line:
                                 self.console_callback(f"[Playit] {clean_line}")
-                            self._parse_line(clean_line)
+                            if "AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line:
+                                self.status_callback("Error", None)
+                                self.console_callback("[Playit] ERROR: Account limit reached!")
+                                self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
                         buffer = bytearray()
                 else:
                     buffer.extend(byte)
@@ -502,61 +415,4 @@ class PlayitManager:
                 self.current_address = None
             self.status_callback("Offline", None)
 
-    def _parse_line(self, line):
-        if not line:
-            return
 
-        if "NetworkUnreachable" in line or "Os { code: 10051" in line or "Os { code: 101" in line:
-            return
-
-        if "AgentDisabledOverLimit" in line or "Account limit reached" in line:
-            self.status_callback("Error", None)
-            self.console_callback("[Playit] ERROR: Account limit reached!")
-            self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
-            return
-
-        if "agent registered" in line:
-            if not self.is_linked:
-                with self._lock:
-                    self.is_linked = True
-                self.console_callback("[Playit] Agent linked successfully.")
-                if self.notification_callback:
-                    self.notification_callback("Agent linked! Creating tunnel...", "success")
-                self.status_callback("Connecting...", None)
-                port = getattr(self, '_current_port', 25565)
-                if not self._restarting:
-                    self._restarting = True
-                    threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
-            return
-
-        if self._api_dns:
-            return
-
-        dns_patterns = [
-            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?(?:ply|playit)\.gg(?::\d+)?)",
-            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?joinmc\.link(?::\d+)?)",
-        ]
-        for pattern in dns_patterns:
-            dns_match = re.search(pattern, line)
-            if dns_match:
-                address = dns_match.group(1).rstrip('.')
-                if address != self.current_address:
-                    self._api_dns = address
-                    self.current_address = address
-                    self.status_callback("Online", address)
-                    self.console_callback(f"[Playit] Public address: {address}")
-                    if self.notification_callback:
-                        self.notification_callback(f"Tunnel online: {address}", "success")
-                return
-
-        if "tunnel running" in line and not self.current_address:
-            self.status_callback("Connecting...", None)
-            self.console_callback("[Playit] Tunnel active, waiting for DNS assignment...")
-
-    def _restart_with_mapping(self, port: int):
-        try:
-            time.sleep(1)
-            self.stop(force=True)
-            self.start(port)
-        finally:
-            self._restarting = False

@@ -175,12 +175,12 @@
 
 **Branch**: `simplify-playit-manager` (desde `dev`)
 
-- [ ] Eliminar código muerto: `_inject_toml_mapping`, `get_local_status`, `_handle_local_status`, `_status_polling_loop`, `_dns_polling_loop`, `_restart_with_mapping`
-- [ ] Simplificar `_parse_line`: mantener solo filtros `AgentDisabledOverLimit` y `NetworkUnreachable`
-- [ ] Simplificar `_read_output`: quitar `_parse_line()`, mantener solo filtro spam + log
-- [ ] Reducir threads en `_start_internal`: solo `_read_output` + `_heartbeat_loop`
-- [ ] Simplificar `_heartbeat_loop`: restart directo vía `self.start()` en vez de `_restart_with_mapping`
-- [ ] Correr tests (15/15 pasan)
+- [x] Eliminar código muerto: `_inject_toml_mapping`, `get_local_status`, `_handle_local_status`, `_status_polling_loop`, `_dns_polling_loop`, `_restart_with_mapping` ✅
+- [x] Simplificar `_parse_line`: inline solo `AgentDisabledOverLimit` en `_read_output` ✅
+- [x] Simplificar `_read_output`: quitar `_parse_line()`, mantener solo filtro spam + log ✅
+- [x] Reducir threads en `_start_internal`: solo `_read_output` + `_heartbeat_loop` ✅
+- [x] Simplificar `_heartbeat_loop`: restart directo vía `self.start()` en vez de `_restart_with_mapping` ✅
+- [x] Correr tests (200/200 pasan) ✅
 - [ ] Merge a `dev`
 
 ---
