@@ -104,6 +104,26 @@ class PlayitManager:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
 
+    def _inject_toml_mapping(self, port: int):
+        """Appends a [[mapping]] block to playit.toml so the agent automatically creates a tunnel."""
+        try:
+            if not os.path.exists(self.toml_path):
+                return
+            with open(self.toml_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if "[[mapping]]" not in content:
+                mapping_block = (
+                    "\n\n[[mapping]]\n"
+                    'local_ip = "127.0.0.1"\n'
+                    'port_type = "tcp"\n'
+                    f"local_port = {port}\n"
+                )
+                with open(self.toml_path, "a", encoding="utf-8") as f:
+                    f.write(mapping_block)
+                logger.info("Injected [[mapping]] into playit.toml for auto-tunnel creation.")
+        except Exception as e:
+            logger.error(f"Failed to prepare tunnel via TOML mapping: {e}")
+
     def get_or_create_tunnel(self, port: int) -> str:
         if not self.api_client.load_secret_key():
             self.console_callback("[Playit] Agent not linked yet.")
@@ -172,6 +192,7 @@ class PlayitManager:
         self.is_linked = os.path.exists(self.toml_path)
         if self.is_linked:
             self.api_client.is_read_only = False
+            self._inject_toml_mapping(port)
             self.console_callback("[Playit] Existing config found. Starting agent...")
             try:
                 if self.api_client.initialize():
@@ -446,24 +467,36 @@ class PlayitManager:
                 if self.notification_callback:
                     self.notification_callback("Agent linked! Creating tunnel...", "success")
                 self.status_callback("Connecting...", None)
-                port = getattr(self, '_current_port', 25565)
-                self.console_callback("[Playit] Restarting agent to create tunnel...")
-                if not self._restarting:
-                    self._restarting = True
-                    threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
+                p = getattr(self, '_current_port', 25565)
+                self._inject_toml_mapping(p)
+                self.console_callback(f"[Playit] Tunnel mapping injected for port {p}. Waiting for DNS...")
+            return
+
+        tunnel_online = re.search(r"Tunnel\s+Online|Forwarding|tunnel\s+is\s+now\s+online", line, re.IGNORECASE)
+        if tunnel_online:
+            self.status_callback("Online", self.current_address)
+            self.console_callback("[Playit] Tunnel reported online by agent.")
+            if self.notification_callback and not self.current_address:
+                self.notification_callback("Tunnel online, waiting for DNS...", "info")
             return
 
         if self._api_dns:
             return
 
         dns_patterns = [
-            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?(?:ply|playit)\.gg(?::\d+)?)",
-            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?joinmc\.link(?::\d+)?)",
+            r"([a-z0-9][a-z0-9-]*\.(?:ply|playit)\.gg)",
+            r"([a-z0-9][a-z0-9-]*\.joinmc\.link)",
+            r"(\d+\.\d+\.\d+\.\d+:\d+)",
         ]
         for pattern in dns_patterns:
             dns_match = re.search(pattern, line)
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
+                if address.startswith("0.") or address.startswith("127.") or address.startswith("169.254."):
+                    continue
+                port_match = re.search(r':(\d{4,5})', line)
+                if port_match and ":" not in address:
+                    address = f"{address}:{port_match.group(1)}"
                 with self._lock:
                     if address != self.current_address:
                         self._api_dns = address
