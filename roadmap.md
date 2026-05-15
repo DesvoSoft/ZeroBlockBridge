@@ -71,6 +71,37 @@
 
 ---
 
+## 🟢 Fase 2b: Compatibilidad Linux (Debian-Ready)
+
+### 2b.1 Abstracción de "Open Folder"
+**Contexto**: `main.py` y `server_properties_editor.py` tienen lógica duplicada de `os.startfile`/`xdg-open` esparcida en 4 lugares.
+
+- [ ] **`services/platform_utils.py` (nuevo)** — Crear `open_directory(path)` que unifique:
+      - `sys.platform == "win32"` → `os.startfile(path)`
+      - `sys.platform == "darwin"` → `subprocess.run(["open", path])`
+      - default → `subprocess.run(["xdg-open", path])`
+- [ ] **`main.py`** — Reemplazar 3 ocurrencias de `os.startfile`/`xdg-open` por `platform_utils.open_directory()`
+- [ ] **`server_properties_editor.py:657`** — Reemplazar `os.startfile` por `platform_utils.open_directory()`
+
+### 2b.2 Universal Symlinks (Reemplazar `_winapi`)
+**Contexto**: `main.py:517` y `core.py:369` usan `_winapi.CreateJunction`, que solo existe en Windows. En Linux/Mac se necesita `os.symlink`.
+
+- [ ] **`services/platform_utils.py`** — Crear `create_link(src, dst, is_directory=False)`:
+      - Windows → `_winapi.CreateJunction(src, dst)` (si es directorio) o `os.symlink`
+      - Linux/Mac → `os.symlink(src, dst)`
+- [ ] **`main.py:517`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por `platform_utils.create_link()`
+- [ ] **`core.py:369`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por `platform_utils.create_link()`
+
+### 2b.3 Manejo de Señales (SIGTERM en Linux)
+**Contexto**: En Linux, `subprocess.Popen` no recibe SIGTERM automáticamente. Si el proceso padre muere, el agente Playit puede quedar zombie.
+
+- [ ] **`playit_manager.py`** — Registrar `signal.signal(signal.SIGTERM, handler)` que ejecute `self.stop()` limpiamente
+- [ ] **`playit_manager.py:stop()`** — Asegurar que `process.terminate()` → `process.wait(timeout=5)` → `process.kill()` funcione en Linux (SIGTERM → SIGKILL)
+- [ ] **`core.py`** — Propagar `SIGTERM` a procesos hijo vía `preexec_fn=os.setpgrp` en Linux para kills en grupo
+- [ ] **`single_instance.py`** — Verificar que `atexit.register` capture `SIGTERM` además de `sys.exit()` normal
+
+---
+
 ## 🟠 Fase 3: Mod Ecosystem — Event-Driven
 
 ### Evento INSTALL_REQUEST
@@ -133,6 +164,7 @@
 |---|---|---|---|
 | **F1: Playit.gg** | `playit_api.py`, `playit_manager.py`, `constants.py` | Actualizar tests existentes | ✅ Completa |
 | **F2: JDK Core** | `core.py`, `java_installer.py`, `main.py`, `server_wizard.py`, `constants.py` | 28 tests existentes | ✅ Completa |
+| **F2b: Linux Compat** | `platform_utils.py`, `main.py`, `core.py`, `playit_manager.py`, `single_instance.py` | — | ❌ |
 | **F3a: Evento Mod** | `server_events.py`, `scaffolder.py`, `modrinth_browser.py` | `test_install_request_event` | ❌ |
 | **F3b: Dependencias** | `scaffolder.py`, `modrinth.py` | `test_dependency_resolution` | ❌ |
 | **Auditoría** | múltiples | regression 188 tests | ✅ Completa |
