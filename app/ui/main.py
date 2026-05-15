@@ -513,10 +513,12 @@ class MCTunnelApp(ctk.CTk):
             link_path = os.path.join(SERVERS_DIR, config["name"])
             try:
                 os.makedirs(target_path, exist_ok=True)
-                # Create directory junction on Windows
-                import _winapi
-                _winapi.CreateJunction(target_path, link_path)
-                self.server_console.log(f"[System] Created junction for custom location: {target_path}")
+                if sys.platform == "win32":
+                    import _winapi
+                    _winapi.CreateJunction(target_path, link_path)
+                else:
+                    os.symlink(target_path, link_path)
+                self.server_console.log(f"[System] Created link for custom location: {target_path}")
             except Exception as e:
                 self.server_console.log(f"[Error] Failed to map custom location: {e}")
                 return

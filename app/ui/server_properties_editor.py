@@ -2,6 +2,8 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import logging
 import os
+import subprocess
+import sys
 import threading
 from app.core.app_config import AppConfig
 
@@ -654,7 +656,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
     def open_folder(self):
         server_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name)
         if os.path.exists(server_path):
-            os.startfile(server_path)
+            if sys.platform == "win32":
+                os.startfile(server_path)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", server_path], check=False)
+            else:
+                subprocess.run(["xdg-open", server_path], check=False)
 
     def save_launch_settings(self):
         meta_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name, "metadata.json")

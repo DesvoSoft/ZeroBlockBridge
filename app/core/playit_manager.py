@@ -207,6 +207,10 @@ class PlayitManager:
                 "--secret_path", str(self.toml_path),
             ]
 
+            kwargs = {}
+            if platform.system() != "Windows":
+                kwargs["preexec_fn"] = os.setsid
+
             self.process = subprocess.Popen(
                 cmd,
                 cwd=os.path.abspath(CONFIG_DIR),
@@ -214,6 +218,7 @@ class PlayitManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=env,
+                **kwargs,
             )
             self.running = True
             if not self.current_address:
