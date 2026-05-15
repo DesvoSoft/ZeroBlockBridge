@@ -11,6 +11,7 @@ ZBB is built on a strict **decoupled architecture** to ensure the core logic can
 *   **Event-Driven Communication**: All communication between the UI and the Core (`app/core/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
 *   **Headless-Ready**: Every feature must be implemented such that it could function via a CLI or REST API without a GUI. 
 *   **Single Source of Truth**: `ZBBManager` is the orchestrator. No other component should directly manage server lifecycles or global configurations.
+*   **Platform Neutrality**: Queda prohibido el uso de `os.startfile` y `_winapi` en el núcleo. Toda interacción con el sistema operativo debe usar abstracciones que detecten `sys.platform`. Las rutas se construyen exclusivamente con `pathlib.Path` para garantizar compatibilidad entre Windows y Linux.
 
 ### Code Example: Emitting Events
 ```python
@@ -47,12 +48,35 @@ The use of `print()` is strictly prohibited in the production codebase.
     *   `WARNING`: Recoverable issues or unexpected behavior.
     *   `ERROR`: Non-recoverable failures that require attention.
 
+### 3a. Silent Failure Prevention (No-Silent Failures)
+Queda **estrictamente prohibido** el uso de `except: pass`.
+
+**Requisitos obligatorios para todo bloque `except`:**
+1. La excepción capturada debe ser lo más específica posible (`ValueError`, `OSError`, `requests.ConnectionError`, etc.).
+2. Antes de cualquier retorno por defecto, se debe llamar a `logger.exception()` o `logger.warning()` con un mensaje que describa el contexto del fallo.
+3. Excepciones admitidas (con justificación documentada): operaciones de limpieza en destructores o cierres donde el error no afecta al estado del programa.
+
+```python
+# Correcto
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    logger.exception("Failed to parse server metadata: %s", e)
+    data = {}
+
+# Incorrecto
+try:
+    data = json.loads(raw)
+except:
+    pass
+```
+
 ---
 
 ## 4. Aesthetics & UI: Neo-Modern Brand Book
 The ZBB interface follows a **Neo-Modern** aesthetic designed to feel premium and state-of-the-art.
 
-*   **Corner Radius**: A uniform `corner_radius=12` is mandatory for all frames, buttons, and input fields.
+*   **Corner Radius (Regla del 12)**: Un `corner_radius=12` uniforme es **obligatorio** para todos los frames, botones y campos de entrada. Esta es una métrica de certificación visual: cualquier componente con un valor distinto se considera una regression.
 *   **Color Palette**: Use **Slate**-based palettes for both Dark and Light modes to avoid high-contrast fatigue.
 *   **Typography**: Use **Roboto** (Body) and **Roboto Medium** (Headings/Titles).
 *   **Component Pattern**: Data-rich results (like the Modrinth Browser) must use **Cards** with subtle hover effects and clean borders.
@@ -66,6 +90,30 @@ Quality is non-negotiable. ZBB maintains a robust testing culture.
 *   **Linting First**: All code **must** pass `flake8 --select=E9,F63,F7,F82` with zero errors before committing.
 *   **Linting**: Adhere to PEP 8 standards. Use `flake8` for static analysis to ensure code cleanliness.
 *   **Documentation Integrity**: Preserving existing comments and docstrings is mandatory. New features must be documented using Google-style docstrings.
+
+---
+
+## 6. Quality Certification (Health Score)
+
+Cada fase del Roadmap debe finalizar con una auditoría técnica que garantice un **Health Score > 90/100**.
+
+### Criterios de Evaluación
+
+| Categoría | Máx | Penalización |
+|---|---|---|
+| **Código Muerto** | 25 pts | -5 pts por cada stub, import no usado, o función huérfana |
+| **Manejo de Errores** | 25 pts | -10 pts por cada `except: pass` sin registro |
+| **Consistencia Visual** | 20 pts | -5 pts por cada widget con `corner_radius` distinto de 12 |
+| **Documentación** | 15 pts | -5 pts por cada ruta obsoleta o enlace roto en docs/ |
+| **Neutralidad de Plataforma** | 15 pts | -5 pts por cada uso de `os.startfile` o `_winapi` sin abstracción |
+
+### Proceso de Certificación
+1. Ejecutar `flake8 --select=E9,F63,F7,F82 --statistics app/` — tolerancia cero.
+2. Escanear el código en busca de `except:`, `os.startfile`, `_winapi`.
+3. Verificar que todos los `corner_radius` en la UI sean `12`.
+4. Validar que no haya enlaces rotos en `docs/`.
+
+Un Health Score por debajo de 90 requiere una fase correctiva antes de continuar con el siguiente hito del Roadmap.
 
 ---
 
