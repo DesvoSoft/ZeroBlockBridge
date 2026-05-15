@@ -100,8 +100,8 @@ class PlayitApiClient:
             return False
 
     def _get_platform_variant(self) -> str:
-        """Variante según nomenclatura de GitHub para v0.17.1.
-        Windows → windows-x86_64, Linux → linux-amd64.
+        """Variante segÃºn nomenclatura de GitHub para v0.17.1.
+        Windows â†’ windows-x86_64, Linux â†’ linux-amd64.
         """
         machine = platform.machine().lower()
         sys_name = platform.system().lower()
@@ -121,39 +121,27 @@ class PlayitApiClient:
 
     # --- Account Linking ---
     def link_account(self, setup_code: str, agent_name: str = "ZeroBlockBridge") -> bool:
-        """Link to a playit account using a setup code.
-        Payload plano requerido por el Bridge:
-        account_setup_code, agent_type="program", version_major/minor/patch (ints),
-        variant, client_id.
-        Si el Bridge responde 400 recurrente, el setup_code queda invalidado.
+        """Link to a playit account using a setup code from the third-party web flow.
         Returns True if linking succeeded and playit.toml was written.
         """
-        variant = self._get_platform_variant()
+        os_name = platform.system().lower()
+        if os_name == "darwin":
+            os_name = "macos"
+
         payload = {
             "account_setup_code": setup_code,
-            "agent_name": "ZeroBlockBridge",
-            "agent_type": "program",
+            "agent_name": agent_name,
+            "platform": os_name,
             "version_major": 0,
             "version_minor": 17,
             "version_patch": 1,
-            "variant": variant,
-            "client_id": self.client_id,
         }
 
         from app.core.app_config import AppConfig
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        logger.info("[Playit] Claiming agent — variant=%s, client_id=%s", variant, self.client_id)
-        logger.info("[Playit] Full payload: %s", json.dumps(payload))
-
         try:
             response = requests.post(
                 AppConfig.PLAYIT_BRIDGE_URL,
                 json=payload,
-                headers=headers,
                 timeout=20,
             )
             data = response.json()
@@ -164,14 +152,9 @@ class PlayitApiClient:
 
         if response.status_code >= 400 or data.get("status") == "fail":
             logger.error("Bridge returned HTTP %d: %s", response.status_code, response.text)
-            if response.status_code == 400:
-                raise PlayitApiException(
-                    f"Bridge rejected the setup code (HTTP 400). It may be invalidated. "
-                    f"Generate a new code at {AppConfig.PLAYIT_WIZARD_URL} and try again."
-                )
             raise PlayitApiException(f"Bridge exchange failed (HTTP {response.status_code}): {response.text[:500]}")
 
-        # Extract credentials — handle both bridge and direct API response shapes
+        # Extract credentials
         result = data.get("data", data)
         secret_key = result.get("agent_secret_key") or result.get("secret_key")
         agent_id = result.get("agent_id")
@@ -180,7 +163,7 @@ class PlayitApiClient:
             logger.error("Bridge response body: %s", data)
             raise PlayitApiException(f"Bridge did not return a secret key: {data}")
 
-        # Write playit.toml — persistencia crítica del secret_key
+        # Write playit.toml â€” persistencia crÃ­tica del secret_key
         os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
         with open(self.toml_path, "w", encoding="utf-8") as f:
             f.write(f'secret_key = "{secret_key}"\n')
@@ -209,37 +192,33 @@ class PlayitApiClient:
             
         # Fallback: try tunnels/list to see if we can find the agent_id there
         try:
-            # tunnels/list for all tunnels often works even if rundata doesn't
-            url = f"{self.api_base}/tunnels/list"
-            # Try both auth types manually here if needed, but _request does it
-            data = self._request("tunnels/list", json_data={})
+            data = self._request("tunnels/list", json_data={"agent_id": None})
             if data.get("status") == "success":
                 tunnels = data.get("data", {}).get("tunnels", [])
                 if tunnels:
-                    self._agent_id = tunnels[0].get("agent_id")
+                    self._agent_id = tunnels[0].get("origin", {}).get("data", {}).get("agent_id")
                     if self._agent_id:
                         return self._agent_id
         except Exception as e:
             logger.warning(f"Fallback agent_id detection failed: {e}")
-
-        raise PlayitApiException("Could not determine agent_id via any method.")
 
     def get_agent_rundata(self) -> dict:
         """Returns full agent rundata including agent_id."""
         data = self._request("agents/rundata")
         if data.get("status") == "success":
             self._agent_id = data["data"]["agent_id"]
+            agent_type = data["data"].get("agent_type")
+            logger.info("Agent type from rundata: %s", agent_type)
             return data["data"]
         raise PlayitApiException(f"Failed to get agent rundata: {data}")
 
     def proto_register(self) -> Optional[str]:
-        """Register client protocol version with the playit server.
-        Usa estructura simple (platform + version string) que la v0.17.1 entiende.
-        """
+        """Register client protocol version with the playit server."""
         os_name = platform.system().lower()
         if os_name == "darwin":
             os_name = "macos"
 
+        from app.core.constants import PLAYIT_VERSION
         proto_data = {
             "agent_version": {
                 "official": True,
@@ -253,7 +232,7 @@ class PlayitApiClient:
             "client_addr": "0.0.0.0:0",
             "tunnel_addr": "0.0.0.0:0",
         }
-        
+
         data = self._request("proto/register", json_data=proto_data)
         if data.get("status") == "success":
             self._proto_key = data.get("data", {}).get("key")
@@ -265,7 +244,7 @@ class PlayitApiClient:
         Returns True if the API session is ready or in Guest Mode."""
         if not self.load_secret_key():
             return False
-        
+
         try:
             self.get_agent_rundata()
             self.proto_register()
@@ -288,15 +267,33 @@ class PlayitApiClient:
 
     def get_tunnel_address(self, tunnel_data: dict) -> Optional[str]:
         """Extract the full connectable address from tunnel API data.
-        Navega por alloc.data.assigned_domain + port_start o address.public_dns.
+        Soporta: assigned_domain directo (AgentTunnel), connect_addresses (v1 web),
+        y alloc.* (legacy).
         Returns 'domain:port' string or None."""
+
+        # AgentTunnel format: assigned_domain + port
+        domain = tunnel_data.get("assigned_domain")
+        if domain:
+            local_port = tunnel_data.get("local_port")
+            if local_port:
+                return f"{domain}:{local_port}"
+            return domain
+
+        # Web API format: connect_addresses
+        connect_addrs = tunnel_data.get("connect_addresses", [])
+        if connect_addrs:
+            for entry in connect_addrs:
+                addr = entry.get("value", {}).get("address")
+                port = entry.get("value", {}).get("default_port")
+                if addr:
+                    return f"{addr}:{port}" if port else addr
+
+        # Legacy format: alloc.data
         alloc = tunnel_data.get("alloc", {})
         if alloc.get("status") == "pending":
             return None
-
         alloc_data = alloc.get("data", {})
 
-        # Try address.public_dns first (campo directo de la API)
         public_dns = alloc_data.get("address", {}).get("public_dns") if isinstance(alloc_data.get("address"), dict) else None
         if public_dns:
             if ":" in public_dns:
@@ -306,7 +303,6 @@ class PlayitApiClient:
                 return f"{public_dns}:{port_start}"
             return public_dns
 
-        # Fallback: assigned_domain + port_start
         domain = alloc_data.get("assigned_domain")
         if not domain:
             return None
@@ -314,10 +310,9 @@ class PlayitApiClient:
         if port_start:
             return f"{domain}:{port_start}"
         return domain
-
     def get_tunnels(self) -> List[str]:
-        """Obtiene todas las direcciones públicas de los túneles vía API.
-        Devuelve lista de strings 'domain:port'. Vacía si no hay túneles asignados."""
+        """Obtiene todas las direcciones pÃºblicas de los tÃºneles vÃ­a API.
+        Devuelve lista de strings 'domain:port'. VacÃ­a si no hay tÃºneles asignados."""
         try:
             tunnels = self.list_tunnels()
             addresses = []
@@ -328,6 +323,56 @@ class PlayitApiClient:
             return addresses
         except PlayitApiException:
             return []
+
+    def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
+        agent_id = self.get_agent_id()
+        import random
+        import string
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+
+        tunnel_data = {
+            "name": f"{tunnel_type}_{suffix}",
+            "tunnel_type": tunnel_type,
+            "port_type": "tcp",
+            "port_count": 1,
+            "enabled": True,
+            "origin": {
+                "type": "agent",
+                "data": {
+                    "agent_id": agent_id,
+                    "local_ip": "127.0.0.1",
+                    "local_port": port,
+                },
+            },
+            "alloc": {
+                "type": "region",
+                "details": {"region": "global"},
+            },
+            "proxy_protocol": None,
+            "firewall_id": None,
+        }
+
+        data = self._request("tunnels/create", json_data=tunnel_data)
+        if data.get("status") != "success":
+            raise PlayitApiException(f"Failed to create tunnel: {data}")
+
+        tunnel_id = data.get("data", {}).get("id")
+        if not tunnel_id:
+            raise PlayitApiException("Tunnel creation returned success but no ID.")
+
+        logger.info(f"Tunnel {tunnel_id} created, polling for assignment...")
+        for _ in range(15):
+            tunnels = self.list_tunnels()
+            for t in tunnels:
+                if t.get("id") == tunnel_id:
+                    address = self.get_tunnel_address(t)
+                    if address:
+                        logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+                        return t
+            time.sleep(1)
+
+        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s.")
+        return data.get("data", {})
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
         """Deletes a tunnel by ID using v2 API."""
@@ -369,3 +414,6 @@ class PlayitApiClient:
         except Exception as e:
             logger.error(f"Unexpected error during agent deletion: {e}")
             return False
+
+
+

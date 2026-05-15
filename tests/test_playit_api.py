@@ -71,9 +71,11 @@ def test_get_platform_variant(client, system, machine, expected):
         assert client._get_platform_variant() == expected
 
 def test_link_account_payload(client):
-    """Verify the flat payload: account_setup_code, agent_type=program, flat int versions, client_id."""
+    """Verify the flat payload: account_setup_code, platform, flat int versions."""
     from app.core.app_config import AppConfig
-    variant = client._get_platform_variant()
+    os_name = platform.system().lower()
+    if os_name == "darwin":
+        os_name = "macos"
 
     with patch("requests.post") as mock_post:
         mock_response = MagicMock()
@@ -95,13 +97,12 @@ def test_link_account_payload(client):
         assert call_args[0][0] == AppConfig.PLAYIT_BRIDGE_URL
         sent_payload = call_args[1]["json"]
 
-        assert sent_payload["agent_type"] == "program"
         assert sent_payload["account_setup_code"] == "test-code-123"
-        assert sent_payload["variant"] == variant
+        assert sent_payload["platform"] == os_name
+        assert sent_payload["agent_name"] == "ZeroBlockBridge"
         assert sent_payload["version_major"] == 0
         assert sent_payload["version_minor"] == 17
         assert sent_payload["version_patch"] == 1
-        assert sent_payload["client_id"] == client.client_id
         assert isinstance(sent_payload["version_major"], int)
         assert isinstance(sent_payload["version_minor"], int)
         assert isinstance(sent_payload["version_patch"], int)

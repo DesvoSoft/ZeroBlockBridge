@@ -32,7 +32,6 @@ class PlayitManager:
         self.api_client = PlayitApiClient()
         self._lock = threading.RLock()
         self._api_dns = None
-        self._stdout_dns = None
         self._current_port = 25565
         self._restarting = False
 
@@ -166,8 +165,13 @@ class PlayitManager:
                         self._api_dns = address
                         return address
 
-            self.console_callback(f"[Playit] No tunnel for port {port}. Injecting TOML mapping so agent auto-creates tunnel...")
-            self._inject_toml_mapping(port)
+            self.console_callback(f"[Playit] No tunnel for port {port}. Creating via API...")
+            tunnel = self.api_client.create_tunnel(port)
+            if tunnel:
+                address = self.api_client.get_tunnel_address(tunnel)
+                if address:
+                    self._api_dns = address
+                    return address
             return None
 
         except PlayitApiException as e:
@@ -218,7 +222,6 @@ class PlayitManager:
         self.is_linked = os.path.exists(self.toml_path)
         if self.is_linked:
             self.api_client.is_read_only = False
-            self._inject_toml_mapping(port)
             self.console_callback("[Playit] Existing config found. Starting agent...")
             try:
                 if self.api_client.initialize():
@@ -277,24 +280,25 @@ class PlayitManager:
 
     def stop(self, force=False):
         with self._lock:
-            if self.process:
+            proc = self.process
+            self.process = None
+            if proc:
                 self.console_callback("[Playit] Stopping agent...")
+                pid = proc.pid
                 try:
                     import psutil
-                    parent = psutil.Process(self.process.pid)
+                    parent = psutil.Process(pid)
                     for child in parent.children(recursive=True):
                         child.kill()
                     parent.kill()
                 except Exception:
                     if platform.system() == "Windows":
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)],
+                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)],
                                      capture_output=True, check=False)
                     try:
-                        self.process.terminate()
+                        proc.terminate()
                     except Exception:
                         pass
-
-                self.process = None
 
             if force and platform.system() == "Windows":
                 for proc_name in ["playit.exe", "playit-cli.exe"]:
@@ -305,7 +309,6 @@ class PlayitManager:
             with self._lock:
                 self.current_address = None
                 self._api_dns = None
-                self._stdout_dns = None
             self.status_callback("Offline", None)
 
     def reset(self, reuse_agent: bool = True):
@@ -411,7 +414,7 @@ class PlayitManager:
             waited += 5
             if not self.running:
                 return
-            if self._api_dns or self._stdout_dns:
+            if self._api_dns:
                 return
             try:
                 addresses = self.api_client.get_tunnels()
@@ -467,31 +470,35 @@ class PlayitManager:
 
     def _read_output(self):
         try:
+            buffer = bytearray()
             while self.running and self.process:
                 try:
-                    raw = self.process.stdout.readline()
+                    byte = self.process.stdout.read(1)
                 except Exception:
                     break
-                if not raw:
+                if not byte:
                     break
-                try:
-                    line = raw.decode('utf-8', errors='replace').strip()
-                except Exception:
-                    continue
-                if line:
-                    clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
-                    is_spam = any(s in clean_line for s in self.SPAM_LOGS)
-                    if not is_spam or "ERROR" in clean_line:
-                        self.console_callback(f"[Playit] {clean_line}")
-                    self._parse_line(clean_line)
+                if byte in (b'\n', b'\r'):
+                    if buffer:
+                        try:
+                            line = buffer.decode('utf-8', errors='replace').strip()
+                        except Exception:
+                            line = ""
+                        if line:
+                            clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
+                            is_spam = any(s in clean_line for s in self.SPAM_LOGS)
+                            if not is_spam or "ERROR" in clean_line:
+                                self.console_callback(f"[Playit] {clean_line}")
+                            self._parse_line(clean_line)
+                        buffer = bytearray()
+                else:
+                    buffer.extend(byte)
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:
             self.running = False
             self.process = None
-            addr = self._api_dns or self._stdout_dns
-            self.current_address = addr
-            if not addr:
+            if not self._api_dns:
                 self.current_address = None
             self.status_callback("Offline", None)
 
@@ -534,7 +541,7 @@ class PlayitManager:
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
                 if address != self.current_address:
-                    self._stdout_dns = address
+                    self._api_dns = address
                     self.current_address = address
                     self.status_callback("Online", address)
                     self.console_callback(f"[Playit] Public address: {address}")
