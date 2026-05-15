@@ -4,6 +4,7 @@ import subprocess
 import threading
 import requests
 import re
+import json
 import time
 import logging
 import webbrowser
@@ -36,6 +37,7 @@ class PlayitManager:
         # Persistence: Check if already linked
         if self.api_client.load_secret_key():
             self.is_linked = True
+            self._fix_permissions()
             logger.info("Playit linked state persisted from playit.toml")
 
         # Register global cleanup
@@ -185,7 +187,9 @@ class PlayitManager:
             env = os.environ.copy()
             env["RUST_LOG"] = "debug"
 
-            cmd = [str(self.binary_path), "--stdout", "--secret_path", str(self.toml_path)]
+            self.api_client.load_secret_key()
+            cmd = [str(self.binary_path), "--stdout", "--network", "ipv4"]
+            env["PLAYIT_SECRET_KEY"] = self.api_client._secret_key or ""
 
             self.process = subprocess.Popen(
                 cmd,
@@ -202,6 +206,8 @@ class PlayitManager:
                 self.status_callback("Starting...", None)
 
             threading.Thread(target=self._read_output, daemon=True).start()
+            threading.Thread(target=self._status_polling_loop, daemon=True).start()
+            threading.Thread(target=self._heartbeat_loop, daemon=True).start()
 
         except OSError as e:
             self.console_callback(f"[Playit] Failed to start: {e}")
@@ -242,52 +248,56 @@ class PlayitManager:
             self._stdout_dns = None
             self.status_callback("Offline", None)
 
-    def reset(self):
-        """Wipes the playit configuration, stops any running agent, and cleans up API resources."""
+    def reset(self, reuse_agent: bool = True):
+        """Non-destructive reset: reuses agent if key is valid, only nukes config as last resort.
+        Set reuse_agent=False for a full destructive wipe (old behavior)."""
         try:
-            self.console_callback("[Playit] Starting full reset...")
+            self.console_callback("[Playit] Starting reset...")
             self.stop()
 
-            if self.is_linked:
-                self.console_callback("[Playit] Attempting to clean up API resources...")
+            key_valid = self.api_client.verify_secret_key()
+            if key_valid and reuse_agent:
+                self.console_callback("[Playit] Secret key valid. Reusing existing agent — deleting tunnels only...")
                 try:
-                    if self.api_client.initialize():
-                        if self.api_client.delete_agent():
-                            self.console_callback("[Playit] Remote agent deleted successfully (all tunnels cleared).")
-                        else:
-                            self.console_callback("[Playit] Agent deletion restricted. Cleaning up tunnels individually...")
-                            tunnels = self.api_client.list_tunnels()
-                            for t in tunnels:
-                                tid = t.get("id")
-                                if tid:
-                                    if self.api_client.delete_tunnel(tid):
-                                        self.console_callback(f"[Playit] Deleted remote tunnel: {tid}")
-                    else:
-                        self.console_callback("[Playit] API key invalid or expired. Skipping remote cleanup.")
+                    tunnels = self.api_client.list_tunnels()
+                    for t in tunnels:
+                        tid = t.get("id")
+                        if tid:
+                            if self.api_client.delete_tunnel(tid):
+                                self.console_callback(f"[Playit] Deleted tunnel: {tid}")
+                    self.console_callback("[Playit] Tunnels cleared. Agent kept intact.")
                 except PlayitApiException as e:
-                    if "401" in str(e):
-                        self.console_callback("[Playit] Authentication failed (401). Your agent key may have been revoked.")
-                        self.console_callback("[Playit] Please verify and delete unused agents at https://playit.gg/dashboard/agents")
-                    else:
-                        self.console_callback(f"[Playit] API cleanup failed: {e}")
-                except Exception as e:
-                    self.console_callback(f"[Playit] API cleanup failed: {e}")
+                    self.console_callback(f"[Playit] Tunnel cleanup failed: {e}")
+            elif key_valid:
+                self.console_callback("[Playit] Destructive reset requested. Deleting remote agent...")
+                try:
+                    if self.api_client.delete_agent():
+                        self.console_callback("[Playit] Remote agent deleted.")
+                except PlayitApiException as e:
+                    self.console_callback(f"[Playit] Agent deletion failed: {e}")
+            else:
+                self.console_callback("[Playit] Secret key invalid/expired. Skipping remote cleanup.")
 
-            if os.path.exists(self.toml_path):
-                os.remove(self.toml_path)
-                self.console_callback("[Playit] Local config playit.toml removed.")
+            if not key_valid or not reuse_agent:
+                if os.path.exists(self.toml_path):
+                    os.remove(self.toml_path)
+                    self.console_callback("[Playit] Local config playit.toml removed.")
+                self.is_linked = False
+                self.api_client.is_read_only = False
+                self.api_client._secret_key = None
+                self.api_client._agent_id = None
+                self.console_callback("[Playit] Account unlinked.")
+            else:
+                self.console_callback("[Playit] Local config preserved (non-destructive reset).")
 
-            self.is_linked = False
             self.current_address = None
             self._api_dns = None
             self._stdout_dns = None
-            self.api_client.is_read_only = False
-            self.api_client._secret_key = None
-            self.api_client._agent_id = None
-            self.console_callback("[Playit] Reset complete. Account unlinked.")
+            self.console_callback("[Playit] Reset complete.")
 
             if self.notification_callback:
-                self.notification_callback("Playit account unlinked and reset.", "success")
+                msg = "Playit reset complete (non-destructive)." if reuse_agent else "Playit account unlinked and reset."
+                self.notification_callback(msg, "success")
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
@@ -310,6 +320,81 @@ class PlayitManager:
             if self.notification_callback:
                 self.notification_callback(f"Link failed: {e}", "error")
         return False
+
+    def _fix_permissions(self):
+        """Ensure playit.toml has restricted permissions (Unix only)."""
+        if platform.system() != "Windows" and os.path.exists(self.toml_path):
+            try:
+                mode = os.stat(self.toml_path).st_mode
+                if mode & 0o077:
+                    os.chmod(self.toml_path, 0o600)
+                    logger.info("Fixed playit.toml permissions to 600")
+            except Exception as e:
+                logger.warning(f"Could not fix playit.toml permissions: {e}")
+
+    def get_local_status(self):
+        """Query the local playit agent status endpoint (JSON-RPC).
+        Returns parsed dict or None if unavailable."""
+        try:
+            resp = requests.get("http://127.0.0.1:25374/status", timeout=3)
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            pass
+        return None
+
+    def _handle_local_status(self, data: dict):
+        """Process status from local JSON-RPC API — source of truth for tunnel info.
+        Falls back: stdout parsing (_parse_line) is used only when this fails."""
+        tunnels = data.get("tunnels", [])
+        for t in tunnels:
+            domain = t.get("assigned_domain")
+            port = t.get("port")
+            if domain:
+                address = f"{domain}:{port}" if port else domain
+                if address != self.current_address:
+                    self.current_address = address
+                    self._api_dns = address
+                    self.status_callback("Online", address)
+                    self.console_callback(f"[Playit] Public address: {address}")
+                    if self.notification_callback:
+                        self.notification_callback(f"Tunnel online: {address}", "success")
+
+    def _status_polling_loop(self):
+        """Poll local playit status API every 5s for tunnel info."""
+        while self.running:
+            try:
+                data = self.get_local_status()
+                if data:
+                    self._handle_local_status(data)
+            except Exception:
+                pass
+            time.sleep(5)
+
+    def _heartbeat_loop(self):
+        """Periodically verify the playit process is alive.
+        If dead, attempt auto-restart up to 3 times, then report failure."""
+        max_failures = 3
+        fail_count = 0
+        while self.running:
+            time.sleep(15)
+            if not self.running:
+                break
+            with self._lock:
+                if self.process is None or self.process.poll() is not None:
+                    fail_count += 1
+                    logger.warning(f"[Playit] Heartbeat #{fail_count}: process not running.")
+                    if fail_count >= max_failures:
+                        self.console_callback("[Playit] CRITICAL: Agent process dead. Auto-restarting...")
+                        if self.notification_callback:
+                            self.notification_callback("Playit agent crashed. Restarting...", "error")
+                        port = getattr(self, '_current_port', 25565)
+                        self._restarting = True
+                        threading.Thread(target=self._restart_with_mapping, args=(port,), daemon=True).start()
+                        fail_count = 0
+                        break
+                else:
+                    fail_count = 0
 
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",

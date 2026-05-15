@@ -86,7 +86,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.entry_search = ctk.CTkEntry(
             bar,
             placeholder_text="Search Modrinth for mods, plugins, shaders…",
-            corner_radius=8,
+            corner_radius=12,
             height=36,
             font=AppConfig.FONT_BODY,
             border_width=0,
@@ -99,8 +99,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.combo_type = ctk.CTkComboBox(
             bar,
             values=["mod", "plugin", "modpack", "resourcepack", "shader"],
-            width=110, height=36, corner_radius=8,
-            state="readonly", font=AppConfig.FONT_BODY_SMALL,
+            width=110, height=36, corner_radius=12,
         )
         self.combo_type.set("mod")
         self.combo_type.grid(row=0, column=2, padx=4, pady=8)
@@ -111,7 +110,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         # Search button
         self.btn_search = ctk.CTkButton(
             bar, text="Search", width=90, height=36,
-            corner_radius=8,
+            corner_radius=12,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_search,
@@ -121,7 +120,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         # Optimizer button
         self.btn_opt = ctk.CTkButton(
             bar, text="⚡ Optimizers", width=100, height=36,
-            corner_radius=8,
+            corner_radius=12,
             fg_color="#3b82f6", hover_color="#2563eb",
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_install_optimizers,
@@ -160,7 +159,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Layout: Status Bar
     # ------------------------------------------------------------------
     def _build_status_bar(self):
-        self.status_bar = ctk.CTkFrame(self, height=28, corner_radius=8,
+        self.status_bar = ctk.CTkFrame(self, height=28, corner_radius=12,
                                         fg_color=("gray95", "gray15"))
         self.status_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(6, 0))
 
@@ -211,10 +210,6 @@ class ModrinthBrowser(ctk.CTkFrame):
                     limit=25,
                 )
                 
-                # Fallback: if loader is vanilla and no results, try without loader or with fabric
-                if not hits and ld == "vanilla":
-                    hits = self.provider.search_mods(q, mc_version=mv, loader=None, limit=25)
-                
                 self._current_hits = hits
                 total = len(hits)
                 self.after(0, lambda: self._render_results(self._current_hits, total))
@@ -237,15 +232,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             try:
                 info = self.get_server_info()
                 if info: _, mc_version, loader = info
-            except: pass
+            except Exception as e:
+                logger.debug("Modrinth get_server_info failed: %s", e)
 
         self._set_status("Loading popular mods...", busy=True)
         
         def _do_load():
             try:
-                # If vanilla, search popular without loader filter to show useful things
-                search_loader = loader if loader != "vanilla" else None
-                hits = self.provider.get_popular_mods(mc_version=mc_version, loader=search_loader)
+                hits = self.provider.get_popular_mods(mc_version=mc_version, loader=loader)
                 self.after(0, lambda: self._render_results(hits, len(hits)))
             except Exception as e:
                 logger.error(f"Failed to load popular mods: {e}")
@@ -277,24 +271,19 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _create_mod_card(self, hit: dict, index: int) -> ctk.CTkFrame:
         """Build a single mod result card — Neo-Modern style."""
+        title = hit.get("title", "Unknown")
+        initial = title[0].upper() if title else "?"
+        import hashlib
+        _ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
+        color = _ICON_COLORS[int(hashlib.md5(title.encode()).hexdigest(), 16) % len(_ICON_COLORS)]
+
         card = ctk.CTkFrame(
             self.results_frame,
-            corner_radius=10,
-            fg_color=(_CARD_BG_LIGHT, _CARD_BG_DARK),
-            border_width=1,
-            border_color=(_SEPARATOR_LIGHT, _SEPARATOR_DARK),
+            corner_radius=12,
         )
-        card.grid_columnconfigure(1, weight=1)
-
-        # --- Icon placeholder (colored circle with initial) ---
-        title = hit.get("title", "?")
-        initial = title[0].upper() if title else "?"
-        # Deterministic color from project slug
-        colors = ["#3b82f6", "#8b5cf6", "#ec4899", "#f97316", "#14b8a6",
-                  "#6366f1", "#06b6d4", "#84cc16", "#f43f5e", "#a855f7"]
-        color = colors[hash(hit.get("slug", "")) % len(colors)]
-
-        icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=10, fg_color=color)
+        card_inner = ctk.CTkScrollableFrame(card, fg_color="transparent")
+        
+        icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=12, fg_color=color)
         icon_frame.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12, sticky="n")
         icon_frame.grid_propagate(False)
         lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=("Roboto Medium", 20),
@@ -348,14 +337,14 @@ class ModrinthBrowser(ctk.CTkFrame):
                 font=("Roboto", 10),
                 text_color=(_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK),
                 fg_color=(_BADGE_BG_LIGHT, _BADGE_BG_DARK),
-                corner_radius=6, padx=8, pady=2,
+                corner_radius=12, padx=8, pady=2,
             )
             badge.pack(side="left", padx=(0, 4))
 
         # --- Install button ---
         btn_install = ctk.CTkButton(
             card, text="Install", width=80, height=32,
-            corner_radius=8,
+            corner_radius=12,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
             text_color="white", font=("Roboto Medium", 12),
             command=lambda h=hit: self._on_install(h),

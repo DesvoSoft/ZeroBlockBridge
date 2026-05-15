@@ -34,15 +34,18 @@ class HeartbeatMonitor:
         self._last_probe = 0.0
         self._last_response = 0.0
         self._running = False
-        
+        self._stop_ev = threading.Event()
+
         self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
     def start(self):
         self._running = True
+        self._stop_ev.clear()
         threading.Thread(target=self._loop, daemon=True).start()
 
     def stop(self):
         self._running = False
+        self._stop_ev.set()
 
     def observe_line(self, line: str):
         if not self._running: return
@@ -61,7 +64,8 @@ class HeartbeatMonitor:
                     logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
                     runner.send_command("list")
                     self._last_probe = now
-                    time.sleep(self._probe_timeout)
+                    if self._stop_ev.wait(timeout=self._probe_timeout):
+                        return
 
                     if self._last_response < self._last_probe:
                         logger.warning("Heartbeat: zombie detected (no response to probe)")
@@ -69,4 +73,5 @@ class HeartbeatMonitor:
                             "silence_seconds": silence,
                         })
 
-            time.sleep(self._check_interval)
+            if self._stop_ev.wait(timeout=self._check_interval):
+                return

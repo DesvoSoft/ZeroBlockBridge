@@ -327,8 +327,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         if mode == "Interval":
             interval = 6
-            try: interval = int(self.entry_interval.get())
-            except: pass
+            try:
+                interval = int(self.entry_interval.get())
+            except ValueError:
+                logger.warning("Invalid interval input, using default 6")
             self.scheduler.set_restart_schedule(enabled, interval_hours=interval, backup_on_restart=backup)
         else:
             time_val = self.entry_time.get()
@@ -369,7 +371,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                                text_color="royalblue", anchor="w")
             lbl.pack(fill="x", padx=15, pady=(15, 5))
 
-        card = ctk.CTkFrame(parent, fg_color=("white", "gray17"), corner_radius=8)
+        card = ctk.CTkFrame(parent, fg_color=("white", "gray17"), corner_radius=12)
         card.pack(fill="x", padx=10, pady=(0, 5))
         
         card.grid_columnconfigure(0, weight=1) # Label
@@ -400,7 +402,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # 3. Help Icon (?)
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
-                                     width=18, height=18, corner_radius=9,
+                                     width=18, height=18, corner_radius=12,
                                      fg_color=("gray85", "gray30"), text_color=("gray40", "gray70"))
             help_icon.grid(row=current_row, column=1, sticky="w", padx=2)
             help_icon.tooltip_ref = ToolTip(help_icon, text=description)
@@ -574,8 +576,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             try:
                 ram = int(ram_input)
                 self.logic.set_server_ram(self.server_name, ram)
-            except:
-                pass
+            except ValueError:
+                logger.warning("Invalid RAM input: %s", ram_input)
 
         # 2. Validate Automation Interval (Automation Tab)
         if self.var_auto_restart and self.var_auto_restart.get():

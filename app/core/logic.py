@@ -204,8 +204,8 @@ def normalize_server_jar(server_dir):
                 with open(server_jar_path, "rb") as _f:
                     _f.read(4)
                 result = True
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("Normalize: existing server.jar validation failed: %s", e)
         if result:
             _get_jar_event(server_dir).set()
             return True
@@ -220,8 +220,8 @@ def normalize_server_jar(server_dir):
             try:
                 shutil.copy2(fabric_jar, server_jar_path)
                 result = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Normalize: fabric copy failed: %s", e)
 
     # Forge (legacy: forge-*.jar, excluding installer)
     if not result:
@@ -235,8 +235,8 @@ def normalize_server_jar(server_dir):
                     try:
                         shutil.copy2(src, server_jar_path)
                         result = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Normalize: forge legacy copy failed: %s", e)
                 if result:
                     break
 
@@ -260,8 +260,8 @@ def normalize_server_jar(server_dir):
                             except (OSError, NotImplementedError):
                                 shutil.copy2(lib_abs, server_jar_path)
                             result = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Normalize: forge modern detection failed: %s", e)
                 break
 
     # Paper / Purpur — find any jar that is not an installer
@@ -276,8 +276,8 @@ def normalize_server_jar(server_dir):
                     try:
                         shutil.copy2(src, server_jar_path)
                         result = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Normalize: paper/purpur copy failed: %s", e)
                 if result:
                     break
 
@@ -297,7 +297,8 @@ def normalize_server_jar(server_dir):
             else:
                 with open(server_jar_path, "rb") as _f:
                     _f.read(4)
-        except OSError:
+        except OSError as e:
+            logger.debug("Normalize: final verification failed: %s", e)
             result = False
 
     # Signal consumers the jar is ready (or timeout will handle failure)
@@ -366,7 +367,8 @@ class ServerRunner:
                     self.ram_allocation = f"{meta['ram']}M"
                 else:
                     self.ram_allocation = ram_allocation
-        except:
+        except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+            logger.warning("Could not load metadata for %s: %s", server_name, e)
             self.ram_allocation = ram_allocation
             
         self.player_count = 0
@@ -530,8 +532,10 @@ class ServerRunner:
         except Exception as e:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to stop server: {e}")
             if self.process:
-                try: self.process.kill()
-                except: pass
+                try:
+                    self.process.kill()
+                except OSError as kill_err:
+                    logger.warning("Force kill failed: %s", kill_err)
 
     def send_command(self, command):
         if not self.running or not self.process or not self.process.stdin:
@@ -600,7 +604,8 @@ def save_server_icon(server_name, image_path):
         icon_path = os.path.join(server_path, "server-icon.png")
         img.save(icon_path, "PNG")
         return True
-    except:
+    except (FileNotFoundError, OSError, ValueError) as e:
+        logger.error("Failed to save server icon: %s", e)
         return False
 
 def check_eula(server_name):
@@ -622,7 +627,11 @@ class Scheduler:
         if not os.path.exists(self.metadata_path): return {}
         try:
             with open(self.metadata_path, "r") as f: return json.load(f)
-        except: return {}
+        except FileNotFoundError:
+            return {}
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error("Failed to load scheduler metadata: %s", e)
+            return {}
 
     def _save_metadata(self, data):
         with open(self.metadata_path, "w") as f: json.dump(data, f)
@@ -678,7 +687,11 @@ def get_server_ram(server_name):
     try:
         with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
             return json.load(f).get("ram", 2048)
-    except: return 2048
+    except FileNotFoundError:
+        return 2048
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to read server RAM for %s: %s", server_name, e)
+        return 2048
 
 def set_server_ram(server_name, ram_mb):
     metadata_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
@@ -689,6 +702,8 @@ def set_server_ram(server_name, ram_mb):
         meta["ram"] = int(ram_mb)
         with open(metadata_path, "w") as f: json.dump(meta, f, indent=4)
         return True
-    except: return False
+    except (OSError, json.JSONEncodeError, json.JSONDecodeError) as e:
+        logger.error("Failed to set server RAM for %s: %s", server_name, e)
+        return False
 
 

@@ -42,7 +42,8 @@ class ToolTip:
             
             if not (widget_x1 <= x <= widget_x2 and widget_y1 <= y <= widget_y2):
                 return
-        except:
+        except Exception as e:
+            logger.debug("ToolTip pointer check failed: %s", e)
             return
 
         # Position relative to mouse
@@ -59,7 +60,7 @@ class ToolTip:
         self.tooltip.bind("<Enter>", lambda e: self.hide())
         
         label = ctk.CTkLabel(self.tooltip, text=self.text, fg_color=("#ebebeb", "#2b2b2b"), 
-                             text_color=("black", "white"), corner_radius=6, padx=10, pady=5,
+                             text_color=("black", "white"), corner_radius=12, padx=10, pady=5,
                              font=ctk.CTkFont(size=12))
         label.pack()
         
@@ -72,8 +73,8 @@ class ToolTip:
         if self.tooltip:
             try:
                 self.tooltip.destroy()
-            except:
-                pass
+            except Exception as e:
+                logger.debug("ToolTip destroy ignored: %s", e)
             self.tooltip = None
 
 class ConsoleWidget(ctk.CTkTextbox):
@@ -148,7 +149,7 @@ class ServerListItem(ctk.CTkFrame):
         self.full_name = server_name
         
         self.configure(
-            corner_radius=6,
+            corner_radius=12,
             fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK),
             border_width=1,
             border_color=("gray85", AppConfig.COLOR_BORDER_DARK)
@@ -227,7 +228,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.label = ctk.CTkLabel(self, text="Starting download...", font=AppConfig.FONT_BODY)
         self.label.pack(pady=(20, 10))
         
-        self.progress_bar = ctk.CTkProgressBar(self, width=280, height=12, corner_radius=6)
+        self.progress_bar = ctk.CTkProgressBar(self, width=280, height=12, corner_radius=12)
         self.progress_bar.pack(pady=10)
         self.progress_bar.set(0)
         
@@ -235,7 +236,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             self,
             text="Cancel",
             width=100,
-            corner_radius=8,
+            corner_radius=12,
             fg_color="transparent",
             border_width=1,
             border_color=("gray70", "gray30"),
@@ -260,12 +261,12 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             if status_text:
                 self.label.configure(text=status_text)
             self.update_idletasks()
-        except Exception:
-            pass
-        
+        except Exception as e:
+            logger.debug("Progress update ignored: %s", e)
+
     def close(self):
         try:
             self.grab_release()
             self.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Dialog close ignored: %s", e)

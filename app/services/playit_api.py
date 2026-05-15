@@ -78,6 +78,23 @@ class PlayitApiClient:
 
         return data
 
+    def verify_secret_key(self) -> bool:
+        """Ping the API to validate the secret key without creating/registering.
+        Returns True if the key is valid, False otherwise."""
+        if not self._secret_key:
+            self.load_secret_key()
+        if not self._secret_key:
+            return False
+        try:
+            resp = self.session.get(
+                f"{self.api_base}/agents/rundata",
+                headers={"Authorization": f"agent-key {self._secret_key}"},
+                timeout=5,
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
     # --- Account Linking ---
     def link_account(self, setup_code: str, agent_name: str = "ZeroBlockBridge") -> bool:
         """Link to a playit account using a setup code from the third-party web flow.
@@ -93,7 +110,7 @@ class PlayitApiClient:
             "agent_name": agent_name,
             "platform": os_name,
             "version_major": 0,
-            "version_minor": 17,
+            "version_minor": 20,
             "version_patch": 1,
         }
         
@@ -124,6 +141,8 @@ class PlayitApiClient:
         os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
         with open(self.toml_path, "w", encoding="utf-8") as f:
             f.write(f'secret_key = "{secret_key}"\n')
+        if platform.system() != "Windows":
+            os.chmod(self.toml_path, 0o600)
         
         self._secret_key = secret_key
         self._agent_id = agent_id
@@ -242,19 +261,20 @@ class PlayitApiClient:
         
         return domain
 
-    def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java") -> Dict:
+    def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
         """Creates a new tunnel and polls up to 15s for the assigned domain."""
         agent_id = self.get_agent_id()
         import random
         import string
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-        
+
         tunnel_data = {
             "name": f"{tunnel_type}_{suffix}",
             "tunnel_type": tunnel_type,
             "port_type": "tcp",
             "port_count": 1,
             "enabled": True,
+            "proxy_protocol": proxy_protocol,
             "origin": {
                 "type": "agent",
                 "data": {
@@ -292,16 +312,11 @@ class PlayitApiClient:
         return data.get("data", {})
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
-        """Deletes a tunnel by ID."""
+        """Deletes a tunnel by ID using v2 API."""
         try:
-            # Try multiple common keys for deletion payload
-            for key in ["id", "tunnel_id", "tunnel-id"]:
-                try:
-                    data = self._request("tunnels/delete", json_data={key: tunnel_id})
-                    if data.get("status") == "success":
-                        return True
-                except Exception:
-                    continue
+            data = self._request("tunnels/delete", json_data={"tunnel_id": tunnel_id})
+            if data.get("status") == "success":
+                return True
             return False
         except PlayitApiException as e:
             if "401" in str(e):
@@ -310,31 +325,27 @@ class PlayitApiClient:
             raise e
 
     def delete_agent(self) -> bool:
-        """Deletes the current agent from the account."""
+        """Deletes the current agent from the account using v2 API."""
         try:
             agent_id = self._agent_id
             if not agent_id:
-                try: agent_id = self.get_agent_id()
-                except: pass
-            
-            if not agent_id: 
+                try:
+                    agent_id = self.get_agent_id()
+                except PlayitApiException as e:
+                    logger.warning("Could not fetch agent_id for deletion: %s", e)
+
+            if not agent_id:
                 logger.warning("Cannot delete agent: No agent_id found.")
                 return False
-                
-            # Try multiple common keys for agent deletion payload
-            for key in ["id", "agent_id", "agent-id"]:
-                try:
-                    data = self._request("agents/delete", json_data={key: agent_id})
-                    if data.get("status") == "success":
-                        return True
-                except Exception:
-                    continue
-                    
+
+            data = self._request("agents/delete", json_data={"agent_id": agent_id})
+            if data.get("status") == "success":
+                return True
             return False
         except PlayitApiException as e:
             if "401" in str(e):
                 logger.warning("Agent deletion failed with 401. Your key might be read-only or revoked.")
-                return False 
+                return False
             logger.error(f"Error during agent deletion: {e}")
             return False
         except Exception as e:

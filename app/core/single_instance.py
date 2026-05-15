@@ -35,8 +35,8 @@ class SingleInstanceLock:
         if self._is_owner and self._lockfile.exists():
             try:
                 self._lockfile.unlink(missing_ok=True)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("Lockfile unlink ignored: %s", e)
             self._is_owner = False
 
     def _check_existing(self) -> bool:
@@ -45,11 +45,11 @@ class SingleInstanceLock:
             if pid_str and self._is_pid_alive(int(pid_str)):
                 return False
         except (ValueError, OSError):
-            pass
+            logger.debug("Stale lockfile detected, removing")
         try:
             self._lockfile.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning("Failed to remove stale lockfile: %s", e)
         return self.try_acquire()
 
     @staticmethod

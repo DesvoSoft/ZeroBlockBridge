@@ -17,7 +17,10 @@ VANILLA_MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_
 FABRIC_META_URL = "https://meta.fabricmc.net/v2/versions/game"
 FORGE_PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"
 
+# JDK Cache
+JDK_CACHE_DIR = BASE_DIR / ".zbb_cache" / "jdks"
+
 # Playit Configuration
-PLAYIT_VERSION = "0.16.5"
+PLAYIT_VERSION = "0.20.1"
 PLAYIT_URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-x86_64-signed.exe"
 PLAYIT_URL_LINUX = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-linux-amd64"

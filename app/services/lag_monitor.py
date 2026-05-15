@@ -1,5 +1,6 @@
 import logging
 import time
+from collections import deque
 
 from app.core.server_events import ServerEvent
 
@@ -19,8 +20,8 @@ class LagMonitor:
         self._events = event_emitter
         self._threshold = threshold
         self._window = window_minutes * 60.0
-        self._spikes = []
-        
+        self._spikes = deque()
+
         self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
     def observe_line(self, line: str):
@@ -34,11 +35,12 @@ class LagMonitor:
         now = time.time()
         self._spikes.append(now)
         cutoff = now - self._window
-        self._spikes = [t for t in self._spikes if t > cutoff]
+        while self._spikes and self._spikes[0] <= cutoff:
+            self._spikes.popleft()
         if len(self._spikes) >= self._threshold:
             logger.warning("Lag threshold exceeded: %d spikes in %.0fs", len(self._spikes), self._window)
             self._events.emit(ServerEvent.LAG_SPIKE, {
                 "count": len(self._spikes),
                 "window_seconds": self._window,
             })
-            self._spikes = []
+            self._spikes.clear()

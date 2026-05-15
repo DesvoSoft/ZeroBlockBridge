@@ -22,7 +22,6 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.services.backup_manager import BackupManager
 from app.core.logic import check_java, download_server, accept_eula, install_fabric, Scheduler
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
@@ -114,14 +113,14 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_create_server = ctk.CTkButton(
             self.actions_frame, text="+ Create New Server", 
-            command=self.create_server_dialog, corner_radius=8, height=36,
+            command=self.create_server_dialog, corner_radius=12, height=36,
             font=("Roboto Medium", 13)
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
 
         self.btn_load_server = ctk.CTkButton(
             self.actions_frame, text="📁 Load Existing Folder", 
-            command=self.load_existing_server_action, corner_radius=8, height=32, 
+            command=self.load_existing_server_action, corner_radius=12, height=32, 
             fg_color="transparent", border_width=1, border_color=AppConfig.COLOR_BORDER_DARK,
             font=("Roboto", 12)
         )
@@ -157,7 +156,7 @@ class MCTunnelApp(ctk.CTk):
         self._build_console_tabs()
 
     def _build_status_bar(self):
-        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
         
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
@@ -169,7 +168,7 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_config = ctk.CTkButton(
             self.status_frame, text="⚙", width=36, height=36, 
-            corner_radius=18, fg_color="transparent", hover_color="#334155",
+            corner_radius=12, fg_color="transparent", hover_color="#334155",
             font=("Roboto", 18), command=self.edit_server_properties,
             state="disabled"
         )
@@ -190,7 +189,7 @@ class MCTunnelApp(ctk.CTk):
 
 
     def _build_dashboard(self):
-        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
         
         self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
@@ -202,11 +201,11 @@ class MCTunnelApp(ctk.CTk):
         self._build_tunnel_controls()
 
     def _build_server_controls(self):
-        self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=12, height=36, font=("Roboto Medium", 12))
         self.btn_start_all.pack(side="left", padx=5)
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=8, height=36)
+        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
         self.btn_start.pack(side="left", padx=2)
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
+        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
         self.btn_stop.pack(side="left", padx=2)
 
     def _build_tunnel_controls(self):
@@ -223,145 +222,26 @@ class MCTunnelApp(ctk.CTk):
             self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
             fg_color="#1e293b", hover_color="#334155",
             border_width=1, border_color="#3b82f6",
-            width=36, corner_radius=8, height=28,
+            width=36, corner_radius=12, height=28,
             font=("Roboto", 13), text_color="#3b82f6",
         )
 
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=8, height=36)
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
         
         # Setup Code Input & Link Button
-        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=120, height=36, corner_radius=8)
-        self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=8, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Link Playit.gg", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=8, height=36, font=("Roboto Medium", 12))
+        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=120, height=36, corner_radius=12)
+        self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Link Playit.gg", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=12, height=36, font=("Roboto Medium", 12))
         
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=8, height=36)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=12, height=36)
         self.btn_reset.pack(side="left", padx=2)
         
         # Initial UI State Check
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
-
-    def _build_management_controls(self):
-        # Configure management_frame layout
-        self.management_frame.grid_columnconfigure(0, weight=1)
-        self.management_frame.grid_columnconfigure(1, weight=1)
-        self.management_frame.grid_columnconfigure(2, weight=1)
-        self.management_frame.grid_columnconfigure(3, weight=1)
-        
-        card_fg = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK)
-        
-        # 1. Scheduler Card
-        self.scheduler_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
-        self.scheduler_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        self.scheduler_frame.grid_columnconfigure(1, weight=1)
-
-        self.lbl_scheduler = ctk.CTkLabel(self.scheduler_frame, text="Auto-Restart Scheduler", font=AppConfig.FONT_HEADING_SMALL)
-        self.lbl_scheduler.grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
-
-        # Controls container
-        sched_controls = ctk.CTkFrame(self.scheduler_frame, fg_color="transparent")
-        sched_controls.grid(row=1, column=0, columnspan=2, sticky="ew", padx=15, pady=5)
-        sched_controls.grid_columnconfigure(1, weight=1)
-        
-        self.var_scheduler_enabled = ctk.BooleanVar()
-        self.chk_scheduler = ctk.CTkSwitch(sched_controls, text="", variable=self.var_scheduler_enabled, command=self.toggle_scheduler_inputs, width=40)
-        self.chk_scheduler.grid(row=0, column=0, sticky="w", pady=5)
-        
-        self.combo_schedule_mode = ctk.CTkOptionMenu(sched_controls, values=["Interval", "Daily Time"], width=110, command=self.toggle_schedule_mode)
-        self.combo_schedule_mode.grid(row=0, column=1, sticky="w", padx=(5, 0))
-        self.combo_schedule_mode.set("Interval")
-
-        self.entry_scheduler_interval = ctk.CTkEntry(sched_controls, width=60, placeholder_text=str(AppConfig.DEFAULT_INTERVAL_HOURS), corner_radius=8, height=32)
-        self.entry_scheduler_interval.grid(row=0, column=2, sticky="w", padx=(5, 0))
-        
-        self.lbl_interval_unit = ctk.CTkLabel(sched_controls, text="h")
-        self.lbl_interval_unit.grid(row=0, column=3, sticky="w")
-        
-        self.entry_restart_time = ctk.CTkEntry(sched_controls, width=60, placeholder_text=AppConfig.DEFAULT_RESTART_TIME, corner_radius=8, height=32)
-        self.entry_restart_time.bind("<KeyRelease>", self._format_time_input)
-        
-        self.btn_apply_schedule = ctk.CTkButton(sched_controls, text="Apply", width=60, command=self.save_scheduler_dashboard, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=12, height=32)
-        self.btn_apply_schedule.grid(row=0, column=4, sticky="e", padx=(10, 0))
-
-        self.var_backup_on_restart = ctk.BooleanVar()
-        self.chk_backup_on_restart = ctk.CTkSwitch(self.scheduler_frame, text="Backup on Restart", variable=self.var_backup_on_restart, font=AppConfig.FONT_BODY)
-        self.chk_backup_on_restart.grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
-
-        # 2. Backup Card
-        self.backup_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
-        self.backup_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        self.backup_frame.grid_columnconfigure(0, weight=1)
-
-        self.lbl_backup_title = ctk.CTkLabel(self.backup_frame, text="Quick Backup", font=AppConfig.FONT_HEADING_SMALL)
-        self.lbl_backup_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
-
-        self.lbl_last_backup = ctk.CTkLabel(self.backup_frame, text="Last: None", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
-        self.lbl_last_backup.grid(row=1, column=0, sticky="w", padx=15, pady=0)
-        
-        self.btn_quick_backup = ctk.CTkButton(self.backup_frame, text="✚ Backup Now", command=self.quick_backup_action, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, corner_radius=12, height=32)
-        self.btn_quick_backup.grid(row=2, column=0, sticky="w", padx=15, pady=(10, 15))
-
-        # 3. Server Settings Card
-        self.settings_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
-        self.settings_frame.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
-        self.settings_frame.grid_columnconfigure(0, weight=1)
-        
-        self.lbl_settings_title = ctk.CTkLabel(self.settings_frame, text="Server Settings", font=AppConfig.FONT_HEADING_SMALL)
-        self.lbl_settings_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
-        
-        self.btn_edit_properties = ctk.CTkButton(self.settings_frame, text="⚙ Edit Properties", command=self.edit_server_properties, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_SECONDARY, hover_color=AppConfig.COLOR_BTN_SECONDARY_HOVER)
-        self.btn_edit_properties.grid(row=1, column=0, sticky="w", padx=15, pady=5)
-
-        # 4. Advanced Tools Card
-        self.tools_frame = ctk.CTkFrame(self.management_frame, corner_radius=12, fg_color=card_fg)
-        self.tools_frame.grid(row=0, column=3, padx=5, pady=5, sticky="nsew")
-        self.tools_frame.grid_columnconfigure(0, weight=1)
-
-        self.lbl_tools_title = ctk.CTkLabel(self.tools_frame, text="Advanced Tools", font=AppConfig.FONT_HEADING_SMALL)
-        self.lbl_tools_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
-
-        self.btn_browse_mods = ctk.CTkButton(
-            self.tools_frame, text="📦 Browse Mods", 
-            command=lambda: self.console_tabs.set("Mods"),
-            corner_radius=8, height=36,
-            fg_color="#8b5cf6", hover_color="#7c3aed",
-            font=("Roboto Medium", 12)
-        )
-        self.btn_browse_mods.grid(row=1, column=0, sticky="ew", padx=15, pady=5)
-
-        self.btn_open_folder = ctk.CTkButton(
-            self.tools_frame, text="📁 Open Folder", 
-            command=self.open_server_folder,
-            corner_radius=8, height=32,
-            fg_color="gray", hover_color="gray30",
-            font=("Roboto", 11)
-        )
-        self.btn_open_folder.grid(row=2, column=0, sticky="ew", padx=15, pady=(5, 15))
-
-        self.btn_open_server_folder = ctk.CTkButton(self.settings_frame, text="📂 Open Folder", command=self.open_mods_folder_action, state="disabled", corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_INFO, hover_color=AppConfig.COLOR_BTN_INFO_HOVER)
-        self.btn_open_server_folder.grid(row=2, column=0, sticky="w", padx=15, pady=5)
-
-        # Advanced View Toggle
-        self.var_advanced_mode = ctk.BooleanVar(value=False)
-        self.switch_advanced = ctk.CTkSwitch(self.settings_frame, text="Advanced View", variable=self.var_advanced_mode, command=self.toggle_advanced_view)
-        self.switch_advanced.grid(row=3, column=0, sticky="w", padx=15, pady=(5, 10))
-
-        # Advanced Controls Container (Hidden by default)
-        self.advanced_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
-        
-        self.lbl_java = ctk.CTkLabel(self.advanced_frame, text="Java Runtime:")
-        self.lbl_java.grid(row=0, column=0, sticky="w", padx=0, pady=2)
-        
-        self.var_java_path = ctk.StringVar(value="auto")
-        self.combo_java = ctk.CTkOptionMenu(self.advanced_frame, variable=self.var_java_path, dynamic_resizing=False, width=150, corner_radius=8, height=32, command=self.save_advanced_settings)
-        self.combo_java.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 5))
-
-        self.var_use_aikars = ctk.BooleanVar(value=True)
-        self.switch_aikars = ctk.CTkSwitch(self.advanced_frame, text="Aikar's Optimizer", variable=self.var_use_aikars, command=self.save_advanced_settings)
-        self.switch_aikars.grid(row=2, column=0, sticky="w", padx=0, pady=5)
 
     def _build_console_tabs(self):
         self.console_tabs = ctk.CTkTabview(self.main_frame)
@@ -373,14 +253,14 @@ class MCTunnelApp(ctk.CTk):
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
         self.server_console.pack(fill="both", expand=True)
         
-        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=10, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=12, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
         
-        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=8, height=36)
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=12, height=36)
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
         
-        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=8, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         self.btn_send.pack(side="right", padx=10, pady=5)
         
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
@@ -425,25 +305,28 @@ class MCTunnelApp(ctk.CTk):
                 else:
                     major_version = version.split('.')[0] if '.' in version else version
                 
-                self.lbl_java_ver.configure(text=f"Java {major_version}", text_color="green")
-                self.server_console.log(f"[System] Found Java: {version}")
+                self.after(0, lambda: self.lbl_java_ver.configure(text=f"Java {major_version}", text_color="green"))
+                self.after(0, lambda: self.server_console.log(f"[System] Found Java: {version}"))
             else:
-                self.lbl_java_ver.configure(text="No Java", text_color="red")
-                self.server_console.log("[System] CRITICAL: Java not found! Please install Java 17+.")
+                self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
+                self.after(0, lambda: self.server_console.log("[System] CRITICAL: Java not found! Please install Java 17+."))
         threading.Thread(target=_check, daemon=True).start()
 
-    def play_notification_sound(self):
-        try:
-            sound_path = ASSETS_DIR / "notification.wav"
-            from app.services.audio import play_sound
-            threading.Thread(target=play_sound, args=(sound_path,), daemon=True).start()
-        except Exception as e:
-            self.server_console.log(f"[Error] Failed to play notification sound: {e}")
-
     def load_servers(self):
-        for widget in self.server_list_frame.winfo_children(): widget.destroy()
-        if not os.path.exists(SERVERS_DIR): os.makedirs(SERVERS_DIR)
-        servers = [d for d in os.listdir(SERVERS_DIR) if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+        def _scan():
+            try:
+                if not os.path.exists(SERVERS_DIR):
+                    os.makedirs(SERVERS_DIR, exist_ok=True)
+                servers = [d for d in os.listdir(SERVERS_DIR) if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+            except OSError as e:
+                logger.warning("Failed to scan servers: %s", e)
+                servers = []
+            self.after(0, lambda s=servers: self._render_server_list(s))
+        threading.Thread(target=_scan, daemon=True).start()
+
+    def _render_server_list(self, servers):
+        for widget in self.server_list_frame.winfo_children():
+            widget.destroy()
         if not servers:
             lbl = ctk.CTkLabel(self.server_list_frame, text="No servers found.")
             lbl.pack(pady=10)
@@ -455,11 +338,11 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_select(self, server_name):
         # UI Locking: Block switching if current server is active
-        if self.zbb_manager.is_running() and self.current_server != server_name:
+        if self.zbb_manager.is_running() and self.zbb_manager.current_server != server_name:
             Toast.show(self, "Stop the current server before switching", toast_type="warning")
             return
 
-        self.current_server = server_name
+        self.zbb_manager.select_server(server_name)
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
@@ -490,23 +373,23 @@ class MCTunnelApp(ctk.CTk):
             else:
                 subprocess.run(["xdg-open", str(p)])
 
-        if not self.current_server:
+        if not self.zbb_manager.current_server:
             path = SERVERS_DIR
             _open_folder(path)
             return
             
-        server_path = os.path.join(SERVERS_DIR, self.current_server)
+        server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
         if os.path.exists(server_path):
             _open_folder(server_path)
 
     def _get_current_server_info(self):
         """Return (server_name, mc_version, loader) for the current server."""
-        if not self.current_server:
+        if not self.zbb_manager.current_server:
             return None
-        server_path = os.path.join(SERVERS_DIR, self.current_server)
+        server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
         meta_path = os.path.join(server_path, "metadata.json")
         mc_version = "1.20.1"
-        loader = "vanilla"
+        loader = None
         
         if os.path.exists(meta_path):
             try:
@@ -520,20 +403,20 @@ class MCTunnelApp(ctk.CTk):
             except Exception:
                 pass
         
-        logger.info(f"Server Info for Mod Search: {self.current_server} | MC: {mc_version} | Loader: {loader}")
-        return (self.current_server, mc_version, loader)
+        logger.info(f"Server Info for Mod Search: {self.zbb_manager.current_server} | MC: {mc_version} | Loader: {loader or 'any'}")
+        return (self.zbb_manager.current_server, mc_version, loader)
 
     def start_all_action(self):
-        if not self.current_server: return
+        if not self.zbb_manager.current_server: return
         if self.start_server_action():
             self.update_console("[System] Starting server and tunnel...")
             self.start_tunnel()
 
     def save_advanced_settings(self, *args):
-        if not self.current_server: return
+        if not self.zbb_manager.current_server: return
         import json
         from app.core.constants import SERVERS_DIR
-        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        meta_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server, "metadata.json")
         try:
             with open(meta_path, "r") as f:
                 meta = json.load(f)
@@ -550,75 +433,22 @@ class MCTunnelApp(ctk.CTk):
         except Exception as e:
             self.server_console.log(f"[Error] Failed to save advanced settings: {e}")
 
-    def toggle_schedule_mode(self, mode=None):
-        if mode is None: mode = self.combo_schedule_mode.get()
-        if mode == "Interval":
-            self.entry_scheduler_interval.grid(row=0, column=2, sticky="w", padx=(5, 0))
-            self.lbl_interval_unit.grid(row=0, column=3, sticky="w")
-            self.entry_restart_time.grid_forget()
-        else:
-            self.entry_scheduler_interval.grid_forget()
-            self.lbl_interval_unit.grid_forget()
-            self.entry_restart_time.grid(row=0, column=2, sticky="w", padx=(5, 0), columnspan=2)
-
-    def _format_time_input(self, event=None):
-        """Auto-format time entry to HH:MM. Strips non-numeric chars
-        and inserts colon separator after two digits."""
-        raw = self.entry_restart_time.get()
-        digits = "".join(c for c in raw if c.isdigit())
-
-        # Clamp to 4 digits max (HHMM)
-        digits = digits[:4]
-
-        # Auto-insert colon after 2 digits
-        if len(digits) > 2:
-            formatted = f"{digits[:2]}:{digits[2:]}"
-        else:
-            formatted = digits
-
-        # Validate hour/minute range when complete
-        if len(digits) == 4:
-            hour, minute = int(digits[:2]), int(digits[2:])
-            if hour > 23:
-                formatted = f"23:{digits[2:]}"
-            if minute > 59:
-                formatted = f"{digits[:2]}:59"
-
-        # Only update if changed (avoid cursor jump)
-        if raw != formatted:
-            cursor = self.entry_restart_time.index("insert")
-            self.entry_restart_time.delete(0, "end")
-            self.entry_restart_time.insert(0, formatted)
-            # Try to restore cursor, accounting for colon insertion
-            try:
-                new_pos = min(cursor + (len(formatted) - len(raw)), len(formatted))
-                self.entry_restart_time.icursor(max(0, new_pos))
-            except Exception:
-                pass
-
-    def save_scheduler_dashboard(self):
-        pass
-
-    def quick_backup_action(self):
-        # Redundant: moved to Properties Editor
-        pass
-
     def edit_server_properties(self):
-        if not self.current_server: return
+        if not self.zbb_manager.current_server: return
         if self.zbb_manager.is_running():
             self.server_console.log("[Error] Stop the server before editing properties.")
             return
-        ServerPropertiesEditor(self, self.current_server, logic)
+        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic)
 
     def open_mods_folder_action(self):
-        if not self.current_server: return
-        server_path = SERVERS_DIR / self.current_server
+        if not self.zbb_manager.current_server: return
+        server_path = SERVERS_DIR / self.zbb_manager.current_server
         if not server_path.exists(): return
         try:
             if sys.platform == "win32": os.startfile(str(server_path))
             elif sys.platform == "darwin": subprocess.run(["open", str(server_path)])
             else: subprocess.run(["xdg-open", str(server_path)])
-            self.server_console.log(f"[System] Opened server folder for '{self.current_server}'")
+            self.server_console.log(f"[System] Opened server folder for '{self.zbb_manager.current_server}'")
         except Exception as e:
             self.server_console.log(f"[Error] Failed to open server folder: {e}")
 
@@ -637,19 +467,24 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
-        if self.zbb_manager.start_server():
-            return True
-        return False
+        def _start():
+            self.zbb_manager.start_server()
+        threading.Thread(target=_start, daemon=True).start()
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self.btn_start.configure(state="disabled"))
         self.after(0, lambda: self.btn_start_all.configure(state="disabled"))
         self.after(0, lambda: self.btn_stop.configure(state="normal"))
+        if data and isinstance(data, dict):
+            jdk_src = data.get("jdk_source", "unknown")
+            java_ver = data.get("required_java", "?")
+            label = f"Java {java_ver} ({jdk_src})"
+            color = "green" if jdk_src == "system" else "orange"
+            self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=color))
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
-        self.after(0, self.play_notification_sound)
 
     def on_player_count_update(self, count):
         self.after(0, lambda: self.lbl_player_count.configure(text=f"Players: {count}"))
@@ -728,6 +563,18 @@ class MCTunnelApp(ctk.CTk):
                     port = self.zbb_manager.get_server_port(name)
                     pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
                     self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
+                    meta_path = os.path.join(server_dir, "metadata.json")
+                    if os.path.exists(meta_path):
+                        try:
+                            import json
+                            with open(meta_path, "r") as f:
+                                meta = json.load(f)
+                            if "auto_install_jdk" in config:
+                                meta["auto_install_jdk"] = config["auto_install_jdk"]
+                            with open(meta_path, "w") as f:
+                                json.dump(meta, f, indent=4)
+                        except Exception:
+                            pass
 
                     # --- PROV-03: Bytecode Analysis ---
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")

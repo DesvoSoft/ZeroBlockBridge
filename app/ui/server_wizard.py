@@ -30,7 +30,8 @@ class ServerWizard(ctk.CTkToplevel):
             "view_distance": "10",
             "simulation_distance": "10",
             "location": str(SERVERS_DIR),
-            "icon_path": None
+            "icon_path": None,
+            "auto_install_jdk": True,
         }
         
         # Layout
@@ -273,7 +274,8 @@ class ServerWizard(ctk.CTkToplevel):
                         match = re.match(r"(\d+)", part)
                         parts.append(int(match.group(1)) if match else 0)
                 return tuple(parts)
-            except:
+            except (ValueError, TypeError) as e:
+                logger.debug("Wizard version_key parse failed: %s", e)
                 return (0, 0, 0)
 
         versions.sort(key=version_key, reverse=True)
@@ -320,6 +322,10 @@ class ServerWizard(ctk.CTkToplevel):
         self.var_whitelist = ctk.BooleanVar(value=self.wizard_data["whitelist"])
         self.chk_whitelist = ctk.CTkSwitch(toggles_frame, text="White-list", variable=self.var_whitelist)
         self.chk_whitelist.pack(side="left")
+
+        self.var_auto_jdk = ctk.BooleanVar(value=self.wizard_data["auto_install_jdk"])
+        self.chk_auto_jdk = ctk.CTkSwitch(toggles_frame, text="Auto-install JDK if missing", variable=self.var_auto_jdk)
+        self.chk_auto_jdk.pack(side="left", padx=(20, 0))
         
         # Seed
         ctk.CTkLabel(self.content_frame, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
@@ -380,6 +386,7 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
             self.wizard_data["hardcore"] = self.var_hardcore.get()
             self.wizard_data["whitelist"] = self.var_whitelist.get()
+            self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             
             self.on_complete_callback(self.wizard_data)
@@ -395,6 +402,7 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["difficulty"] = self.combo_difficulty.get()
             self.wizard_data["hardcore"] = self.var_hardcore.get()
             self.wizard_data["whitelist"] = self.var_whitelist.get()
+            self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             
         self.current_step -= 1

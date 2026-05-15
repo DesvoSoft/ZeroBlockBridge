@@ -145,8 +145,8 @@ class ToastNotification:
         if self._toast:
             try:
                 self._toast.destroy()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Toast destroy ignored: %s", e)
         self._toast = None
         self._after_id = None
         self._fade_ids.clear()
@@ -157,14 +157,14 @@ class ToastNotification:
             try:
                 if self._toast and self._toast.winfo_exists():
                     self._toast.after_cancel(aid)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Toast fade cancel ignored: %s", e)
         self._fade_ids.clear()
         if self._after_id and self._toast:
             try:
                 self._toast.after_cancel(self._after_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Toast after_cancel ignored: %s", e)
         self._destroy()
 
     @staticmethod

@@ -50,8 +50,8 @@ class BackupManager:
             if backup_path.exists():
                 try:
                     backup_path.unlink()
-                except Exception:
-                    pass
+                except OSError as unlink_err:
+                    logger.warning("Failed to clean up failed backup: %s", unlink_err)
             return None, str(e)
 
     def list_backups(self):
@@ -97,5 +97,6 @@ class BackupManager:
             with zipfile.ZipFile(backup_path, 'r') as zipf:
                 zipf.extractall(self.server_path)
             return True
-        except Exception:
+        except (FileNotFoundError, zipfile.BadZipFile, OSError) as e:
+            logger.error("Backup restore failed: %s", e)
             return False

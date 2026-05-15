@@ -4,7 +4,9 @@ import os
 import requests
 import threading
 import datetime
+import re
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 from app.core.constants import (
@@ -38,11 +40,11 @@ class VersionManager:
         >>> url = vm.get_download_url("Vanilla", "1.20.1")
     """
     _instance = None
-    _lock = threading.Lock()
+    _singleton_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            with cls._lock:
+            with cls._singleton_lock:
                 if cls._instance is None:
                     cls._instance = super(VersionManager, cls).__new__(cls)
                     cls._instance._initialized = False
@@ -51,7 +53,7 @@ class VersionManager:
     def __init__(self):
         if getattr(self, '_initialized', False):
             return
-        # Safe Init: Define caches first to prevent AttributeError in background threads
+        self.cache_lock = threading.RLock()
         self.fallback_cache = self._get_default_cache()
         self.cache = self.fallback_cache
         self.cache = self._load_cache()
@@ -60,71 +62,148 @@ class VersionManager:
         self._initialized = True
 
     def add_callback(self, callback):
-        """
-        Registers a callback function to be notified when versions refresh.
-        
-        Args:
-            callback (callable): Function to call after version refresh completes.
-                                 Should accept no arguments.
-        """
-        if callback not in self.callbacks:
-            self.callbacks.append(callback)
+        with self.cache_lock:
+            if callback not in self.callbacks:
+                self.callbacks.append(callback)
 
     def _notify_callbacks(self):
-        for cb in self.callbacks:
+        with self.cache_lock:
+            cbs = list(self.callbacks)
+        for cb in cbs:
             try:
                 cb()
             except Exception as e:
                 logger.error("Version callback failed: %s", e)
 
     def _load_cache(self):
-        """
-        Loads version cache from disk, with validation.
-        
-        Validates that cached Fabric versions are game versions (1.x) not loader
-        versions (0.x), and that Forge versions are game versions (1.x) not
-        build numbers (large integers).
-        
-        Returns:
-            dict: Cached version data or default structure if invalid/missing
-        """
         if os.path.exists(VERSIONS_CACHE_FILE):
             try:
                 with open(VERSIONS_CACHE_FILE, "r") as f:
                     data = json.load(f)
-                    
-                    # VALIDATION: Check if Fabric versions look like Game versions (1.x) not Loader versions (0.x)
-                    # Fabric game versions usually start with "1." (e.g. 1.20.1)
-                    # Loader versions usually start with "0." (e.g. 0.14.22)
-                    # If we see "0." versions in Fabric list, assume cache is stale/wrong type.
+
                     fabric_versions = data.get("Fabric", [])
                     if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
                         logger.info("Detected stale Fabric loader versions in cache. Forcing refresh.")
                         return self._get_default_cache()
 
-                    # VALIDATION: Check if Forge versions look like Game versions (1.x)
-                    # Forge loader versions usually start with large numbers (e.g. 47.x, 14.x)
-                    # Minecraft versions start with "1."
                     forge_versions = data.get("Forge", [])
-                    if forge_versions and any(not v.startswith("1.") for v in forge_versions[:3]):
-                        logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
-                        return self._get_default_cache()
-                        
+                    if forge_versions:
+                        first = forge_versions[0]
+                        if not first.startswith("1.") or re.match(r'^\d+\.\d+', first):
+                            logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
+                            return self._fetch_defaults_sync()
+
+                    for key in ("Paper", "Purpur"):
+                        versions = data.get(key, [])
+                        if versions and not versions[0].startswith("1."):
+                            logger.info("Detected stale %s versions in cache. Forcing refresh.", key)
+                            return self._fetch_defaults_sync()
+
                     return data
             except (json.JSONDecodeError, OSError):
                 logger.warning("Version cache corrupted. Using defaults.")
-        
+
+        return self._get_default_cache()
+
+    def _fetch_defaults_sync(self):
+        """Try a synchronous foreground fetch when cache is stale.
+        Returns fetched cache on success, default cache on failure."""
+        try:
+            new_cache = self._get_default_cache()
+            data = self._fetch_all_versions(timeout=8)
+            if data:
+                new_cache.update(data)
+                new_cache["last_updated"] = datetime.datetime.now().isoformat()
+                self.cache = new_cache
+                self._save_cache()
+                logger.info("Synchronous version refresh completed.")
+                return new_cache
+        except Exception as e:
+            logger.warning("Synchronous refresh failed: %s", e)
         return self._get_default_cache()
 
     def _get_default_cache(self):
         return {
             "last_updated": None,
-            "Vanilla": ["1.21.1", "1.20.1", "1.19.4"], # Minimal fallback
+            "Vanilla": ["1.21.1", "1.20.1", "1.19.4"],
             "Fabric": ["1.21.1", "1.20.1"],
             "Forge": ["1.20.1", "1.19.2"],
             "Paper": ["1.21.1", "1.20.1", "1.19.4"],
             "Purpur": ["1.21.1", "1.20.1", "1.19.4"]
         }
+
+    @staticmethod
+    def _fetch_vanilla(timeout=10):
+        resp = requests.get(VANILLA_MANIFEST_URL, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        return [v["id"] for v in data.get("versions", []) if v["type"] == "release"][:100]
+
+    @staticmethod
+    def _fetch_fabric(timeout=10):
+        resp = requests.get(FABRIC_META_URL, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        return [v["version"] for v in data if v.get("stable")][:100]
+
+    @staticmethod
+    def _fetch_forge(timeout=10):
+        resp = requests.get(FORGE_PROMOTIONS_URL, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        promos = data.get("promos", {})
+        forge_versions = set()
+        for key in promos.keys():
+            if "-" in key:
+                mc_ver = key.split("-")[0]
+                forge_versions.add(mc_ver)
+        def version_key(v):
+            try:
+                parts = []
+                for part in v.split('.'):
+                    if part.isdigit():
+                        parts.append(int(part))
+                return tuple(parts)
+            except (ValueError, TypeError) as e:
+                logger.debug("Forge version_key parse failed: %s", e)
+                return (0,)
+        return sorted(forge_versions, key=version_key, reverse=True)[:100]
+
+    @staticmethod
+    def _fetch_paper(timeout=10):
+        resp = requests.get("https://api.papermc.io/v2/projects/paper", timeout=timeout)
+        resp.raise_for_status()
+        versions = resp.json().get("versions", [])
+        versions.reverse()
+        return versions[:100]
+
+    @staticmethod
+    def _fetch_purpur(timeout=10):
+        resp = requests.get("https://api.purpurmc.org/v2/purpur", timeout=timeout)
+        resp.raise_for_status()
+        versions = resp.json().get("versions", [])
+        versions.reverse()
+        return versions[:100]
+
+    def _fetch_all_versions(self, timeout=10):
+        """Fetch all version lists in parallel using ThreadPoolExecutor."""
+        fetchers = {
+            "Vanilla": self._fetch_vanilla,
+            "Fabric": self._fetch_fabric,
+            "Forge": self._fetch_forge,
+            "Paper": self._fetch_paper,
+            "Purpur": self._fetch_purpur,
+        }
+        results = {}
+        with ThreadPoolExecutor(max_workers=5) as exe:
+            future_map = {exe.submit(fn, timeout=timeout): key for key, fn in fetchers.items()}
+            for future in as_completed(future_map, timeout=timeout + 2):
+                key = future_map[future]
+                try:
+                    results[key] = future.result()
+                except Exception as e:
+                    logger.warning("Failed to fetch %s versions: %s", key, e)
+        return results
 
     def _save_cache(self):
         """Persists current version cache to disk."""
@@ -136,128 +215,38 @@ class VersionManager:
             logger.error("Failed to save version cache: %s", e)
 
     def get_versions(self, server_type):
-        """
-        Returns list of available versions for a server type.
-        
-        Triggers background refresh if cache is older than 24 hours.
-        
-        Args:
-            server_type (str): One of "Vanilla", "Fabric", or "Forge"
-        
-        Returns:
-            list: Version strings for the specified server type
-        """
-        # Trigger background refresh if cache is old (> 24 hours) or empty
         self._check_and_refresh()
-        return self.cache.get(server_type, [])
+        with self.cache_lock:
+            return list(self.cache.get(server_type, []))
 
     def _check_and_refresh(self):
-        """Checks if cache needs refresh and starts background thread."""
-        should_refresh = False
-        last_updated = self.cache.get("last_updated")
-        
-        if not last_updated:
-            should_refresh = True
-        else:
-            try:
-                last = datetime.datetime.fromisoformat(last_updated)
-                if datetime.datetime.now() - last > datetime.timedelta(hours=24):
-                    should_refresh = True
-            except ValueError:
+        with self.cache_lock:
+            last_updated = self.cache.get("last_updated")
+            should_refresh = False
+            if not last_updated:
                 should_refresh = True
+            else:
+                try:
+                    last = datetime.datetime.fromisoformat(last_updated)
+                    if datetime.datetime.now() - last > datetime.timedelta(hours=24):
+                        should_refresh = True
+                except ValueError:
+                    should_refresh = True
 
-        if should_refresh and (self.refresh_thread is None or not self.refresh_thread.is_alive()):
-            self.refresh_thread = threading.Thread(target=self.refresh_versions, daemon=True)
-            self.refresh_thread.start()
+            if should_refresh and (self.refresh_thread is None or not self.refresh_thread.is_alive()):
+                self.refresh_thread = threading.Thread(target=self.refresh_versions, daemon=True)
+                self.refresh_thread.start()
 
     def refresh_versions(self):
-        """
-        Fetches latest versions from all Minecraft APIs and updates cache.
-        
-        Runs in background thread. Updates Vanilla, Fabric, and Forge version
-        lists from their respective APIs. Maintains existing versions if fetch
-        fails for any server type.
-        
-        Automatically saves cache and notifies registered callbacks on completion.
-        """
         logger.info("Refreshing server versions...")
-        new_cache = self.cache.copy()
-        
-        # 1. Vanilla
-        try:
-            resp = requests.get(VANILLA_MANIFEST_URL, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                versions = [v["id"] for v in data.get("versions", []) if v["type"] == "release"]
-                new_cache["Vanilla"] = versions[:100] # Increased limit for older versions like 1.8.9
-        except Exception as e:
-            logger.warning("Failed to fetch Vanilla versions: %s", e)
-
-        # 2. Fabric
-        try:
-            resp = requests.get(FABRIC_META_URL, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                # Fabric meta returns list of objects with "version"
-                versions = [v["version"] for v in data if v.get("stable")]
-                new_cache["Fabric"] = versions[:100]
-        except Exception as e:
-            logger.warning("Failed to fetch Fabric versions: %s", e)
-
-        # 3. Forge
-        try:
-            resp = requests.get(FORGE_PROMOTIONS_URL, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                promos = data.get("promos", {})
-                # Extract MC versions from keys like "1.20.1-recommended" or "1.20.1-latest"
-                forge_versions = set()
-                for key in promos.keys():
-                    if "-" in key:
-                        mc_ver = key.split("-")[0]
-                        forge_versions.add(mc_ver)
-                
-                # Sort versions using semantic versioning logic
-                def version_key(v):
-                    try:
-                        parts = []
-                        for part in v.split('.'):
-                            if part.isdigit():
-                                parts.append(int(part))
-                        return tuple(parts)
-                    except:
-                        return (0,)
-
-                sorted_versions = sorted(list(forge_versions), key=version_key, reverse=True)
-                new_cache["Forge"] = sorted_versions[:100]
-        except Exception as e:
-            logger.warning("Failed to fetch Forge versions: %s", e)
-
-        # 4. Paper
-        try:
-            resp = requests.get("https://api.papermc.io/v2/projects/paper", timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                versions = data.get("versions", [])
-                versions.reverse() # Reverse to get newest first
-                new_cache["Paper"] = versions[:100]
-        except Exception as e:
-            logger.warning("Failed to fetch Paper versions: %s", e)
-
-        # 5. Purpur
-        try:
-            resp = requests.get("https://api.purpurmc.org/v2/purpur", timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                versions = data.get("versions", [])
-                versions.reverse() # Reverse to get newest first
-                new_cache["Purpur"] = versions[:100]
-        except Exception as e:
-            logger.warning("Failed to fetch Purpur versions: %s", e)
-
-        new_cache["last_updated"] = datetime.datetime.now().isoformat()
-        self.cache = new_cache
-        self._save_cache()
+        with self.cache_lock:
+            new_cache = self.cache.copy()
+            results = self._fetch_all_versions(timeout=10)
+            for key, versions in results.items():
+                new_cache[key] = versions
+            new_cache["last_updated"] = datetime.datetime.now().isoformat()
+            self.cache = new_cache
+            self._save_cache()
         logger.info("Server versions refreshed.")
         self._notify_callbacks()
 

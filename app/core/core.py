@@ -75,6 +75,25 @@ class ZBBManager:
         is_guest = self.playit_manager.api_client.is_read_only
         self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns, "is_guest": is_guest})
 
+    def _save_jdk_metadata(self, required_java: int, jdk_source: str):
+        """Persist required_java + jdk_source to the server's metadata.json."""
+        import json
+        from app.core.constants import SERVERS_DIR
+        if not self.current_server:
+            return
+        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        if not os.path.exists(meta_path):
+            return
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            meta["required_java"] = required_java
+            meta["jdk_source"] = jdk_source
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=4)
+        except Exception as e:
+            logger.error("Failed to save JDK metadata: %s", e)
+
     # --- Configuration ---
     def get_config(self):
         return load_config()
@@ -132,12 +151,15 @@ class ZBBManager:
         java_path = "auto"
         use_aikars = True
         required_java_cached = None
+        self._jdk_source = "unknown"
         try:
             if os.path.exists(meta_path):
                 with open(meta_path, "r") as f:
                     meta = json.load(f)
                     mc_version = meta.get("version", "1.20.1")
                     required_java_cached = meta.get("required_java")
+                    self._jdk_source = meta.get("jdk_source", "system")
+                    auto_install_jdk = meta.get("auto_install_jdk", True)
                     if meta.get("advanced_mode", False):
                         java_path = meta.get("java_path", "auto")
                         use_aikars = meta.get("use_aikars", True)
@@ -186,7 +208,8 @@ class ZBBManager:
                         with open(meta_path, "r") as f: meta = json.load(f)
                         meta["required_java"] = required_java
                         with open(meta_path, "w") as f: json.dump(meta, f, indent=4)
-                except: pass
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.warning("Failed to cache required_java in metadata: %s", e)
 
             self.events.emit(
                 ServerEvent.CONSOLE_LINE,
@@ -198,10 +221,37 @@ class ZBBManager:
             all_javas = detector.detect_all()
 
             if not all_javas:
-                msg = "Error: No Java installation found. Please install Java."
-                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                return False
+                if not auto_install_jdk:
+                    msg = "No Java installation found and auto-install is disabled in server settings."
+                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                    return False
+                msg = "No Java installation found. Attempting to auto-install JDK %d..." % required_java
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] {msg}")
+                try:
+                    from app.services.java_installer import JdkManagerInstance
+                    java_bin = JdkManagerInstance.ensure_java(required_java)
+                    self._jdk_source = "portable"
+                    self._save_jdk_metadata(required_java, "portable")
+                    self.events.emit(
+                        ServerEvent.CONSOLE_LINE,
+                        f"[System] Using auto-installed JDK {required_java} at {java_bin}"
+                    )
+                except Exception as jdk_err:
+                    msg = f"Error: No Java installation found and auto-install failed: {jdk_err}"
+                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                    return False
+
+                # Auto-install succeeded — skip Smart Java Flexibility and start directly
+                self.server_runner = ServerRunner(
+                    self.current_server, ram, self.events,
+                    java_bin=java_bin, use_aikars=use_aikars
+                )
+                self._setup_monitors(config)
+                self.server_runner.start()
+                self.events.emit(ServerEvent.STARTING, {"jdk_source": "portable", "required_java": required_java})
+                return True
 
             # 3. Smart Java Flexibility — 3-case resolution
             # CASE 1: Exact match (ideal)
@@ -209,6 +259,7 @@ class ZBBManager:
             if exact:
                 exact.sort(key=lambda j: j.is_jdk, reverse=True)
                 java_bin = exact[0].path
+                self._jdk_source = "system"
                 self.events.emit(
                     ServerEvent.CONSOLE_LINE,
                     f"[System] Using Java {exact[0].major} ({exact[0].source})"
@@ -220,6 +271,7 @@ class ZBBManager:
                 # CASE 2: Detected > required AND <= 21 (safe range)
                 if best.major > required_java and best.major <= 21:
                     java_bin = best.path
+                    self._jdk_source = "system"
                     msg = (
                         f"Running with Java {best.major}. "
                         f"Recommended: Java {required_java}."
@@ -229,24 +281,61 @@ class ZBBManager:
 
                 # CASE 3: Detected > 21 (experimental, unstable)
                 elif best.major > 21:
-                    msg = (
-                        f"Java {best.major} detected (experimental). "
-                        f"ZBB supports up to Java 21 for stability. "
-                        f"Required: Java {required_java}."
+                    if not auto_install_jdk:
+                        msg = f"Java {best.major} detected (experimental). Auto-install disabled. Install Java {required_java} manually."
+                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                        return False
+                    self.events.emit(
+                        ServerEvent.CONSOLE_LINE,
+                        f"[System] Java {best.major} detected but unstable. Attempting to auto-install JDK {required_java}..."
                     )
-                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                    return False
+                    try:
+                        from app.services.java_installer import JdkManagerInstance
+                        java_bin = JdkManagerInstance.ensure_java(required_java)
+                        self._jdk_source = "portable"
+                        self.events.emit(
+                            ServerEvent.CONSOLE_LINE,
+                            f"[System] Using auto-installed JDK {required_java} at {java_bin}"
+                        )
+                    except Exception as jdk_err:
+                        msg = (
+                            f"Java {best.major} detected (experimental). "
+                            f"ZBB supports up to Java 21 for stability. "
+                            f"Required: Java {required_java}. Auto-install failed: {jdk_err}"
+                        )
+                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                        return False
 
-                # CASE 1: Detected < required (incompatible)
+                # Detected < required (incompatible)
                 else:
-                    msg = (
-                        f"Java version too low. "
-                        f"Required Java {required_java}, detected Java {best.major}."
+                    if not auto_install_jdk:
+                        msg = f"Java {best.major} too low. Auto-install disabled. Install Java {required_java} manually."
+                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                        return False
+                    self.events.emit(
+                        ServerEvent.CONSOLE_LINE,
+                        f"[System] Java {best.major} too low. Attempting to auto-install JDK {required_java}..."
                     )
-                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                    return False
+                    try:
+                        from app.services.java_installer import JdkManagerInstance
+                        java_bin = JdkManagerInstance.ensure_java(required_java)
+                        self._jdk_source = "portable"
+                        self.events.emit(
+                            ServerEvent.CONSOLE_LINE,
+                            f"[System] Using auto-installed JDK {required_java} at {java_bin}"
+                        )
+                    except Exception as jdk_err:
+                        msg = (
+                            f"Java version too low. "
+                            f"Required Java {required_java}, detected Java {best.major}. "
+                            f"Auto-install failed: {jdk_err}"
+                        )
+                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                        return False
         else:
             java_bin = java_path
 
@@ -257,9 +346,10 @@ class ZBBManager:
 
         self._setup_monitors(config)
         self.server_runner.start()
+        self._save_jdk_metadata(required_java, self._jdk_source)
 
         # Let UI know
-        self.events.emit(ServerEvent.STARTING)
+        self.events.emit(ServerEvent.STARTING, {"jdk_source": self._jdk_source, "required_java": required_java})
         return True
 
     def load_server_manually(self, folder_path: str) -> bool:
@@ -305,8 +395,10 @@ class ZBBManager:
             return True
         except Exception as e:
             if os.path.exists(link_path):
-                try: os.rmdir(link_path)
-                except: pass
+                try:
+                    os.rmdir(link_path)
+                except OSError as cleanup_err:
+                    logger.warning("Failed to cleanup link dir after error: %s", cleanup_err)
             raise e
 
     def stop_server(self):
@@ -413,10 +505,10 @@ class ZBBManager:
         self._scheduler_thread.start()
 
     def _send_system_message(self, message):
-        """Sends a message to the console and in-game."""
+        """Sends a message to the console and in-game via CommandSanitizer."""
         if self.server_runner and self.server_runner.running:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] {message}")
-            self.server_runner.send_command(f"say {message}")
+            self.send_command(f"say {message}")
 
     def _handle_restart_request(self, data=None):
         """Handles internal requests to restart the server gracefully."""
@@ -462,9 +554,9 @@ class ZBBManager:
                 # Wait briefly then report success
                 time.sleep(AppConfig.SERVER_START_WAIT)
                 if self.is_running():
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] ✓ Scheduled restart completed successfully! Server is back online.")
+                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] OK - Scheduled restart completed successfully! Server is back online.")
                 else:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] ✗ ERROR: Server failed to restart automatically. Please check logs.")
+                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] ERROR: Server failed to restart automatically. Please check logs.")
             
         threading.Thread(target=_restart, daemon=True).start()
 
