@@ -169,4 +169,20 @@
 | **F3b: Dependencias** | `scaffolder.py`, `modrinth.py` | `test_dependency_resolution` | ❌ |
 | **Auditoría** | múltiples | regression 188 tests | ✅ Completa |
 
-**Prioridad**: F1 (Playit.gg — estabilidad) → F2 (JDK) → F3a (Evento Mod) → F3b (Dependencias)
+## 🧹 Fase 1G: Simplificación de PlayitManager
+
+**Contexto**: Tras restaurar `create_tunnel()` vía REST API, gran parte del código de `playit_manager.py` quedó muerto o redundante (<code>_inject_toml_mapping</code>, <code>get_local_status</code>, <code>_status_polling_loop</code>, <code>_dns_polling_loop</code>, <code>_restart_with_mapping</code>). También hay polling loops obsoletos y lógica de stdout que ya no se necesita.
+
+**Branch**: `simplify-playit-manager` (desde `dev`)
+
+- [ ] Eliminar código muerto: `_inject_toml_mapping`, `get_local_status`, `_handle_local_status`, `_status_polling_loop`, `_dns_polling_loop`, `_restart_with_mapping`
+- [ ] Simplificar `_parse_line`: mantener solo filtros `AgentDisabledOverLimit` y `NetworkUnreachable`
+- [ ] Simplificar `_read_output`: quitar `_parse_line()`, mantener solo filtro spam + log
+- [ ] Reducir threads en `_start_internal`: solo `_read_output` + `_heartbeat_loop`
+- [ ] Simplificar `_heartbeat_loop`: restart directo vía `self.start()` en vez de `_restart_with_mapping`
+- [ ] Correr tests (15/15 pasan)
+- [ ] Merge a `dev`
+
+---
+
+**Prioridad**: F1 (Playit.gg — estabilidad) → F1G (Simplificación) → F2 (JDK) → F3a (Evento Mod) → F3b (Dependencias)
