@@ -14,6 +14,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm_Noncommercial-red.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+[![Version](https://img.shields.io/github/v/release/DesvoSoft/ZeroBlockBridge?color=green)](https://github.com/DesvoSoft/ZeroBlockBridge/releases)
 
 ---
 
@@ -22,7 +23,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 ### Server Management
 
 - **Creation & Import**: Guided 3-step wizard for new servers or **Instant Load** for existing folders (via symbolic links).
-- **Multi-Version Support**: Vanilla, Fabric, and Forge with dynamic version fetching (hundreds of versions).
+- **Multi-Version Support**: Vanilla, Fabric, Forge, Paper, and Purpur with dynamic version fetching (100+ versions).
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
 - **Integrated Console**: Send commands directly from the app.
@@ -298,6 +299,11 @@ ZeroBlockBridge/
 │       ├── settings_manager.py    # App config read/write (module)
 │       └── toast.py               # Non-blocking notification overlay
 │
+├── .github/
+│   └── workflows/
+│       ├── tests.yml                # GitHub CI: pytest + flake8
+│       └── build.yml                # Build & release on version tags
+|
 ├── requirements.txt               # Project dependencies
 │
 ├── assets/                        # Misc files
@@ -334,13 +340,15 @@ ZeroBlockBridge/
 
 ### Supported Versions
 
-Zero Block Bridge uses **dynamic version fetching** to automatically support hundreds of Minecraft versions:
+Zero Block Bridge uses **dynamic version fetching** to support hundreds of Minecraft versions:
 
-- **Vanilla**: Fetches top 20 latest releases from Mojang API (e.g., 1.21.1, 1.20.1, 1.19.4) + popular versions (1.18.2, 1.16.5, 1.12.2, 1.8.9, etc.)
-- **Fabric**: Fetches top 20 stable game versions from Fabric Meta API with latest installer
-- **Forge**: Fetches top 50 versions from Forge Promotions API with recommended/latest builds
-- **Auto-Update**: Version cache refreshes every 24 hours automatically
-- **Cache Location**: Stored in `config/versions_cache.json` for offline access
+- **Vanilla**: Fetches top 100 releases from Mojang API (supports 26.x.x and 1.21.x schemes) with expanded offline defaults.
+- **Fabric**: Fetches top 100 stable game versions from Fabric Meta API with latest installer.
+- **Forge**: Fetches top 100 versions from Forge Promotions API with recommended/latest builds.
+- **Paper**: Fetches top 100 versions from PaperMC API.
+- **Purpur**: Fetches top 100 versions from PurpurMC API.
+- **Smart Caching**: Auto-refreshes every 24h (background) + sync refresh if >2 days stale. Falls back to expanded defaults if offline.
+- **Cache Location**: Stored in `config/versions_cache.json` for offline access.
 
 ### System Requirements
 
@@ -370,7 +378,7 @@ Feedback is always appreciated ❤️
 
 ## License
 
-**ZeroBlockBridge** © 2025 by **DesvoSoft**.
+**ZeroBlockBridge** © 2025-2026 by **DesvoSoft**.
 
 This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 

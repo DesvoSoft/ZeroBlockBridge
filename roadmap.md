@@ -203,27 +203,27 @@ def _compute_backoff(self):
 
 ### 3A. Refactors Estructurales
 
-| # | Tarea | Archivos | LOC saved | Riesgo |
-|---|-------|----------|-----------|--------|
-| 3.1 | `normalize_server_jar()` extraer helper symlink/copy (122→~60 LOC) | `logic.py:209-331` | ~60 | 🟡 |
-| 3.2 | `install_fabric` + `install_forge` → `_run_installer()` helper | `logic.py:178-374` | ~50 | 🟡 |
-| 3.3 | `start_server()` extraer auto-install helper (222→~140 LOC) | `core.py:129-351` | ~80 | 🟠 |
-| 3.4 | `on_tunnel_status()` refactor a state machine — eliminar patrón `pack_forget`/`pack` | `main.py:658-735` | ~20 | 🟡 |
-| 3.5 | Centralizar acceso a `metadata.json` en `get_server_meta()`/`set_server_meta()` | `logic.py` + callers | ~30 | 🟡 |
-| 3.6 | Eliminar `_pre_warm_version_cache()` de bootstrap | `core.py:119-124` | ~8 | 🟢 |
-| 3.7 | `PlayitManager` aceptar EventBus en vez de 4 callbacks | `playit_manager.py`, `core.py` | ~15 | 🟠 |
-| 3.8 | Eliminar `_apply_pending_settings()` (duplica scaffolder) | `logic.py:402-428` | ~28 | 🟡 |
-| 3.9 | `Scheduler` + `SchedulerService` fusionar en funciones | `logic.py`, `scheduler_service.py` | ~90 | 🟡 |
+| # | Tarea | Archivos | LOC saved | Riesgo | Estado |
+|---|-------|----------|-----------|--------|--------|
+| 3.1 | `normalize_server_jar()` extraer helper symlink/copy (122→~60 LOC) | `logic.py:209-331` | ~60 | 🟡 | ❌ Pendiente |
+| 3.2 | `install_fabric` + `install_forge` → `_run_installer()` helper | `logic.py:178-374` | ~50 | 🟡 | ✅ Completado |
+| 3.3 | `start_server()` extraer auto-install helper (222→~140 LOC) | `core.py:129-351` | ~80 | 🟠 | ❌ Pendiente |
+| 3.4 | `on_tunnel_status()` refactor a state machine — eliminar patrón `pack_forget`/`pack` | `main.py:658-735` | ~20 | 🟡 | ❌ Pendiente |
+| 3.5 | Centralizar acceso a `metadata.json` en `get_server_meta()`/`update_server_meta()` | `logic.py` + callers | ~30 | 🟡 | ✅ Completado |
+| 3.6 | Eliminar `_pre_warm_version_cache()` de bootstrap | `core.py:119-124` | ~8 | 🟢 | ✅ Completado |
+| 3.7 | `PlayitManager` aceptar EventBus en vez de 4 callbacks | `playit_manager.py`, `core.py` | ~15 | 🟠 | ❌ Pendiente |
+| 3.8 | Eliminar `_apply_pending_settings()` (duplica scaffolder) | `logic.py:402-428` | ~28 | 🟡 | ✅ Completado |
+| 3.9 | `Scheduler` + `SchedulerService` fusionar en funciones | `logic.py`, `scheduler_service.py` | ~90 | 🟡 | ❌ Pendiente |
 
 ### 3B. Modrinth Management (UI + Funcionalidad)
 
-| # | Tarea | Archivos | Riesgo |
-|---|-------|----------|--------|
-| 3.10 | Añadir gestión de mods instalados (lista con checkboxes, desinstalar con confirmación) | `modrinth_browser.py` | 🟡 |
-| 3.11 | Añadir paginación en búsqueda ("Load More" que incrementa offset) | `modrinth_browser.py`, `modrinth.py` | 🟢 |
-| 3.12 | Mostrar íconos reales de mods vía `icon_url` en vez de placeholders de letras | `modrinth_browser.py` | 🟢 |
-| 3.13 | Exponer "Check for Updates" en UI llamando `ModrinthClient.check_updates()` | `modrinth_browser.py` | 🟡 |
-| 3.14 | Añadir selector de versión al instalar (dropdown de versiones compatibles antes de descargar) | `modrinth_browser.py`, `modrinth.py` | 🟡 |
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 3.10 | Añadir gestión de mods instalados (lista con checkboxes, desinstalar con confirmación) | `modrinth_browser.py` | 🟡 | ✅ Completado |
+| 3.11 | Añadir paginación en búsqueda ("Load More" que incrementa offset) | `modrinth_browser.py`, `modrinth.py` | 🟢 | ✅ Completado |
+| 3.12 | Mostrar íconos reales de mods vía `icon_url` en vez de placeholders de letras | `modrinth_browser.py` | 🟢 | ✅ Completado |
+| 3.13 | Exponer "Check for Updates" en UI llamando `ModrinthClient.check_updates()` | `modrinth_browser.py` | 🟡 | ✅ Completado |
+| 3.14 | Añadir selector de versión al instalar (dropdown de versiones compatibles antes de descargar) | `modrinth_browser.py`, `modrinth.py` | 🟡 | ✅ Completado |
 
 ### Pendientes del roadmap anterior (integrados aquí)
 
