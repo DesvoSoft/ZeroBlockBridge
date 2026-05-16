@@ -7,10 +7,14 @@ Modrinth-hosted mods and plugins.
 """
 
 import customtkinter as ctk
+import io
 import logging
 import os
 import threading
 from typing import Callable, Optional
+
+import requests
+from PIL import Image
 
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
@@ -34,6 +38,8 @@ _BADGE_TEXT_DARK = "#93c5fd"  # blue-300
 _SEPARATOR_LIGHT = "#e2e8f0"
 _SEPARATOR_DARK = "#334155"
 _DOWNLOADS_COLOR = "#94a3b8"  # slate-400
+
+_ICON_CACHE: dict[str, ctk.CTkImage] = {}
 
 
 class ModrinthBrowser(ctk.CTkFrame):
@@ -324,9 +330,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             btn_more.grid(row=len(self._current_hits), column=0, pady=10)
 
     def _create_mod_card(self, hit: dict, index: int) -> ctk.CTkFrame:
-        """Build a single mod result card — Neo-Modern style."""
         title = hit.get("title", "Unknown")
         initial = title[0].upper() if title else "?"
+        icon_url = hit.get("icon_url", "")
         import hashlib
         _ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
         color = _ICON_COLORS[int(hashlib.md5(title.encode()).hexdigest(), 16) % len(_ICON_COLORS)]
@@ -343,6 +349,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=("Roboto Medium", 20),
                                    text_color="white")
         lbl_initial.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Async load real icon
+        if icon_url and icon_url not in _ICON_CACHE:
+            threading.Thread(target=self._load_icon, args=(icon_url, icon_frame, lbl_initial), daemon=True).start()
+        elif icon_url in _ICON_CACHE:
+            self._apply_icon(icon_frame, lbl_initial, _ICON_CACHE[icon_url])
 
         # --- Info section ---
         info_frame = ctk.CTkFrame(card, fg_color="transparent")
@@ -595,6 +607,22 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_close = ctk.CTkButton(dialog, text="Close", width=100, height=32,
                                    corner_radius=12, command=dialog.destroy)
         btn_close.pack(pady=8)
+
+    def _load_icon(self, icon_url, icon_frame, lbl_initial):
+        try:
+            resp = requests.get(icon_url, timeout=8)
+            resp.raise_for_status()
+            img = Image.open(io.BytesIO(resp.content)).resize((48, 48), Image.LANCZOS)
+            ctk_img = ctk.CTkImage(img, size=(48, 48))
+            _ICON_CACHE[icon_url] = ctk_img
+            self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
+        except Exception:
+            pass
+
+    def _apply_icon(self, icon_frame, lbl_initial, ctk_img):
+        lbl_initial.destroy()
+        lbl_icon = ctk.CTkLabel(icon_frame, image=ctk_img, text="")
+        lbl_icon.place(relx=0.5, rely=0.5, anchor="center")
 
     # ------------------------------------------------------------------
     # Utilities
