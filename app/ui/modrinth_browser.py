@@ -11,6 +11,7 @@ import io
 import logging
 import os
 import threading
+import tkinter.messagebox
 from typing import Callable, Optional
 
 import requests
@@ -154,7 +155,17 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color="white", font=("Roboto Medium", 11),
             command=self._on_check_updates,
         )
-        self.btn_updates.grid(row=0, column=5, padx=(4, 12), pady=8)
+        self.btn_updates.grid(row=0, column=5, padx=(4, 4), pady=8)
+
+        # Installed mods button
+        self.btn_installed = ctk.CTkButton(
+            bar, text="Installed", width=90, height=36,
+            corner_radius=12,
+            fg_color="#64748b", hover_color="#475569",
+            text_color="white", font=("Roboto Medium", 11),
+            command=self._on_show_installed,
+        )
+        self.btn_installed.grid(row=0, column=6, padx=(4, 12), pady=8)
 
     # ------------------------------------------------------------------
     # Layout: Results Area (scrollable)
@@ -607,6 +618,79 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_close = ctk.CTkButton(dialog, text="Close", width=100, height=32,
                                    corner_radius=12, command=dialog.destroy)
         btn_close.pack(pady=8)
+
+    def _on_show_installed(self):
+        if not self.get_server_info:
+            self._set_status("⚠ No server selected.")
+            return
+        info = self.get_server_info()
+        if not info:
+            self._set_status("⚠ Select a server first.")
+            return
+        server_name = info[0]
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Installed Mods / Plugins")
+        dialog.geometry("500x400")
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+
+        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
+        frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
+        frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            frame, text=f"Installed files for '{server_name}':",
+            font=("Roboto Medium", 14), anchor="w",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        mods_dir = os.path.join(SERVERS_DIR, server_name, "mods")
+        plugins_dir = os.path.join(SERVERS_DIR, server_name, "plugins")
+        files = []
+        for d in [mods_dir, plugins_dir]:
+            if os.path.isdir(d):
+                for fname in sorted(os.listdir(d)):
+                    if fname.endswith(".jar"):
+                        files.append(os.path.join(d, fname))
+
+        if not files:
+            ctk.CTkLabel(frame, text="No mods or plugins installed.",
+                         font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_NOTE).grid(
+                row=1, column=0, pady=20)
+        else:
+            delete_btns = []
+            for i, fpath in enumerate(files):
+                fname = os.path.basename(fpath)
+                row_frame = ctk.CTkFrame(frame, corner_radius=8)
+                row_frame.grid(row=i + 1, column=0, sticky="ew", pady=2)
+                row_frame.grid_columnconfigure(0, weight=1)
+
+                ctk.CTkLabel(row_frame, text=fname, font=("Roboto", 12), anchor="w").grid(
+                    row=0, column=0, sticky="w", padx=10, pady=6)
+
+                btn_del = ctk.CTkButton(
+                    row_frame, text="🗑", width=36, height=28,
+                    corner_radius=8,
+                    fg_color="#ef4444", hover_color="#dc2626",
+                    font=("Roboto", 12),
+                    command=lambda fp=fpath: self._confirm_delete_mod(fp, dialog),
+                )
+                btn_del.grid(row=0, column=1, padx=(0, 6), pady=4)
+
+        ctk.CTkButton(dialog, text="Close", width=100, height=32,
+                       corner_radius=12, command=dialog.destroy).pack(pady=10)
+
+    def _confirm_delete_mod(self, filepath, dialog):
+        fname = os.path.basename(filepath)
+        if not tkinter.messagebox.askyesno("Delete Mod", f"Delete '{fname}'?"):
+            return
+        try:
+            os.remove(filepath)
+            self._set_status(f"✓ Deleted {fname}")
+            dialog.destroy()
+            self._on_show_installed()
+        except OSError as e:
+            self._set_status(f"✗ Failed to delete {fname}: {e}")
 
     def _load_icon(self, icon_url, icon_frame, lbl_initial):
         try:
