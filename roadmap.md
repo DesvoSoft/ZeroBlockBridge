@@ -1,195 +1,383 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-## Contenido
-- [Fase 1: Playit.gg — Estabilización y Fiabilidad](#-fase-1-playitgg--estabilización-y-fiabilidad)
-- [Fase 2: JDK Auto-Installer](#-fase-2-jdk-auto-installer)
-- [Fase 3: Mod Ecosystem — Event-Driven](#-fase-3-mod-ecosystem--event-driven)
-- [Auditoría Técnica (Completada)](#-auditoría-técnica-completada)
+> **Documento maestro de contexto:** `.planning/PROJECT_CONTEXT.md`
+> **Auditoría detallada:** `.planning/AUDITORIA_R1.md`
+> **Última actualización:** 2026-05-16
 
 ---
 
-## 🔴 Fase 1: Playit.gg — Estabilización y Fiabilidad
+## Estructura del Plan
 
-### 1A. Versión del Protocolo (Obsolescencia)
-**Contexto**: `playit_api.py:link_account()` usa version_hardcodeada `0.17.1`. La versión actual del protocolo es `0.20.1`. La 0.17.x puede causar errores de autenticación o inestabilidad en el túnel.
-
-- [x] **`playit_api.py:link_account()`** — Actualizar `version_major=0`, `version_minor=20`, `version_patch=1` ✅
-- [x] **`constants.py:PLAYIT_VERSION`** — Actualizar de `"0.16.5"` a `"0.20.1"` (versión del binario) ✅
-- [x] **`playit_api.py:delete_agent()`** — Limpiar bucle `for key in ["id", "agent_id", "agent-id"]` y usar solo el campo estándar de la v2 ✅
-- [x] **`playit_manager.py`** — Verificar compatibilidad del flag `--secret_path` con binario 0.20.1 ✅
-
-### 1B. Monitoreo Frágil (Reemplazar stdout por API Local)
-**Contexto**: `PlayitManager._parse_line()` depende de 4 patrones Regex sobre la salida stdout del binario. Si el binario cambia un espacio o palabra, el túnel aparece como "Desconectado" aunque funcione.
-
-- [x] **`playit_manager.py`** — Crear `get_local_status()` que consulte `http://127.0.0.1:25374/status` (JSON-RPC local) ✅
-- [x] **`playit_manager.py`** — Implementar polling loop (ej. cada 5s) que consulte el puerto local en vez de depender del stdout ✅
-- [x] **`playit_manager.py:_parse_line()`** — Reducir/eliminar dependencia de Regex; usar `get_local_status()` como source of truth ✅
-- [x] **`playit_manager.py`** — Emitir `TUNNEL_STATUS` basado en respuesta JSON-RPC (estado, IP, DNS) en lugar de stdout ✅
-- [x] **`playit_manager.py`** — Agregar fallback: si JSON-RPC no responde, usar stdout como respaldo ✅
-
-### 1C. Reset No Destructivo (Evitar AgentDisabledOverLimit)
-**Contexto**: `reset()` borra `playit.toml` e intenta borrar el agente remoto. Si el usuario resetea muchas veces, llega al límite de agentes de la cuenta gratuita.
-
-- [x] **`playit_manager.py:reset()`** — Cambiar lógica: primero intentar "reclamar" el agente existente verificando la validez de `secret_key` ✅
-- [x] **`playit_manager.py:reset()`** — Solo borrar `playit.toml` si la `secret_key` es inválida/vencida ✅
-- [x] **`playit_manager.py`** — Agregar opción `reuse_agent` al flujo de reset: mantener mismo agent_id y solo regenerar tunnels ✅
-- [x] **`playit_api.py`** — Agregar `verify_secret_key()` que haga un ping a la API para validar la llave sin crear agentes duplicados ✅
-
-### 1D. Seguridad de Archivos (Permisos)
-**Contexto**: `playit.toml` se crea con permisos por defecto (legible por otros usuarios del sistema en Linux/Mac).
-
-- [x] **`playit_api.py:link_account()`** — Después de escribir `playit.toml`, ejecutar `os.chmod(toml_path, 0o600)` en Unix ✅
-- [x] **`playit_manager.py`** — Al detectar `playit.toml` existente, verificar permisos y corregirlos si es necesario ✅
-
-### 1E. Flag `--secret` en subprocess
-**Contexto**: Al lanzar el binario con `subprocess.Popen`, no se usa `--secret` para pasar la llave directa, solo `--secret_path`.
-
-- [x] **`playit_manager.py:_start_internal()`** — Agregar flag `--secret <secret_key>` al comando para evitar que el binario cree agentes "invitados" (Guest Mode) si el toml no se lee correctamente ✅
-
-### 1F. Nuevas Funcionalidades (Proxy Protocol, IPv4, Heartbeat)
-- [x] **`playit_api.py:create_tunnel()`** — Agregar parámetro opcional `proxy_protocol: bool = False` para activar Proxy Protocol V2 ✅
-- [x] **`playit_manager.py:_start_internal()`** — Agregar flag `--network ipv4` para forzar IPv4 en conexiones problemáticas ✅
-- [x] **`playit_manager.py`** — Implementar `_heartbeat_loop()` que haga ping periódico al proceso playit (verificar que no sea zombie) ✅
-- [x] **`playit_manager.py`** — Si el heartbeat falla N veces seguidas, reiniciar el agente ✅
+- [Fase 0: Auditoría Táctica ✅](#fase-0-auditoría-táctica-completada)
+- [Fase 0.5: Corrección de Críticos ✅](#fase-05-corrección-de-críticos-seguridad--data-loss)
+- [Fase 1: Quick Wins ✅](#fase-1-quick-winds-bajo-riesgo)
+- [Fase 2: Bugfixes + Wizard UX ✅](#fase-2-bugfixes--wizard-ux)
+- [Fase 3: Refactors Estructurales](#fase-3-refactors-estructurales)
+- [Fase 4: Cross-Platform (Linux)](#fase-4-cross-platform-linux-compat)
+- [Fase 5: UI/UX — ZBB 2.0](#fase-5-uiux--zeroblock-bridge-20)
+- [Fase 6: Features Innovadoras](#fase-6-features-innovadoras)
+- [Resumen de Fases](#resumen-de-fases)
 
 ---
 
-## 🟡 Fase 2: JDK Auto-Installer
+## Fase 0: Auditoría Táctica (COMPLETADA)
 
-**Archivo**: `app/services/java_installer.py` — ✅ Implementado (Fase 1)
+**Objetivo:** Entender el código base a fondo antes de modificar nada.
 
-### Integración en Core
-- [x] **`core.py:start_server()`** — Fallback chain en 3 escenarios: sin Java, >21 experimental, < required ✅
-- [x] **`core.py:start_server()`** — Manejar `JdkDownloadError` → `ServerEvent.NOTIFICATION` tipo "error" ✅
-- [x] **`core.py`** — Cachear `required_java` en `metadata.json` con `jdk_source: "portable"` post-descarga ✅
-- [x] **`main.py`** — Indicador visual en status bar si se está usando JDK portable vs system Java ✅
-- [x] **`ServerWizard`** — Agregar flag opcional "Auto-install JDK if missing" (default: true) ✅
-
-### Post-Instalación
-- [x] **`java_installer.py`** — Agregar `purge_unused_jdks()` para limpiar JDKs no referenciados por ningún servidor ✅
-- [x] **`constants.py`** — Agregar `JDK_CACHE_DIR = BASE_DIR / ".zbb_cache" / "jdks"` ✅
-
----
-
-## 🟢 Fase 2b: Compatibilidad Linux (Debian-Ready)
-
-### 2b.1 Abstracción de "Open Folder"
-**Contexto**: `main.py` y `server_properties_editor.py` tienen lógica duplicada de `os.startfile`/`xdg-open` esparcida en 4 lugares.
-
-- [ ] **`services/platform_utils.py` (nuevo)** — Crear `open_directory(path)` que unifique:
-      - `sys.platform == "win32"` → `os.startfile(path)`
-      - `sys.platform == "darwin"` → `subprocess.run(["open", path])`
-      - default → `subprocess.run(["xdg-open", path])`
-- [ ] **`main.py`** — Reemplazar 3 ocurrencias de `os.startfile`/`xdg-open` por `platform_utils.open_directory()`
-- [ ] **`server_properties_editor.py:657`** — Reemplazar `os.startfile` por `platform_utils.open_directory()`
-
-### 2b.2 Universal Symlinks (Reemplazar `_winapi`)
-**Contexto**: `main.py:517` y `core.py:369` usan `_winapi.CreateJunction`, que solo existe en Windows. En Linux/Mac se necesita `os.symlink`.
-
-- [ ] **`services/platform_utils.py`** — Crear `create_link(src, dst, is_directory=False)`:
-      - Windows → `_winapi.CreateJunction(src, dst)` (si es directorio) o `os.symlink`
-      - Linux/Mac → `os.symlink(src, dst)`
-- [x] **`main.py:517`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por guard `sys.platform == "win32"` + `os.symlink` fallback ✅
-- [ ] **`core.py:369`** — Reemplazar `import _winapi; _winapi.CreateJunction(...)` por `platform_utils.create_link()`
-
-### 2b.3 Manejo de Señales (SIGTERM en Linux)
-**Contexto**: En Linux, `subprocess.Popen` no recibe SIGTERM automáticamente. Si el proceso padre muere, el agente Playit puede quedar zombie.
-
-- [x] **`playit_manager.py`** — Agregar `preexec_fn=os.setsid` al `subprocess.Popen` del agente para evitar orphans en Linux ✅
-- [ ] **`playit_manager.py`** — Registrar `signal.signal(signal.SIGTERM, handler)` que ejecute `self.stop()` limpiamente
-- [ ] **`playit_manager.py:stop()`** — Asegurar que `process.terminate()` → `process.wait(timeout=5)` → `process.kill()` funcione en Linux (SIGTERM → SIGKILL)
-- [ ] **`single_instance.py`** — Verificar que `atexit.register` capture `SIGTERM` además de `sys.exit()` normal
+| Tarea | Archivos | Estado |
+|-------|----------|--------|
+| Análisis de import graph (38 archivos, ~6,200 LOC) | Todos | ✅ |
+| Thread audit (24 spawns, 6 innecesarios) | main.py, logic.py, core.py | ✅ |
+| I/O map (metadata.json leído en 8+ lugares) | Todos | ✅ |
+| Security scan (sanitizer OK, sin SQL) | sanitizer.py | ✅ |
+| Memory baseline estimado (~35-45 MB idle) | — | ✅ |
+| Identificación sobreingeniería (46 hallazgos, 14 alto impacto) | Todos | ✅ |
+| Script de profiling generado | `scripts/profile_app.py` | ✅ |
+| Documento maestro de contexto | `.planning/PROJECT_CONTEXT.md` | ✅ |
+| ~2,800 LOC potencialmente eliminables de ~6,200 | — | 📊 |
 
 ---
 
-## 🟠 Fase 3: Mod Ecosystem — Event-Driven
+## Fase 0.5: Corrección de Críticos (Seguridad + Data Loss)
 
-### Evento INSTALL_REQUEST
-- [ ] `server_events.py` — Agregar `INSTALL_REQUEST = "install_request"`
-- [ ] Payload: `{"server_name", "mod_slug", "mc_version", "loader", "project_type"}`
+**Objetivo:** Corregir bugs que pueden causar pérdida de datos, seguridad comprometida, o UI bloqueada. ~42 min de trabajo.
 
-### Scaffolder como gestor de descargas
-- [ ] `scaffolder.py` — Nueva función `handle_install_request(data)`:
-      - Escuchar `ServerEvent.INSTALL_REQUEST`
-      - Ejecutar descarga en hilo separado (daemon)
-      - Reportar progreso vía `ServerEvent.CONSOLE_LINE` + `ServerEvent.NOTIFICATION`
-      - Delegar a `ModrinthClient.download_mod()` internamente
-- [ ] `scaffolder.py` — Suscribirse al EventBus en `core.py`
+| # | Prioridad | Tarea | Archivo | Líneas | Riesgo | Tiempo |
+|---|-----------|-------|---------|--------|--------|--------|
+| 0.5.1 | 🔴 | Backup: hacer ZIP de respaldo ANTES de restaurar | `backup_manager.py:87-102` | ~15 | 🔴 (data loss) | 15 min |
+| 0.5.2 | 🔴 | Sanitizer: `%` no debe estar bloqueado (válido en MC) | `sanitizer.py:6` | 1 | 🔴 (UX) | 2 min |
+| 0.5.3 | 🔴 | JDK: no reintentar si SHA256 falló + detectar SHA-256 vs SHA-512 | `java_installer.py:73-78,189-202` | ~10 | 🔴 (wasted bandwidth) | 10 min |
+| 0.5.4 | 🟠 | Port validation: negativos fuera | `scaffolder.py:22` | ~5 | 🟠 (túnel roto) | 5 min |
+| 0.5.5 | 🟠 | DownloadProgressDialog: `protocol("WM_DELETE_WINDOW")` para grab_release | `ui_components.py:220-272` | 1 | 🟠 (UI lockeada) | 5 min |
+| 0.5.6 | 🟠 | Watchdog backoff con límite superior (1 hora max) | `watchdog.py:178-179` | ~3 | 🟠 (server nunca revive) | 5 min |
 
-### UI desacoplada
-- [ ] `modrinth_browser.py:_on_install()` — Reemplazar llamada directa a `provider.download_mod()` por `events.emit(ServerEvent.INSTALL_REQUEST, {...})`
-- [ ] `modrinth_browser.py` — Remover import de `ModProvider` (ya no necesario en UI)
-- [ ] `modrinth_browser.py` — Escuchar `ServerEvent.CONSOLE_LINE` para feedback de instalación en status bar
+**Detalle técnico de cada fix:**
 
-### Resolución de Dependencias
-- [ ] `scaffolder.py` — `_resolve_dependencies(slug, mc_version, loader)` con API Modrinth
-- [ ] `scaffolder.py` — `_install_with_deps()` con orden topológico (máx profundidad 3)
+### 0.5.1 — Backup restore safety (backup_manager.py)
+```python
+# ANTES: wipe → extract (si ZIP corrupto, data loss)
+shutil.rmtree(server_path)  # wipe primero
+zipf.extractall(server_path)  # si falla, datos perdidos
 
-### Optimizer Bundle Event-Driven
-- [ ] `server_events.py` — Agregar `INSTALL_OPTIMIZERS = "install_optimizers"`
-- [ ] `scaffolder.py` — Mover lógica de `ModProvider.install_optimizer_bundle()` a scaffolder
-- [ ] `modrinth_browser.py:_on_install_optimizers()` — Emitir `INSTALL_OPTIMIZERS` en vez de llamar a `provider` directamente
+# DESPUÉS: backup previo → wipe → extract → restore si falla
+_temp_backup = shutil.make_archive(...)  # respaldo antes de tocar
+try:
+    wipe_server_dir()
+    extract_zip()
+except:
+    restore_from_temp_backup()
+    raise
+finally:
+    cleanup_temp_backup()
+```
 
----
+### 0.5.2 — Sanitizer % fix (sanitizer.py:6)
+```python
+# ANTES: INJECTION_CHARS incluye %
+INJECTION_CHARS = set(';|&`$%')
 
-## ✅ Auditoría Técnica (Completada)
+# DESPUÉS: % eliminado de INJECTION_CHARS (válido en comandos MC)
+INJECTION_CHARS = set(';|&`$')
+```
 
-### Código Muerto Residual
-- [x] `main.py:247-345` — Eliminar `_build_management_controls` (~100 líneas) ✅
-- [x] `main.py:599` — Eliminar stub `save_scheduler_dashboard` ✅
-- [x] `main.py:602` — Eliminar stub `quick_backup_action` ✅
-- [x] Adicional: `main.py:426-436` — `toggle_schedule_mode` ✅
-- [x] Adicional: `main.py:437-470` — `_format_time_input` ✅
+### 0.5.3 — JDK checksum retry + SHA detection (java_installer.py)
+```python
+# ANTES: reintenta descarga contra misma URL (siempre falla)
+if not _verify_checksum(zip_path, expected_checksum):
+    zip_path.unlink()  # misma URL → mismo checksum → siempre falla
 
-### UI: corner_radius Neo-Modern (estándar = 12)
-- [x] `main.py` — Corregido ✅
-- [x] `ui_components.py` — Corregido ✅
-- [x] `server_properties_editor.py` — Corregido ✅
-- [x] `modrinth_browser.py` — Corregido ✅
+# DESPUÉS: detectar SHA-256 vs SHA-512 + abortar inmediatamente
+if len(expected_checksum) == 128:
+    actual = _compute_sha512(zip_path)  # nueva función
+else:
+    actual = _compute_sha256(zip_path)
+if actual != expected_checksum:
+    raise JdkIntegrityError(...)  # no retry
+```
 
-### Limpieza de Sonidos
-- [x] `app/services/audio.py` — Eliminado (31 líneas) ✅
-- [x] `main.py` — Eliminado `play_notification_sound` + caller ✅
-- [x] `assets/notification.wav` — Eliminado ✅
+### 0.5.4 — Port validation (scaffolder.py)
+```python
+# AÑADIR al inicio de pre_boot_scaffold():
+if not (1 <= port <= 65535):
+    raise ValueError(f"Invalid port: {port}. Must be 1-65535.")
+```
 
-### Estándares
-- [x] `core.py` — Emojis `✓` `✗` reemplazados por `OK` `ERROR` ✅
-- [x] `tests/test_java_installer.py` — 28 tests creados ✅
+### 0.5.5 — Dialog grab release (ui_components.py)
+```python
+# AÑADIR en __init__ de DownloadProgressDialog:
+self.protocol("WM_DELETE_WINDOW", self.close)
+```
 
----
+### 0.5.6 — Watchdog backoff cap (watchdog.py)
+```python
+# ANTES: backoff exponencial sin límite
+def _compute_backoff(self):
+    return self._backoff_base * (2 ** (self.retry_count - 1))
 
-## 📦 Resumen de Fases
-
-| Fase | Archivos | Tests | Estado |
-|---|---|---|---|
-| **F1: Playit.gg** | `playit_api.py`, `playit_manager.py`, `constants.py` | Actualizar tests existentes | ✅ Completa |
-| **F2: JDK Core** | `core.py`, `java_installer.py`, `main.py`, `server_wizard.py`, `constants.py` | 28 tests existentes | ✅ Completa |
-| **F2b: Linux Compat** | `platform_utils.py`, `main.py`, `core.py`, `playit_manager.py`, `single_instance.py` | — | ❌ |
-| **F3a: Evento Mod** | `server_events.py`, `scaffolder.py`, `modrinth_browser.py` | `test_install_request_event` | ❌ |
-| **F3b: Dependencias** | `scaffolder.py`, `modrinth.py` | `test_dependency_resolution` | ❌ |
-| **Auditoría** | múltiples | regression 188 tests | ✅ Completa |
-
-## 🧹 Fase 1G: Simplificación de PlayitManager
-
-**Contexto**: Tras restaurar `create_tunnel()` vía REST API, gran parte del código de `playit_manager.py` quedó muerto o redundante (<code>_inject_toml_mapping</code>, <code>get_local_status</code>, <code>_status_polling_loop</code>, <code>_dns_polling_loop</code>, <code>_restart_with_mapping</code>). También hay polling loops obsoletos y lógica de stdout que ya no se necesita.
-
-**Branch**: `simplify-playit-manager` (desde `dev`)
-
-- [x] Eliminar código muerto: `_inject_toml_mapping`, `get_local_status`, `_handle_local_status`, `_status_polling_loop`, `_dns_polling_loop`, `_restart_with_mapping` ✅
-- [x] Simplificar `_parse_line`: inline solo `AgentDisabledOverLimit` en `_read_output` ✅
-- [x] Simplificar `_read_output`: quitar `_parse_line()`, mantener solo filtro spam + log ✅
-- [x] Reducir threads en `_start_internal`: solo `_read_output` + `_heartbeat_loop` ✅
-- [x] Simplificar `_heartbeat_loop`: restart directo vía `self.start()` en vez de `_restart_with_mapping` ✅
-- [x] Eliminar `proto_register()` de `initialize()` (no necesario para tunnel CRUD) ✅
-- [x] Simplificar `create_tunnel()`: intentar address de respuesta directa, poll 5s solo si pending ✅
-- [x] Mover `ensure_binary()` temprano en `link_manually()` (descargar antes del bridge exchange) ✅
-- [x] Cambiar `_read_output` de `read(1)` a `readline()` para eficiencia ✅
-- [x] Fix Linux HIGH: guardar `_winapi.CreateJunction` en `main.py` con `sys.platform` ✅
-- [x] Fix Linux HIGH: guardar `os.startfile` en `server_properties_editor.py` con branching completo ✅
-- [x] Fix Linux MEDIUM: `preexec_fn=os.setsid` en subprocess playit para evitar orphans ✅
-- [x] Correr tests (200/200 pasan) ✅
-- [ ] Merge a `dev`
+# DESPUÉS: cap a 3600s (1 hora)
+def _compute_backoff(self):
+    delay = self._backoff_base * (2 ** (self.retry_count - 1))
+    return min(delay, 3600)  # cap at 1 hour
+```
 
 ---
 
-**Prioridad**: F1 (Playit.gg — estabilidad) → F1G (Simplificación) → F2 (JDK) → F3a (Evento Mod) → F3b (Dependencias)
+## Fase 1: Quick Wins (COMPLETADA)
+
+**Objetivo:** Eliminar código muerto y sobreingeniería obvia. ~30 min de trabajo, ~194 LOC eliminadas.
+
+| # | Tarea | Archivos | LOC | Riesgo | Estado |
+|---|-------|----------|-----|--------|--------|
+| 1.1 | `statemanager.py` — singleton+facade → 3 vars + 2 funciones | `statemanager.py`, `main.py` | ~50 | 🟢 | ✅ |
+| 1.2 | Fix `select_server()` duplicado (línea 346) | `main.py:345-346` | 1 (bug) | 🟢 | ✅ |
+| 1.3 | Eliminar `mod_provider.py` — usar `ModrinthClient` directo | `mod_provider.py`, `modrinth_browser.py` | 67 | 🟢 | ✅ |
+| 1.4 | `console_buffer.py` — `CircularBuffer` → `collections.deque` | `console_buffer.py` | 32 | 🟢 | ✅ |
+| 1.5 | `server_events.py` — eliminar `RLock` + `EventPayload` muerto | `server_events.py` | ~15 | 🟢 | ✅ |
+| 1.6 | Eliminar `read_properties()` alias en `server_properties.py` | `server_properties.py` | 2 | 🟢 | ✅ |
+| 1.7 | `settings_manager.py` — singleton → funciones módulo | `settings_manager.py` | ~35 | 🟡 | ✅ |
+
+---
+
+## Fase 2: Bugfixes + Playit UX + Wizard UX (COMPLETADA)
+
+**Objetivo:** Corregir bugs activos, arreglar el filtro de Modrinth, rediseñar la UI de linking de Playit, mejorar la experiencia de creación de servidores, y agregar soft reset tunnel.
+
+### 2A. Bugfixes
+
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 2.1 | Fix `check_java_startup()` — usar `JavaDetector` en vez de parsear ruta | `main.py:298-313` | 🟡 | ✅ |
+| 2.2 | DNS recovery chain (3 mecanismos) | `playit_manager.py` | 🔴 | ✅ |
+| 2.3 | Verificar que `TunnelStatusProvider.schedule_update()` elimina el "Starting..." duplicado | `main.py`, `statemanager.py` | 🟢 | ✅ |
+
+### 2B. Modrinth Critical Fix
+
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 2.4 | Fix `project_type` filter — pasar valor del dropdown + arreglar `get_popular_mods()` | `modrinth_browser.py` | 🟡 | ✅ |
+
+### 2C. Playit Link UX Redesign
+
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 2.5 | Rediseñar UI de linking: collapsible con botón "⚡ Link", auto-open web, hide reset si unlinked | `main.py` | 🟡 | ✅ |
+| 2.14 | Soft reset tunnel — solo borra túneles, reusa agente. Click "▶" para nuevo túnel | `playit_manager.py`, `core.py`, `main.py` | 🟢 | ✅ |
+
+### 2D. Wizard + Barra de Progreso + Status
+
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 2.6 | `progress_callback(float)` → `progress_callback(float, str)` con estados | `ui_components.py`, `sha1_validator.py` | 🟢 | ✅ |
+| 2.7 | Mensajes de progreso detallados (descarga, SHA1, normalize, scaffold, bytecode, tunnel) | `main.py`, `server_wizard.py` | 🟢 | ✅ |
+| 2.8 | Pre-flight Java check en ServerWizard Step 2 | `server_wizard.py` | 🟡 | ✅ |
+| 2.9 | Botón "▶ Start Now" al finalizar creación | `main.py` | 🟢 | ✅ |
+| 2.10 | Status badge por tipo de Java (System/Portable) en barra de estado | `java_detector.py`, `main.py` | 🟢 | ✅ |
+
+### 2E. Remote Agent + JDK Pre-download
+
+| # | Tarea | Archivos | Riesgo | Estado |
+|---|-------|----------|--------|--------|
+| 2.11 | Remote agent cleanup — gate `key_valid` eliminado | `playit_manager.py` | 🟡 | ✅ |
+| 2.12 | Pre-download JDK durante wizard tras bytecode analysis | `main.py`, `java_installer.py` | 🟡 | ✅ |
+| 2.13 | Reset UI fijo — `skip_debounce` post-reset | `main.py` | 🟢 | ✅ |
+
+### Estados de Progreso Definidos (implementados)
+
+```
+0%  → Downloading {type} {version} server jar...
+20% → Verifying file integrity (SHA1)...
+25% → Preparing server jar...
+30% → Applying server icon...
+35% → Configuring server environment...
+50% → Analyzing Java requirements...
+60% → Setting up Playit tunnel...
+80% → Finalizing setup...
+100% → ✓ Server ready!
+```
+
+---
+
+## Fase 3: Refactors + Modrinth Management
+
+**Objetivo:** Reducir duplicación y complejidad en la lógica central (~248 LOC saved) y mejorar la gestión de mods con nuevas funcionalidades en el browser.
+
+### 3A. Refactors Estructurales
+
+| # | Tarea | Archivos | LOC saved | Riesgo |
+|---|-------|----------|-----------|--------|
+| 3.1 | `normalize_server_jar()` extraer helper symlink/copy (122→~60 LOC) | `logic.py:209-331` | ~60 | 🟡 |
+| 3.2 | `install_fabric` + `install_forge` → `_run_installer()` helper | `logic.py:178-374` | ~50 | 🟡 |
+| 3.3 | `start_server()` extraer auto-install helper (222→~140 LOC) | `core.py:129-351` | ~80 | 🟠 |
+| 3.4 | `on_tunnel_status()` refactor a state machine — eliminar patrón `pack_forget`/`pack` | `main.py:658-735` | ~20 | 🟡 |
+| 3.5 | Centralizar acceso a `metadata.json` en `get_server_meta()`/`set_server_meta()` | `logic.py` + callers | ~30 | 🟡 |
+| 3.6 | Eliminar `_pre_warm_version_cache()` de bootstrap | `core.py:119-124` | ~8 | 🟢 |
+| 3.7 | `PlayitManager` aceptar EventBus en vez de 4 callbacks | `playit_manager.py`, `core.py` | ~15 | 🟠 |
+| 3.8 | Eliminar `_apply_pending_settings()` (duplica scaffolder) | `logic.py:402-428` | ~28 | 🟡 |
+| 3.9 | `Scheduler` + `SchedulerService` fusionar en funciones | `logic.py`, `scheduler_service.py` | ~90 | 🟡 |
+
+### 3B. Modrinth Management (UI + Funcionalidad)
+
+| # | Tarea | Archivos | Riesgo |
+|---|-------|----------|--------|
+| 3.10 | Añadir gestión de mods instalados (lista con checkboxes, desinstalar con confirmación) | `modrinth_browser.py` | 🟡 |
+| 3.11 | Añadir paginación en búsqueda ("Load More" que incrementa offset) | `modrinth_browser.py`, `modrinth.py` | 🟢 |
+| 3.12 | Mostrar íconos reales de mods vía `icon_url` en vez de placeholders de letras | `modrinth_browser.py` | 🟢 |
+| 3.13 | Exponer "Check for Updates" en UI llamando `ModrinthClient.check_updates()` | `modrinth_browser.py` | 🟡 |
+| 3.14 | Añadir selector de versión al instalar (dropdown de versiones compatibles antes de descargar) | `modrinth_browser.py`, `modrinth.py` | 🟡 |
+
+### Pendientes del roadmap anterior (integrados aquí)
+
+| Tarea original | Ahora en |
+|---------------|----------|
+| `platform_utils.py` — `open_directory()` | Fase 4.1 |
+| `platform_utils.py` — `create_link()` | Fase 4.2 |
+| SIGTERM handler Linux | Fase 4.3 |
+| `stop()` con wait+kill en Linux | Fase 4.4 |
+| `single_instance.py` + SIGTERM | Fase 4.5 |
+| Mod Ecosystem Event-Driven | Reevaluado — baja prioridad |
+
+---
+
+## Fase 4: Cross-Platform (Linux Compat)
+
+**Objetivo:** Garantizar funcionamiento correcto en Linux (hereda de Fase 2b del roadmap anterior).
+
+| # | Tarea | Archivos | Riesgo |
+|---|-------|----------|--------|
+| 4.1 | `platform_utils.py` — `open_directory(path)` unificado | Nuevo + `main.py`, `server_properties_editor.py` | 🟢 |
+| 4.2 | `platform_utils.py` — `create_link(src, dst)` unificado | Nuevo + `main.py`, `core.py` | 🟢 |
+| 4.3 | SIGTERM handler en `playit_manager.py` | `playit_manager.py` | 🟡 |
+| 4.4 | `stop()` con `wait(timeout=5)` + `kill()` en Linux | `playit_manager.py` | 🟡 |
+| 4.5 | `single_instance.py` verificar captura de SIGTERM | `single_instance.py` | 🟢 |
+
+---
+
+## Fase 5: UI/UX — ZeroBlock Bridge 2.0
+
+**Objetivo:** Transformar la experiencia de usuario con interfaces modernas, informativas, y eficientes.
+
+### 5A. ServerWizard Rediseñado
+
+| # | Tarea | Riesgo |
+|---|-------|--------|
+| 5.1 | Pre-flight checks integrados (Java, espacio en disco, puerto disponible) | 🟡 |
+| 5.2 | Barra de progreso con texto descriptivo y estimación de tiempo | 🟢 |
+| 5.3 | Resumen final antes de crear ("Server X con Paper 1.20.1, 2GB RAM, Java 17") | 🟢 |
+| 5.4 | Botón "▶ Start Now" post-creación | 🟢 |
+| 5.5 | Server Templates selector (Lite SMP, Modded Fabric, Vanilla+) | 🟡 |
+
+### 5B. ServerPropertiesEditor Rediseñado
+
+| # | Tarea | Riesgo |
+|---|-------|--------|
+| 5.6 | Reducir de 7 a 4 pestañas (General, World, Management, Advanced) | 🟠 |
+| 5.7 | Crear clase `SettingsField` unificada con validación y tooltip | 🟡 |
+| 5.8 | Agrupar Backups + Auto-restart + JDK en "Server Management" | 🟡 |
+| 5.9 | Carga eager (no lazy) del diálogo completo | 🟢 |
+| 5.10 | Validación visual inline (borde rojo + mensaje) para campos inválidos | 🟢 |
+| 5.11 | Backup scheduler visual con selector de hora | 🟡 |
+
+### 5C. Layout + Consola
+
+| # | Tarea | Riesgo |
+|---|-------|--------|
+| 5.12 | Sidebar colapsable/redimensionable (toggle hamburguesa) | 🟠 |
+| 5.13 | Dashboard compacto (~80px en vez de ~130px, reducir pady y botones) | 🟢 |
+| 5.14 | Indicador visual de servidor activo en sidebar (border/accent color) | 🟢 |
+| 5.15 | Console search/filter (buscar texto en logs, filtrar por nivel) | 🟡 |
+| 5.16 | Separación visual de console input (fg_color distinto del fondo) | 🟢 |
+| 5.17 | Reemplazar emojis en botones con iconos reales (CTkImage) | 🟡 |
+| 5.18 | Fuentes consistentes — migrar hardcodeos a `AppConfig.FONT_*` | 🟢 |
+| 5.19 | Gear de settings mover a toolbar dedicada | 🟢 |
+
+### 5D. Mejoras Generales UI
+
+| # | Tarea | Riesgo |
+|---|-------|--------|
+| 5.20 | Server performance dashboard (TPS, RAM, players en tiempo real) | 🟠 |
+| 5.21 | Modo oscuro/claro completo — pulir colores del tema | 🟢 |
+| 5.22 | Tooltips descriptivos en todos los campos de config | 🟢 |
+
+---
+
+## Fase 6: Features Innovadoras
+
+**Objetivo:** Agregar funcionalidades que diferencien a ZeroBlockBridge de otros launchers.
+
+### ⭐ Alta Prioridad
+
+| # | Feature | Descripción | Esfuerzo |
+|---|---------|-------------|----------|
+| 6.1 | **Server Templates** | Perfiles predefinidos reutilizables (guardar/cargar config completa) | 2-3 días |
+| 6.2 | **Server Import/Export (.zbbpack)** | Backup portátil en ZIP con config + mundo + mods | 2-3 días |
+| 6.3 | **Auto-backup scheduler visual** | UI para programar backups automáticos con retención | 1 día |
+
+### 🟡 Media Prioridad
+
+| # | Feature | Descripción | Esfuerzo |
+|---|---------|-------------|----------|
+| 6.4 | **Plugin/Mod auto-installer** | Seleccionar mods populares durante creación del servidor | 2 días |
+| 6.5 | **One-click deploy** | "Lite SMP", "Modded Fabric", "Vanilla+" con 1 clic | 3 días |
+| 6.6 | **Launch presets** | Perfiles Survival / Creative / Minigame que ajustan server.properties | 1 día |
+| 6.7 | **Server health dashboard** | Gráficos de TPS, RAM, jugadores, chunks | 2 días |
+
+### 🟢 Baja Prioridad
+
+| # | Feature | Descripción | Esfuerzo |
+|---|---------|-------------|----------|
+| 6.8 | **Modo headless** | `launcher.py --headless` para VPS sin GUI | 2 días |
+| 6.9 | **Web dashboard** | Monitoreo vía navegador (FastAPI + websocket) | 5 días |
+| 6.10 | **Auto-update** | Verificar y descargar nuevas versiones de ZBB | 1 día |
+
+---
+
+## Resumen de Fases
+
+| Fase | Descripción | LOC cambio | Tiempo estimado | Prioridad |
+|------|-------------|-----------|-----------------|-----------|
+| **F0** | Auditoría Táctica | ~0 | ✅ Completa | — |
+| **F0.5** | Corrección de Críticos | ~+35 | ✅ Completa | — |
+| **F1** | Quick Wins | -194 | ✅ Completa (~30 min) | — |
+| **F2** | Bugfixes + Playit UX + Wizard UX | +150 | ✅ Completa | — |
+| **F3** | Refactors + Modrinth Management | -180 | ~4 hrs | 🥇 Siguiente |
+| **F4** | Cross-Platform (Linux) | +80 | ~2 hrs | 🥈 |
+| **F5** | UI/UX — ZBB 2.0 | +350 | ~6 hrs | 🥉 |
+| **F6** | Features Innovadoras | +500 | ~2-3 semanas | 🥉 |
+
+### Orden de Ejecución Recomendado
+```
+F0 → F0.5 → F1 → F2 → F3 → F4 → F5 → F6
+(hecho) (hecho) (hecho) (hecho) ⬆️
+                          empezar aquí
+```
+
+### Branch Strategy
+- Rama principal de desarrollo: `dev`
+- Feature branches desde `dev`: `feature/<nombre>`
+- Commits atómicos (un commit = un cambio)
+- Merge a `dev` después de cada fase o feature completa
+- NO mergear a `main` hasta tener versión estable
+
+### Testing
+```powershell
+python -m pytest tests/ -v           # Regresión
+python -m py_compile app/ruta.py     # Sintaxis
+python scripts/profile_app.py        # Baseline rendimiento
+```
+
+---
+
+## Pendientes del Roadmap Anterior (Migrados)
+
+Los siguientes items del roadmap original han sido reevaluados e integrados:
+
+| Item original | Estado | Nueva ubicación |
+|--------------|--------|-----------------|
+| Fase 1G: Merge simplificación Playit a `dev` | ✅ Completado | Fase 2 + merge a dev |
+| Fase 2b: Linux compat (platform_utils) | Pendiente | Fase 4.1-4.2 |
+| Fase 2b: SIGTERM + stop Linux | Pendiente | Fase 4.3-4.5 |
+| Fase 3a: Mod Ecosystem Event-Driven | Reevaluado | ⏸ Pospuesto (baja prioridad) |
+| Fase 3b: Dependency Resolution | Reevaluado | ⏸ Pospuesto |
+
+**Razón del pospuesto de Fase 3 (Mod Ecosystem):** El Event-Driven para mods es un refactor grande
+que no aporta valor visible al usuario. Priorizamos mejoras de UX y estabilidad primero.

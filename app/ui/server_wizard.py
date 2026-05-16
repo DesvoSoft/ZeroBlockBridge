@@ -4,6 +4,7 @@ import os
 import psutil
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
+from app.services.java_detector import JavaDetector, get_required_java
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -221,18 +222,51 @@ class ServerWizard(ctk.CTkToplevel):
         self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color="red", font=ctk.CTkFont(size=12))
         self.lbl_ram_error.pack(anchor="w")
 
+        # --- Pre-flight Java Check ---
+        ctk.CTkLabel(engine_res_frame, text="Java:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
+        self.java_frame = ctk.CTkFrame(engine_res_frame, corner_radius=8, fg_color=("gray90", "gray20"))
+        self.java_frame.pack(fill="x", pady=(0, 5))
+
+        self.lbl_java_status = ctk.CTkLabel(self.java_frame, text="Detecting Java...", font=ctk.CTkFont(size=13), anchor="w")
+        self.lbl_java_status.pack(fill="x", padx=10, pady=6)
+        self._update_java_check()
+
         self._update_ram_hint()
         
     def _on_engine_change(self):
         self.wizard_data["type"] = self.engine_var.get()
         self._render_versions()
         self._update_ram_hint()
+        self._update_java_check()
 
     def _update_ram_hint(self):
         engine = self.engine_var.get()
         hints = {"Vanilla": "512 MB min", "Paper": "1 GB min", "Purpur": "1 GB min", "Fabric": "1 GB min", "Forge": "2 GB min"}
         hint = hints.get(engine, "1 GB min")
         self.lbl_ram_hint.configure(text=f"Recommended: {hint}")
+
+    def _update_java_check(self):
+        version = self.version_var.get()
+        if not version:
+            self.lbl_java_status.configure(text="Select a version to check Java compatibility.", text_color="gray")
+            return
+        detector = JavaDetector()
+        installations = detector.detect_all()
+        required = get_required_java(version)
+        if not installations:
+            self.lbl_java_status.configure(
+                text=f"⚠ No Java found. MC {version} requires Java {required}. Enable Auto-install JDK in Step 3.",
+                text_color="orange"
+            )
+            return
+        best = installations[0]
+        compatible = best.major == required
+        compat_text = "✅" if compatible else "⚠"
+        best_label = f"Java {best.major} ({best.source})"
+        self.lbl_java_status.configure(
+            text=f"{compat_text} {best_label} — MC {version} requires Java {required}",
+            text_color=None
+        )
 
     def update_ram_from_entry(self, event=None):
         try:
@@ -288,8 +322,8 @@ class ServerWizard(ctk.CTkToplevel):
             ctk.CTkLabel(self.scroll_versions, text="No versions found.").pack(pady=20)
             return
             
-        for v in filtered[:100]: # Allow more versions to be shown
-            rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var, value=v)
+        for v in filtered[:100]:
+            rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var, value=v, command=self._update_java_check)
             rb.pack(anchor="w", padx=10, pady=5)
             
         if self.wizard_data["version"] in filtered:

@@ -30,6 +30,8 @@ class PlayitManager:
         self.api_client = PlayitApiClient()
         self._lock = threading.RLock()
         self._api_dns = None
+        # --- CRITICAL DNS: stdout DNS — recovered via _parse_line regex from agent stdout ---
+        self._stdout_dns = None
         self._current_port = 25565
 
         # Persistence: Check if already linked
@@ -160,9 +162,6 @@ class PlayitManager:
 
         self.status_callback("Starting...", None)
 
-        if self.notification_callback:
-            self.notification_callback("Initializing tunnel relay...", "info")
-
         if not self.ensure_binary():
             self.console_callback("[Playit] Binary check failed.")
             return
@@ -225,6 +224,7 @@ class PlayitManager:
                 self.status_callback("Starting...", None)
 
             threading.Thread(target=self._read_output, daemon=True).start()
+            threading.Thread(target=self._dns_polling_loop, daemon=True).start()
             threading.Thread(target=self._heartbeat_loop, daemon=True).start()
 
         except OSError as e:
@@ -265,53 +265,69 @@ class PlayitManager:
                 self._api_dns = None
             self.status_callback("Offline", None)
 
-    def reset(self, reuse_agent: bool = True):
+    def reset(self, mode="full"):
         try:
-            self.console_callback("[Playit] Starting reset...")
-            self.stop()
+            if mode == "full":
+                self.console_callback("[Playit] Starting full reset...")
+            else:
+                self.console_callback("[Playit] Starting tunnel-only reset...")
 
-            key_valid = self.api_client.verify_secret_key()
-            if key_valid and reuse_agent:
-                self.console_callback("[Playit] Secret key valid. Reusing existing agent — deleting tunnels only...")
-                try:
-                    tunnels = self.api_client.list_tunnels()
-                    for t in tunnels:
-                        tid = t.get("id")
-                        if tid:
+            # --- CRITICAL DNS: load secret key from toml for remote cleanup ---
+            self.api_client.load_secret_key()
+
+            # 1. Delete remote tunnels (both modes)
+            self.console_callback("[Playit] Cleaning up remote tunnels...")
+            try:
+                tunnels = self.api_client.list_tunnels()
+                for t in tunnels:
+                    tid = t.get("id")
+                    if tid:
+                        try:
                             if self.api_client.delete_tunnel(tid):
                                 self.console_callback(f"[Playit] Deleted tunnel: {tid}")
-                    self.console_callback("[Playit] Tunnels cleared. Agent kept intact.")
-                except PlayitApiException as e:
-                    self.console_callback(f"[Playit] Tunnel cleanup failed: {e}")
-            elif key_valid:
-                self.console_callback("[Playit] Destructive reset requested. Deleting remote agent...")
-                try:
-                    if self.api_client.delete_agent():
-                        self.console_callback("[Playit] Remote agent deleted.")
-                except PlayitApiException as e:
-                    self.console_callback(f"[Playit] Agent deletion failed: {e}")
-            else:
-                self.console_callback("[Playit] Secret key invalid/expired. Skipping remote cleanup.")
+                        except Exception as e:
+                            self.console_callback(f"[Playit] Tunnel delete failed: {e}")
+            except Exception as e:
+                self.console_callback(f"[Playit] Tunnel list failed: {e}")
 
-            if not key_valid or not reuse_agent:
+            # 2. Stop local process (both modes)
+            self.stop()
+
+            if mode == "full":
+                # Full reset: also delete agent, config, credentials
+                self.console_callback("[Playit] Cleaning up remote agent...")
+                api_deleted = False
+                try:
+                    api_deleted = self.api_client.delete_agent()
+                    if api_deleted:
+                        self.console_callback("[Playit] Remote agent deleted via API.")
+                except Exception as e:
+                    self.console_callback(f"[Playit] API agent deletion failed (agent may remain in dashboard): {e}")
+
+                if not api_deleted:
+                    self.console_callback("[Playit] Agent could not be deleted automatically. If it remains, delete manually at:")
+                    self.console_callback("[Playit] https://playit.gg/dashboard/agents")
+
                 if os.path.exists(self.toml_path):
                     os.remove(self.toml_path)
                     self.console_callback("[Playit] Local config playit.toml removed.")
+
                 self.is_linked = False
                 self.api_client.is_read_only = False
                 self.api_client._secret_key = None
                 self.api_client._agent_id = None
-                self.console_callback("[Playit] Account unlinked.")
+                self.current_address = None
+                self._api_dns = None
+                self.console_callback("[Playit] Account unlinked and reset complete.")
+                if self.notification_callback:
+                    self.notification_callback("Playit account unlinked and reset.", "success")
             else:
-                self.console_callback("[Playit] Local config preserved (non-destructive reset).")
-
-            self.current_address = None
-            self._api_dns = None
-            self.console_callback("[Playit] Reset complete.")
-
-            if self.notification_callback:
-                msg = "Playit reset complete (non-destructive)." if reuse_agent else "Playit account unlinked and reset."
-                self.notification_callback(msg, "success")
+                # Soft reset: keep agent linked, user can create a new tunnel with ▶
+                self.current_address = None
+                self._api_dns = None
+                self.console_callback("[Playit] Tunnels cleared. Agent stays linked. Click ▶ to create a new tunnel.")
+                if self.notification_callback:
+                    self.notification_callback("Tunnels cleared. Click ▶ to create a new tunnel.", "success")
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
@@ -354,6 +370,39 @@ class PlayitManager:
             except Exception as e:
                 logger.warning(f"Could not fix playit.toml permissions: {e}")
 
+    # --- CRITICAL DNS: polls API for up to 60s until tunnel domain is assigned ---
+    # DO NOT MODIFY without understanding the full DNS recovery chain:
+    # 1. get_or_create_tunnel() (15s window in create_tunnel)
+    # 2. _dns_polling_loop() (60s API poll - THIS METHOD)
+    # 3. _parse_line() (stdout regex from agent)
+    def _dns_polling_loop(self):
+        waited = 0
+        while self.running and waited < 60:
+            time.sleep(5)
+            waited += 5
+            if not self.running:
+                return
+            if self._api_dns or self._stdout_dns:
+                return
+            try:
+                addresses = self.api_client.get_tunnels()
+                if addresses:
+                    address = addresses[0]
+                    with self._lock:
+                        if address == self.current_address:
+                            continue
+                        self.current_address = address
+                        self._api_dns = address
+                    self.status_callback("Online", address)
+                    self.console_callback(f"[Playit] Public address: {address}")
+                    if self.notification_callback:
+                        self.notification_callback(f"Tunnel online: {address}", "success")
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+                    return
+            except Exception:
+                pass
+
     def _heartbeat_loop(self):
         max_failures = 3
         fail_count = 0
@@ -386,6 +435,33 @@ class PlayitManager:
         "NetworkUnreachable"
     ]
 
+    # --- CRITICAL DNS: regex-based domain extraction from agent stdout ---
+    # DO NOT MODIFY. This is the 3rd and final DNS recovery mechanism.
+    # Extracts .ply.gg / .playit.gg / .joinmc.link domains from agent log lines.
+    def _parse_line(self, line):
+        if not line:
+            return
+        if self._api_dns or self._stdout_dns:
+            return
+        dns_patterns = [
+            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?(?:ply|playit)\.gg(?::\d+)?)",
+            r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?joinmc\.link(?::\d+)?)",
+        ]
+        for pattern in dns_patterns:
+            dns_match = re.search(pattern, line)
+            if dns_match:
+                address = dns_match.group(1).rstrip('.')
+                if address != self.current_address:
+                    self._stdout_dns = address
+                    self.current_address = address
+                    self.status_callback("Online", address)
+                    self.console_callback(f"[Playit] Public address: {address}")
+                    if self.notification_callback:
+                        self.notification_callback(f"Tunnel online: {address}", "success")
+                    if self.on_ready_callback:
+                        self.on_ready_callback()
+                return
+
     def _read_output(self):
         try:
             while self.running and self.process:
@@ -408,12 +484,16 @@ class PlayitManager:
                         self.status_callback("Error", None)
                         self.console_callback("[Playit] ERROR: Account limit reached!")
                         self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
+                    # --- CRITICAL DNS: must call _parse_line on every line ---
+                    self._parse_line(clean_line)
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:
             self.running = False
             self.process = None
-            if not self._api_dns:
+            addr = self._api_dns or self._stdout_dns
+            self.current_address = addr
+            if not addr:
                 self.current_address = None
             self.status_callback("Offline", None)
 

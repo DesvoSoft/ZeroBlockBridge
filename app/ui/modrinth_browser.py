@@ -14,8 +14,7 @@ from typing import Callable, Optional
 
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
-from app.services.mod_provider import ModProvider
-from app.services.modrinth import ModrinthException
+from app.services.modrinth import ModrinthClient, ModrinthException
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,14 @@ class ModrinthBrowser(ctk.CTkFrame):
     threading for API calls — never blocks the UI thread.
     """
 
+    OPTIMIZERS = [
+        {"slug": "sodium", "name": "Sodium", "description": "High performance rendering engine."},
+        {"slug": "lithium", "name": "Lithium", "description": "General-purpose game code optimizer."},
+        {"slug": "ferrite-core", "name": "FerriteCore", "description": "Memory usage optimization."},
+        {"slug": "starlight", "name": "Starlight", "description": "Rewrite of light engine for performance."},
+        {"slug": "iris", "name": "Iris Shaders", "description": "Modern shader support for Sodium."}
+    ]
+
     def __init__(self, master, get_server_info: Callable = None, **kwargs):
         """
         Args:
@@ -55,7 +62,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         """
         super().__init__(master, fg_color="transparent", **kwargs)
         self.get_server_info = get_server_info
-        self.provider = ModProvider()
+        self.client = ModrinthClient()
         self._current_hits = []
         self._search_thread = None
 
@@ -201,15 +208,16 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._set_status("Searching…", busy=True)
         self.btn_search.configure(state="disabled")
 
-        def _do_search(q, mv, ld):
+        def _do_search(q, mv, ld, pt):
             try:
-                hits = self.provider.search_mods(
+                results = self.client.search(
                     q,
                     mc_version=mv,
                     loader=ld,
+                    project_type=pt,
                     limit=25,
                 )
-                
+                hits = results.get("hits", [])
                 self._current_hits = hits
                 total = len(hits)
                 self.after(0, lambda: self._render_results(self._current_hits, total))
@@ -221,7 +229,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self.btn_search.configure(state="normal"))
                 self.after(0, lambda: self._set_status("Ready"))
 
-        self._search_thread = threading.Thread(target=_do_search, args=(query, mc_version, loader), daemon=True)
+        self._search_thread = threading.Thread(target=_do_search, args=(query, mc_version, loader, project_type), daemon=True)
         self._search_thread.start()
 
     def _load_popular_mods(self):
@@ -239,7 +247,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         
         def _do_load():
             try:
-                hits = self.provider.get_popular_mods(mc_version=mc_version, loader=loader)
+                results = self.client.search(
+                    "", mc_version=mc_version, loader=loader,
+                    project_type="mod", limit=20,
+                )
+                hits = results.get("hits", [])
                 self.after(0, lambda: self._render_results(hits, len(hits)))
             except Exception as e:
                 logger.error(f"Failed to load popular mods: {e}")
@@ -386,7 +398,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _do_install():
             try:
-                path = self.provider.download_mod(
+                path = self.client.download_mod(
                     slug, server_name, mc_version, loader,
                     progress_callback=lambda p: self.after(
                         0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
@@ -414,10 +426,17 @@ class ModrinthBrowser(ctk.CTkFrame):
         server_name, mc_version, loader = info
         
         self._set_status("Installing Optimizer Bundle...", busy=True)
-        self.provider.install_optimizer_bundle(
-            server_name, mc_version, loader,
-            status_callback=lambda s: self.after(0, lambda: self._set_status(s))
-        )
+        def _run_opt():
+            for mod in self.OPTIMIZERS:
+                self.after(0, lambda m=mod: self._set_status(f"Installing {m['name']}..."))
+                try:
+                    self.client.download_mod(
+                        mod["slug"], server_name, mc_version, loader
+                    )
+                except Exception as e:
+                    logger.error("Failed to install %s: %s", mod["name"], e)
+            self.after(0, lambda: self._set_status("Ready"))
+        threading.Thread(target=_run_opt, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Utilities

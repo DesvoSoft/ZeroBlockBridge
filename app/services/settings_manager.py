@@ -1,64 +1,64 @@
 import json
 import os
 import logging
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-class SettingsManager:
-    """Manages global application settings via JSON."""
-    _instance = None
-    _settings_file = "zbb_settings.json"
-    
-    def __new__(cls, config_dir: str = None):
-        if cls._instance is None:
-            cls._instance = super(SettingsManager, cls).__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
+_settings_file = "zbb_settings.json"
+_settings_path = _settings_file
+_settings: dict = None
 
-    def __init__(self, config_dir: str = None):
-        if getattr(self, '_initialized', False):
-            return
-            
-        if config_dir:
-            self.settings_path = os.path.join(config_dir, self._settings_file)
-        else:
-            self.settings_path = self._settings_file
-            
-        self.settings: Dict[str, Any] = self._get_default_settings()
-        self.load_settings()
-        self._initialized = True
 
-    def _get_default_settings(self) -> Dict[str, Any]:
-        return {
-            "theme": "Dark",
-            "servers_dir": "servers",
-            "java_preferences": {
-                "java8_path": "",
-                "java17_path": "",
-                "java21_path": ""
-            }
-        }
+def _get_defaults() -> dict:
+    return {
+        "theme": "Dark",
+        "servers_dir": "servers",
+        "java_preferences": {"java8_path": "", "java17_path": "", "java21_path": ""},
+    }
 
-    def load_settings(self):
-        if os.path.exists(self.settings_path):
-            try:
-                with open(self.settings_path, 'r', encoding='utf-8') as f:
-                    loaded = json.load(f)
-                    self.settings.update(loaded)
-            except Exception as e:
-                logger.error(f"Error loading settings: {e}")
 
-    def save_settings(self):
+def _ensure_loaded():
+    global _settings
+    if _settings is not None:
+        return
+    _settings = _get_defaults()
+    if os.path.exists(_settings_path):
         try:
-            with open(self.settings_path, 'w', encoding='utf-8') as f:
-                json.dump(self.settings, f, indent=4)
+            with open(_settings_path, "r", encoding="utf-8") as f:
+                _settings.update(json.load(f))
         except Exception as e:
-            logger.error(f"Error saving settings: {e}")
+            logger.error("Error loading settings: %s", e)
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.settings.get(key, default)
 
-    def set(self, key: str, value: Any):
-        self.settings[key] = value
-        self.save_settings()
+def set_config_dir(config_dir: str):
+    global _settings_path
+    _settings_path = os.path.join(config_dir, _settings_file)
+
+
+def get(key: str, default: Any = None) -> Any:
+    _ensure_loaded()
+    return _settings.get(key, default)
+
+
+def set(key: str, value: Any):
+    _ensure_loaded()
+    _settings[key] = value
+    try:
+        with open(_settings_path, "w", encoding="utf-8") as f:
+            json.dump(_settings, f, indent=4)
+    except Exception as e:
+        logger.error("Error saving settings: %s", e)
+
+
+def load():
+    _ensure_loaded()
+
+
+def save():
+    _ensure_loaded()
+    try:
+        with open(_settings_path, "w", encoding="utf-8") as f:
+            json.dump(_settings, f, indent=4)
+    except Exception as e:
+        logger.error("Error saving settings: %s", e)

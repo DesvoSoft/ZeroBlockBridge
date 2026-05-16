@@ -61,21 +61,46 @@ def save_config(config):
     with open(APP_CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
-def check_java():
-    """Checks for Java installation."""
-    java_cmd = "java"
-    config = load_config()
-    if config.get("java_path") != "auto":
-        java_cmd = config.get("java_path")
-
+def get_server_meta(server_name):
+    """Centralized reader for server metadata.json."""
+    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    if not os.path.exists(meta_path):
+        return {}
     try:
-        result = subprocess.run([java_cmd, "-version"], capture_output=True, text=True, check=False)
-        if result.returncode == 0:
-            return result.stderr.splitlines()[0] if result.stderr else "Java detected (Unknown version)"
-        else:
-            return None
-    except FileNotFoundError:
-        return None
+        with open(meta_path, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to load metadata for %s: %s", server_name, e)
+        return {}
+
+def set_server_meta(server_name, key, value):
+    """Centralized writer for server metadata.json."""
+    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    try:
+        meta = get_server_meta(server_name)
+        meta[key] = value
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=4)
+        return True
+    except (OSError, json.JSONEncodeError) as e:
+        logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
+        return False
+
+def check_java():
+    """Check if a compatible Java installation is available on the system.
+    
+    Returns:
+        str: The path to the java executable if found, None otherwise.
+    """
+    from app.services.java_detector import JavaDetector
+    
+    detector = JavaDetector()
+    installations = detector.detect_all()
+    if installations:
+        # Return the path to the most preferred installation (highest Java version)
+        best = installations[0]
+        return best.path
+    return None
 
 def create_server_directory(server_name, server_type="Vanilla", version="1.20.1"):
     """Creates the server directory if it doesn't exist."""
@@ -375,41 +400,32 @@ class ServerRunner:
         self._stderr_done = threading.Event()
 
     def _apply_pending_settings(self):
-        metadata_path = os.path.join(SERVERS_DIR, self.server_name, "metadata.json")
-        if not os.path.exists(metadata_path):
+        meta = get_server_meta(self.server_name)
+        pending = meta.get("pending_settings")
+        if not pending or not any(pending.values()):
             return
 
-        try:
-            with open(metadata_path, "r+") as f:
-                meta = json.load(f)
-                pending = meta.get("pending_settings")
-                if not pending or not any(pending.values()):
-                    return
+        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Applying initial server settings from wizard...")
+        props = load_server_properties(self.server_name)
+        if not props:
+            props = {
+                "network-compression-threshold": "256",
+                "sync-chunk-writes": "false",
+                "entity-broadcast-range-percentage": "75",
+                "allow-flight": "true",
+                "force-gamemode": "true"
+            }
 
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Applying initial server settings from wizard...")
-                props = load_server_properties(self.server_name)
-                if not props:
-                    props["network-compression-threshold"] = "256"
-                    props["sync-chunk-writes"] = "false"
-                    props["entity-broadcast-range-percentage"] = "75"
-                    props["allow-flight"] = "true"
-                    props["force-gamemode"] = "true"
-
-                if pending.get("seed"): props["level-seed"] = pending.get("seed")
-                if pending.get("game_mode"): props["gamemode"] = pending.get("game_mode")
-                if pending.get("difficulty"): props["difficulty"] = pending.get("difficulty")
-                if pending.get("view_distance"): props["view-distance"] = pending.get("view_distance")
-                if pending.get("simulation_distance"): props["simulation-distance"] = pending.get("simulation_distance")
-                
-                save_server_properties(self.server_name, props)
-                
-                meta["pending_settings"] = {}
-                f.seek(0)
-                f.truncate()
-                json.dump(meta, f, indent=4)
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initial settings applied successfully.")
-        except Exception as e:
-            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to apply pending settings: {e}")
+        if pending.get("seed"): props["level-seed"] = pending.get("seed")
+        if pending.get("game_mode"): props["gamemode"] = pending.get("game_mode")
+        if pending.get("difficulty"): props["difficulty"] = pending.get("difficulty")
+        if pending.get("view_distance"): props["view-distance"] = pending.get("view_distance")
+        if pending.get("simulation_distance"): props["simulation-distance"] = pending.get("simulation_distance")
+        
+        save_server_properties(self.server_name, props)
+        
+        set_server_meta(self.server_name, "pending_settings", {})
+        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initial settings applied successfully.")
 
     def start(self):
         if self.running:
@@ -615,7 +631,7 @@ def check_eula(server_name):
     with open(eula_path, "r") as f:
         return "eula=true" in f.read()
 
-from app.services.server_properties import load_server_properties, save_server_properties, read_properties
+from app.services.server_properties import load_server_properties, save_server_properties
 
 class Scheduler:
     def __init__(self, server_name):
@@ -624,17 +640,15 @@ class Scheduler:
         self.metadata_path = os.path.join(self.server_path, "metadata.json")
         
     def _load_metadata(self):
-        if not os.path.exists(self.metadata_path): return {}
-        try:
-            with open(self.metadata_path, "r") as f: return json.load(f)
-        except FileNotFoundError:
-            return {}
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error("Failed to load scheduler metadata: %s", e)
-            return {}
-
+        return get_server_meta(self.server_name)
+    
     def _save_metadata(self, data):
-        with open(self.metadata_path, "w") as f: json.dump(data, f)
+        meta_path = self.metadata_path
+        try:
+            with open(meta_path, "w") as f: 
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            logger.error("Failed to save scheduler metadata: %s", e)
 
     def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None, backup_on_restart=False):
         data = self._load_metadata()
@@ -684,26 +698,9 @@ class Scheduler:
 
 
 def get_server_ram(server_name):
-    try:
-        with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
-            return json.load(f).get("ram", 2048)
-    except FileNotFoundError:
-        return 2048
-    except (json.JSONDecodeError, OSError) as e:
-        logger.error("Failed to read server RAM for %s: %s", server_name, e)
-        return 2048
+    return get_server_meta(server_name).get("ram", 2048)
 
 def set_server_ram(server_name, ram_mb):
-    metadata_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    try:
-        if os.path.exists(metadata_path):
-            with open(metadata_path, "r") as f: meta = json.load(f)
-        else: meta = {}
-        meta["ram"] = int(ram_mb)
-        with open(metadata_path, "w") as f: json.dump(meta, f, indent=4)
-        return True
-    except (OSError, json.JSONEncodeError, json.JSONDecodeError) as e:
-        logger.error("Failed to set server RAM for %s: %s", server_name, e)
-        return False
+    return set_server_meta(server_name, "ram", int(ram_mb))
 
 

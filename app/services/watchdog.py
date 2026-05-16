@@ -176,7 +176,8 @@ class Watchdog:
         return False
 
     def _compute_backoff(self):
-        return self._backoff_base * (2 ** (self.retry_count - 1))
+        delay = self._backoff_base * (2 ** (self.retry_count - 1))
+        return min(delay, 3600)  # cap at 1 hour
 
     def stop(self):
         self._listening = False

@@ -101,9 +101,9 @@ class TestSanitizerBlocked:
         safe, _ = is_safe_command("list >> /etc/passwd")
         assert not safe
 
-    def test_percent_in_path(self):
+    def test_percent_now_allowed(self):
         safe, _ = is_safe_command("op %USERNAME%")
-        assert not safe
+        assert safe
 
 
 class TestSanitizerUnknown:

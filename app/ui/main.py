@@ -39,9 +39,8 @@ ctk.set_default_color_theme("blue")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
-        from app.services.settings_manager import SettingsManager
-        self.settings = SettingsManager()
-        theme = self.settings.get("theme", "Dark")
+        from app.services import settings_manager
+        theme = settings_manager.get("theme", "Dark")
         ctk.set_appearance_mode(theme)
         
         super().__init__()
@@ -60,7 +59,6 @@ class MCTunnelApp(ctk.CTk):
 
     def _init_state_variables(self):
         self.claim_url = None
-        self._show_setup_input = False
         
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
@@ -232,16 +230,33 @@ class MCTunnelApp(ctk.CTk):
         self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
         
-        # Setup Code Input & Link Button
-        self.entry_setup_code = ctk.CTkEntry(self.tunnel_toolbar, placeholder_text="Setup Code", width=120, height=36, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.tunnel_toolbar, text="🔗 Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.tunnel_toolbar, text="Link Playit.gg", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=130, corner_radius=12, height=36, font=("Roboto Medium", 12))
-        
+        # --- Playit Account Linking (collapsible when unlinked) ---
+        self._setup_expanded = False
+        self.btn_toggle_setup = ctk.CTkButton(
+            self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
+            fg_color="#1e293b", hover_color="#334155",
+            border_width=1, border_color="#f97316",
+            width=70, corner_radius=12, height=36,
+            font=("Roboto Medium", 12), text_color="#f97316",
+        )
+        self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
+        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
+
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=12, height=36)
         self.btn_reset.pack(side="left", padx=2)
-        
+
         # Initial UI State Check
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
+
+    def _toggle_setup_section(self):
+        self._setup_expanded = not self._setup_expanded
+        if self._setup_expanded:
+            import webbrowser
+            webbrowser.open(AppConfig.PLAYIT_WIZARD_URL)
+            self.tunnel_console.log(f"[UI] Opening Playit Setup Wizard...")
+        self.on_tunnel_status({"status": "Offline", "skip_debounce": True})
 
     def _build_console_tabs(self):
         self.console_tabs = ctk.CTkTabview(self.main_frame)
@@ -297,16 +312,15 @@ class MCTunnelApp(ctk.CTk):
 
     def check_java_startup(self):
         def _check():
-            version = check_java()
-            if version:
-                if 'version' in version.lower():
-                    version_part = version.lower().split('version')[1].strip()
-                    major_version = version_part.split('.')[0].strip('"').strip()
-                else:
-                    major_version = version.split('.')[0] if '.' in version else version
-                
-                self.after(0, lambda: self.lbl_java_ver.configure(text=f"Java {major_version}", text_color="green"))
-                self.after(0, lambda: self.server_console.log(f"[System] Found Java: {version}"))
+            from app.services.java_detector import JavaDetector
+            detector = JavaDetector()
+            installations = detector.detect_all()
+            if installations:
+                best = installations[0]
+                source_badge = "Portable" if best.source == "PORTABLE" else "System"
+                label = f"Java {best.major} ({source_badge})"
+                self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color="green"))
+                self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
                 self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
                 self.after(0, lambda: self.server_console.log("[System] CRITICAL: Java not found! Please install Java 17+."))
@@ -342,7 +356,6 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Stop the current server before switching", toast_type="warning")
             return
 
-        self.zbb_manager.select_server(server_name)
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
@@ -535,30 +548,36 @@ class MCTunnelApp(ctk.CTk):
             try:
                 name = config["name"]
                 version = config["version"]
-                if config["type"] == "Vanilla":
+                engine = config["type"]
+                dialog.update_progress(0.0, f"Downloading {engine} {version} server jar...")
+                if engine == "Vanilla":
                     self.server_console.log(f"[System] Downloading Vanilla {version}...")
-                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                elif config["type"] == "Paper":
+                    success = logic.download_server(name, engine, version, dialog.update_progress)
+                elif engine == "Paper":
                     self.server_console.log(f"[System] Downloading Paper {version}...")
-                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                elif config["type"] == "Purpur":
+                    success = logic.download_server(name, engine, version, dialog.update_progress)
+                elif engine == "Purpur":
                     self.server_console.log(f"[System] Downloading Purpur {version}...")
-                    success = logic.download_server(name, config["type"], version, dialog.update_progress)
-                elif config["type"] == "Fabric":
+                    success = logic.download_server(name, engine, version, dialog.update_progress)
+                elif engine == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
                     success = logic.install_fabric(name, version, dialog.update_progress)
-                elif config["type"] == "Forge":
+                elif engine == "Forge":
                     self.server_console.log(f"[System] Installing Forge {version}...")
                     success = logic.install_forge(name, version, dialog.update_progress)
                 else:
-                    self.server_console.log(f"[Error] Unknown server type: {config['type']}")
+                    self.server_console.log(f"[Error] Unknown server type: {engine}")
                     success = False
                 
                 if success:
                     self.server_console.log(f"[System] Installation success. Applying settings...")
-                    if config.get("icon_path"): logic.save_server_icon(name, config["icon_path"])
+                    dialog.update_progress(0.25, "Verifying file integrity...")
+                    if config.get("icon_path"):
+                        dialog.update_progress(0.30, "Applying server icon...")
+                        logic.save_server_icon(name, config["icon_path"])
 
                     # --- PROV-02: Pre-Boot Scaffolding ---
+                    dialog.update_progress(0.35, "Configuring server environment...")
                     self.server_console.log("[System] Scaffolding server environment...")
                     from app.services.scaffolder import pre_boot_scaffold
                     server_dir = os.path.join(SERVERS_DIR, name)
@@ -579,12 +598,14 @@ class MCTunnelApp(ctk.CTk):
                             pass
 
                     # --- PROV-03: Bytecode Analysis ---
+                    dialog.update_progress(0.50, "Analyzing Java requirements from server jar...")
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
                     from app.core.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")
+                    dialog.update_progress(0.55, "Waiting for server.jar normalization...")
                     import time
                     required_java = None
                     for _ in range(20):
@@ -602,11 +623,23 @@ class MCTunnelApp(ctk.CTk):
 
                     if required_java:
                         self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
+                        # Pre-download JDK during wizard so it's ready when server starts
+                        from app.services.java_installer import JdkManagerInstance
+                        if not JdkManagerInstance.get_java_path(required_java):
+                            dialog.update_progress(0.65, f"Downloading Java {required_java}...")
+                            self.server_console.log(f"[System] Downloading Java {required_java}...")
+                            try:
+                                JdkManagerInstance.ensure_java(required_java)
+                                self.server_console.log(f"[System] Java {required_java} ready.")
+                            except Exception as jde:
+                                self.server_console.log(f"[Warning] Java {required_java} download failed: {jde}")
                     else:
                         self.server_console.log("[System] Bytecode analysis inconclusive; will use version map at startup.")
 
+                    dialog.update_progress(0.70, "Setting up Playit tunnel...")
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.zbb_manager.create_tunnel_for_server(name)
+                    dialog.update_progress(1.0, "Server ready!")
                     self.after(0, lambda: self._on_download_complete(dialog, name))
                 else:
                     self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
@@ -620,9 +653,16 @@ class MCTunnelApp(ctk.CTk):
 
     def _on_download_complete(self, dialog, name):
         self.load_servers()
-        self.server_console.log(f"[System] Setup complete for '{name}'. You can now start it manually.")
+        self.server_console.log(f"[System] Setup complete for '{name}'.")
         self.on_server_select(name)
         dialog.close()
+        start_now = tkinter.messagebox.askyesno(
+            "Server Ready",
+            f"'{name}' has been created successfully.\n\nDo you want to start it now?",
+            icon="question"
+        )
+        if start_now:
+            self.start_server_action()
 
     def start_tunnel(self):
         self.btn_tunnel_start.configure(state="disabled")
@@ -636,45 +676,49 @@ class MCTunnelApp(ctk.CTk):
 
     def reset_tunnel(self):
         msg = (
-            "This will wipe your local Playit configuration and delete the tunnel.\n\n"
-            "Note: Due to Playit API restrictions, the Agent might still appear in your "
-            "web dashboard and will need to be deleted manually there if desired.\n\n"
-            "Are you sure you want to proceed?"
+            "This will delete all tunnels but keep your agent linked.\n\n"
+            "After reset, click ▶ to create a new tunnel.\n\n"
+            "Are you sure?"
         )
-        if not tkinter.messagebox.askyesno("Reset Playit", msg): return
+        if not tkinter.messagebox.askyesno("Reset Tunnels", msg): return
         
-        Toast.show(self, "Performing full account reset...", toast_type="info")
-        self.tunnel_console.log("[System] Initiating Playit account reset...")
+        Toast.show(self, "Clearing tunnels...", toast_type="info")
+        self.tunnel_console.log("[System] Clearing tunnels...")
         
         def _reset_task():
-            self.zbb_manager.reset_tunnel()
-            self.after(0, lambda: self.on_tunnel_status({"status": "Offline"}))
+            self.zbb_manager.reset_tunnel(mode="soft")
+            self.after(0, lambda: self.on_tunnel_status({"status": "Offline", "skip_debounce": True}))
             self.after(0, lambda: self.btn_tunnel_start.configure(state="normal"))
             self.after(0, lambda: self.btn_tunnel_stop.configure(state="disabled"))
-            self.after(0, lambda: Toast.show(self, "Full reset complete. Account unlinked.", toast_type="success"))
-            self._show_setup_input = False
+            self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
+            self.after(0, lambda: Toast.show(self, "Ready. Click ▶ to create a tunnel.", toast_type="success"))
 
         threading.Thread(target=_reset_task, daemon=True).start()
 
     def on_tunnel_status(self, data):
         if not data: return
+        if not data.get("skip_debounce"):
+            from app.core.statemanager import schedule_update as _schedule_tunnel_update
+            if not _schedule_tunnel_update(data):
+                return
         status = data.get("status", "Offline")
         ip = data.get("ip", None)
         dns = data.get("dns", None)
-        
+
         def _update():
             # 1. Update Status Label and Colors
             color = "gray"
             icon = "●"
             if status == "Online": color = "green"
             elif status == "Error": color, icon = "red", "✖"
-            elif status in ("Starting...", "Connecting..."): color, icon = "orange", "⏳"
+            elif status == "Starting...": color, icon = "orange", "⏳"
             
             self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
             
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
-            # This logic ensures the public address appears immediately 
-            # and hides redundant/stale labels. 
+            # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
+            # See playit_manager.py: _dns_polling_loop, _parse_line, _stdout_dns.
+            # The address assigned by Playit appears here via TUNNEL_STATUS event.
             display_dns = dns or ip
             
             # Hide labels first to be clean
@@ -688,8 +732,8 @@ class MCTunnelApp(ctk.CTk):
                 self.lbl_dns_display.pack(side="left", padx=5)
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif status in ("Starting...", "Connecting..."):
-                self.lbl_dns_display.configure(text="Connecting...", text_color="#f97316")
+            elif status == "Starting...":
+                self.lbl_dns_display.configure(text="Waiting for domain...", text_color="#f97316")
                 self.lbl_dns_display.pack(side="left", padx=5)
             elif status == "Error":
                 self.lbl_dns_display.configure(text="Error", text_color="#ef4444")
@@ -698,35 +742,41 @@ class MCTunnelApp(ctk.CTk):
                 self.lbl_dns_display.configure(text="")
                 self._last_full_ip = None
 
-            # 3. Update Buttons Visibility and State
+            # 2. Update Buttons Visibility and State
             is_linked = self.zbb_manager.playit_manager.is_linked
-            
+
             if not is_linked:
                 self.btn_tunnel_start.pack_forget()
                 self.btn_tunnel_stop.pack_forget()
+                self.setup_frame.pack_forget()
                 self.btn_reset.pack_forget()
-                
-                if not getattr(self, "_show_setup_input", False):
-                    self.btn_claim.pack(side="left", padx=2)
-                    self.entry_setup_code.pack_forget()
-                    self.btn_link_code.pack_forget()
-                else:
-                    self.btn_claim.pack_forget()
+                self.btn_toggle_setup.pack(side="left", padx=2)
+                if self._setup_expanded:
+                    self.btn_toggle_setup.pack_forget()
+                    self.setup_frame.pack(side="left", fill="x")
                     self.entry_setup_code.pack(side="left", padx=2)
                     self.btn_link_code.pack(side="left", padx=2)
+                    self.btn_claim.pack(side="left", padx=2)
+                else:
+                    self.setup_frame.pack_forget()
+                    self.entry_setup_code.pack_forget()
+                    self.btn_link_code.pack_forget()
+                    self.btn_claim.pack_forget()
             else:
-                self.btn_claim.pack_forget()
+                self.btn_toggle_setup.pack_forget()
+                self.setup_frame.pack_forget()
                 self.entry_setup_code.pack_forget()
                 self.btn_link_code.pack_forget()
-                
+                self.btn_claim.pack_forget()
+
                 self.btn_tunnel_start.pack(side="left", padx=2)
                 self.btn_tunnel_stop.pack(side="left", padx=2)
                 self.btn_reset.pack(side="left", padx=2)
-                
+
                 if status == "Online":
                     self.btn_tunnel_start.configure(state="disabled")
                     self.btn_tunnel_stop.configure(state="normal")
-                elif status in ("Starting...", "Connecting..."):
+                elif status == "Starting...":
                     self.btn_tunnel_start.configure(state="disabled")
                     self.btn_tunnel_stop.configure(state="disabled")
                 else:
@@ -743,12 +793,10 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Full address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
-        """Opens the official Playit wizard and switches to setup code input."""
+        """Opens the official Playit wizard and shows setup instructions."""
         url = AppConfig.PLAYIT_WIZARD_URL
         self.tunnel_console.log(f"[UI] Opening Playit Setup Wizard...")
         webbrowser.open(url)
-        self._show_setup_input = True
-        self.on_tunnel_status({"status": "Offline"}) # Refresh UI
         Toast.show(self, "1. Get your Setup Code from Playit\n2. Paste it here to link.", toast_type="info", duration=5000)
 
     def _link_with_setup_code(self):
@@ -763,9 +811,8 @@ class MCTunnelApp(ctk.CTk):
         def _link_task():
             success = self.zbb_manager.link_playit_manually(code)
             if success:
-                self.after(0, lambda: Toast.show(self, "Success! Account linked. Tunnel starting...", toast_type="success"))
                 self.after(0, lambda: self.entry_setup_code.delete(0, 'end'))
-                self.after(0, lambda: setattr(self, '_show_setup_input', False))
+                self.after(0, lambda: setattr(self, '_setup_expanded', False))
             else:
                 self.after(0, lambda: Toast.show(self, "Link failed. Verify your code.", toast_type="error"))
         

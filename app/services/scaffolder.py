@@ -29,10 +29,15 @@ def pre_boot_scaffold(server_dir: str, port: int = 25565, eula_accepted: bool = 
 
     Args:
         server_dir:     Absolute path to the server root.
-        port:           The server-port value to inject.
+        port:           The server-port value to inject (1-65535).
         eula_accepted:  Whether the user has accepted the Mojang EULA.
         config:         Optional dict containing advanced properties.
+
+    Raises:
+        ValueError: If port is outside valid range.
     """
+    if not (1 <= port <= 65535):
+        raise ValueError(f"Invalid port: {port}. Must be between 1 and 65535.")
     if not os.path.isdir(server_dir):
         logger.warning("Scaffolder: directory does not exist: %s", server_dir)
         return

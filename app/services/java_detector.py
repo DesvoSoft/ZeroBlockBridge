@@ -17,6 +17,8 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from app.core.constants import JDK_CACHE_DIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -382,6 +384,16 @@ class JavaDetector:
                     inst = _probe_java(match, "SCAN")
                     if inst:
                         results.append(inst)
+
+        # Portable JDKs downloaded by JdkManager
+        jdk_cache = str(JDK_CACHE_DIR)
+        if os.path.isdir(jdk_cache):
+            jdk_pattern = os.path.join(jdk_cache, "*", "bin", "java.exe" if platform.system() == "Windows" else "java")
+            for match in glob.glob(jdk_pattern):
+                inst = _probe_java(match, "PORTABLE")
+                if inst:
+                    results.append(inst)
+                    logger.debug("Found portable JDK: %s (Java %d)", match, inst.major)
 
         return results
 

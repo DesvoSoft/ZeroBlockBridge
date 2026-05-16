@@ -26,9 +26,6 @@ def load_server_properties(server_name=None, server_dir=None):
     return properties
 
 
-def read_properties(server_name=None, server_dir=None):
-    return load_server_properties(server_name, server_dir)
-
 
 def save_server_properties(server_name=None, server_dir=None, new_properties=None):
     if new_properties is None:

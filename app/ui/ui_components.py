@@ -248,6 +248,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.transient(master)
         self.wait_visibility()
         self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.close)
         
     def _on_cancel(self):
         self.cancelled = True

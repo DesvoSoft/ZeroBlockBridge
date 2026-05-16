@@ -64,9 +64,6 @@ class ZBBManager:
             if any(s in ip for s in domain_suffixes):
                 dns = ip
                 display_ip = ""
-            elif ip == "Connecting...":
-                dns = "Connecting..."
-                display_ip = ""
         # Saved DNS from config is the last-resort fallback, not the override
         if status == "Online" and not dns and config.get("playit_dns"):
             dns = config["playit_dns"]
@@ -439,8 +436,8 @@ class ZBBManager:
     def get_server_port(self, server_name: str = None) -> int:
         target = server_name or self.current_server
         if not target: return 25565
-        from app.services.server_properties import read_properties
-        props = read_properties(target)
+        from app.services.server_properties import load_server_properties
+        props = load_server_properties(target)
         return int(props.get("server-port", 25565))
 
     def create_tunnel_for_server(self, server_name: str):
@@ -466,8 +463,8 @@ class ZBBManager:
         self.stop_server()
         self.stop_tunnel()
 
-    def reset_tunnel(self):
-        self.playit_manager.reset()
+    def reset_tunnel(self, mode="full"):
+        self.playit_manager.reset(mode)
 
     def get_tunnel_ip(self):
         return self.playit_manager.current_address

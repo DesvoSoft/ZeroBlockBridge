@@ -3,7 +3,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-INJECTION_CHARS = set(';|&`$%')
+INJECTION_CHARS = set(';|&`$')
 INJECTION_PATTERNS = [
     re.compile(r'\$\(.*?\)'),
     re.compile(r'`.*?`'),

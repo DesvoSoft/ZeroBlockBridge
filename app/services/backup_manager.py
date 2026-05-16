@@ -2,6 +2,7 @@ import datetime
 import logging
 import os
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -88,15 +89,32 @@ class BackupManager:
         backup_path = Path(backup_path_str)
         if not backup_path.exists():
             return False
+        tmp_backup = None
         try:
+            tmp_base = tempfile.mktemp()
+            tmp_backup = Path(shutil.make_archive(tmp_base, 'zip', self.server_path))
+
             for item in self.server_path.iterdir():
                 if item.is_file() or item.is_symlink():
                     item.unlink()
                 elif item.is_dir():
                     shutil.rmtree(item)
-            with zipfile.ZipFile(backup_path, 'r') as zipf:
-                zipf.extractall(self.server_path)
+
+            try:
+                with zipfile.ZipFile(backup_path, 'r') as zipf:
+                    zipf.extractall(self.server_path)
+            except Exception:
+                with zipfile.ZipFile(tmp_backup, 'r') as zipf:
+                    zipf.extractall(self.server_path)
+                raise
+
             return True
         except (FileNotFoundError, zipfile.BadZipFile, OSError) as e:
             logger.error("Backup restore failed: %s", e)
             return False
+        finally:
+            if tmp_backup and tmp_backup.exists():
+                try:
+                    tmp_backup.unlink()
+                except OSError:
+                    pass

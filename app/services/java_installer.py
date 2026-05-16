@@ -70,12 +70,19 @@ def _checksum_path(version: int) -> Path:
     return _JDK_CACHE_DIR / f"jdk{version}" / ".checksum"
 
 
-def _verify_checksum(file_path: Path, expected_sha256: str) -> bool:
-    sha256 = hashlib.sha256()
+def _verify_checksum(file_path: Path, expected: str) -> bool:
+    expected = expected.lower()
+    if len(expected) == 128:
+        h = hashlib.sha512()
+    elif len(expected) == 64:
+        h = hashlib.sha256()
+    else:
+        logger.warning("Unknown checksum length %d — skipping verification", len(expected))
+        return True
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest().lower() == expected_sha256.lower()
+            h.update(chunk)
+    return h.hexdigest().lower() == expected
 
 
 def _find_java_binary(extract_dir: Path) -> Optional[Path]:
@@ -193,13 +200,7 @@ class JdkManager:
                 if expected_checksum:
                     if not _verify_checksum(zip_path, expected_checksum):
                         zip_path.unlink(missing_ok=True)
-                        last_error = f"SHA256 mismatch for JDK {version}"
-                        logger.warning("%s (attempt %d/%d)", last_error, attempt, MAX_RETRIES)
-                        if attempt < MAX_RETRIES:
-                            import time
-                            time.sleep(RETRY_DELAY)
-                            continue
-                        raise JdkIntegrityError(last_error)
+                        raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
                 else:
                     logger.warning("No checksum available for JDK %d — skipping verification", version)
 

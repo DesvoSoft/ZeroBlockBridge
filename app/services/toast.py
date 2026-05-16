@@ -35,34 +35,17 @@ _COLOR_TYPE_MAP = {
 
 
 class ToastNotification:
-    """Manages a single floating toast notification with fade animation.
-
-    Usage from EventBus:
-        events.emit(ServerEvent.NOTIFICATION, {
-            "msg": "Something happened",
-            "type": "warning",       # info | warning | error
-        })
-
-    Legacy payloads using "color" key are also supported.
+    """Manages a queue of floating toast notifications with fade animations.
+    
+    Now supports multiple concurrent toasts to prevent window orphans
+    and race conditions.
     """
-
     def __init__(self):
-        self._toast = None
-        self._after_id = None
-        self._fade_ids = []
+        self._active_toasts = []
 
     def show(self, parent, message: str, toast_type: str = "info",
-             duration: int = 4000):
-        """Display a toast notification.
-
-        Args:
-            parent:     The root CTk window.
-            message:    Text to display.
-            toast_type: One of "info", "warning", "error".
-            duration:   How long (ms) to display before auto-dismiss.
-        """
-        self.dismiss()
-
+              duration: int = 4000):
+        """Display a toast notification."""
         style = _TOAST_STYLES.get(toast_type, _TOAST_STYLES["info"])
         bg_color, border_color, icon_char = style
 
@@ -95,33 +78,36 @@ class ToastNotification:
             font=("Roboto", 12), wraplength=320, justify="left",
         ).pack(side="left", fill="x", expand=True)
 
-        # Position: bottom-right of parent
+        # Position: bottom-right, stacked vertically
         parent.update_idletasks()
         toast.update_idletasks()
         tw = max(toast.winfo_reqwidth(), 280)
         th = toast.winfo_reqheight()
         pw = parent.winfo_width()
         ph = parent.winfo_height()
+        
+        # Offset based on current active toasts
+        offset_y = len(self._active_toasts) * (th + 10)
         x = parent.winfo_rootx() + pw - tw - 20
-        y = parent.winfo_rooty() + ph - th - 20
+        y = parent.winfo_rooty() + ph - th - 20 - offset_y
         toast.geometry(f"{tw}x{th}+{x}+{y}")
 
-        self._toast = toast
+        self._active_toasts.append(toast)
 
-        # Fade-in animation
+        # Fade-in
         self._animate_alpha(toast, 0.0, 0.95, steps=8, delay=25)
 
         # Schedule fade-out then destroy
-        self._after_id = toast.after(duration, lambda: self._fade_out(toast))
+        toast.after(duration, lambda: self._fade_out(toast))
 
     def _fade_out(self, toast):
         """Animate fade-out, then destroy."""
         self._animate_alpha(toast, 0.95, 0.0, steps=8, delay=25,
-                            on_complete=self._destroy)
+                            on_complete=lambda: self._destroy_toast(toast))
 
     def _animate_alpha(self, toast, start, end, steps, delay,
                        on_complete=None):
-        """Smooth alpha transition over `steps` frames."""
+        """Smooth alpha transition."""
         if not toast or not toast.winfo_exists():
             return
         delta = (end - start) / steps
@@ -134,38 +120,26 @@ class ToastNotification:
             except Exception:
                 return
             if i < steps:
-                aid = toast.after(delay, _step, i + 1, current + delta)
-                self._fade_ids.append(aid)
+                toast.after(delay, _step, i + 1, current + delta)
             elif on_complete:
                 on_complete()
 
         _step(0, start)
 
-    def _destroy(self):
-        if self._toast:
-            try:
-                self._toast.destroy()
-            except Exception as e:
-                logger.debug("Toast destroy ignored: %s", e)
-        self._toast = None
-        self._after_id = None
-        self._fade_ids.clear()
+    def _destroy_toast(self, toast):
+        """Safe destruction and removal from tracking list."""
+        if toast in self._active_toasts:
+            self._active_toasts.remove(toast)
+        try:
+            toast.destroy()
+        except Exception:
+            pass
 
     def dismiss(self):
-        """Cancel any pending animation/timer and destroy the toast."""
-        for aid in self._fade_ids:
-            try:
-                if self._toast and self._toast.winfo_exists():
-                    self._toast.after_cancel(aid)
-            except Exception as e:
-                logger.debug("Toast fade cancel ignored: %s", e)
-        self._fade_ids.clear()
-        if self._after_id and self._toast:
-            try:
-                self._toast.after_cancel(self._after_id)
-            except Exception as e:
-                logger.debug("Toast after_cancel ignored: %s", e)
-        self._destroy()
+        """Clear all active toasts immediately."""
+        for toast in list(self._active_toasts):
+            self._destroy_toast(toast)
+
 
     @staticmethod
     def resolve_type(data: dict) -> str:
