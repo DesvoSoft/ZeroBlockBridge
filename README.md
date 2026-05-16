@@ -43,8 +43,9 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
 - **Manual Tunnel Setup**: Get a Setup Code from Playit.gg and link it instantly.
 - **Persistent Sessions**: Your account link persists across app restarts; no need to re-verify.
-- **Non-Destructive Reset**: Reuses existing agent if secret key is valid — avoids `AgentDisabledOverLimit` errors.
-- **Local API Status Polling**: Tunnel status sourced from local JSON-RPC (`127.0.0.1:25374/status`) instead of fragile stdout regex.
+- **Soft Reset**: Clears tunnels only — keeps agent linked. Click ▶ to create a new tunnel.
+- **Full Reset**: Deletes tunnels + unlinks account. Dashboard link provided if agent remains.
+- **DNS Recovery Chain**: 3 redundant mechanisms (API poll 60s + stdout regex + create_tunnel) ensure domain assignment never gets stuck.
 - **Heartbeat Monitoring**: Auto-restarts the agent if the process dies unexpectedly.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
@@ -60,9 +61,9 @@ Note: playit.gg is a global proxy that allows anyone to host a server without po
 
 ### Architecture & Quality
 
-- **Decoupled Core/UI**: `ZBBManager` serves as the single orchestrator. The UI only subscribes to events — no direct file I/O.
+- **Decoupled Core/UI**: `ZBBManager` serves as the single orchestrator. The UI subscribes to events and delegates all I/O to core/services.
 - **Single Source of Truth**: Server state flows through `EventBus` (`STARTING`, `READY`, `STOPPED`, `TUNNEL_STATUS`).
-- **Thread Safety**: All shared state protected with `threading.RLock`. Background threads use `daemon=True`.
+- **Thread Safety**: Background threads use `daemon=True`; UI updates via `self.after(0, ...)`.
 - **Command Sanitization**: Every console command passes through an allowlist-based sanitizer — no raw shell execution.
 
 ---
@@ -75,11 +76,11 @@ The application features:
 - **Dashboard**: Server/tunnel controls, auto-restart settings, quick backup.
 - **Tabbed Console**: Separate logs for Server and Tunnel output.
 - **Console Input**: Send server commands directly from the UI.
-- **Properties Editor**: 6 tabs (General, World, Network, Advanced, Backups, Automation).
+- **Properties Editor**: 7 tabs (General, World, Network, Advanced, Backups, Automation, Launch).
 
 ---
 
-## Auto-Healing System (Fase 1)
+## Auto-Healing System
 
 ZeroBlockBridge includes built-in resilience through four coordinated services that automatically detect, classify, and recover from server failures.
 
@@ -183,11 +184,10 @@ py app/launcher.py
 ### First Server
 
 1. Click **"Create Server"** in the sidebar.
-2. Follow the 3-step wizard to configure your server.
-3. Select the server from the list.
-4. The server will automatically start, initialize the core files (world, logs, mods), and stop by itself.
-5. Click **"Start"** to launch your fully configured server.
-6. **Optional**: Enable tunneling to play with friends online.
+2. Follow the 3-step wizard to configure your server (includes pre-flight Java check).
+3. The wizard shows detailed progress (download, verify, scaffold, bytecode analysis, tunnel setup).
+4. After creation, click **"Start Now"** to launch your server immediately.
+5. **Optional**: Click **"⚡ Link"** to enable Playit tunneling and play with friends online.
 
 Note: The tunneling feature uses the free third party services from [Playit.GG](http://playit.gg/). The app will guide you to their "Third Party" setup wizard to obtain a Setup Code, which you then paste into the app to securely link your account (One-time process).
 
@@ -274,18 +274,20 @@ ZeroBlockBridge/
 │   │   ├── app_config.py          # UI config (colors, fonts, window)
 │   │   ├── version_manager.py     # Dynamic version fetching & caching
 │   │   ├── server_events.py       # EventBus, ServerEvent definitions
+│   │   ├── statemanager.py        # Tunnel status debounce (module)
 │   │   ├── scheduler_service.py   # Automated restart logic
 │   │   ├── playit_manager.py      # Playit.gg agent lifecycle & tunnel
 │   │   └── single_instance.py     # PID lockfile (prevents duplicates)
 │   │
 │   └── services/                  # Specialized Services & Auto-Healing
+│       ├── playit_api.py          # Playit.gg REST API v2 client
 │       ├── scaffolder.py          # Server directory scaffolding
 │       ├── server_properties.py   # server.properties read/write
 │       ├── java_installer.py      # JDK auto-download from Adoptium
-│       ├── java_detector.py       # System Java detection
+│       ├── java_detector.py       # System Java detection + Portable JDK scan
 │       ├── bytecode_analyzer.py   # JAR bytecode Java version analysis
 │       ├── aikars_flags.py        # Aikars JVM flag calculator
-│       ├── console_buffer.py      # Thread-safe circular console buffer
+│       ├── console_buffer.py      # Thread-safe console buffer (deque)
 │       ├── sanitizer.py           # Command injection prevention
 │       ├── watchdog.py            # Crash detection & auto-restart
 │       ├── heartbeat.py           # Zombie server detection
@@ -293,6 +295,7 @@ ZeroBlockBridge/
 │       ├── backup_manager.py      # ZIP backup create/restore
 │       ├── modrinth.py            # Modrinth API client
 │       ├── sha1_validator.py      # SHA1 download verification
+│       ├── settings_manager.py    # App config read/write (module)
 │       └── toast.py               # Non-blocking notification overlay
 │
 ├── requirements.txt               # Project dependencies
