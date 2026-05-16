@@ -114,14 +114,6 @@ class ZBBManager:
         """Initializes non-blocking services on app startup."""
         logger.info("[ZBBManager] Bootstrapping core services...")
         self._start_scheduler_loop()
-        self._pre_warm_version_cache()
-
-    def _pre_warm_version_cache(self):
-        """REND-01: Pre-warm version caches from all providers in background."""
-        def _warm():
-            self.version_manager.get_versions("Vanilla")
-            logger.info("[ZBBManager] Version cache pre-warmed.")
-        threading.Thread(target=_warm, daemon=True).start()
 
     def select_server(self, server_name: str):
         self.current_server = server_name
