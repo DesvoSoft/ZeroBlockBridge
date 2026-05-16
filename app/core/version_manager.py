@@ -81,25 +81,40 @@ class VersionManager:
                 with open(VERSIONS_CACHE_FILE, "r") as f:
                     data = json.load(f)
 
-                    fabric_versions = data.get("Fabric", [])
-                    if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
-                        logger.info("Detected stale Fabric loader versions in cache. Forcing refresh.")
-                        return self._get_default_cache()
+                fabric_versions = data.get("Fabric", [])
+                if fabric_versions and any(v.startswith("0.") for v in fabric_versions[:3]):
+                    logger.info("Detected stale Fabric loader versions in cache. Forcing refresh.")
+                    return self._get_default_cache()
 
-                    forge_versions = data.get("Forge", [])
-                    if forge_versions:
-                        first = forge_versions[0]
-                        if not first.startswith("1.") or re.match(r'^\d+\.\d+', first):
-                            logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
-                            return self._fetch_defaults_sync()
+                forge_versions = data.get("Forge", [])
+                if forge_versions:
+                    first = forge_versions[0]
+                    if not first.startswith("1.") or re.match(r'^\d+\.\d+', first):
+                        logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
+                        return self._fetch_defaults_sync()
 
-                    for key in ("Paper", "Purpur"):
-                        versions = data.get(key, [])
-                        if versions and not versions[0].startswith("1."):
-                            logger.info("Detected stale %s versions in cache. Forcing refresh.", key)
-                            return self._fetch_defaults_sync()
+                for key in ("Paper", "Purpur"):
+                    versions = data.get(key, [])
+                    if versions and not versions[0].startswith("1."):
+                        logger.info("Detected stale %s versions in cache. Forcing refresh.", key)
+                        return self._fetch_defaults_sync()
 
-                    return data
+                last_updated = data.get("last_updated")
+                if last_updated:
+                    try:
+                        last = datetime.datetime.fromisoformat(last_updated)
+                        if datetime.datetime.now() - last > datetime.timedelta(days=2):
+                            logger.info("Version cache is >2 days old. Forcing sync refresh.")
+                            fetched = self._fetch_all_versions(timeout=8)
+                            if fetched:
+                                data.update(fetched)
+                                data["last_updated"] = datetime.datetime.now().isoformat()
+                                self._save_cache()
+                            return data
+                    except ValueError:
+                        pass
+
+                return data
             except (json.JSONDecodeError, OSError):
                 logger.warning("Version cache corrupted. Using defaults.")
 
@@ -125,11 +140,47 @@ class VersionManager:
     def _get_default_cache(self):
         return {
             "last_updated": None,
-            "Vanilla": ["1.21.1", "1.20.1", "1.19.4"],
-            "Fabric": ["1.21.1", "1.20.1"],
-            "Forge": ["1.20.1", "1.19.2"],
-            "Paper": ["1.21.1", "1.20.1", "1.19.4"],
-            "Purpur": ["1.21.1", "1.20.1", "1.19.4"]
+            "Vanilla": [
+                "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
+                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
+                "1.20.4", "1.20.1",
+                "1.19.4", "1.19.2",
+                "1.18.2",
+                "1.17.1",
+                "1.16.5", "1.15.2", "1.14.4",
+                "1.12.2", "1.8.9",
+            ],
+            "Fabric": [
+                "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
+                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
+                "1.20.4", "1.20.1",
+                "1.19.4", "1.19.2",
+                "1.18.2",
+                "1.17.1",
+                "1.16.5",
+            ],
+            "Forge": [
+                "1.21.1", "1.20.1", "1.19.2", "1.18.2",
+                "1.17.1", "1.16.5",
+            ],
+            "Paper": [
+                "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
+                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
+                "1.20.4", "1.20.1",
+                "1.19.4", "1.19.2",
+                "1.18.2",
+                "1.17.1",
+                "1.16.5",
+            ],
+            "Purpur": [
+                "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
+                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
+                "1.20.4", "1.20.1",
+                "1.19.4", "1.19.2",
+                "1.18.2",
+                "1.17.1",
+                "1.16.5",
+            ],
         }
 
     @staticmethod
@@ -216,8 +267,20 @@ class VersionManager:
 
     def get_versions(self, server_type):
         self._check_and_refresh()
+        self._wait_for_background_refresh(timeout=4)
         with self.cache_lock:
             return list(self.cache.get(server_type, []))
+
+    def _wait_for_background_refresh(self, timeout=4):
+        thread = getattr(self, 'refresh_thread', None)
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+        thread = getattr(self, 'refresh_thread', None)
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+            if not thread.is_alive():
+                return True
+        return False
 
     def _check_and_refresh(self):
         with self.cache_lock:

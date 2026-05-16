@@ -2,6 +2,7 @@ import customtkinter as ctk
 import logging
 import os
 import psutil
+import threading
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.services.java_detector import JavaDetector, get_required_java
@@ -97,6 +98,16 @@ class ServerWizard(ctk.CTkToplevel):
         if self.current_step == 2:
             self.after(0, self._render_versions)
 
+    def _force_refresh_versions(self):
+        self.btn_refresh.configure(state="disabled", text="↻ ...")
+        threading.Thread(target=self._do_force_refresh, daemon=True).start()
+
+    def _do_force_refresh(self):
+        try:
+            self.vm._refresh_versions()
+        finally:
+            self.after(0, lambda: self.btn_refresh.configure(state="normal", text="↻ Refresh"))
+
     # --- Step 1: Identidad ---
     def show_step_1(self):
         self.clear_content()
@@ -178,9 +189,13 @@ class ServerWizard(ctk.CTkToplevel):
 
         # Version Search
         ctk.CTkLabel(engine_res_frame, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_search = ctk.CTkEntry(engine_res_frame, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
-        self.entry_search.pack(fill="x", pady=(0, 10))
+        search_row = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        search_row.pack(fill="x", pady=(0, 10))
+        self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
+        self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
+        self.btn_refresh = ctk.CTkButton(search_row, text="↻ Refresh", width=100, height=36, corner_radius=12, command=self._force_refresh_versions)
+        self.btn_refresh.pack(side="right")
 
         # Versions List
         self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=12, fg_color=("gray90", "gray15"), height=120)
