@@ -73,23 +73,13 @@ class ZBBManager:
         self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns, "is_guest": is_guest})
 
     def _save_jdk_metadata(self, required_java: int, jdk_source: str):
-        """Persist required_java + jdk_source to the server's metadata.json."""
-        import json
-        from app.core.constants import SERVERS_DIR
+        from app.core.logic import update_server_meta
         if not self.current_server:
             return
-        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
-        if not os.path.exists(meta_path):
+        from app.core.constants import SERVERS_DIR
+        if not os.path.exists(os.path.join(SERVERS_DIR, self.current_server, "metadata.json")):
             return
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            meta["required_java"] = required_java
-            meta["jdk_source"] = jdk_source
-            with open(meta_path, "w") as f:
-                json.dump(meta, f, indent=4)
-        except Exception as e:
-            logger.error("Failed to save JDK metadata: %s", e)
+        update_server_meta(self.current_server, {"required_java": required_java, "jdk_source": jdk_source})
 
     # --- Configuration ---
     def get_config(self):
@@ -132,9 +122,8 @@ class ZBBManager:
         ram = config.get("ram_allocation", "2G")
 
         # Load metadata to find java/version settings
-        import json
         from app.core.constants import SERVERS_DIR
-        meta_path = os.path.join(SERVERS_DIR, self.current_server, "metadata.json")
+        from app.core.logic import get_server_meta
         server_dir = os.path.join(SERVERS_DIR, self.current_server)
         mc_version = "1.20.1"
         java_path = "auto"
@@ -143,16 +132,15 @@ class ZBBManager:
         auto_install_jdk = True
         self._jdk_source = "unknown"
         try:
-            if os.path.exists(meta_path):
-                with open(meta_path, "r") as f:
-                    meta = json.load(f)
-                    mc_version = meta.get("version", "1.20.1")
-                    required_java_cached = meta.get("required_java")
-                    self._jdk_source = meta.get("jdk_source", "system")
-                    auto_install_jdk = meta.get("auto_install_jdk", True)
-                    if meta.get("advanced_mode", False):
-                        java_path = meta.get("java_path", "auto")
-                        use_aikars = meta.get("use_aikars", True)
+            meta = get_server_meta(self.current_server)
+            if meta:
+                mc_version = meta.get("version", "1.20.1")
+                required_java_cached = meta.get("required_java")
+                self._jdk_source = meta.get("jdk_source", "system")
+                auto_install_jdk = meta.get("auto_install_jdk", True)
+                if meta.get("advanced_mode", False):
+                    java_path = meta.get("java_path", "auto")
+                    use_aikars = meta.get("use_aikars", True)
         except Exception as e:
             logger.error("Failed to read metadata: %s", e)
 
@@ -193,13 +181,8 @@ class ZBBManager:
                 source = "bytecode" if bytecode_java else "version-map"
                 
                 # Cache the result
-                try:
-                    if os.path.exists(meta_path):
-                        with open(meta_path, "r") as f: meta = json.load(f)
-                        meta["required_java"] = required_java
-                        with open(meta_path, "w") as f: json.dump(meta, f, indent=4)
-                except (OSError, json.JSONDecodeError) as e:
-                    logger.warning("Failed to cache required_java in metadata: %s", e)
+                from app.core.logic import update_server_meta
+                update_server_meta(self.current_server, {"required_java": required_java})
 
             self.events.emit(
                 ServerEvent.CONSOLE_LINE,
@@ -362,15 +345,13 @@ class ZBBManager:
                 os.symlink(folder_path, link_path)
                 
             # Create a default metadata.json if missing
-            meta_path = os.path.join(link_path, "metadata.json")
-            if not os.path.exists(meta_path):
-                # Try to guess version from jar name or bytecode
+            if not os.path.exists(os.path.join(link_path, "metadata.json")):
                 jar_name = "server.jar"
                 if not os.path.exists(os.path.join(link_path, jar_name)):
                     jars = [f for f in os.listdir(link_path) if f.endswith(".jar")]
                     if jars: jar_name = jars[0]
-                
-                meta = {
+                from app.core.logic import update_server_meta
+                update_server_meta(server_name, {
                     "name": server_name,
                     "type": "Vanilla",
                     "version": "Unknown",
@@ -378,9 +359,7 @@ class ZBBManager:
                     "advanced_mode": False,
                     "use_aikars": True,
                     "custom_jar": jar_name
-                }
-                with open(meta_path, "w") as f:
-                    json.dump(meta, f, indent=4)
+                })
             
             return True
         except Exception as e:

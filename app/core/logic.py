@@ -82,8 +82,21 @@ def set_server_meta(server_name, key, value):
         with open(meta_path, "w") as f:
             json.dump(meta, f, indent=4)
         return True
-    except (OSError, json.JSONEncodeError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
+        return False
+
+def update_server_meta(server_name, updates):
+    """Atomic multi-key update for server metadata.json."""
+    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    try:
+        meta = get_server_meta(server_name)
+        meta.update(updates)
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=4)
+        return True
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error("Failed to update metadata for %s: %s", server_name, e)
         return False
 
 def check_java():

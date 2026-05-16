@@ -396,25 +396,14 @@ class MCTunnelApp(ctk.CTk):
             _open_folder(server_path)
 
     def _get_current_server_info(self):
-        """Return (server_name, mc_version, loader) for the current server."""
         if not self.zbb_manager.current_server:
             return None
-        server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
-        meta_path = os.path.join(server_path, "metadata.json")
-        mc_version = "1.20.1"
+        meta = logic.get_server_meta(self.zbb_manager.current_server)
+        mc_version = meta.get("version", "1.20.1")
         loader = None
-        
-        if os.path.exists(meta_path):
-            try:
-                import json
-                with open(meta_path, "r") as f:
-                    meta = json.load(f)
-                mc_version = meta.get("version", "1.20.1")
-                stype = meta.get("type", "Vanilla").lower()
-                if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
-                    loader = stype
-            except Exception:
-                pass
+        stype = meta.get("type", "Vanilla").lower()
+        if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
+            loader = stype
         
         logger.info(f"Server Info for Mod Search: {self.zbb_manager.current_server} | MC: {mc_version} | Loader: {loader or 'any'}")
         return (self.zbb_manager.current_server, mc_version, loader)
@@ -427,24 +416,13 @@ class MCTunnelApp(ctk.CTk):
 
     def save_advanced_settings(self, *args):
         if not self.zbb_manager.current_server: return
-        import json
-        from app.core.constants import SERVERS_DIR
-        meta_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server, "metadata.json")
-        try:
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            meta["advanced_mode"] = self.var_advanced_mode.get()
-            
-            # Map label back to path
-            label = self.var_java_path.get()
-            path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-            meta["java_path"] = path
-            
-            meta["use_aikars"] = self.var_use_aikars.get()
-            with open(meta_path, "w") as f:
-                json.dump(meta, f, indent=4)
-        except Exception as e:
-            self.server_console.log(f"[Error] Failed to save advanced settings: {e}")
+        label = self.var_java_path.get()
+        path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
+        logic.update_server_meta(self.zbb_manager.current_server, {
+            "advanced_mode": self.var_advanced_mode.get(),
+            "java_path": path,
+            "use_aikars": self.var_use_aikars.get(),
+        })
 
     def edit_server_properties(self):
         if not self.zbb_manager.current_server: return
@@ -584,18 +562,8 @@ class MCTunnelApp(ctk.CTk):
                     port = self.zbb_manager.get_server_port(name)
                     pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
                     self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
-                    meta_path = os.path.join(server_dir, "metadata.json")
-                    if os.path.exists(meta_path):
-                        try:
-                            import json
-                            with open(meta_path, "r") as f:
-                                meta = json.load(f)
-                            if "auto_install_jdk" in config:
-                                meta["auto_install_jdk"] = config["auto_install_jdk"]
-                            with open(meta_path, "w") as f:
-                                json.dump(meta, f, indent=4)
-                        except Exception:
-                            pass
+                    if "auto_install_jdk" in config:
+                        logic.update_server_meta(name, {"auto_install_jdk": config["auto_install_jdk"]})
 
                     # --- PROV-03: Bytecode Analysis ---
                     dialog.update_progress(0.50, "Analyzing Java requirements from server jar...")
