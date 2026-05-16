@@ -412,39 +412,9 @@ class ServerRunner:
         self.player_count = 0
         self._stderr_done = threading.Event()
 
-    def _apply_pending_settings(self):
-        meta = get_server_meta(self.server_name)
-        pending = meta.get("pending_settings")
-        if not pending or not any(pending.values()):
-            return
-
-        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Applying initial server settings from wizard...")
-        props = load_server_properties(self.server_name)
-        if not props:
-            props = {
-                "network-compression-threshold": "256",
-                "sync-chunk-writes": "false",
-                "entity-broadcast-range-percentage": "75",
-                "allow-flight": "true",
-                "force-gamemode": "true"
-            }
-
-        if pending.get("seed"): props["level-seed"] = pending.get("seed")
-        if pending.get("game_mode"): props["gamemode"] = pending.get("game_mode")
-        if pending.get("difficulty"): props["difficulty"] = pending.get("difficulty")
-        if pending.get("view_distance"): props["view-distance"] = pending.get("view_distance")
-        if pending.get("simulation_distance"): props["simulation-distance"] = pending.get("simulation_distance")
-        
-        save_server_properties(self.server_name, props)
-        
-        set_server_meta(self.server_name, "pending_settings", {})
-        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initial settings applied successfully.")
-
     def start(self):
         if self.running:
             return
-        
-        self._apply_pending_settings()
         
         if not check_eula(self.server_name):
             accept_eula(self.server_name)
