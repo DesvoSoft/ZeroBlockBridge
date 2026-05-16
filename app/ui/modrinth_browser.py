@@ -472,7 +472,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 else:
                     self.after(0, lambda: self._show_version_picker(versions, server_name, loader, title))
             except Exception as exc:
-                self.after(0, lambda: self._set_status(f"✗ Failed to load versions: {exc}"))
+                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
@@ -493,7 +493,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 else:
                     self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
             except Exception as exc:
-                self.after(0, lambda: self._set_status(f"✗ Install failed: {exc}"))
+                self.after(0, lambda e=exc: self._set_status(f"✗ Install failed: {e}"))
         threading.Thread(target=_install, daemon=True).start()
 
     def _show_version_picker(self, versions, server_name, loader, title):
@@ -578,7 +578,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 updates = self.client.check_updates(server_name, mc_version, loader)
                 self.after(0, lambda: self._show_updates_dialog(updates))
             except Exception as exc:
-                self.after(0, lambda: self._set_status(f"✗ Update check failed: {exc}"))
+                self.after(0, lambda e=exc: self._set_status(f"✗ Update check failed: {e}"))
             finally:
                 self.after(0, lambda: self._set_status("Ready"))
 
