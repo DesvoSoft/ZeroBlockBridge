@@ -436,12 +436,29 @@ class ModrinthBrowser(ctk.CTkFrame):
         slug = hit.get("slug", hit.get("project_id", ""))
         title = hit.get("title", slug)
 
-        self._set_status(f"Installing {title}…", busy=True)
+        self._set_status(f"Loading versions for {title}…", busy=True)
 
-        def _do_install():
+        def _fetch_versions():
             try:
-                path = self.client.download_mod(
-                    slug, server_name, mc_version, loader,
+                versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
+                if not versions:
+                    self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    return
+                if len(versions) == 1:
+                    self._do_install_version(versions[0], server_name, loader, title)
+                else:
+                    self.after(0, lambda: self._show_version_picker(versions, server_name, loader, title))
+            except Exception as exc:
+                self.after(0, lambda: self._set_status(f"✗ Failed to load versions: {exc}"))
+
+        threading.Thread(target=_fetch_versions, daemon=True).start()
+
+    def _do_install_version(self, version, server_name, loader, title):
+        self._set_status(f"Installing {title}…", busy=True)
+        def _install():
+            try:
+                path = self.client.download_version(
+                    version, server_name, loader,
                     progress_callback=lambda p: self.after(
                         0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
                     ),
@@ -449,15 +466,56 @@ class ModrinthBrowser(ctk.CTkFrame):
                 if path:
                     fname = os.path.basename(path)
                     self.after(0, lambda: self._set_status(f"✓ Installed {fname}"))
-                    logger.info("Installed mod %s to %s", title, path)
+                    logger.info("Installed %s to %s", title, path)
                 else:
-                    self.after(0, lambda: self._set_status(f"✗ No compatible version of {title} found."))
+                    self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
             except Exception as exc:
-                logger.error("Install failed for %s: %s", title, exc)
-                msg = f"✗ Install failed: {exc}"
-                self.after(0, lambda m=msg: self._set_status(m))
+                self.after(0, lambda: self._set_status(f"✗ Install failed: {exc}"))
+        threading.Thread(target=_install, daemon=True).start()
 
-        threading.Thread(target=_do_install, daemon=True).start()
+    def _show_version_picker(self, versions, server_name, loader, title):
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Choose Version — {title}")
+        dialog.geometry("460x320")
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+
+        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
+        frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
+
+        ctk.CTkLabel(
+            frame, text=f"Select a version to install:",
+            font=("Roboto Medium", 14), anchor="w",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        var = ctk.StringVar(value=versions[0].get("id", ""))
+
+        for i, v in enumerate(versions):
+            vnum = v.get("version_number", "?")
+            mc_v = ", ".join(v.get("game_versions", []))
+            rb = ctk.CTkRadioButton(
+                frame, text=f"{vnum}  (MC: {mc_v})",
+                variable=var, value=v.get("id", ""),
+                font=("Roboto", 12),
+            )
+            rb.grid(row=i + 1, column=0, sticky="w", padx=8, pady=2)
+
+        def _on_confirm():
+            selected_id = var.get()
+            for v in versions:
+                if v.get("id") == selected_id:
+                    dialog.destroy()
+                    self._do_install_version(v, server_name, loader, title)
+                    break
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=12, pady=10)
+
+        ctk.CTkButton(btn_frame, text="Cancel", width=90, height=32,
+                       corner_radius=12, command=dialog.destroy).pack(side="right", padx=4)
+        ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
+                       corner_radius=12, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                       text_color="white", command=_on_confirm).pack(side="right", padx=4)
 
     def _on_install_optimizers(self):
         if not self.get_server_info: return

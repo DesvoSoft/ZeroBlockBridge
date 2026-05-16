@@ -166,6 +166,51 @@ class ModrinthClient:
     # ------------------------------------------------------------------
     # Public API — Download + Install
     # ------------------------------------------------------------------
+    def _download_file(self, download_url, filename, expected_sha1, dest_dir, progress_callback=None):
+        dest_path = os.path.join(dest_dir, filename)
+        try:
+            resp = self.session.get(download_url, stream=True, timeout=30)
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+            downloaded = 0
+            sha1 = hashlib.sha1()
+
+            with open(dest_path, "wb") as fp:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        fp.write(chunk)
+                        sha1.update(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback and total > 0:
+                            progress_callback(downloaded / total)
+
+            if expected_sha1 and sha1.hexdigest() != expected_sha1:
+                logger.error(
+                    "SHA1 mismatch for %s: expected %s, got %s",
+                    filename, expected_sha1, sha1.hexdigest(),
+                )
+                os.remove(dest_path)
+                return None
+
+            logger.info("Downloaded %s to %s", filename, dest_path)
+            return dest_path
+
+        except Exception as exc:
+            logger.error("Download failed for %s: %s", filename, exc)
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+            return None
+
+    def _resolve_version_file(self, version):
+        primary_file = None
+        for f in version.get("files", []):
+            if f.get("primary", False):
+                primary_file = f
+                break
+        if not primary_file and version.get("files"):
+            primary_file = version["files"][0]
+        return primary_file
+
     def download_mod(
         self,
         project_id: str,
@@ -185,63 +230,52 @@ class ModrinthClient:
             logger.warning("No compatible version found for %s (MC %s, %s)", project_id, mc_version, loader)
             return None
 
-        version = versions[0]  # newest compatible
-        primary_file = None
-        for f in version.get("files", []):
-            if f.get("primary", False):
-                primary_file = f
-                break
-        if not primary_file and version.get("files"):
-            primary_file = version["files"][0]
-
+        version = versions[0]
+        primary_file = self._resolve_version_file(version)
         if not primary_file:
             logger.error("Version %s has no downloadable files", version.get("id"))
             return None
 
-        download_url = primary_file["url"]
-        filename = primary_file["filename"]
-        expected_sha1 = primary_file.get("hashes", {}).get("sha1")
-
-        # Determine target directory
         target_dir = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
         dest_dir = os.path.join(SERVERS_DIR, server_name, target_dir)
         os.makedirs(dest_dir, exist_ok=True)
-        dest_path = os.path.join(dest_dir, filename)
 
-        # Download with progress
-        try:
-            resp = self.session.get(download_url, stream=True, timeout=30)
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            sha1 = hashlib.sha1()
+        return self._download_file(
+            primary_file["url"], primary_file["filename"],
+            primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
+        )
 
-            with open(dest_path, "wb") as fp:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        fp.write(chunk)
-                        sha1.update(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback and total > 0:
-                            progress_callback(downloaded / total)
+    def download_version(
+        self,
+        version: dict,
+        server_name: str,
+        loader: str,
+        progress_callback=None,
+    ) -> Optional[str]:
+        """
+        Download a specific version of a mod.
 
-            # SHA1 verification
-            if expected_sha1 and sha1.hexdigest() != expected_sha1:
-                logger.error(
-                    "SHA1 mismatch for %s: expected %s, got %s",
-                    filename, expected_sha1, sha1.hexdigest(),
-                )
-                os.remove(dest_path)
-                return None
+        Args:
+            version: A version dict from get_versions()
+            server_name: Target server
+            loader: Mod loader (determines mods/ vs plugins/)
+            progress_callback: Optional progress callback
 
-            logger.info("Downloaded %s to %s", filename, dest_path)
-            return dest_path
-
-        except Exception as exc:
-            logger.error("Download failed for %s: %s", filename, exc)
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
+        Returns path to the downloaded file, or None on failure.
+        """
+        primary_file = self._resolve_version_file(version)
+        if not primary_file:
+            logger.error("Version %s has no downloadable files", version.get("id"))
             return None
+
+        target_dir = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
+        dest_dir = os.path.join(SERVERS_DIR, server_name, target_dir)
+        os.makedirs(dest_dir, exist_ok=True)
+
+        return self._download_file(
+            primary_file["url"], primary_file["filename"],
+            primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
+        )
 
     # ------------------------------------------------------------------
     # Public API — Update checking
