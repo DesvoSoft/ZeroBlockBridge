@@ -65,6 +65,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.client = ModrinthClient()
         self._current_hits = []
         self._search_thread = None
+        self._search_query = ""
+        self._search_project_type = "mod"
+        self._search_mc_version = None
+        self._search_loader = None
+        self._search_offset = 0
+        self._search_total = 0
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -187,14 +193,47 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Search logic
     # ------------------------------------------------------------------
+    def _do_search(self, reset=False):
+        if reset:
+            self._current_hits = []
+            self._search_offset = 0
+            self.btn_search.configure(state="disabled")
+        self._set_status("Searching…", busy=True)
+
+        def _search():
+            try:
+                results = self.client.search(
+                    self._search_query,
+                    mc_version=self._search_mc_version,
+                    loader=self._search_loader,
+                    project_type=self._search_project_type,
+                    limit=25,
+                    offset=self._search_offset,
+                )
+                hits = results.get("hits", [])
+                self._current_hits.extend(hits)
+                self._search_total = results.get("total_hits", len(hits))
+                total_shown = len(self._current_hits)
+                self._search_offset += len(hits)
+                self.after(0, lambda: self._render_results(total_shown))
+            except ModrinthException as exc:
+                logger.error("Modrinth search failed: %s", exc)
+                msg = f"Search failed:\n{exc}"
+                self.after(0, lambda m=msg: self._show_placeholder(m))
+            finally:
+                self.after(0, lambda: self.btn_search.configure(state="normal"))
+                self.after(0, lambda: self._set_status("Ready"))
+
+        threading.Thread(target=_search, daemon=True).start()
+    
+    def _on_load_more(self):
+        self._do_search(reset=False)
+
     def _on_search(self, event=None):
         query = self.entry_search.get().strip()
         if not query:
             return
-
         project_type = self.combo_type.get()
-
-        # Get server context for filtering
         mc_version = None
         loader = None
         if self.get_server_info:
@@ -204,33 +243,11 @@ class ModrinthBrowser(ctk.CTkFrame):
                     _, mc_version, loader = info
             except Exception:
                 pass
-
-        self._set_status("Searching…", busy=True)
-        self.btn_search.configure(state="disabled")
-
-        def _do_search(q, mv, ld, pt):
-            try:
-                results = self.client.search(
-                    q,
-                    mc_version=mv,
-                    loader=ld,
-                    project_type=pt,
-                    limit=25,
-                )
-                hits = results.get("hits", [])
-                self._current_hits = hits
-                total = len(hits)
-                self.after(0, lambda: self._render_results(self._current_hits, total))
-            except ModrinthException as exc:
-                logger.error("Modrinth search failed: %s", exc)
-                msg = f"Search failed:\n{exc}"
-                self.after(0, lambda m=msg: self._show_placeholder(m))
-            finally:
-                self.after(0, lambda: self.btn_search.configure(state="normal"))
-                self.after(0, lambda: self._set_status("Ready"))
-
-        self._search_thread = threading.Thread(target=_do_search, args=(query, mc_version, loader, project_type), daemon=True)
-        self._search_thread.start()
+        self._search_query = query
+        self._search_project_type = project_type
+        self._search_mc_version = mc_version
+        self._search_loader = loader
+        self._do_search(reset=True)
 
     def _load_popular_mods(self):
         """Fetch and show popular mods."""
@@ -252,7 +269,10 @@ class ModrinthBrowser(ctk.CTkFrame):
                     project_type="mod", limit=20,
                 )
                 hits = results.get("hits", [])
-                self.after(0, lambda: self._render_results(hits, len(hits)))
+                self._current_hits = hits
+                self._search_total = results.get("total_hits", len(hits))
+                total_shown = len(hits)
+                self.after(0, lambda: self._render_results(total_shown))
             except Exception as e:
                 logger.error(f"Failed to load popular mods: {e}")
             finally:
@@ -266,20 +286,32 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Render results
     # ------------------------------------------------------------------
-    def _render_results(self, hits: list, total: int):
+    def _render_results(self, total_shown: int):
         for w in self.results_frame.winfo_children():
             w.destroy()
 
-        if not hits:
+        if not self._current_hits:
             self._show_placeholder("No results found.\nTry a different search term.")
             self.lbl_count.configure(text="0 results")
             return
 
-        self.lbl_count.configure(text=f"{len(hits)} of {total} results")
+        self.lbl_count.configure(text=f"{total_shown} of {self._search_total} results")
 
-        for idx, hit in enumerate(hits):
+        for idx, hit in enumerate(self._current_hits):
             card = self._create_mod_card(hit, idx)
             card.grid(row=idx, column=0, sticky="ew", padx=6, pady=3)
+
+        if total_shown < self._search_total:
+            btn_more = ctk.CTkButton(
+                self.results_frame, text="Load More", width=140, height=36,
+                corner_radius=12,
+                fg_color=("#e2e8f0", "#334155"),
+                hover_color=("#cbd5e1", "#475569"),
+                text_color=("black", "white"),
+                font=("Roboto Medium", 12),
+                command=self._on_load_more,
+            )
+            btn_more.grid(row=len(self._current_hits), column=0, pady=10)
 
     def _create_mod_card(self, hit: dict, index: int) -> ctk.CTkFrame:
         """Build a single mod result card — Neo-Modern style."""
