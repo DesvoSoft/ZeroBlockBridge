@@ -138,7 +138,17 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_install_optimizers,
         )
-        self.btn_opt.grid(row=0, column=4, padx=(4, 12), pady=8)
+        self.btn_opt.grid(row=0, column=4, padx=(4, 0), pady=8)
+
+        # Check for Updates button
+        self.btn_updates = ctk.CTkButton(
+            bar, text="Check Updates", width=110, height=36,
+            corner_radius=12,
+            fg_color="#f59e0b", hover_color="#d97706",
+            text_color="white", font=("Roboto Medium", 11),
+            command=self._on_check_updates,
+        )
+        self.btn_updates.grid(row=0, column=5, padx=(4, 12), pady=8)
 
     # ------------------------------------------------------------------
     # Layout: Results Area (scrollable)
@@ -469,6 +479,64 @@ class ModrinthBrowser(ctk.CTkFrame):
                     logger.error("Failed to install %s: %s", mod["name"], e)
             self.after(0, lambda: self._set_status("Ready"))
         threading.Thread(target=_run_opt, daemon=True).start()
+
+    def _on_check_updates(self):
+        if not self.get_server_info:
+            self._set_status("⚠ No server selected.")
+            return
+        info = self.get_server_info()
+        if not info:
+            self._set_status("⚠ Select a server first.")
+            return
+        server_name, mc_version, loader = info
+
+        self._set_status("Checking for updates…", busy=True)
+
+        def _check():
+            try:
+                updates = self.client.check_updates(server_name, mc_version, loader)
+                self.after(0, lambda: self._show_updates_dialog(updates))
+            except Exception as exc:
+                self.after(0, lambda: self._set_status(f"✗ Update check failed: {exc}"))
+            finally:
+                self.after(0, lambda: self._set_status("Ready"))
+
+        threading.Thread(target=_check, daemon=True).start()
+
+    def _show_updates_dialog(self, updates):
+        if not updates:
+            self._set_status("✓ All mods are up to date.")
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Mod Updates Available")
+        dialog.geometry("520x400")
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+
+        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+        lbl_title = ctk.CTkLabel(
+            frame, text=f"{len(updates)} update(s) available",
+            font=("Roboto Medium", 16), anchor="w",
+        )
+        lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        for i, u in enumerate(updates):
+            card = ctk.CTkFrame(frame, corner_radius=8)
+            card.grid(row=i + 1, column=0, sticky="ew", pady=3)
+            card.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(card, text=u["filename"], font=("Roboto Medium", 13), anchor="w").grid(
+                row=0, column=0, sticky="w", padx=10, pady=(8, 0))
+            ctk.CTkLabel(card, text=f"→ {u.get('latest_version', 'newer version')} available",
+                         font=AppConfig.FONT_BODY_SMALL, anchor="w").grid(
+                row=1, column=0, sticky="w", padx=10, pady=(0, 8))
+
+        btn_close = ctk.CTkButton(dialog, text="Close", width=100, height=32,
+                                   corner_radius=12, command=dialog.destroy)
+        btn_close.pack(pady=8)
 
     # ------------------------------------------------------------------
     # Utilities
