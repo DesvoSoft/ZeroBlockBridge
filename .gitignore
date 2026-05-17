@@ -75,3 +75,8 @@ CHECKLIST.md
 .opencode/
 .agent/
 skills-lock.json
+
+# Local development files (not needed in repo)
+opencode.json
+scripts/
+roadmap.md
