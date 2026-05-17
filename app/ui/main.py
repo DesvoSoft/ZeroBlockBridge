@@ -190,45 +190,24 @@ class MCTunnelApp(ctk.CTk):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
 
-        # --- Server Section ---
-        self.server_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.server_section.pack(fill="x", padx=15, pady=(6, 2))
-
-        ctk.CTkLabel(self.server_section, text="SERVER",
-                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
-                      ).pack(anchor="w", pady=(0, 2))
-
-        self.controls_frame = ctk.CTkFrame(self.server_section, fg_color="transparent")
-        self.controls_frame.pack(fill="x")
+        self.dash_row = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.dash_row.pack(fill="x", padx=10, pady=5)
         self._build_server_controls()
-
-        # --- Separator ---
-        sep = ctk.CTkFrame(self.dashboard_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
-        sep.pack(fill="x", padx=15, pady=4)
-
-        # --- Tunnel Section ---
-        self.tunnel_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_section.pack(fill="x", padx=15, pady=(2, 6))
-
-        ctk.CTkLabel(self.tunnel_section, text="TUNNEL",
-                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
-                      ).pack(anchor="w", pady=(0, 2))
-
-        self.tunnel_frame = ctk.CTkFrame(self.tunnel_section, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x")
         self._build_tunnel_controls()
 
     def _build_server_controls(self):
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
+        self.btn_start = ctk.CTkButton(self.dash_row, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=40, corner_radius=12, height=32)
         self.btn_start.pack(side="left", padx=2)
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
+        self.btn_stop = ctk.CTkButton(self.dash_row, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=40, corner_radius=12, height=32)
         self.btn_stop.pack(side="left", padx=2)
+        self.lbl_server_tag = ctk.CTkLabel(self.dash_row, text="", font=("Roboto Medium", 12), text_color=AppConfig.COLOR_TEXT_GRAY)
+        self.lbl_server_tag.pack(side="left", padx=(6, 0))
 
     def _build_tunnel_controls(self):
-        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
-        self.lbl_tunnel_status.pack(side="left", padx=(20, 5))
+        self.lbl_tunnel_status = ctk.CTkLabel(self.dash_row, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 12))
+        self.lbl_tunnel_status.pack(side="left", padx=(12, 2))
 
-        self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
+        self.ip_frame = ctk.CTkFrame(self.dash_row, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
 
         self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 13), text_color="#3b82f6")
@@ -238,34 +217,31 @@ class MCTunnelApp(ctk.CTk):
             self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
             fg_color="#1e293b", hover_color="#334155",
             border_width=1, border_color="#3b82f6",
-            width=36, corner_radius=12, height=28,
+            width=32, corner_radius=12, height=28,
             font=("Roboto", 13), text_color="#3b82f6",
         )
 
-        self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
-        self.tunnel_toolbar.pack(side="right", padx=10)
+        self.tunnel_toolbar = ctk.CTkFrame(self.dash_row, fg_color="transparent")
+        self.tunnel_toolbar.pack(side="right")
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
-        
-        # --- Playit Account Linking (collapsible when unlinked) ---
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=40, corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=40, corner_radius=12, height=32)
+
         self._setup_expanded = False
         self.btn_toggle_setup = ctk.CTkButton(
             self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
             fg_color="#1e293b", hover_color="#334155",
             border_width=1, border_color="#f97316",
-            width=70, corner_radius=12, height=36,
+            width=65, corner_radius=12, height=32,
             font=("Roboto Medium", 12), text_color="#f97316",
         )
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
-        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
+        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=180, height=32, corner_radius=12)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=55, height=32, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=65, corner_radius=12, height=32, font=("Roboto Medium", 11))
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=12, height=36)
-        self.btn_reset.pack(side="left", padx=2)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=40, corner_radius=12, height=32)
 
-        # Initial UI State Check
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
 
     def _toggle_setup_section(self):
@@ -387,6 +363,7 @@ class MCTunnelApp(ctk.CTk):
         meta = logic.get_server_meta(server_name)
         mc_version = meta.get("version", "?") if meta else "?"
         self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color="white")
+        self.lbl_server_tag.configure(text=server_type.upper() if server_type else "VANILLA")
         
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
         

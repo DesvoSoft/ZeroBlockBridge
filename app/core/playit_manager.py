@@ -370,16 +370,14 @@ class PlayitManager:
             except Exception as e:
                 logger.warning(f"Could not fix playit.toml permissions: {e}")
 
-    # --- CRITICAL DNS: polls API for up to 60s until tunnel domain is assigned ---
+    # --- CRITICAL DNS: polls API indefinitely until DNS resolves or manager stops ---
     # DO NOT MODIFY without understanding the full DNS recovery chain:
     # 1. get_or_create_tunnel() (15s window in create_tunnel)
-    # 2. _dns_polling_loop() (60s API poll - THIS METHOD)
+    # 2. _dns_polling_loop() (infinite API poll - THIS METHOD)
     # 3. _parse_line() (stdout regex from agent)
     def _dns_polling_loop(self):
-        waited = 0
-        while self.running and waited < 60:
+        while self.running:
             time.sleep(5)
-            waited += 5
             if not self.running:
                 return
             if self._api_dns or self._stdout_dns:

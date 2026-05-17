@@ -1,3 +1,16 @@
+import os
+import shutil
+
+
+def pytest_sessionfinish(session):
+    cache_dir = os.path.join(os.path.dirname(__file__), "..", ".pytest_cache")
+    if os.path.isdir(cache_dir):
+        shutil.rmtree(cache_dir, ignore_errors=True)
+    zbb_cache = os.path.join(os.path.dirname(__file__), "..", "app", "bin", ".zbb_cache")
+    if os.path.isdir(zbb_cache):
+        shutil.rmtree(zbb_cache, ignore_errors=True)
+
+
 class FakeRunner:
     def __init__(self):
         self.started = False

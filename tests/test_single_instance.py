@@ -81,11 +81,11 @@ class TestSingleInstanceLock:
 
 
 class TestIsPidAlive:
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_dead(self):
-        with patch.object(sys, "platform", "win32"):
-            with patch("ctypes.windll.kernel32.OpenProcess", return_value=0):
-                result = SingleInstanceLock._is_pid_alive(99999)
-                assert result is False
+        with patch("ctypes.windll.kernel32.OpenProcess", return_value=0):
+            result = SingleInstanceLock._is_pid_alive(99999)
+            assert result is False
 
     def test_linux_alive(self):
         with patch.object(sys, "platform", "linux"):
@@ -99,8 +99,8 @@ class TestIsPidAlive:
                 result = SingleInstanceLock._is_pid_alive(99999)
                 assert result is False
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_exception_fallback(self):
-        with patch.object(sys, "platform", "win32"):
-            with patch("ctypes.windll.kernel32.OpenProcess", side_effect=Exception("access denied")):
-                result = SingleInstanceLock._is_pid_alive(1234)
-                assert result is False
+        with patch("ctypes.windll.kernel32.OpenProcess", side_effect=Exception("access denied")):
+            result = SingleInstanceLock._is_pid_alive(1234)
+            assert result is False
