@@ -206,6 +206,8 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.dash_server, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=40, corner_radius=12, height=32)
         self.btn_stop.pack(side="left", padx=2)
+        self.lbl_server_status = ctk.CTkLabel(self.dash_server, text="○ Offline", font=("Roboto Medium", 12), text_color=AppConfig.COLOR_TEXT_GRAY)
+        self.lbl_server_status.pack(side="left", padx=(4, 0))
         self.lbl_server_tag = ctk.CTkLabel(self.dash_server, text="", font=("Roboto Medium", 12), text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_server_tag.pack(side="left", padx=(6, 0))
 
@@ -215,20 +217,6 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=40, corner_radius=12, height=32, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=40, corner_radius=12, height=32)
-
-        self._setup_expanded = False
-        self.btn_toggle_setup = ctk.CTkButton(
-            self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
-            fg_color="#1e293b", hover_color="#334155",
-            border_width=1, border_color="#f97316",
-            width=65, corner_radius=12, height=32,
-            font=("Roboto Medium", 12), text_color="#f97316",
-        )
-        self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
-        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=180, height=32, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=55, height=32, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=65, corner_radius=12, height=32, font=("Roboto Medium", 11))
-
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=40, corner_radius=12, height=32)
 
         self.lbl_tunnel_status = ctk.CTkLabel(self.dash_tunnel, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=("Roboto", 12))
@@ -247,6 +235,22 @@ class MCTunnelApp(ctk.CTk):
             width=32, corner_radius=12, height=28,
             font=("Roboto", 13), text_color="#3b82f6",
         )
+
+        self.tunnel_right = ctk.CTkFrame(self.dash_tunnel, fg_color="transparent")
+        self.tunnel_right.pack(side="right")
+
+        self._setup_expanded = False
+        self.btn_toggle_setup = ctk.CTkButton(
+            self.tunnel_right, text="⚡ Link", command=self._toggle_setup_section,
+            fg_color="#1e293b", hover_color="#334155",
+            border_width=1, border_color="#f97316",
+            width=65, corner_radius=12, height=32,
+            font=("Roboto Medium", 12), text_color="#f97316",
+        )
+        self.setup_frame = ctk.CTkFrame(self.tunnel_right, fg_color="transparent")
+        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=180, height=32, corner_radius=12)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=55, height=32, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=65, corner_radius=12, height=32, font=("Roboto Medium", 11))
 
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
 
@@ -372,6 +376,8 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_server_tag.configure(text=server_type.upper() if server_type else "VANILLA")
         
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
+        self.lbl_server_status.configure(text="🟢 Online" if is_running else "○ Offline",
+                                         text_color="green" if is_running else AppConfig.COLOR_TEXT_GRAY)
         
         self.btn_start.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
@@ -460,6 +466,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self.lbl_server_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self.btn_start.configure(state="disabled"))
         self.after(0, lambda: self.btn_stop.configure(state="normal"))
         if data and isinstance(data, dict):
@@ -471,12 +478,14 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self.lbl_server_status.configure(text="🟢 Online", text_color="green"))
 
     def on_player_count_update(self, count):
         self.after(0, lambda: self.lbl_player_count.configure(text=f"Players: {count}"))
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
+        self.after(0, lambda: self.lbl_server_status.configure(text="○ Offline", text_color=AppConfig.COLOR_TEXT_GRAY))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
 

@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     name: Build packages
+    permissions:
+      contents: write
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false   # <-- prevents canceling all jobs if one fails
