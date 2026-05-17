@@ -38,8 +38,8 @@ The core and UI are decoupled via `EventBus`. `ZBBManager` serves as the single 
 The application features:
 
 - **Sidebar**: Server list with selection.
-- **Dashboard**: Server/tunnel controls, auto-restart settings, quick backup.
-- **Tabbed Console**: Separate logs for Server and Tunnel output.
+- **Dashboard**: Tunnel controls, auto-restart settings, quick backup (server start/stop merged into status bar).
+- **Tabbed Console**: Console, Tunnel Log, and Mods (Modrinth Browser) tabs.
 - **Console Input**: Send server commands directly from the UI.
 - **Properties Editor**: 7 tabs (General, World, Network, Advanced, Backups, Automation, Launch).
 - **Modrinth Mod Browser**: Search mods/plugins with pagination, loader/version filters, one-click install, and update checks.
@@ -163,7 +163,7 @@ ZeroBlockBridge/
 ├── docs/
 │   ├── SKILL.md                   # AI assistant guidelines
 │   ├── STANDARDS.md               # Technical standards & architecture
-│   └── roadmap.md                 # Development roadmap
+│   └── roadmap.md                 # (local-only) Development roadmap
 |
 ├── servers/                       # (Generated) Per-server directories
 │   └── <server-name>/

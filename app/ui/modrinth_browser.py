@@ -352,6 +352,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.results_frame,
             corner_radius=12,
         )
+        card.grid_columnconfigure(1, weight=1)
         card_inner = ctk.CTkScrollableFrame(card, fg_color="transparent")
         
         icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=12, fg_color=color)

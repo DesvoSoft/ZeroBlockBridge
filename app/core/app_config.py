@@ -3,10 +3,10 @@ class AppConfig:
 
     # Window Configuration
     WINDOW_TITLE = "Zero Block Bridge"
-    DEFAULT_WIDTH = 1000
-    DEFAULT_HEIGHT = 650
-    MIN_WIDTH = 800
-    MIN_HEIGHT = 550
+    DEFAULT_WIDTH = 1150
+    DEFAULT_HEIGHT = 700
+    MIN_WIDTH = 900
+    MIN_HEIGHT = 580
 
     # Colors - UI Theme
     COLOR_BG_LIGHT = "white"
