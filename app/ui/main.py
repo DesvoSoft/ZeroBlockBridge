@@ -172,6 +172,11 @@ class MCTunnelApp(ctk.CTk):
         )
         self.btn_config.pack(side="left", padx=5)
 
+        self.btn_start = ctk.CTkButton(self.status_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
+        self.btn_start.pack(side="left", padx=2)
+        self.btn_stop = ctk.CTkButton(self.status_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
+        self.btn_stop.pack(side="left", padx=2)
+
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", padx=20, pady=8)
         
@@ -189,40 +194,15 @@ class MCTunnelApp(ctk.CTk):
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
-
-        # --- Server Section ---
-        self.server_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.server_section.pack(fill="x", padx=15, pady=(6, 2))
-
-        ctk.CTkLabel(self.server_section, text="SERVER",
-                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
-                      ).pack(anchor="w", pady=(0, 2))
-
-        self.controls_frame = ctk.CTkFrame(self.server_section, fg_color="transparent")
-        self.controls_frame.pack(fill="x")
-        self._build_server_controls()
-
+ 
         # --- Separator ---
         sep = ctk.CTkFrame(self.dashboard_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
         sep.pack(fill="x", padx=15, pady=4)
 
-        # --- Tunnel Section ---
-        self.tunnel_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_section.pack(fill="x", padx=15, pady=(2, 6))
-
-        ctk.CTkLabel(self.tunnel_section, text="TUNNEL",
-                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
-                      ).pack(anchor="w", pady=(0, 2))
-
-        self.tunnel_frame = ctk.CTkFrame(self.tunnel_section, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x")
+        # --- Tunnel ---
+        self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.tunnel_frame.pack(fill="x", padx=15, pady=(2, 6))
         self._build_tunnel_controls()
-
-    def _build_server_controls(self):
-        self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
-        self.btn_start.pack(side="left", padx=2)
-        self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
-        self.btn_stop.pack(side="left", padx=2)
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
