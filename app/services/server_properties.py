@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Any
 
 from app.core.constants import SERVERS_DIR
 
@@ -18,7 +17,7 @@ def load_server_properties(server_name: str | None = None, server_dir: str | Non
     properties = {}
     if not os.path.exists(props_path):
         return properties
-    with open(props_path, "r") as f:
+    with open(props_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
@@ -34,11 +33,11 @@ def save_server_properties(server_name: str | None = None, server_dir: str | Non
     props_path = _props_path(server_name, server_dir)
     os.makedirs(os.path.dirname(props_path), exist_ok=True)
     if not os.path.exists(props_path):
-        with open(props_path, "w") as f:
+        with open(props_path, "w", encoding="utf-8") as f:
             for k, v in new_properties.items():
                 f.write(f"{k}={v}\n")
         return
-    with open(props_path, "r") as f:
+    with open(props_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     updated_keys = set()
     new_lines = []
@@ -56,5 +55,5 @@ def save_server_properties(server_name: str | None = None, server_dir: str | Non
     for k, v in new_properties.items():
         if k not in updated_keys:
             new_lines.append(f"{k}={v}\n")
-    with open(props_path, "w") as f:
+    with open(props_path, "w", encoding="utf-8") as f:
         f.writelines(new_lines)

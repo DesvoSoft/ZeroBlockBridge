@@ -142,8 +142,7 @@ class PlayitManager:
             if self.running:
                 self.console_callback("[Playit] Agent already running.")
                 if self._api_dns:
-                    with self._lock:
-                        self.current_address = self._api_dns
+                    self.current_address = self._api_dns
                     self.status_callback("Online", self._api_dns)
                 return
 
@@ -260,9 +259,8 @@ class PlayitManager:
                                  capture_output=True, check=False)
 
             self.running = False
-            with self._lock:
-                self.current_address = None
-                self._api_dns = None
+            self.current_address = None
+            self._api_dns = None
             self.status_callback("Offline", None)
 
     def reset(self, mode="full"):
@@ -449,15 +447,17 @@ class PlayitManager:
             dns_match = re.search(pattern, line)
             if dns_match:
                 address = dns_match.group(1).rstrip('.')
-                if address != self.current_address:
+                with self._lock:
+                    if address == self.current_address:
+                        return
                     self._stdout_dns = address
                     self.current_address = address
-                    self.status_callback("Online", address)
-                    self.console_callback(f"[Playit] Public address: {address}")
-                    if self.notification_callback:
-                        self.notification_callback(f"Tunnel online: {address}", "success")
-                    if self.on_ready_callback:
-                        self.on_ready_callback()
+                self.status_callback("Online", address)
+                self.console_callback(f"[Playit] Public address: {address}")
+                if self.notification_callback:
+                    self.notification_callback(f"Tunnel online: {address}", "success")
+                if self.on_ready_callback:
+                    self.on_ready_callback()
                 return
 
     def _read_output(self):
@@ -489,12 +489,11 @@ class PlayitManager:
         except Exception as e:
             self.console_callback(f"[Playit] Read error: {e}")
         finally:
-            self.running = False
-            self.process = None
-            addr = self._api_dns or self._stdout_dns
-            self.current_address = addr
-            if not addr:
-                self.current_address = None
+            with self._lock:
+                self.running = False
+                self.process = None
+                addr = self._api_dns or self._stdout_dns
+                self.current_address = addr if addr else None
             self.status_callback("Offline", None)
 
 

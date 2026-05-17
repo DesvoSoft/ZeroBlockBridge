@@ -19,6 +19,15 @@ from app.core.version_manager import VersionManager
 _jar_ready_events: dict[str, threading.Event] = {}
 _jar_events_lock = threading.Lock()
 
+
+def create_junction(source: str, dest: str) -> None:
+    """Create a cross-platform filesystem link (junction on Windows, symlink on Linux)."""
+    if sys.platform == "win32":
+        import _winapi
+        _winapi.CreateJunction(source, dest)
+    else:
+        os.symlink(source, dest)
+
 def _get_jar_event(server_dir: str) -> threading.Event:
     """Get or create a threading.Event for a server's jar normalization."""
     with _jar_events_lock:

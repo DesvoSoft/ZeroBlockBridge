@@ -177,8 +177,8 @@ class PlayitApiClient:
         return True
 
     # --- Agent Info ---
-    def get_agent_id(self) -> str:
-        """Retrieves and caches the agent_id."""
+    def get_agent_id(self) -> Optional[str]:
+        """Retrieves and caches the agent_id. Returns None if unavailable."""
         if self._agent_id:
             return self._agent_id
             
@@ -201,6 +201,7 @@ class PlayitApiClient:
                         return self._agent_id
         except Exception as e:
             logger.warning(f"Fallback agent_id detection failed: {e}")
+        return None
 
     def get_agent_rundata(self) -> dict:
         """Returns full agent rundata including agent_id."""
@@ -259,6 +260,8 @@ class PlayitApiClient:
     def list_tunnels(self) -> List[Dict]:
         """Returns a list of all tunnels for the agent."""
         agent_id = self.get_agent_id()
+        if not agent_id:
+            return []
         data = self._request("tunnels/list", json_data={"agent_id": agent_id})
         if data.get("status") == "success":
             return data.get("data", {}).get("tunnels", [])
@@ -325,6 +328,8 @@ class PlayitApiClient:
 
     def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
         agent_id = self.get_agent_id()
+        if not agent_id:
+            raise PlayitApiException("Cannot create tunnel: no agent_id available. Ensure playit is linked.")
         import random
         import string
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 from app.core.app_config import AppConfig
+from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip
@@ -628,7 +629,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             
         options = list(self._java_label_to_path.keys())
         
-        meta_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name, "metadata.json")
+        meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
         meta = {}
         if os.path.exists(meta_path):
             import json
@@ -654,7 +655,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder, fg_color="gray30", height=32).pack(fill="x", padx=15, pady=10)
 
     def open_folder(self):
-        server_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name)
+        server_path = os.path.join(str(SERVERS_DIR), self.server_name)
         if os.path.exists(server_path):
             if sys.platform == "win32":
                 os.startfile(server_path)
@@ -664,11 +665,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 subprocess.run(["xdg-open", server_path], check=False)
 
     def save_launch_settings(self):
-        meta_path = os.path.join(AppConfig.SERVERS_DIR if hasattr(AppConfig, "SERVERS_DIR") else "servers", self.server_name, "metadata.json")
+        meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
         if not os.path.exists(meta_path): return
         
         import json
-        with open(meta_path, "r") as f:
+        with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
             
         label = self.var_java_path.get()

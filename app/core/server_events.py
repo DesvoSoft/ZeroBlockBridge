@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any, Callable, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -26,20 +27,24 @@ class ServerEvent:
 class EventBus:
     def __init__(self):
         self._listeners: Dict[str, List[Callable]] = {}
+        self._lock = threading.RLock()
 
     def subscribe(self, event_type: str, callback: Callable):
-        if event_type not in self._listeners:
-            self._listeners[event_type] = []
-        if callback not in self._listeners[event_type]:
-            self._listeners[event_type].append(callback)
+        with self._lock:
+            if event_type not in self._listeners:
+                self._listeners[event_type] = []
+            if callback not in self._listeners[event_type]:
+                self._listeners[event_type].append(callback)
 
     def unsubscribe(self, event_type: str, callback: Callable):
-        if event_type in self._listeners:
-            if callback in self._listeners[event_type]:
-                self._listeners[event_type].remove(callback)
+        with self._lock:
+            if event_type in self._listeners:
+                if callback in self._listeners[event_type]:
+                    self._listeners[event_type].remove(callback)
 
     def emit(self, event_type: str, data: Any = None):
-        callbacks = self._listeners.get(event_type, []).copy()
+        with self._lock:
+            callbacks = self._listeners.get(event_type, []).copy()
         for callback in callbacks:
             try:
                 callback(data)

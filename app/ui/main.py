@@ -40,6 +40,8 @@ ctk.set_default_color_theme("blue")
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
         from app.services import settings_manager
+        from app.core.constants import CONFIG_DIR
+        settings_manager.set_config_dir(str(CONFIG_DIR))
         theme = settings_manager.get("theme", "Dark")
         ctk.set_appearance_mode(theme)
         
@@ -491,15 +493,12 @@ class MCTunnelApp(ctk.CTk):
             
         custom_loc = config.get("location", str(SERVERS_DIR))
         if custom_loc and os.path.normpath(custom_loc) != os.path.normpath(str(SERVERS_DIR)):
+            from app.core.logic import create_junction
             target_path = os.path.join(custom_loc, config["name"])
             link_path = os.path.join(SERVERS_DIR, config["name"])
             try:
                 os.makedirs(target_path, exist_ok=True)
-                if sys.platform == "win32":
-                    import _winapi
-                    _winapi.CreateJunction(target_path, link_path)
-                else:
-                    os.symlink(target_path, link_path)
+                create_junction(target_path, link_path)
                 self.server_console.log(f"[System] Created link for custom location: {target_path}")
             except Exception as e:
                 self.server_console.log(f"[Error] Failed to map custom location: {e}")

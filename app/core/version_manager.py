@@ -275,11 +275,7 @@ class VersionManager:
         thread = getattr(self, 'refresh_thread', None)
         if thread is not None and thread.is_alive():
             thread.join(timeout=timeout)
-        thread = getattr(self, 'refresh_thread', None)
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=timeout)
-            if not thread.is_alive():
-                return True
+            return not thread.is_alive()
         return False
 
     def _check_and_refresh(self):

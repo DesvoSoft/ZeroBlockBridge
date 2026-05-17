@@ -1,6 +1,7 @@
 import pytest
 import platform
 from unittest.mock import MagicMock, patch
+from typing import Optional
 from app.services.playit_api import PlayitApiClient, PlayitApiException
 
 @pytest.fixture

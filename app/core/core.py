@@ -36,6 +36,11 @@ class ZBBManager:
         # Scheduler State
         self._scheduler_thread: Optional[threading.Thread] = None
         self._scheduler_running = False
+        
+        # Start lock -- prevents concurrent start_server calls and protects _jdk_source
+        self._start_lock = threading.Lock()
+        self._restart_lock = threading.Lock()
+        self._jdk_source: str = "unknown"
         self.restart_warnings_sent: set = set()
         self._restart_warnings_lock = threading.Lock()
         self._backup_in_progress = False
@@ -93,14 +98,6 @@ class ZBBManager:
         config[key] = value
         save_config(config)
         return config
-
-    def remove_config_key(self, key: str):
-        config = load_config()
-        if key in config:
-            del config[key]
-            save_config(config)
-            return True
-        return False
 
     # --- Core Server Operations ---
     def bootstrap(self):
@@ -228,59 +225,61 @@ class ZBBManager:
         return (java_bin, required_java)
 
     def start_server(self):
-        if not self.current_server:
-            return False
-        
-        if self.server_runner and self.server_runner.running:
-            self.events.emit(ServerEvent.CONSOLE_LINE, "[Error] A server is already running.")
-            return False
-            
-        self._stop_monitors()
-
-        config = self.get_config()
-        ram = config.get("ram_allocation", "2G")
-
-        from app.core.constants import SERVERS_DIR
-        from app.core.logic import get_server_meta
-        server_dir = os.path.join(SERVERS_DIR, self.current_server)
-        mc_version = "1.20.1"
-        java_path = "auto"
-        use_aikars = True
-        required_java_cached = None
-        required_java = 21
-        auto_install_jdk = True
-        self._jdk_source = "unknown"
-        try:
-            meta = get_server_meta(self.current_server)
-            if meta:
-                mc_version = meta.get("version", "1.20.1")
-                required_java_cached = meta.get("required_java")
-                self._jdk_source = meta.get("jdk_source", "system")
-                auto_install_jdk = meta.get("auto_install_jdk", True)
-                if meta.get("advanced_mode", False):
-                    java_path = meta.get("java_path", "auto")
-                    use_aikars = meta.get("use_aikars", True)
-        except Exception as e:
-            logger.error("Failed to read metadata: %s", e)
-
-        from app.services.scaffolder import pre_boot_scaffold
-        port = self.get_server_port(self.current_server)
-        pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
-
-        if java_path == "auto":
-            result = self._resolve_java_bin(server_dir, mc_version, required_java_cached, auto_install_jdk)
-            if result is None:
+        with self._start_lock:
+            if not self.current_server:
                 return False
-            java_bin, required_java = result
-        else:
-            java_bin = java_path
 
-        return self._launch_server(ram, java_bin, use_aikars, required_java, config)
+            if self.server_runner and self.server_runner.running:
+                self.events.emit(ServerEvent.CONSOLE_LINE, "[Error] A server is already running.")
+                return False
+
+            self._stop_monitors()
+
+            config = self.get_config()
+            ram = config.get("ram_allocation", "2G")
+
+            from app.core.constants import SERVERS_DIR
+            from app.core.logic import get_server_meta
+            server_dir = os.path.join(SERVERS_DIR, self.current_server)
+            mc_version = "1.20.1"
+            java_path = "auto"
+            use_aikars = True
+            required_java_cached = None
+            required_java = 21
+            auto_install_jdk = True
+            self._jdk_source = "unknown"
+            try:
+                meta = get_server_meta(self.current_server)
+                if meta:
+                    mc_version = meta.get("version", "1.20.1")
+                    required_java_cached = meta.get("required_java")
+                    self._jdk_source = meta.get("jdk_source", "system")
+                    auto_install_jdk = meta.get("auto_install_jdk", True)
+                    if meta.get("advanced_mode", False):
+                        java_path = meta.get("java_path", "auto")
+                        use_aikars = meta.get("use_aikars", True)
+            except Exception as e:
+                logger.error("Failed to read metadata: %s", e)
+
+            from app.services.scaffolder import pre_boot_scaffold
+            port = self.get_server_port(self.current_server)
+            pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
+
+            if java_path == "auto":
+                result = self._resolve_java_bin(server_dir, mc_version, required_java_cached, auto_install_jdk)
+                if result is None:
+                    return False
+                java_bin, required_java = result
+            else:
+                java_bin = java_path
+
+            return self._launch_server(ram, java_bin, use_aikars, required_java, config)
 
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
-        import os, sys, json
+        import os, json
         from app.core.constants import SERVERS_DIR
+        from app.core.logic import create_junction
         
         server_name = os.path.basename(folder_path.rstrip("\\/"))
         link_path = os.path.join(SERVERS_DIR, server_name)
@@ -289,12 +288,7 @@ class ZBBManager:
             raise Exception(f"A server named '{server_name}' already exists.")
             
         try:
-            # Create the link (junction on windows)
-            if sys.platform == "win32":
-                import _winapi
-                _winapi.CreateJunction(folder_path, link_path)
-            else:
-                os.symlink(folder_path, link_path)
+            create_junction(folder_path, link_path)
                 
             # Create a default metadata.json if missing
             if not os.path.exists(os.path.join(link_path, "metadata.json")):
@@ -381,11 +375,6 @@ class ZBBManager:
     def stop_tunnel(self):
         self.playit_manager.stop(force=True)
 
-    def stop_all(self):
-        """Stops all running services (Server, Tunnel, etc.). Used for app exit."""
-        self.stop_server()
-        self.stop_tunnel()
-
     def reset_tunnel(self, mode="full"):
         self.playit_manager.reset(mode)
 
@@ -466,52 +455,54 @@ class ZBBManager:
 
     def _handle_restart_request(self, data=None):
         """Handles internal requests to restart the server gracefully."""
+        if not self._restart_lock.acquire(blocking=False):
+            logger.warning("[ZBBManager] Restart already in progress, ignoring duplicate request.")
+            return
         reason = (data or {}).get("reason", "manual")
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[ZBBManager] Handling restart request (reason: {reason})...")
-        
+
         def _restart():
-            for i in [5, 4, 3, 2]:
-                self._send_system_message(f"Restarting in {i}...")
-                time.sleep(1)
-            
-            self._send_system_message("Restarting NOW!")
-            
-            # Auto-Backup Check
-            scheduler = Scheduler(self.current_server)
-            schedule = scheduler.get_schedule()
-            if schedule and schedule.get("backup_on_restart", False):
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initiating async auto-backup before restart...")
-                
-                def _do_backup():
-                    manager = BackupManager(self.current_server)
-                    path, error = manager.create_backup()
-                    if path:
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {os.path.basename(path)}")
+            try:
+                for i in [5, 4, 3, 2]:
+                    self._send_system_message(f"Restarting in {i}...")
+                    time.sleep(1)
+
+                self._send_system_message("Restarting NOW!")
+
+                scheduler = Scheduler(self.current_server)
+                schedule = scheduler.get_schedule()
+                if schedule and schedule.get("backup_on_restart", False):
+                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initiating async auto-backup before restart...")
+
+                    def _do_backup():
+                        manager = BackupManager(self.current_server)
+                        path, error = manager.create_backup()
+                        if path:
+                            self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {os.path.basename(path)}")
+                        else:
+                            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+
+                    threading.Thread(target=_do_backup, daemon=True).start()
+                    time.sleep(1)
+
+                self.stop_server()
+
+                timeout = AppConfig.SERVER_STOP_TIMEOUT
+                while timeout > 0:
+                    if not self.server_runner or not self.server_runner.running: break
+                    time.sleep(1)
+                    timeout -= 1
+
+                time.sleep(5)
+                if self.start_server():
+                    time.sleep(AppConfig.SERVER_START_WAIT)
+                    if self.is_running():
+                        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] OK - Scheduled restart completed successfully! Server is back online.")
                     else:
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
-                
-                threading.Thread(target=_do_backup, daemon=True).start()
-                # Give it a second to start archiving before we shut down the JVM
-                time.sleep(1)
-            
-            self.stop_server()
-            
-            timeout = AppConfig.SERVER_STOP_TIMEOUT
-            while timeout > 0:
-                if not self.server_runner or not self.server_runner.running: break
-                time.sleep(1)
-                timeout -= 1
-            
-            time.sleep(5)
-            # Re-start
-            if self.start_server():
-                # Wait briefly then report success
-                time.sleep(AppConfig.SERVER_START_WAIT)
-                if self.is_running():
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] OK - Scheduled restart completed successfully! Server is back online.")
-                else:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] ERROR: Server failed to restart automatically. Please check logs.")
-            
+                        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] ERROR: Server failed to restart automatically. Please check logs.")
+            finally:
+                self._restart_lock.release()
+
         threading.Thread(target=_restart, daemon=True).start()
 
     def shutdown(self):
