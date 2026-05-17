@@ -24,6 +24,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 - **Creation & Import**: Guided 3-step wizard for new servers or **Instant Load** for existing folders (via symbolic links).
 - **Multi-Version Support**: Vanilla, Fabric, Forge, Paper, and Purpur with dynamic version fetching (100+ versions).
+- **Smart Version Caching**: Auto-refreshes every 24h (background) + sync refresh if >2 days stale. Falls back to 15+ popular versions offline. Manual ↻ Refresh button in the wizard.
 - **Custom RAM Allocation**: Slider + manual entry with validation (512MB - system max).
 - **Server Properties Editor**: Tabbed interface for all settings.
 - **Integrated Console**: Send commands directly from the app.
@@ -39,6 +40,14 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
   - Automatic success/error notifications.
 - **Auto-Management**: Set it and forget it with automated restarts + backups.
 
+### Modrinth Mod Browser
+
+- **Search & Browse**: Search mods/plugins from Modrinth with pagination ("Load More") and loader/version filters.
+- **One-Click Install**: Browse mods, select a compatible version via radio buttons, and install directly to your server.
+- **Installed Mods Management**: List all installed mods with real icons (async cached from Modrinth) and delete with confirmation.
+- **Check Updates**: Scan installed mods against Modrinth API to find available updates, with a dialog showing outdated mods.
+- **Icons & Placeholders**: Real mod icons loaded asynchronously with global cache; fallback to colored letter placeholders.
+
 ### Tunneling & Sharing
 
 - **Built-in [Playit.gg](https://playit.gg/) Integration**: No port forwarding needed.
@@ -47,7 +56,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 - **Soft Reset**: Clears tunnels only — keeps agent linked. Click ▶ to create a new tunnel.
 - **Full Reset**: Deletes tunnels + unlinks account. Dashboard link provided if agent remains.
 - **DNS Recovery Chain**: 3 redundant mechanisms (API poll 60s + stdout regex + create_tunnel) ensure domain assignment never gets stuck.
-- **Heartbeat Monitoring**: Auto-restarts the agent if the process dies unexpectedly.
+- **Agent Heartbeat**: Monitors the Playit agent process and auto-restarts it if it dies unexpectedly.
 
 Note: playit.gg is a global proxy that allows anyone to host a server without port forwarding by using tunneling.
 
@@ -143,7 +152,8 @@ All auto-healing events display a **Toast notification** (bottom-right overlay, 
 ### Prerequisites
 
 - **Python 3.10+** ([Download](https://www.python.org/downloads/))
-- **Java 17+** ([Download](https://www.java.com/en/download/))
+
+> **Java:** No es necesario instalarlo manualmente. El app detecta, descarga y cachea automáticamente el JDK correcto (Adoptium, rango 17-21) según la versión de Minecraft seleccionada.
 
 ### Installation
 
@@ -163,9 +173,16 @@ cd ZeroBlockBridge
 
 Create a virtual environment (recommended):
 
+**Windows:**
 ```bash
 py -m venv venv
 .\venv\Scripts\activate
+```
+
+**Linux/macOS:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
 Install dependencies:
@@ -246,8 +263,13 @@ Commands appear in the log with `>` prefix and execute immediately.
 
 ZeroBlockBridge is designed with simplicity and transparency in mind:
 
-- **No External Connections**: The software does not connect to any external services other than the free tunneling services provided by [Playit.gg](https://playit.gg).
 - **No Data Collection**: ZeroBlockBridge is not intended to collect, store, or transmit any personal information or usage data.
+- **External Connections**: The app connects only to the services necessary for its operation:
+  - **Playit.gg** — tunneling (optional, only if you enable it)
+  - **Mojang** — version manifest and server jar downloads
+  - **Modrinth** — mod/plugin browsing and downloads
+  - **Fabric/Forge/Paper/Purpur APIs** — version fetches
+  - **Adoptium** — JDK auto-install
 - **User Control**: All server management, backups, and tunneling operations remain fully under the user’s control.
 
 This ensures that your Minecraft server management experience is secure, private, and limited strictly to the features described.
@@ -327,6 +349,13 @@ ZeroBlockBridge/
 │
 ├── bin/                           # (Generated) playit agent binary
 │
+├── .zbb_cache/                    # (Generated) JDK cache directory
+│   └── jdks/
+│       └── <version>/
+│           ├── bin/
+│           │   └── java(.exe)
+│           └── ...
+│
 ├── config/                        # (Generated) App configuration
 │   ├── config.json
 │   └── versions_cache.json
@@ -354,7 +383,7 @@ Zero Block Bridge uses **dynamic version fetching** to support hundreds of Minec
 
 - **OS**: Windows/Linux
 - **Python**: 3.10 or higher
-- **Java**: 17-21 (Stability range enforced: block if > 21 or < required).
+- **Java**: Auto-managed — the app detects, downloads, and caches the required JDK (Adoptium, range 17-21) based on the Minecraft version. Blocks incompatible versions.
 - **RAM**: 2GB minimum (4GB+ recommended for modded servers)
 - **Disk**: 37 MB for core app and dependencies + ~107MB per server (vanilla, it might vary for modded servers) + world size
 
