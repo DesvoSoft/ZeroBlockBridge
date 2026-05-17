@@ -201,7 +201,7 @@ class MCTunnelApp(ctk.CTk):
 
         # --- Tunnel ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x", padx=15, pady=(2, 6))
+        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 3))
         self._build_tunnel_controls()
 
     def _build_tunnel_controls(self):

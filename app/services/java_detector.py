@@ -212,6 +212,8 @@ class JavaDetector:
     Results are deduplicated by resolved absolute path.
     """
 
+    _shared_cache: Optional[List[JavaInstallation]] = None
+
     def __init__(self):
         self._cache: Optional[List[JavaInstallation]] = None
 
@@ -226,6 +228,10 @@ class JavaDetector:
             List of JavaInstallation objects, sorted by major version descending.
         """
         if self._cache is not None and not force_refresh:
+            return self._cache
+
+        if JavaDetector._shared_cache is not None and not force_refresh:
+            self._cache = JavaDetector._shared_cache
             return self._cache
 
         found: Dict[str, JavaInstallation] = {}
@@ -255,9 +261,11 @@ class JavaDetector:
             if key not in found:
                 found[key] = inst
 
-        self._cache = sorted(found.values(), key=lambda j: j.major, reverse=True)
-        logger.info("Detected %d Java installations", len(self._cache))
-        return self._cache
+        result = sorted(found.values(), key=lambda j: j.major, reverse=True)
+        JavaDetector._shared_cache = result
+        self._cache = result
+        logger.info("Detected %d Java installations", len(result))
+        return result
 
     # ------------------------------------------------------------------
     # Source: PATH
