@@ -1,6 +1,8 @@
 import logging
 import threading
 import time
+from collections.abc import Callable
+from typing import Any
 
 from app.core.server_events import ServerEvent
 
@@ -23,8 +25,8 @@ class HeartbeatMonitor:
     Call observe_line(line) from the console callback to feed lines in.
     """
 
-    def __init__(self, event_emitter, server_runner_getter,
-                 check_interval=60, suspect_after=300, probe_timeout=15):
+    def __init__(self, event_emitter: Any, server_runner_getter: Callable[[], Any],
+                 check_interval: int = 60, suspect_after: int = 300, probe_timeout: int = 15):
         self._events = event_emitter
         self._get_runner = server_runner_getter
         self._check_interval = check_interval
@@ -38,16 +40,16 @@ class HeartbeatMonitor:
 
         self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
-    def start(self):
+    def start(self) -> None:
         self._running = True
         self._stop_ev.clear()
         threading.Thread(target=self._loop, daemon=True).start()
 
-    def stop(self):
+    def stop(self) -> None:
         self._running = False
         self._stop_ev.set()
 
-    def observe_line(self, line: str):
+    def observe_line(self, line: str) -> None:
         if not self._running: return
         self._last_output = time.time()
         if any(p in line for p in PLAYER_LIST_PATTERNS):

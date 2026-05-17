@@ -1,12 +1,7 @@
 """Unit tests for ModrinthClient (app/services/modrinth.py)."""
 
-import sys
-import os
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+from unittest.mock import patch, MagicMock, mock_open
 
 from app.services.modrinth import ModrinthClient, ModrinthException
 
@@ -100,7 +95,7 @@ class TestModrinthErrorHandling:
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_response.text = "Not found"
-        
+
         with patch.object(client.session, "request", return_value=mock_response):
             try:
                 client._request("GET", "/project/nonexistent")
@@ -139,9 +134,119 @@ class TestModrinthDownload:
         with patch.object(client.session, "get", return_value=mock_resp):
             with patch("os.makedirs"):
                 with patch("builtins.open", MagicMock()):
-                    # SHA1 of empty content won't match "def", so it'll fail validation
-                    result = client.download_mod("sodium", "test_server", "1.20.1", "fabric")
-                    # Either returns None (sha mismatch) or path — we just verify it tried the primary
+                    client.download_mod("sodium", "test_server", "1.20.1", "fabric")
                     client.session.get.assert_called_once()
                     call_url = client.session.get.call_args[0][0]
                     assert "primary.jar" in call_url
+
+
+class TestModrinthDownloadVersion:
+    @patch("app.services.modrinth.ModrinthClient._resolve_version_file")
+    def test_download_version_no_file_returns_none(self, mock_resolve):
+        mock_resolve.return_value = None
+        client = ModrinthClient()
+        result = client.download_version({"id": "v1", "version_number": "1.0.0"}, "test_server", "fabric")
+        assert result is None
+
+    @patch("app.services.modrinth.ModrinthClient._resolve_version_file")
+    def test_download_version_resolves_and_downloads(self, mock_resolve):
+        mock_resolve.return_value = {
+            "url": "https://cdn.modrinth.com/mod.jar",
+            "filename": "mod.jar",
+            "hashes": {"sha1": "abc123"},
+        }
+        with patch("app.services.modrinth.ModrinthClient._download_file") as mock_dl:
+            mock_dl.return_value = "/servers/test_server/mods/mod.jar"
+            client = ModrinthClient()
+            result = client.download_version({"id": "v1"}, "test_server", "fabric")
+            assert result == "/servers/test_server/mods/mod.jar"
+            mock_dl.assert_called_once_with(
+                "https://cdn.modrinth.com/mod.jar", "mod.jar",
+                "abc123", mock_dl.call_args[0][3], None,
+            )
+
+    @patch("app.services.modrinth.ModrinthClient._resolve_version_file")
+    def test_download_version_plugins_dir(self, mock_resolve):
+        mock_resolve.return_value = {
+            "url": "https://cdn.modrinth.com/plugin.jar",
+            "filename": "plugin.jar",
+            "hashes": {"sha1": "def456"},
+        }
+        with patch("app.services.modrinth.ModrinthClient._download_file") as mock_dl:
+            mock_dl.return_value = "/servers/test_server/plugins/plugin.jar"
+            client = ModrinthClient()
+            result = client.download_version({"id": "v1"}, "test_server", "paper")
+            assert result == "/servers/test_server/plugins/plugin.jar"
+
+
+class TestModrinthCheckUpdates:
+    @patch("app.services.modrinth.os.path.isdir", return_value=False)
+    def test_no_mods_dir_returns_empty(self, mock_isdir):
+        client = ModrinthClient()
+        result = client.check_updates("test_server", "1.20.1", "fabric")
+        assert result == []
+
+    @patch("app.services.modrinth.os.path.isdir", return_value=True)
+    @patch("app.services.modrinth.os.listdir", return_value=[])
+    def test_empty_mods_dir_returns_empty(self, mock_listdir, mock_isdir):
+        client = ModrinthClient()
+        result = client.check_updates("test_server", "1.20.1", "fabric")
+        assert result == []
+
+    @patch("app.services.modrinth.os.path.isdir", return_value=True)
+    @patch("app.services.modrinth.os.listdir", return_value=["readme.txt", "config.yml"])
+    @patch("app.services.modrinth.os.path.isfile", return_value=True)
+    def test_no_jar_files_returns_empty(self, mock_isfile, mock_listdir, mock_isdir):
+        client = ModrinthClient()
+        result = client.check_updates("test_server", "1.20.1", "fabric")
+        assert result == []
+
+    @patch("app.services.modrinth.os.path.isdir", return_value=True)
+    @patch("app.services.modrinth.os.listdir", return_value=["test-mod.jar"])
+    @patch("app.services.modrinth.os.path.isfile", return_value=True)
+    @patch("app.services.modrinth.hashlib.sha1")
+    def test_check_updates_with_updates(self, mock_sha1, mock_isfile, mock_listdir, mock_isdir):
+        mock_hash = MagicMock()
+        mock_hash.hexdigest.return_value = "aaabbb"
+        mock_hash.update = MagicMock()
+        mock_sha1.return_value = mock_hash
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "aaabbb": {
+                "files": [{"primary": True, "url": "https://cdn.modrinth.com/new.jar", "filename": "new.jar", "hashes": {"sha1": "newhash"}}],
+            }
+        }
+
+        client = ModrinthClient()
+        with patch.object(client, "session") as mock_session:
+            mock_session.request.return_value = MagicMock(status_code=200, json=lambda: {})
+            mock_session.post.return_value = mock_resp
+            with patch("builtins.open", mock_open(read_data=b"jarcontent")):
+                results = client.check_updates("test_server", "1.20.1", "fabric")
+
+        assert len(results) > 0
+        assert results[0]["installed_hash"] == "aaabbb"
+
+    @patch("app.services.modrinth.os.path.isdir", return_value=True)
+    @patch("app.services.modrinth.os.listdir", return_value=["test-mod.jar"])
+    @patch("app.services.modrinth.os.path.isfile", return_value=True)
+    @patch("app.services.modrinth.hashlib.sha1")
+    def test_check_updates_api_failure_returns_empty(self, mock_sha1, mock_isfile, mock_listdir, mock_isdir):
+        mock_hash = MagicMock()
+        mock_hash.hexdigest.return_value = "aaabbb"
+        mock_hash.update = MagicMock()
+        mock_sha1.return_value = mock_hash
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+
+        client = ModrinthClient()
+        with patch.object(client, "session") as mock_session:
+            mock_session.request.return_value = MagicMock(status_code=200, json=lambda: {})
+            mock_session.post.return_value = mock_resp
+            with patch("builtins.open", mock_open(read_data=b"jarcontent")):
+                results = client.check_updates("test_server", "1.20.1", "fabric")
+
+        assert results == []

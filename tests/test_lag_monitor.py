@@ -1,25 +1,6 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
 from app.services.lag_monitor import LagMonitor
+from conftest import FakeEmitter
 
-
-class FakeEmitter:
-    def __init__(self):
-        self.events = []
-        self._listeners = {}
-
-    def subscribe(self, event, callback):
-        if event not in self._listeners:
-            self._listeners[event] = []
-        self._listeners[event].append(callback)
-
-    def emit(self, event, data=None):
-        self.events.append((event, data))
-        for cb in self._listeners.get(event, []):
-            try: cb(data)
-            except: pass
 
 class TestLagMonitor:
     def _make_monitor(self, threshold=3, window_minutes=1):

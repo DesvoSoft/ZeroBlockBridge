@@ -76,7 +76,7 @@ except:
 ## 4. Aesthetics & UI: Neo-Modern Brand Book
 The ZBB interface follows a **Neo-Modern** aesthetic designed to feel premium and state-of-the-art.
 
-*   **Corner Radius (Regla del 12)**: Un `corner_radius=12` uniforme es **obligatorio** para todos los frames, botones y campos de entrada. Esta es una métrica de certificación visual: cualquier componente con un valor distinto se considera una regression.
+*   **Corner Radius (Regla del 12)**: Un `corner_radius=12` uniforme es **obligatorio** para todos los frames, botones y campos de entrada (excepto Toasts y alertas modales que usan `corner_radius=0` por diseño cuadrado). Esta es una métrica de certificación visual: cualquier componente con un valor distinto (sin excepción documentada) se considera una regression.
 *   **Color Palette**: Use **Slate**-based palettes for both Dark and Light modes to avoid high-contrast fatigue.
 *   **Typography**: Use **Roboto** (Body) and **Roboto Medium** (Headings/Titles).
 *   **Component Pattern**: Data-rich results (like the Modrinth Browser) must use **Cards** with subtle hover effects and clean borders.
@@ -103,18 +103,66 @@ Cada fase del Roadmap debe finalizar con una auditoría técnica que garantice u
 |---|---|---|
 | **Código Muerto** | 25 pts | -5 pts por cada stub, import no usado, o función huérfana |
 | **Manejo de Errores** | 25 pts | -10 pts por cada `except: pass` sin registro |
-| **Consistencia Visual** | 20 pts | -5 pts por cada widget con `corner_radius` distinto de 12 |
+| **Consistencia Visual** | 20 pts | -5 pts por cada widget con `corner_radius` distinto de 12 (excluyendo Toasts y alertas con `corner_radius=0` documentado) |
 | **Documentación** | 15 pts | -5 pts por cada ruta obsoleta o enlace roto en docs/ |
 | **Neutralidad de Plataforma** | 15 pts | -5 pts por cada uso de `os.startfile` o `_winapi` sin abstracción |
 
 ### Proceso de Certificación
 1. Ejecutar `flake8 --select=E9,F63,F7,F82 --statistics app/` — tolerancia cero.
 2. Escanear el código en busca de `except:`, `os.startfile`, `_winapi`.
-3. Verificar que todos los `corner_radius` en la UI sean `12`.
+3. Verificar que todos los `corner_radius` en la UI sean `12` (excepción documentada: Toasts y alertas modales pueden usar `0`).
 4. Validar que no haya enlaces rotos en `docs/`.
 
 Un Health Score por debajo de 90 requiere una fase correctiva antes de continuar con el siguiente hito del Roadmap.
 
 ---
 
-**Failure to adhere to these standards is considered a regression in project quality.**
+---
+
+## 7. Git Workflow & Release Strategy
+
+### Branch Hierarchy
+```
+main        Production-ready releases (stable)
+  └─ dev    Integration branch for features
+       └─ feature/<name>   Feature branches from dev
+```
+
+### Workflow Rules
+1. **Feature branches** branch from `dev` and merge back to `dev` via `--ff-only`.
+2. `dev` merges to `main` only at release milestones (see Release Cadence below).
+3. Commits must be in **English**, with conventional prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
+4. No emojis in commit messages, PR descriptions, or branch names.
+5. Every merge to `dev` must pass the full test suite (`pytest tests/ -q`).
+6. Every merge to `main` must additionally pass linting (`flake8 --select=E9,F63,F7,F82`).
+
+### Release Cadence (Recommended)
+| Milestone | Tag | Merge to main |
+|-----------|-----|---------------|
+| Foundation complete (F3) | `v0.9.0-alpha` | Now |
+| First user-visible feature (F4 UI) | `v1.0.0-beta` | After F4 UI |
+| External integration (F6 Discord) | `v1.0.0-rc` | After F6 |
+| Full release (F11 UI) | `v2.0.0` | After F11 |
+
+### Local Merge Protocol (no `gh` CLI)
+```bash
+git checkout dev
+git merge --ff-only feature/<name>
+git checkout main
+git merge --ff-only dev
+git push origin dev main --no-verify
+```
+
+### Commit Message Template
+```
+<type>: <short summary (max 72 chars)>
+
+<optional body with bullet points explaining what and why,
+not how. each bullet <= 72 chars.>
+```
+
+Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `style`.
+
+---
+
+**Failure to adhere to these standards is considered a regression in project quality.****

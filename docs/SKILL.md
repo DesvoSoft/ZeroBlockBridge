@@ -28,9 +28,10 @@ ZeroBlockBridge (ZBB) es una aplicación Python para administrar servidores Mine
 
 ### 4. Gestión de Versiones de Java
 - Siempre emparejar el runtime de Java con los requisitos de la versión de Minecraft:
-  - MC ≥ 1.20.6: Java 21
-  - MC 1.17 - 1.20.4: Java 17
-  - MC < 1.17: Java 8 o 16
+  - MC ≥ 1.20.5: Java 21
+  - MC 1.18 - 1.20.4: Java 17
+  - MC 1.17 - 1.17.1: Java 16
+  - MC < 1.17: Java 8
 - Validar la versión de Java antes de iniciar el servidor.
 - **Rango de Estabilidad**:
   - Permitir ejecución si Requerido <= Detectado <= 21.
@@ -38,7 +39,7 @@ ZeroBlockBridge (ZBB) es una aplicación Python para administrar servidores Mine
   - Bloqueo rojo solo si Detectado > 21 o Detectado < Requerido.
 
 ### 5. Integración con Playit.gg
-- Estandarizar el uso del agente de Playit.gg en la versión v0.20.1.
+- Estandarizar el uso del agente de Playit.gg en la versión v0.17.1.
 - **Regla de Oro**: El argumento para el secreto es `--secret_path` (con guion bajo). Queda estrictamente prohibido el uso de `--secret-path`.
 - Los ejemplos de comandos deben incluir siempre `--stdout` y usar rutas entrecomilladas para Windows. Ejemplo: `playit --secret_path "C:\ruta\al\secreto.txt" --stdout`.
 
@@ -80,10 +81,10 @@ sequenceDiagram
 - Toda operación GUI debe ser no bloqueante (usar `threading` para tareas I/O).
 
 ## Convenciones
-- **Idioma**: Documentación y comentarios en español neutro.
+- **Idioma**: Documentación y comentarios en inglés.
 - **Logging**: NO usar `print()`. Usar `logging.getLogger(__name__)`.
-- **Estilo de Código**: Sin emojis en código ni comentarios.
-- **Backups**: Usar formato ZIP con nomenclatura `backup_YYYYMMDD_HHMMSS.zip`.
+- **Estilo de Código**: Sin emojis en código lógico ni comentarios. Emojis permitidos solo en UI para interacción con el usuario final (botones, notificaciones).
+- **Backups**: Usar formato ZIP con nomenclatura `YYYY-MM-DD_HH-MM-SS.zip`.
 
 ## Instalación Automática de JDK (JdkManager)
 - `JdkManager` en `app/services/java_installer.py` descarga JDKs portables desde la API de Adoptium/Temurin.
@@ -98,11 +99,29 @@ sequenceDiagram
 ## Archivos Clave
 | Archivo | Propósito |
 |---|---|
-| `app/ui/main.py` | Punto de entrada y coordinación de la UI |
-| `app/core/logic.py` | Lógica de negocio principal |
-| `app/core/constants.py` | Constantes globales y rutas |
+| `app/launcher.py` | Punto de entrada principal |
+| `app/ui/main.py` | Coordinación de la UI |
 | `app/core/core.py` | Orquestador central (ZBBManager) |
-| `app/services/watchdog.py` | Detección de crashes |
+| `app/core/logic.py` | Lógica de negocio principal (ServerRunner, Scheduler) |
+| `app/core/constants.py` | Constantes globales y rutas |
+| `app/core/version_manager.py` | Caché y descarga de versiones de Minecraft |
+| `app/core/playit_manager.py` | Ciclo de vida del agente Playit.gg |
+| `app/core/statemanager.py` | Gestión de estado global con debounce |
+| `app/core/server_events.py` | Sistema EventBus (subscribe/emit) |
+| `app/services/watchdog.py` | Detección de crashes y auto-reinicio |
+| `app/services/heartbeat.py` | Monitor de latido (detección de zombies) |
+| `app/services/lag_monitor.py` | Monitor de lag del servidor |
+| `app/services/backup_manager.py` | Creación y restauración de backups ZIP |
+| `app/services/server_properties.py` | Carga/guardado de server.properties |
 | `app/services/sanitizer.py` | Seguridad de comandos |
 | `app/services/bytecode_analyzer.py` | Análisis de versión Java desde el JAR |
 | `app/services/java_installer.py` | Descarga automática de JDK |
+| `app/services/playit_api.py` | Cliente API REST de Playit.gg |
+| `app/services/sha1_validator.py` | Verificación SHA1 de descargas |
+| `app/services/scaffolder.py` | Scaffolding pre-arranque del servidor |
+| `app/services/aikars_flags.py` | Calculadora de flags Aikar's JVM |
+| `app/services/modrinth.py` | Cliente API de Modrinth |
+| `app/services/console_buffer.py` | Buffer circular de consola |
+| `app/services/settings_manager.py` | Configuración global de la app |
+| `app/services/toast.py` | Sistema de notificaciones toast (UI) |
+| `app/core/app_config.py` | Configuración de la aplicación (temas, tokens) |

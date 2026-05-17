@@ -228,18 +228,6 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     return None
 
 
-def install_forge(server_name, mc_version, progress_callback=None):
-    server_path = _run_installer(server_name, "Forge", mc_version, "forge-installer.jar",
-                                  ["--installServer"], progress_callback)
-    if not server_path:
-        return None
-    for f in os.listdir(server_path):
-        if f.startswith("forge-") and f.endswith(".jar") and "installer" not in f:
-            return os.path.join(server_path, f)
-    if os.path.exists(os.path.join(server_path, "run.bat")):
-        return "FORGE_MODERN"
-    return None
-
 def normalize_server_jar(server_dir):
     """Normalize the server jar to 'server.jar' for consistent access.
 
@@ -699,6 +687,88 @@ class Scheduler:
         if "scheduler" in data:
             data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
             self._save_metadata(data)
+
+    def get_status(self):
+        schedule = self.get_schedule()
+        if not schedule:
+            return None
+        now = datetime.datetime.now()
+        remaining = None
+        if schedule["type"] == "interval":
+            last_run_str = schedule.get("last_run")
+            if last_run_str:
+                last_run = datetime.datetime.fromisoformat(last_run_str)
+                remaining = (last_run + datetime.timedelta(hours=schedule["interval_hours"]) - now).total_seconds()
+        elif schedule["type"] == "time":
+            hour, minute = map(int, schedule["restart_time"].split(":"))
+            remaining = (now.replace(hour=hour, minute=minute, second=0, microsecond=0) - now).total_seconds()
+        return {"is_due": self.check_due(), "remaining_seconds": remaining}
+
+    @staticmethod
+    def get_warning_message(remaining_seconds, sent_warnings):
+        if remaining_seconds is None or remaining_seconds <= 0:
+            return None, None
+        if 3600 < remaining_seconds <= 3630 and '1h' not in sent_warnings:
+            return '1h', "Server will restart in 1 hour!"
+        if 1800 < remaining_seconds <= 1830 and '30m' not in sent_warnings:
+            return '30m', "Server will restart in 30 minutes!"
+        if 900 < remaining_seconds <= 930 and '15m' not in sent_warnings:
+            return '15m', "Server will restart in 15 minutes!"
+        if 60 < remaining_seconds <= 90 and '1m' not in sent_warnings:
+            return '1m', "Server will restart in 1 minute!"
+        return None, None
+
+
+class BackupScheduler:
+    DEFAULTS = {"enabled": False, "interval_hours": 4, "retention_count": 10, "last_run": None}
+
+    def __init__(self, server_name: str):
+        self.server_name = server_name
+
+    def _load(self) -> dict:
+        meta = get_server_meta(self.server_name)
+        return meta.get("auto_backup", {})
+
+    def _save(self, data: dict) -> bool:
+        return update_server_meta(self.server_name, {"auto_backup": data})
+
+    def get_config(self) -> dict:
+        config = self.DEFAULTS.copy()
+        config.update(self._load())
+        return config
+
+    def set_config(self, enabled: bool, interval_hours: int = 4, retention_count: int = 10):
+        data = self._load()
+        data["enabled"] = enabled
+        if enabled:
+            data["interval_hours"] = interval_hours
+            data["retention_count"] = retention_count
+        return self._save(data)
+
+    def is_due(self) -> bool:
+        config = self.get_config()
+        if not config["enabled"]:
+            return False
+        last_run = config.get("last_run")
+        if not last_run:
+            return True
+        elapsed = (datetime.datetime.now() - datetime.datetime.fromisoformat(last_run)).total_seconds()
+        return elapsed >= config["interval_hours"] * 3600
+
+    def mark_run(self):
+        data = self._load()
+        data["last_run"] = datetime.datetime.now().isoformat()
+        return self._save(data)
+
+    def seconds_until_next(self) -> float | None:
+        config = self.get_config()
+        if not config["enabled"]:
+            return None
+        last_run = config.get("last_run")
+        if not last_run:
+            return 0.0
+        elapsed = (datetime.datetime.now() - datetime.datetime.fromisoformat(last_run)).total_seconds()
+        return max(0.0, config["interval_hours"] * 3600 - elapsed)
 
 
 def get_server_ram(server_name):

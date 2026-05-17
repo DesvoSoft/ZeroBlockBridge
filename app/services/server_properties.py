@@ -1,18 +1,19 @@
 import logging
 import os
+from typing import Any
 
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
 
 
-def _props_path(server_name=None, server_dir=None):
+def _props_path(server_name: str | None = None, server_dir: str | None = None) -> str:
     if server_dir:
         return os.path.join(server_dir, "server.properties")
     return os.path.join(SERVERS_DIR, server_name, "server.properties")
 
 
-def load_server_properties(server_name=None, server_dir=None):
+def load_server_properties(server_name: str | None = None, server_dir: str | None = None) -> dict[str, str]:
     props_path = _props_path(server_name, server_dir)
     properties = {}
     if not os.path.exists(props_path):
@@ -27,7 +28,7 @@ def load_server_properties(server_name=None, server_dir=None):
 
 
 
-def save_server_properties(server_name=None, server_dir=None, new_properties=None):
+def save_server_properties(server_name: str | None = None, server_dir: str | None = None, new_properties: dict[str, str] | None = None) -> None:
     if new_properties is None:
         new_properties = {}
     props_path = _props_path(server_name, server_dir)

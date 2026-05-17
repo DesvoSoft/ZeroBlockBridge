@@ -6,12 +6,12 @@ from typing import Optional
 
 from app.core.server_events import EventBus, ServerEvent
 from app.services.backup_manager import BackupManager
-from app.core.logic import ServerRunner, load_config, save_config, Scheduler
+from app.core.logic import ServerRunner, load_config, save_config, Scheduler, BackupScheduler
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
 from app.core.playit_manager import PlayitManager
-from app.core.scheduler_service import SchedulerService
+
 from app.services.console_buffer import CircularBuffer
 from app.core.app_config import AppConfig
 from app.core.version_manager import VersionManager
@@ -36,7 +36,10 @@ class ZBBManager:
         # Scheduler State
         self._scheduler_thread: Optional[threading.Thread] = None
         self._scheduler_running = False
-        self.restart_warnings_sent = set()
+        self.restart_warnings_sent: set = set()
+        self._restart_warnings_lock = threading.Lock()
+        self._backup_in_progress = False
+        self._backup_lock = threading.Lock()
         
         # Buffers
         self.console_buffer = CircularBuffer(max_size=1000)
@@ -101,12 +104,128 @@ class ZBBManager:
 
     # --- Core Server Operations ---
     def bootstrap(self):
-        """Initializes non-blocking services on app startup."""
         logger.info("[ZBBManager] Bootstrapping core services...")
         self._start_scheduler_loop()
 
     def select_server(self, server_name: str):
         self.current_server = server_name
+
+    def _auto_install_java(self, required_java: int) -> Optional[str]:
+        from app.services.java_installer import JdkManagerInstance
+        try:
+            java_bin = JdkManagerInstance.ensure_java(required_java)
+            self._jdk_source = "portable"
+            self._save_jdk_metadata(required_java, "portable")
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Using auto-installed JDK {required_java} at {java_bin}")
+            self.events.emit(ServerEvent.STARTING, {"jdk_source": "portable", "required_java": required_java})
+            return java_bin
+        except Exception:
+            return None
+
+    def _launch_server(self, ram: str, java_bin: str, use_aikars: bool, required_java: int, config: dict) -> bool:
+        self.server_runner = ServerRunner(self.current_server, ram, self.events, java_bin=java_bin, use_aikars=use_aikars)
+        self._setup_monitors(config)
+        self.server_runner.start()
+        self._save_jdk_metadata(required_java, self._jdk_source)
+        self.events.emit(ServerEvent.STARTING, {"jdk_source": self._jdk_source, "required_java": required_java})
+        return True
+
+    def _resolve_java_bin(self, server_dir: str, mc_version: str,
+                          required_java_cached: int | None,
+                          auto_install_jdk: bool) -> tuple[str, int] | None:
+        from app.services.java_detector import JavaDetector, get_required_java
+        from app.services.bytecode_analyzer import analyze_jar_bytecode
+
+        if required_java_cached:
+            required_java = required_java_cached
+            source = "cached-metadata"
+        else:
+            self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
+            jar_path = os.path.join(server_dir, "server.jar")
+            bytecode_java = None
+            for _ in range(10):
+                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                    break
+                time.sleep(0.5)
+
+            if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+                try:
+                    bytecode_java = analyze_jar_bytecode(jar_path)
+                except Exception as e:
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
+
+            required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
+            source = "bytecode" if bytecode_java else "version-map"
+
+            from app.core.logic import update_server_meta
+            update_server_meta(self.current_server, {"required_java": required_java})
+
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {required_java} required (source: {source})")
+
+        detector = JavaDetector()
+        all_javas = detector.detect_all()
+
+        if not all_javas:
+            if not auto_install_jdk:
+                msg = "No Java installation found and auto-install is disabled in server settings."
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                return None
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] No Java installation found. Attempting to auto-install JDK {required_java}...")
+            java_bin = self._auto_install_java(required_java)
+            if not java_bin:
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": f"Error: No Java found and auto-install JDK {required_java} failed.", "type": "error"})
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] No Java found and auto-install JDK {required_java} failed.")
+                return None
+            self._jdk_source = "portable"
+            return (java_bin, required_java)
+
+        exact = [j for j in all_javas if j.major == required_java]
+        if exact:
+            exact.sort(key=lambda j: j.is_jdk, reverse=True)
+            self._jdk_source = "system"
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Using Java {exact[0].major} ({exact[0].source})")
+            return (exact[0].path, required_java)
+
+        best = sorted(all_javas, key=lambda j: j.major, reverse=True)[0]
+
+        if best.major > required_java and best.major <= 21:
+            self._jdk_source = "system"
+            msg = f"Running with Java {best.major}. Recommended: Java {required_java}."
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "warning"})
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] {msg}")
+            return (best.path, required_java)
+
+        if best.major > 21:
+            if not auto_install_jdk:
+                msg = f"Java {best.major} detected (experimental). Auto-install disabled. Install Java {required_java} manually."
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                return None
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {best.major} detected but unstable. Attempting to auto-install JDK {required_java}...")
+            java_bin = self._auto_install_java(required_java)
+            if not java_bin:
+                msg = f"Java {best.major} detected (experimental). ZBB supports up to Java 21. Auto-install JDK {required_java} failed."
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+                return None
+            self._jdk_source = "portable"
+            return (java_bin, required_java)
+
+        if not auto_install_jdk:
+            msg = f"Java {best.major} too low. Auto-install disabled. Install Java {required_java} manually."
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+            return None
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {best.major} too low. Attempting to auto-install JDK {required_java}...")
+        java_bin = self._auto_install_java(required_java)
+        if not java_bin:
+            msg = f"Java version too low. Required Java {required_java}, detected Java {best.major}. Auto-install failed."
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+            return None
+        self._jdk_source = "portable"
+        return (java_bin, required_java)
 
     def start_server(self):
         if not self.current_server:
@@ -121,7 +240,6 @@ class ZBBManager:
         config = self.get_config()
         ram = config.get("ram_allocation", "2G")
 
-        # Load metadata to find java/version settings
         from app.core.constants import SERVERS_DIR
         from app.core.logic import get_server_meta
         server_dir = os.path.join(SERVERS_DIR, self.current_server)
@@ -129,6 +247,7 @@ class ZBBManager:
         java_path = "auto"
         use_aikars = True
         required_java_cached = None
+        required_java = 21
         auto_install_jdk = True
         self._jdk_source = "unknown"
         try:
@@ -144,186 +263,19 @@ class ZBBManager:
         except Exception as e:
             logger.error("Failed to read metadata: %s", e)
 
-        # --- PROV-02: Pre-Boot Scaffolding ---
         from app.services.scaffolder import pre_boot_scaffold
         port = self.get_server_port(self.current_server)
         pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
 
-        # --- PROV-03 / INTEG-03: Smart Java Resolution ---
-        # Source of Truth: Bytecode analysis of the server.jar.
-        # Fallback: Static MC-to-Java map from java_detector.
         if java_path == "auto":
-            from app.services.java_detector import JavaDetector, get_required_java
-            from app.services.bytecode_analyzer import analyze_jar_bytecode
-            from app.core.logic import wait_for_jar_ready
-
-            # 1. Determine required Java version
-            if required_java_cached:
-                required_java = required_java_cached
-                source = "cached-metadata"
-            else:
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
-                jar_path = os.path.join(server_dir, "server.jar")
-                # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
-                bytecode_java = None
-                for _ in range(10):
-                    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                        break
-                    time.sleep(0.5)
-                
-                if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                    try:
-                        bytecode_java = analyze_jar_bytecode(jar_path)
-                    except Exception as e:
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
-
-                required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
-                source = "bytecode" if bytecode_java else "version-map"
-                
-                # Cache the result
-                from app.core.logic import update_server_meta
-                update_server_meta(self.current_server, {"required_java": required_java})
-
-            self.events.emit(
-                ServerEvent.CONSOLE_LINE,
-                f"[System] Java {required_java} required (source: {source})"
-            )
-
-            # 2. Find best available Java
-            detector = JavaDetector()
-            all_javas = detector.detect_all()
-
-            if not all_javas:
-                if not auto_install_jdk:
-                    msg = "No Java installation found and auto-install is disabled in server settings."
-                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                    return False
-                msg = "No Java installation found. Attempting to auto-install JDK %d..." % required_java
-                self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] {msg}")
-                try:
-                    from app.services.java_installer import JdkManagerInstance
-                    java_bin = JdkManagerInstance.ensure_java(required_java)
-                    self._jdk_source = "portable"
-                    self._save_jdk_metadata(required_java, "portable")
-                    self.events.emit(
-                        ServerEvent.CONSOLE_LINE,
-                        f"[System] Using auto-installed JDK {required_java} at {java_bin}"
-                    )
-                except Exception as jdk_err:
-                    msg = f"Error: No Java installation found and auto-install failed: {jdk_err}"
-                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                    return False
-
-                # Auto-install succeeded — skip Smart Java Flexibility and start directly
-                self.server_runner = ServerRunner(
-                    self.current_server, ram, self.events,
-                    java_bin=java_bin, use_aikars=use_aikars
-                )
-                self._setup_monitors(config)
-                self.server_runner.start()
-                self.events.emit(ServerEvent.STARTING, {"jdk_source": "portable", "required_java": required_java})
-                return True
-
-            # 3. Smart Java Flexibility — 3-case resolution
-            # CASE 1: Exact match (ideal)
-            exact = [j for j in all_javas if j.major == required_java]
-            if exact:
-                exact.sort(key=lambda j: j.is_jdk, reverse=True)
-                java_bin = exact[0].path
-                self._jdk_source = "system"
-                self.events.emit(
-                    ServerEvent.CONSOLE_LINE,
-                    f"[System] Using Java {exact[0].major} ({exact[0].source})"
-                )
-            else:
-                # No exact match — try flexible selection
-                best = sorted(all_javas, key=lambda j: j.major, reverse=True)[0]
-
-                # CASE 2: Detected > required AND <= 21 (safe range)
-                if best.major > required_java and best.major <= 21:
-                    java_bin = best.path
-                    self._jdk_source = "system"
-                    msg = (
-                        f"Running with Java {best.major}. "
-                        f"Recommended: Java {required_java}."
-                    )
-                    self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "warning"})
-                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] {msg}")
-
-                # CASE 3: Detected > 21 (experimental, unstable)
-                elif best.major > 21:
-                    if not auto_install_jdk:
-                        msg = f"Java {best.major} detected (experimental). Auto-install disabled. Install Java {required_java} manually."
-                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                        return False
-                    self.events.emit(
-                        ServerEvent.CONSOLE_LINE,
-                        f"[System] Java {best.major} detected but unstable. Attempting to auto-install JDK {required_java}..."
-                    )
-                    try:
-                        from app.services.java_installer import JdkManagerInstance
-                        java_bin = JdkManagerInstance.ensure_java(required_java)
-                        self._jdk_source = "portable"
-                        self.events.emit(
-                            ServerEvent.CONSOLE_LINE,
-                            f"[System] Using auto-installed JDK {required_java} at {java_bin}"
-                        )
-                    except Exception as jdk_err:
-                        msg = (
-                            f"Java {best.major} detected (experimental). "
-                            f"ZBB supports up to Java 21 for stability. "
-                            f"Required: Java {required_java}. Auto-install failed: {jdk_err}"
-                        )
-                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                        return False
-
-                # Detected < required (incompatible)
-                else:
-                    if not auto_install_jdk:
-                        msg = f"Java {best.major} too low. Auto-install disabled. Install Java {required_java} manually."
-                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                        return False
-                    self.events.emit(
-                        ServerEvent.CONSOLE_LINE,
-                        f"[System] Java {best.major} too low. Attempting to auto-install JDK {required_java}..."
-                    )
-                    try:
-                        from app.services.java_installer import JdkManagerInstance
-                        java_bin = JdkManagerInstance.ensure_java(required_java)
-                        self._jdk_source = "portable"
-                        self.events.emit(
-                            ServerEvent.CONSOLE_LINE,
-                            f"[System] Using auto-installed JDK {required_java} at {java_bin}"
-                        )
-                    except Exception as jdk_err:
-                        msg = (
-                            f"Java version too low. "
-                            f"Required Java {required_java}, detected Java {best.major}. "
-                            f"Auto-install failed: {jdk_err}"
-                        )
-                        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-                        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-                        return False
+            result = self._resolve_java_bin(server_dir, mc_version, required_java_cached, auto_install_jdk)
+            if result is None:
+                return False
+            java_bin, required_java = result
         else:
             java_bin = java_path
 
-        self.server_runner = ServerRunner(
-            self.current_server, ram, self.events,
-            java_bin=java_bin, use_aikars=use_aikars
-        )
-
-        self._setup_monitors(config)
-        self.server_runner.start()
-        self._save_jdk_metadata(required_java, self._jdk_source)
-
-        # Let UI know
-        self.events.emit(ServerEvent.STARTING, {"jdk_source": self._jdk_source, "required_java": required_java})
-        return True
+        return self._launch_server(ram, java_bin, use_aikars, required_java, config)
 
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
@@ -455,23 +407,56 @@ class ZBBManager:
                 if not (self.server_runner and self.server_runner.running and self.current_server):
                     continue
                 
-                service = SchedulerService(self.current_server)
+                service = Scheduler(self.current_server)
                 status = service.get_status()
                 if not status: continue
 
-                key, message = service.get_warning_message(status["remaining_seconds"], self.restart_warnings_sent)
-                if key:
-                    self._send_system_message(message)
-                    self.restart_warnings_sent.add(key)
+                with self._restart_warnings_lock:
+                    key, message = Scheduler.get_warning_message(status["remaining_seconds"], self.restart_warnings_sent)
+                    if key:
+                        self._send_system_message(message)
+                        self.restart_warnings_sent.add(key)
                 
                 if status["is_due"]:
                     self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Scheduled restart due. Initiating final countdown...")
                     self.events.emit(ServerEvent.REQUEST_RESTART, {"reason": "scheduled"})
-                    service.scheduler.update_last_run()
-                    self.restart_warnings_sent.clear()
+                    service.update_last_run()
+                    with self._restart_warnings_lock:
+                        self.restart_warnings_sent.clear()
+
+                self._check_auto_backup()
 
         self._scheduler_thread = threading.Thread(target=_loop, daemon=True)
         self._scheduler_thread.start()
+
+    def _check_auto_backup(self):
+        if not self.current_server:
+            return
+        with self._backup_lock:
+            if self._backup_in_progress:
+                return
+            backup_sched = BackupScheduler(self.current_server)
+            if not backup_sched.is_due():
+                return
+            self._backup_in_progress = True
+        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Auto-backup due. Starting...")
+        threading.Thread(target=self._run_auto_backup, daemon=True).start()
+
+    def _run_auto_backup(self):
+        try:
+            bm = BackupManager(self.current_server)
+            config = BackupScheduler(self.current_server).get_config()
+            path, error = bm.create_backup(retention_count=config.get("retention_count"))
+            if path:
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
+                self.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.current_server})
+            else:
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+                self.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.current_server})
+            BackupScheduler(self.current_server).mark_run()
+        finally:
+            with self._backup_lock:
+                self._backup_in_progress = False
 
     def _send_system_message(self, message):
         """Sends a message to the console and in-game via CommandSanitizer."""

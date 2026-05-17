@@ -34,7 +34,7 @@ class SingleInstanceLock:
         except OSError:
             return False
 
-    def release(self):
+    def release(self) -> None:
         if self._is_owner and self._lockfile.exists():
             try:
                 self._lockfile.unlink(missing_ok=True)

@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from typing import Any
 
 from app.core.server_events import ServerEvent
 
@@ -38,9 +39,9 @@ def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence
 
 
 class Watchdog:
-    def __init__(self, server_runner, event_emitter,
-                 max_retries=3,
-                 backoff_base=5, stability_window=600, min_uptime_for_retry=5):
+    def __init__(self, server_runner: Any, event_emitter: Any,
+                 max_retries: int = 3,
+                 backoff_base: int = 5, stability_window: int = 600, min_uptime_for_retry: int = 5):
         self._runner = server_runner
         self._events = event_emitter
         self.max_retries = max_retries
@@ -54,7 +55,7 @@ class Watchdog:
         self._restart_thread = None
 
     @property
-    def is_retry_exhausted(self):
+    def is_retry_exhausted(self) -> bool:
         return self.retry_count >= self.max_retries
 
     def _reset_retry_if_stable(self):
@@ -63,7 +64,7 @@ class Watchdog:
             self.retry_count = 0
             logger.info("Watchdog: retry counter reset (stable for %ds)", self._stability_window)
 
-    def listen(self):
+    def listen(self) -> None:
         self._listening = True
         self._events.subscribe(ServerEvent.STOPPED, self._on_stopped)
         self._events.subscribe(ServerEvent.READY, self._on_ready)
@@ -179,5 +180,5 @@ class Watchdog:
         delay = self._backoff_base * (2 ** (self.retry_count - 1))
         return min(delay, 3600)  # cap at 1 hour
 
-    def stop(self):
+    def stop(self) -> None:
         self._listening = False

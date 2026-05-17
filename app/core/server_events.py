@@ -19,6 +19,8 @@ class ServerEvent:
     NOTIFICATION = "notification"
     REQUEST_RESTART = "request_restart"
     TUNNEL_STATUS = "tunnel_status"
+    BACKUP_COMPLETED = "backup_completed"
+    BACKUP_FAILED = "backup_failed"
 
 
 class EventBus:

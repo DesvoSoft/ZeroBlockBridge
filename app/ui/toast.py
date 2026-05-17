@@ -10,6 +10,7 @@ Integrated with the EventBus via ServerEvent.NOTIFICATION payloads.
 
 import customtkinter as ctk
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,11 @@ class ToastNotification:
     Now supports multiple concurrent toasts to prevent window orphans
     and race conditions.
     """
-    def __init__(self):
-        self._active_toasts = []
+    def __init__(self) -> None:
+        self._active_toasts: list = []
 
-    def show(self, parent, message: str, toast_type: str = "info",
-              duration: int = 4000):
+    def show(self, parent: Any, message: str, toast_type: str = "info",
+              duration: int = 4000) -> None:
         """Display a toast notification."""
         style = _TOAST_STYLES.get(toast_type, _TOAST_STYLES["info"])
         bg_color, border_color, icon_char = style
@@ -57,7 +58,7 @@ class ToastNotification:
 
         # Outer frame with border accent
         outer = ctk.CTkFrame(
-            toast, fg_color=bg_color, corner_radius=12,
+            toast, fg_color=bg_color, corner_radius=0,
             border_width=2, border_color=border_color,
         )
         outer.pack(fill="both", expand=True, padx=2, pady=2)
@@ -135,7 +136,7 @@ class ToastNotification:
         except Exception:
             pass
 
-    def dismiss(self):
+    def dismiss(self) -> None:
         """Clear all active toasts immediately."""
         for toast in list(self._active_toasts):
             self._destroy_toast(toast)
@@ -153,5 +154,5 @@ class ToastNotification:
         return _COLOR_TYPE_MAP.get(color, "info")
 
 
-# Module-level singleton (replaces the old Toast from services/toast.py)
+# Module-level singleton
 Toast = ToastNotification()

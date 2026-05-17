@@ -1,13 +1,9 @@
 """Unit tests for Phase 4 — Provisioning services."""
 
-import sys
 import os
 import hashlib
 import tempfile
-from pathlib import Path
 from unittest.mock import patch, MagicMock
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 
 # =====================================================================

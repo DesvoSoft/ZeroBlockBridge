@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import logging
 from typing import Any
 
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 _settings_file = "zbb_settings.json"
 _settings_path = _settings_file
 _settings: dict = None
+_lock = threading.Lock()
 
 
 def _get_defaults() -> dict:
@@ -22,18 +24,22 @@ def _ensure_loaded():
     global _settings
     if _settings is not None:
         return
-    _settings = _get_defaults()
-    if os.path.exists(_settings_path):
-        try:
-            with open(_settings_path, "r", encoding="utf-8") as f:
-                _settings.update(json.load(f))
-        except Exception as e:
-            logger.error("Error loading settings: %s", e)
+    with _lock:
+        if _settings is not None:
+            return
+        _settings = _get_defaults()
+        if os.path.exists(_settings_path):
+            try:
+                with open(_settings_path, "r", encoding="utf-8") as f:
+                    _settings.update(json.load(f))
+            except Exception as e:
+                logger.error("Error loading settings: %s", e)
 
 
 def set_config_dir(config_dir: str):
     global _settings_path
-    _settings_path = os.path.join(config_dir, _settings_file)
+    with _lock:
+        _settings_path = os.path.join(config_dir, _settings_file)
 
 
 def get(key: str, default: Any = None) -> Any:
@@ -43,12 +49,13 @@ def get(key: str, default: Any = None) -> Any:
 
 def set(key: str, value: Any):
     _ensure_loaded()
-    _settings[key] = value
-    try:
-        with open(_settings_path, "w", encoding="utf-8") as f:
-            json.dump(_settings, f, indent=4)
-    except Exception as e:
-        logger.error("Error saving settings: %s", e)
+    with _lock:
+        _settings[key] = value
+        try:
+            with open(_settings_path, "w", encoding="utf-8") as f:
+                json.dump(_settings, f, indent=4)
+        except Exception as e:
+            logger.error("Error saving settings: %s", e)
 
 
 def load():

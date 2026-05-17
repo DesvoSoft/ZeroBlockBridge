@@ -31,7 +31,7 @@ from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
 from app.ui.modrinth_browser import ModrinthBrowser
 from app.services.sanitizer import is_safe_command
-from app.services.toast import Toast
+from app.ui.toast import Toast
 from app.core.core import ZBBManager
 
 ctk.set_appearance_mode("Dark")
@@ -189,18 +189,36 @@ class MCTunnelApp(ctk.CTk):
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
-        
-        self.controls_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.controls_frame.pack(pady=4)
+
+        # --- Server Section ---
+        self.server_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.server_section.pack(fill="x", padx=15, pady=(6, 2))
+
+        ctk.CTkLabel(self.server_section, text="SERVER",
+                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
+                      ).pack(anchor="w", pady=(0, 2))
+
+        self.controls_frame = ctk.CTkFrame(self.server_section, fg_color="transparent")
+        self.controls_frame.pack(fill="x")
         self._build_server_controls()
 
-        self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(pady=5, fill="x")
+        # --- Separator ---
+        sep = ctk.CTkFrame(self.dashboard_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
+        sep.pack(fill="x", padx=15, pady=4)
+
+        # --- Tunnel Section ---
+        self.tunnel_section = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        self.tunnel_section.pack(fill="x", padx=15, pady=(2, 6))
+
+        ctk.CTkLabel(self.tunnel_section, text="TUNNEL",
+                      font=("Roboto Medium", 10), text_color=AppConfig.COLOR_TEXT_GRAY
+                      ).pack(anchor="w", pady=(0, 2))
+
+        self.tunnel_frame = ctk.CTkFrame(self.tunnel_section, fg_color="transparent")
+        self.tunnel_frame.pack(fill="x")
         self._build_tunnel_controls()
 
     def _build_server_controls(self):
-        self.btn_start_all = ctk.CTkButton(self.controls_frame, text="▶ Start All", state="disabled", command=self.start_all_action, fg_color="#00AA00", hover_color="#008800",  width=110, corner_radius=12, height=36, font=("Roboto Medium", 12))
-        self.btn_start_all.pack(side="left", padx=5)
         self.btn_start = ctk.CTkButton(self.controls_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.controls_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
@@ -323,7 +341,7 @@ class MCTunnelApp(ctk.CTk):
                 self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
                 self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
-                self.after(0, lambda: self.server_console.log("[System] CRITICAL: Java not found! Please install Java 17+."))
+                self.after(0, lambda: self.server_console.log("[System] No Java detected on this system. ZeroBlockBridge will auto-install the required JDK when the server starts."))
         threading.Thread(target=_check, daemon=True).start()
 
     def load_servers(self):
@@ -366,12 +384,13 @@ class MCTunnelApp(ctk.CTk):
         elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
             server_type = "Forge"
         
-        self.lbl_server_info.configure(text=f"🎮 {server_type}", text_color="white")
+        meta = logic.get_server_meta(server_name)
+        mc_version = meta.get("version", "?") if meta else "?"
+        self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color="white")
         
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
         
         self.btn_start.configure(state="disabled" if is_running else "normal")
-        self.btn_start_all.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
         
         self.btn_config.configure(state="normal")
@@ -407,12 +426,6 @@ class MCTunnelApp(ctk.CTk):
         
         logger.info(f"Server Info for Mod Search: {self.zbb_manager.current_server} | MC: {mc_version} | Loader: {loader or 'any'}")
         return (self.zbb_manager.current_server, mc_version, loader)
-
-    def start_all_action(self):
-        if not self.zbb_manager.current_server: return
-        if self.start_server_action():
-            self.update_console("[System] Starting server and tunnel...")
-            self.start_tunnel()
 
     def save_advanced_settings(self, *args):
         if not self.zbb_manager.current_server: return
@@ -465,7 +478,6 @@ class MCTunnelApp(ctk.CTk):
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self.btn_start.configure(state="disabled"))
-        self.after(0, lambda: self.btn_start_all.configure(state="disabled"))
         self.after(0, lambda: self.btn_stop.configure(state="normal"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
@@ -483,7 +495,6 @@ class MCTunnelApp(ctk.CTk):
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
-        self.after(0, lambda: self.btn_start_all.configure(state="normal"))
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
 
     def stop_server_action(self):
@@ -659,7 +670,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, lambda: self.btn_tunnel_start.configure(state="normal"))
             self.after(0, lambda: self.btn_tunnel_stop.configure(state="disabled"))
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
-            self.after(0, lambda: Toast.show(self, "Ready. Click ▶ to create a tunnel.", toast_type="success"))
+            # Toast is handled by PlayitManager.notification_callback via EventBus
 
         threading.Thread(target=_reset_task, daemon=True).start()
 
@@ -756,9 +767,10 @@ class MCTunnelApp(ctk.CTk):
     def _copy_ip_to_clipboard(self):
         full_ip = getattr(self, "_last_full_ip", None)
         if full_ip and full_ip not in ["Connecting...", ""]:
+            host = full_ip.split(":")[0] if full_ip and ":" in full_ip else full_ip
             self.clipboard_clear()
-            self.clipboard_append(full_ip)
-            Toast.show(self, "Full address copied to clipboard!", toast_type="success", duration=3000)
+            self.clipboard_append(host)
+            Toast.show(self, "Address copied to clipboard!", toast_type="success", duration=3000)
 
     def open_claim_url(self):
         """Opens the official Playit wizard and shows setup instructions."""

@@ -400,8 +400,8 @@ class PlayitManager:
                     if self.on_ready_callback:
                         self.on_ready_callback()
                     return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[Playit] DNS polling error: %s", e)
 
     def _heartbeat_loop(self):
         max_failures = 3
@@ -467,13 +467,15 @@ class PlayitManager:
             while self.running and self.process:
                 try:
                     raw = self.process.stdout.readline()
-                except Exception:
+                except Exception as e:
+                    logger.warning("[Playit] readline error: %s", e)
                     break
                 if not raw:
                     break
                 try:
                     line = raw.decode('utf-8', errors='replace').strip()
-                except Exception:
+                except Exception as e:
+                    logger.warning("[Playit] decode error: %s", e)
                     continue
                 if line:
                     clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)

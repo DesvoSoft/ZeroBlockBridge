@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from app.core.constants import SERVERS_DIR, BASE_DIR
 
@@ -12,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class BackupManager:
-    def __init__(self, server_name):
+    def __init__(self, server_name: str):
         self.server_name = server_name
         self.server_path = SERVERS_DIR / server_name
         self.backup_dir = BASE_DIR / "backups" / server_name
         if not self.backup_dir.exists():
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_backup(self):
+    def create_backup(self, retention_count: int | None = None) -> tuple[Path | None, str | None]:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_filename = f"{timestamp}.zip"
         backup_path = self.backup_dir / backup_filename
@@ -44,6 +45,7 @@ class BackupManager:
                                 logger.warning("Skipped locked file: %s", arcname)
                             else:
                                 raise e
+            self._apply_retention(retention_count)
             if skipped_files:
                 return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
             return backup_path, None
@@ -55,8 +57,23 @@ class BackupManager:
                     logger.warning("Failed to clean up failed backup: %s", unlink_err)
             return None, str(e)
 
-    def list_backups(self):
-        backups = []
+    def _apply_retention(self, retention_count: int | None) -> None:
+        if retention_count is None:
+            return
+        backups = sorted(
+            [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"],
+            key=lambda x: x.name, reverse=True
+        )
+        if len(backups) > retention_count:
+            for f in backups[retention_count:]:
+                try:
+                    f.unlink()
+                    logger.info("Removed old backup: %s", f.name)
+                except OSError as e:
+                    logger.warning("Failed to remove old backup %s: %s", f.name, e)
+
+    def list_backups(self) -> list[dict[str, Any]]:
+        backups: list[dict[str, Any]] = []
         if not self.backup_dir.exists():
             return backups
         for f in self.backup_dir.iterdir():
@@ -71,7 +88,7 @@ class BackupManager:
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
 
-    def get_latest_backup(self):
+    def get_latest_backup(self) -> dict[str, Any] | None:
         if not self.backup_dir.exists():
             return None
         backups = [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"]
@@ -85,7 +102,7 @@ class BackupManager:
             "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
         }
 
-    def restore_backup(self, backup_path_str):
+    def restore_backup(self, backup_path_str: str) -> bool:
         backup_path = Path(backup_path_str)
         if not backup_path.exists():
             return False

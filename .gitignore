@@ -35,16 +35,12 @@ env/
 *~
 .DS_Store
 
-# Project Specific - Root
-/servers/          # Server instances (keep local only)
-/bin/              # External binaries (playit, java)
-config.json        # User configuration (contains local paths)
-config
-
-# Project Specific - App Directory
+# Project Specific
+/servers/
 app/servers/
-app/config.json
+app/config/
 app/bin/
+config.json
 
 # Logs
 *.log
@@ -52,10 +48,8 @@ logs/
 
 # OS
 Thumbs.db
-.DS_Store
 
 # Local Jar Backups
-mc jar files (fabric and vanilla)/
 *.jar
 
 # Gemini files
@@ -67,16 +61,14 @@ servers/*
 
 # Executable
 Zero Block Bridge.exe
-bin/*
 
 # Planning and AI References
 .planning/
 AI reference/
 CHECKLIST.md
-.planning/research/
 
-
-# pytest
+# Cache / Runtime
+.zbb_cache/
 .pytest_cache/
 
 # Agent workspace

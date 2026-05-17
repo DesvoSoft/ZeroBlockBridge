@@ -20,21 +20,39 @@ from app.services.java_installer import (
 
 
 class TestHelpers:
-    def test_platform_os(self):
-        import sys
-        expected = {"win32": "windows", "linux": "linux", "darwin": "mac"}
-        assert _platform_os() == expected.get(sys.platform, "linux")
+    @pytest.mark.parametrize("platform, expected", [
+        ("win32", "windows"),
+        ("linux", "linux"),
+        ("darwin", "mac"),
+        ("cygwin", "linux"),
+        ("unknown", "linux"),
+    ])
+    def test_platform_os(self, platform, expected):
+        import sys as real_sys
+        with patch.object(real_sys, "platform", platform):
+            assert _platform_os() == expected
 
-    def test_platform_arch(self):
-        arch = _platform_arch()
-        assert arch in ("x64", "arm64", "arm")
+    @pytest.mark.parametrize("machine, expected", [
+        ("AMD64", "x64"),
+        ("x86_64", "x64"),
+        ("arm64", "arm64"),
+        ("aarch64", "arm64"),
+        ("ARMv7", "x64"),
+        ("unknown", "x64"),
+    ])
+    def test_platform_arch(self, machine, expected):
+        with patch("platform.machine", return_value=machine):
+            assert _platform_arch() == expected
 
-    def test_java_exe_name(self):
-        import sys
-        if sys.platform == "win32":
-            assert _java_exe_name() == "java.exe"
-        else:
-            assert _java_exe_name() == "java"
+    @pytest.mark.parametrize("platform, expected", [
+        ("win32", "java.exe"),
+        ("linux", "java"),
+        ("darwin", "java"),
+    ])
+    def test_java_exe_name(self, platform, expected):
+        import sys as real_sys
+        with patch.object(real_sys, "platform", platform):
+            assert _java_exe_name() == expected
 
     def test_verify_checksum_match(self, tmp_path):
         f = tmp_path / "test.bin"
