@@ -13,7 +13,7 @@
 ZeroBlockBridge is a desktop application that simplifies Minecraft server creation and management, designed with the intent to provide a user‑friendly interface that can safely turn any computer into a Minecraft server. Host a server to play with friends and community — without complex setup, port forwarding or unsafe configurations.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm_Noncommercial-red.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Version](https://img.shields.io/github/v/release/DesvoSoft/ZeroBlockBridge?color=green)](https://github.com/DesvoSoft/ZeroBlockBridge/releases)
 
 ---
@@ -124,9 +124,9 @@ Contributions, issues, and pull requests are welcome!
 
 **ZeroBlockBridge** © 2025-2026 by **DesvoSoft**.
 
-Licensed under the **PolyForm Noncommercial License 1.0.0** — no commercial use.
+Licensed under the **GNU Affero General Public License v3.0** — free software, copyleft.
 
-[View Full License Text](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+[View Full License Text](https://www.gnu.org/licenses/agpl-3.0)
 
 ---
 
