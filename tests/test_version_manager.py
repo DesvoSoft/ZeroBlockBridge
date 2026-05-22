@@ -1,5 +1,6 @@
 """Unit tests for VersionManager (app/core/version_manager.py)."""
 
+import datetime
 import json
 import threading
 from unittest.mock import patch, MagicMock, mock_open
@@ -59,7 +60,7 @@ class TestVersionManagerLoadCache:
 
     @patch("app.core.version_manager.VersionManager._fetch_defaults_sync")
     @patch("builtins.open", new_callable=mock_open, read_data=json.dumps({
-        "last_updated": "2026-05-16T00:00:00",
+        "last_updated": datetime.datetime.now().isoformat(),
         "Vanilla": ["1.20.1"],
         "Fabric": ["1.20.1"],
         "Paper": ["1.20.1"],
@@ -67,7 +68,7 @@ class TestVersionManagerLoadCache:
     }))
     @patch("app.core.version_manager.os.path.exists", return_value=True)
     def test_load_cache_valid(self, mock_exists, mock_file, mock_fetch):
-        mock_fetch.return_value = {"last_updated": "2026-05-16T00:00:00", "Vanilla": ["1.20.1"]}
+        mock_fetch.return_value = {"last_updated": datetime.datetime.now().isoformat(), "Vanilla": ["1.20.1"]}
         vm = VersionManager()
         assert vm.cache["Vanilla"] == ["1.20.1"]
 
@@ -118,7 +119,7 @@ class TestVersionManagerLoadCache:
         assert vm.cache["last_updated"] is None
 
     @patch("builtins.open", new_callable=mock_open, read_data=json.dumps({
-        "last_updated": "2026-05-16T00:00:00",
+        "last_updated": datetime.datetime.now().isoformat(),
         "Vanilla": ["1.20.1"],
         "Fabric": ["1.20.1"],
         "Paper": ["1.20.1"],
