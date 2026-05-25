@@ -59,42 +59,42 @@ class TestHeartbeatMonitor:
 
     def test_loop_sends_probe_on_silence(self, monkeypatch):
         hb = self._make(suspect_after=10, probe_timeout=1, check_interval=60)
-        monkeypatch.setattr(time, "time", lambda: 100.0)
         hb._last_output = 0.0
+        hb._last_check = 0.0
         hb._running = True
-        loop_thread = threading.Thread(target=hb._loop, daemon=True)
-        loop_thread.start()
-        threading.Event().wait(0.3)
-        hb.stop()
-        loop_thread.join(timeout=1)
+        
+        # Advance time so silence > suspect_after and check_interval
+        hb.tick(100.0)
         self.runner.send_command.assert_called_with("list")
 
     def test_zombie_detected_after_probe_timeout(self, monkeypatch):
         hb = self._make(suspect_after=10, probe_timeout=0.05, check_interval=60)
-        monkeypatch.setattr(time, "time", lambda: 100.0)
         hb._last_output = 0.0
+        hb._last_check = 0.0
         hb._running = True
-        loop_thread = threading.Thread(target=hb._loop, daemon=True)
-        loop_thread.start()
-        threading.Event().wait(0.3)
-        hb.stop()
-        loop_thread.join(timeout=1)
+        
+        hb.tick(100.0) # sends probe
+        hb.tick(100.1) # waits, probe_timeout exceeded
+        
         zombie_events = [e for e in self.emitter.events if e[0] == ServerEvent.ZOMBIE_DETECTED]
-        assert len(zombie_events) >= 1
+        assert len(zombie_events) == 1
 
     def test_no_zombie_when_response_received(self, monkeypatch):
         hb = self._make(suspect_after=10, probe_timeout=0.2, check_interval=60)
-        times = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-        monkeypatch.setattr(time, "time", lambda: times.pop(0) if times else 5.0)
         hb._last_output = 0.0
+        hb._last_check = 0.0
         hb._last_response = 0.0
         hb._running = True
+        
+        hb.tick(100.0) # sends probe
+        
+        # simulate response
+        monkeypatch.setattr(time, "time", lambda: 100.1)
         hb.observe_line("There are 0 players online")
-        loop_thread = threading.Thread(target=hb._loop, daemon=True)
-        loop_thread.start()
-        threading.Event().wait(0.5)
-        hb.stop()
-        loop_thread.join(timeout=1)
+        
+        hb.tick(100.1) # should not trigger zombie since waiting_for_probe was cleared
+        hb.tick(100.3)
+        
         zombie_events = [e for e in self.emitter.events if e[0] == ServerEvent.ZOMBIE_DETECTED]
         assert len(zombie_events) == 0
 
@@ -102,9 +102,6 @@ class TestHeartbeatMonitor:
         hb = self._make(check_interval=0.01)
         self.runner.running = False
         hb._running = True
-        loop_thread = threading.Thread(target=hb._loop, daemon=True)
-        loop_thread.start()
-        threading.Event().wait(0.1)
-        hb.stop()
-        loop_thread.join(timeout=1)
+        
+        hb.tick(100.0)
         self.runner.send_command.assert_not_called()

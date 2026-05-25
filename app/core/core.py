@@ -2,7 +2,9 @@ import logging
 import threading
 import time
 import os
-from typing import Optional
+from typing import Optional, Any, Protocol
+from enum import Enum, auto
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core.server_events import EventBus, ServerEvent
 from app.services.backup_manager import BackupManager
@@ -18,15 +20,34 @@ from app.core.version_manager import VersionManager
 
 logger = logging.getLogger(__name__)
 
-class ZBBManager:
+class ServerState(Enum):
+    OFFLINE = auto()
+    STARTING = auto()
+    ONLINE = auto()
+    STOPPING = auto()
+
+def _check_disk_space(min_gb=1):
+    import shutil
+    try:
+        total, used, free = shutil.disk_usage("/")
+        return free >= min_gb * (1024**3)
+    except Exception:
+        return True
+
+from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
+from app.core.protocols import ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol
+
+class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol):
     """
     Central orchestrator for ZeroBlockBridge logic.
     Decouples UI from the server lifecycle, background monitors, and tunneling.
     """
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus) -> None:
         self.events = event_bus
         self.current_server: Optional[str] = None
         self.server_runner: Optional[ServerRunner] = None
+        self.state: ServerState = ServerState.OFFLINE
+        self.executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="ZBB_Worker")
         
         # Monitors
         self._watchdog: Optional[Watchdog] = None
@@ -34,8 +55,8 @@ class ZBBManager:
         self._heartbeat: Optional[HeartbeatMonitor] = None
         
         # Scheduler State
-        self._scheduler_thread: Optional[threading.Thread] = None
-        self._scheduler_running = False
+        self._tick_thread: Optional[threading.Thread] = None
+        self._tick_running = False
         
         # Start lock -- prevents concurrent start_server calls and protects _jdk_source
         self._start_lock = threading.Lock()
@@ -63,7 +84,18 @@ class ZBBManager:
         self.events.subscribe(ServerEvent.CONSOLE_LINE, lambda line: self.console_buffer.append(line))
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
 
-    def _on_playit_status(self, status, ip):
+        self.events.subscribe(ServerEvent.READY, self._on_server_ready)
+
+        # Orchestrators
+        self.server_orchestrator = ServerOrchestrator(self)
+        self.backup_orchestrator = BackupOrchestrator(self)
+        self.tunnel_orchestrator = TunnelOrchestrator(self)
+        self.scheduler_orchestrator = SchedulerOrchestrator(self)
+
+    def _on_server_ready(self, data: Any = None) -> None:
+        self.state = ServerState.ONLINE
+
+    def _on_playit_status(self, status: str, ip: str) -> None:
         config = self.get_config()
         display_ip = ip
         dns = None
@@ -80,7 +112,7 @@ class ZBBManager:
         is_guest = self.playit_manager.api_client.is_read_only
         self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns, "is_guest": is_guest})
 
-    def _save_jdk_metadata(self, required_java: int, jdk_source: str):
+    def _save_jdk_metadata(self, required_java: int, jdk_source: str) -> None:
         from app.core.logic import update_server_meta
         if not self.current_server:
             return
@@ -90,21 +122,21 @@ class ZBBManager:
         update_server_meta(self.current_server, {"required_java": required_java, "jdk_source": jdk_source})
 
     # --- Configuration ---
-    def get_config(self):
+    def get_config(self) -> dict:
         return load_config()
 
-    def update_config(self, key: str, value: any):
+    def update_config(self, key: str, value: Any) -> dict:
         config = load_config()
         config[key] = value
         save_config(config)
         return config
 
     # --- Core Server Operations ---
-    def bootstrap(self):
+    def bootstrap(self) -> None:
         logger.info("[ZBBManager] Bootstrapping core services...")
-        self._start_scheduler_loop()
+        self._start_tick_loop()
 
-    def select_server(self, server_name: str):
+    def select_server(self, server_name: str) -> None:
         self.current_server = server_name
 
     def _auto_install_java(self, required_java: int) -> Optional[str]:
@@ -128,8 +160,8 @@ class ZBBManager:
         return True
 
     def _resolve_java_bin(self, server_dir: str, mc_version: str,
-                          required_java_cached: int | None,
-                          auto_install_jdk: bool) -> tuple[str, int] | None:
+                          required_java_cached: Optional[int],
+                          auto_install_jdk: bool) -> Optional[tuple[str, int]]:
         from app.services.java_detector import JavaDetector, get_required_java
         from app.services.bytecode_analyzer import analyze_jar_bytecode
 
@@ -224,56 +256,10 @@ class ZBBManager:
         self._jdk_source = "portable"
         return (java_bin, required_java)
 
-    def start_server(self):
-        with self._start_lock:
-            if not self.current_server:
-                return False
+    def start_server(self) -> bool:
+        return self.server_orchestrator.start_server()
 
-            if self.server_runner and self.server_runner.running:
-                self.events.emit(ServerEvent.CONSOLE_LINE, "[Error] A server is already running.")
-                return False
 
-            self._stop_monitors()
-
-            config = self.get_config()
-            ram = config.get("ram_allocation", "2G")
-
-            from app.core.constants import SERVERS_DIR
-            from app.core.logic import get_server_meta
-            server_dir = os.path.join(SERVERS_DIR, self.current_server)
-            mc_version = "1.20.1"
-            java_path = "auto"
-            use_aikars = True
-            required_java_cached = None
-            required_java = 21
-            auto_install_jdk = True
-            self._jdk_source = "unknown"
-            try:
-                meta = get_server_meta(self.current_server)
-                if meta:
-                    mc_version = meta.get("version", "1.20.1")
-                    required_java_cached = meta.get("required_java")
-                    self._jdk_source = meta.get("jdk_source", "system")
-                    auto_install_jdk = meta.get("auto_install_jdk", True)
-                    if meta.get("advanced_mode", False):
-                        java_path = meta.get("java_path", "auto")
-                        use_aikars = meta.get("use_aikars", True)
-            except Exception as e:
-                logger.error("Failed to read metadata: %s", e)
-
-            from app.services.scaffolder import pre_boot_scaffold
-            port = self.get_server_port(self.current_server)
-            pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
-
-            if java_path == "auto":
-                result = self._resolve_java_bin(server_dir, mc_version, required_java_cached, auto_install_jdk)
-                if result is None:
-                    return False
-                java_bin, required_java = result
-            else:
-                java_bin = java_path
-
-            return self._launch_server(ram, java_bin, use_aikars, required_java, config)
 
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
@@ -316,25 +302,17 @@ class ZBBManager:
                     logger.warning("Failed to cleanup link dir after error: %s", cleanup_err)
             raise e
 
-    def stop_server(self):
-        if self.server_runner:
-            self.server_runner.stop()
+    def stop_server(self) -> None:
+        self.server_orchestrator.stop_server()
 
-    def send_command(self, cmd: str):
-        if self.server_runner and self.server_runner.running:
-            from app.services.sanitizer import is_safe_command
-            safe, reason = is_safe_command(cmd)
-            if not safe:
-                logger.warning(f"Blocked unsafe command: '{cmd}' - Reason: {reason}")
-                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] Blocked unsafe command: {reason}")
-                return
-            self.server_runner.send_command(cmd)
+    def send_command(self, cmd: str) -> None:
+        self.server_orchestrator.send_command(cmd)
 
-    def is_running(self):
-        return self.server_runner and self.server_runner.running
+    def is_running(self) -> bool:
+        return self.server_orchestrator.is_running()
 
     # --- Monitors ---
-    def _setup_monitors(self, config):
+    def _setup_monitors(self, config: dict) -> None:
         self._lag_monitor = LagMonitor(event_emitter=self.events)
         self._heartbeat = HeartbeatMonitor(
             event_emitter=self.events,
@@ -345,115 +323,54 @@ class ZBBManager:
         self._watchdog = Watchdog(self.server_runner, self.events, max_retries=max_retries)
         self._watchdog.listen()
 
-    def _stop_monitors(self):
+    def _stop_monitors(self) -> None:
         if self._heartbeat: self._heartbeat.stop()
         if self._watchdog: self._watchdog.stop()
 
     # --- Tunnel Management ---
-    def get_server_port(self, server_name: str = None) -> int:
+    def get_server_port(self, server_name: Optional[str] = None) -> int:
         target = server_name or self.current_server
         if not target: return 25565
         from app.services.server_properties import load_server_properties
         props = load_server_properties(target)
         return int(props.get("server-port", 25565))
 
-    def create_tunnel_for_server(self, server_name: str):
-        """Automatically creates a tunnel for a newly created server (if playit is linked)."""
-        port = self.get_server_port(server_name)
-        # We run this in a thread because API polling can take 15 seconds
-        def _create():
-            try:
-                self.playit_manager.get_or_create_tunnel(port)
-            except Exception as e:
-                logger.error(f"Auto-tunnel creation failed for {server_name}: {e}")
-        threading.Thread(target=_create, daemon=True).start()
+    def create_tunnel_for_server(self, server_name: str) -> None:
+        self.tunnel_orchestrator.create_tunnel_for_server(server_name)
 
-    def start_tunnel(self):
-        port = self.get_server_port()
-        threading.Thread(target=self.playit_manager.start, args=(port,), daemon=True).start()
+    def start_tunnel(self) -> None:
+        self.tunnel_orchestrator.start_tunnel()
 
-    def stop_tunnel(self):
-        self.playit_manager.stop(force=True)
+    def stop_tunnel(self) -> None:
+        self.tunnel_orchestrator.stop_tunnel()
 
-    def reset_tunnel(self, mode="full"):
-        self.playit_manager.reset(mode)
+    def reset_tunnel(self, mode: str = "full") -> None:
+        self.tunnel_orchestrator.reset_tunnel(mode)
 
-    def get_tunnel_ip(self):
-        return self.playit_manager.current_address
+    def get_tunnel_ip(self) -> Optional[str]:
+        return self.tunnel_orchestrator.get_tunnel_ip()
 
-    def link_playit_manually(self, setup_code: str):
+    def link_playit_manually(self, setup_code: str) -> bool:
         """Link the account manually using a setup code."""
         return self.playit_manager.link_manually(setup_code)
 
     # --- Scheduler & Lifecycle ---
-    def _start_scheduler_loop(self):
-        if self._scheduler_running: return
-        self._scheduler_running = True
-        
-        def _loop():
-            while self._scheduler_running:
-                time.sleep(AppConfig.SCHEDULER_CHECK_INTERVAL)
-                if not (self.server_runner and self.server_runner.running and self.current_server):
-                    continue
-                
-                service = Scheduler(self.current_server)
-                status = service.get_status()
-                if not status: continue
+    def _start_tick_loop(self) -> None:
+        self.scheduler_orchestrator._start_tick_loop()
 
-                with self._restart_warnings_lock:
-                    key, message = Scheduler.get_warning_message(status["remaining_seconds"], self.restart_warnings_sent)
-                    if key:
-                        self._send_system_message(message)
-                        self.restart_warnings_sent.add(key)
-                
-                if status["is_due"]:
-                    self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Scheduled restart due. Initiating final countdown...")
-                    self.events.emit(ServerEvent.REQUEST_RESTART, {"reason": "scheduled"})
-                    service.update_last_run()
-                    with self._restart_warnings_lock:
-                        self.restart_warnings_sent.clear()
+    def _check_auto_backup(self) -> None:
+        self.backup_orchestrator._check_auto_backup()
 
-                self._check_auto_backup()
+    def _run_auto_backup(self) -> None:
+        self.backup_orchestrator._run_auto_backup()
 
-        self._scheduler_thread = threading.Thread(target=_loop, daemon=True)
-        self._scheduler_thread.start()
-
-    def _check_auto_backup(self):
-        if not self.current_server:
-            return
-        with self._backup_lock:
-            if self._backup_in_progress:
-                return
-            backup_sched = BackupScheduler(self.current_server)
-            if not backup_sched.is_due():
-                return
-            self._backup_in_progress = True
-        self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Auto-backup due. Starting...")
-        threading.Thread(target=self._run_auto_backup, daemon=True).start()
-
-    def _run_auto_backup(self):
-        try:
-            bm = BackupManager(self.current_server)
-            config = BackupScheduler(self.current_server).get_config()
-            path, error = bm.create_backup(retention_count=config.get("retention_count"))
-            if path:
-                self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
-                self.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.current_server})
-            else:
-                self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
-                self.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.current_server})
-            BackupScheduler(self.current_server).mark_run()
-        finally:
-            with self._backup_lock:
-                self._backup_in_progress = False
-
-    def _send_system_message(self, message):
+    def _send_system_message(self, message: str) -> None:
         """Sends a message to the console and in-game via CommandSanitizer."""
         if self.server_runner and self.server_runner.running:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] {message}")
             self.send_command(f"say {message}")
 
-    def _handle_restart_request(self, data=None):
+    def _handle_restart_request(self, data: Optional[dict] = None) -> None:
         """Handles internal requests to restart the server gracefully."""
         if not self._restart_lock.acquire(blocking=False):
             logger.warning("[ZBBManager] Restart already in progress, ignoring duplicate request.")
@@ -482,7 +399,13 @@ class ZBBManager:
                         else:
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
 
-                    threading.Thread(target=_do_backup, daemon=True).start()
+                    # Since it is a blocking step in the restart sequence, we keep it as a thread or block.
+                    # Or we can submit to executor and wait for the future
+                    future = self.executor.submit(_do_backup)
+                    try:
+                        future.result(timeout=300)
+                    except Exception as e:
+                        logger.error(f"Backup during restart failed or timed out: {e}")
                     time.sleep(1)
 
                 self.stop_server()
@@ -503,11 +426,20 @@ class ZBBManager:
             finally:
                 self._restart_lock.release()
 
-        threading.Thread(target=_restart, daemon=True).start()
+        self.executor.submit(_restart)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Cleanly stops all services on app exit."""
-        self._scheduler_running = False
+        self._tick_running = False
+        if self._tick_thread and self._tick_thread.is_alive():
+            self._tick_thread.join(timeout=5.0)
+            
         self.stop_server()
+        if self.server_runner and self.server_runner.process:
+            try:
+                self.server_runner.process.wait(timeout=5)
+            except Exception:
+                pass
+                
         self._stop_monitors()
         self.stop_tunnel()

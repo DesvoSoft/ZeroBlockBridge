@@ -37,6 +37,7 @@ class ServerWizard(ctk.CTkToplevel):
             "location": str(SERVERS_DIR),
             "icon_path": None,
             "auto_install_jdk": True,
+            "playit_port": "25565",
         }
         
         # Layout
@@ -386,6 +387,13 @@ class ServerWizard(ctk.CTkToplevel):
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
             
+        # Playit.gg Port
+        ctk.CTkLabel(self.content_frame, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_port = ctk.CTkEntry(self.content_frame, placeholder_text="25565", corner_radius=12, height=36)
+        self.entry_port.pack(fill="x", pady=(0, 10))
+        if self.wizard_data.get("playit_port"):
+            self.entry_port.insert(0, str(self.wizard_data["playit_port"]))
+            
         # Distances (Sliders)
         dist_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         dist_frame.pack(fill="x", pady=(0, 10))
@@ -441,6 +449,9 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             
+            port_val = self.entry_port.get().strip()
+            self.wizard_data["playit_port"] = port_val if port_val else "25565"
+            
             self.on_complete_callback(self.wizard_data)
             self.destroy()
             return
@@ -456,6 +467,10 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["whitelist"] = self.var_whitelist.get()
             self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
+            
+            port_val = getattr(self, "entry_port", None)
+            if port_val:
+                self.wizard_data["playit_port"] = port_val.get().strip() or "25565"
             
         self.current_step -= 1
         self.show_step()

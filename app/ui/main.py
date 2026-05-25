@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import threading
+import concurrent.futures
 import webbrowser
 import time
 import subprocess
@@ -33,14 +34,16 @@ from app.ui.modrinth_browser import ModrinthBrowser
 from app.services.sanitizer import is_safe_command
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
+from app.ui.players_dashboard import PlayersDashboard
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
-        from app.services import settings_manager
+        from app.services.settings_manager import SettingsManager
         from app.core.constants import CONFIG_DIR
+        settings_manager = SettingsManager()
         settings_manager.set_config_dir(str(CONFIG_DIR))
         theme = settings_manager.get("theme", "Dark")
         ctk.set_appearance_mode(theme)
@@ -64,6 +67,7 @@ class MCTunnelApp(ctk.CTk):
         
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
         
         self.events.subscribe(ServerEvent.CONSOLE_LINE, self.update_console)
         self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
@@ -73,6 +77,7 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
         self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        self.events.subscribe(ServerEvent.TPS_UPDATE, self.on_tps_update)
         
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
@@ -162,6 +167,9 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
+        self.lbl_tps = ctk.CTkLabel(self.status_frame, text="TPS: 0.0", text_color="#64748b", font=("Roboto Medium", 13))
+        self.lbl_tps.pack(side="left", padx=10, pady=8)
+
         # Moved from dashboard to save space
         self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
         self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
@@ -185,8 +193,17 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_server_info = ctk.CTkLabel(self.status_right_frame, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
         self.lbl_server_info.pack(side="left", padx=(0, 15))
         
-        self.lbl_player_count = ctk.CTkLabel(self.status_right_frame, text="Players: 0", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_player_count.pack(side="left", padx=(0, 15))
+        self.btn_players = ctk.CTkButton(
+            self.status_right_frame, 
+            text="Players: 0", 
+            command=self.open_players_dashboard,
+            fg_color="transparent", 
+            text_color=AppConfig.COLOR_TEXT_GRAY, 
+            hover_color="#334155", 
+            font=AppConfig.FONT_BODY_SMALL,
+            height=28
+        )
+        self.btn_players.pack(side="left", padx=(0, 15))
         
         self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
         self.lbl_java_ver.pack(side="left", padx=(0, 15))
@@ -324,7 +341,7 @@ class MCTunnelApp(ctk.CTk):
             else:
                 self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
                 self.after(0, lambda: self.server_console.log("[System] No Java detected on this system. ZeroBlockBridge will auto-install the required JDK when the server starts."))
-        threading.Thread(target=_check, daemon=True).start()
+        self.executor.submit(_check)
 
     def load_servers(self):
         def _scan():
@@ -336,7 +353,7 @@ class MCTunnelApp(ctk.CTk):
                 logger.warning("Failed to scan servers: %s", e)
                 servers = []
             self.after(0, lambda s=servers: self._render_server_list(s))
-        threading.Thread(target=_scan, daemon=True).start()
+        self.executor.submit(_scan)
 
     def _render_server_list(self, servers):
         for widget in self.server_list_frame.winfo_children():
@@ -455,7 +472,7 @@ class MCTunnelApp(ctk.CTk):
     def start_server_action(self):
         def _start():
             self.zbb_manager.start_server()
-        threading.Thread(target=_start, daemon=True).start()
+        self.executor.submit(_start)
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
@@ -471,8 +488,17 @@ class MCTunnelApp(ctk.CTk):
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
 
+    def on_tps_update(self, tps):
+        self.after(0, lambda: self.lbl_tps.configure(text=f"TPS: {tps:.1f}"))
+
     def on_player_count_update(self, count):
-        self.after(0, lambda: self.lbl_player_count.configure(text=f"Players: {count}"))
+        self.after(0, lambda: self.btn_players.configure(text=f"Players: {count}"))
+
+    def open_players_dashboard(self):
+        if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
+            self.players_dashboard_window.focus()
+        else:
+            self.players_dashboard_window = PlayersDashboard(self, self.events)
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
@@ -504,7 +530,7 @@ class MCTunnelApp(ctk.CTk):
                 self.server_console.log(f"[Error] Failed to map custom location: {e}")
                 return
 
-        threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
+        self.executor.submit(self.start_download_process, config)
 
     def start_download_process(self, config):
         self.after(0, lambda: self.show_progress_dialog(config))
@@ -549,7 +575,8 @@ class MCTunnelApp(ctk.CTk):
                     self.server_console.log("[System] Scaffolding server environment...")
                     from app.services.scaffolder import pre_boot_scaffold
                     server_dir = os.path.join(SERVERS_DIR, name)
-                    port = self.zbb_manager.get_server_port(name)
+                    port_str = config.get("playit_port")
+                    port = int(port_str) if port_str and str(port_str).isdigit() else self.zbb_manager.get_server_port(name)
                     pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
                     self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
                     if "auto_install_jdk" in config:
@@ -607,7 +634,7 @@ class MCTunnelApp(ctk.CTk):
                 import traceback
                 logger.error("Installation failed:\n%s", traceback.format_exc())
                 self.after(0, dialog.close)
-        threading.Thread(target=run_install, daemon=True).start()
+        self.executor.submit(run_install)
 
     def _on_download_complete(self, dialog, name):
         self.load_servers()
@@ -651,7 +678,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
             # Toast is handled by PlayitManager.notification_callback via EventBus
 
-        threading.Thread(target=_reset_task, daemon=True).start()
+        self.executor.submit(_reset_task)
 
     def on_tunnel_status(self, data):
         if not data: return
@@ -775,7 +802,7 @@ class MCTunnelApp(ctk.CTk):
             else:
                 self.after(0, lambda: Toast.show(self, "Link failed. Verify your code.", toast_type="error"))
         
-        threading.Thread(target=_link_task, daemon=True).start()
+        self.executor.submit(_link_task)
 
     def load_existing_server_action(self):
         folder = ctk.filedialog.askdirectory(title="Select Existing Server Folder")

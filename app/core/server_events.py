@@ -22,6 +22,7 @@ class ServerEvent:
     TUNNEL_STATUS = "tunnel_status"
     BACKUP_COMPLETED = "backup_completed"
     BACKUP_FAILED = "backup_failed"
+    TPS_UPDATE = "tps_update"
 
 
 class EventBus:

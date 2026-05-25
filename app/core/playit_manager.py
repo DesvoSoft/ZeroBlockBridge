@@ -13,8 +13,12 @@ from app.services.playit_api import PlayitApiClient, PlayitApiException
 
 logger = logging.getLogger(__name__)
 
+_ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+from typing import Callable, Optional, Dict, Any, List
+
 class PlayitManager:
-    def __init__(self, console_callback, status_callback, on_ready_callback=None, notification_callback=None):
+    def __init__(self, console_callback: Callable[[str], None], status_callback: Callable[[str, Optional[str]], None], on_ready_callback: Optional[Callable[[], None]]=None, notification_callback: Optional[Callable[[str, str], None]]=None) -> None:
         self.console_callback = console_callback
         self.status_callback = status_callback
         self.on_ready_callback = on_ready_callback
@@ -40,14 +44,23 @@ class PlayitManager:
             self._fix_permissions()
             logger.info("Playit linked state persisted from playit.toml")
 
-        atexit.register(self.stop, force=True)
+        import atexit
+        atexit.register(self._atexit_stop)
 
-    def _get_binary_path(self):
+    def _atexit_stop(self) -> None:
+        self.stop(force=True)
+        # Ensure that no orphaned playit instances remain
+        if platform.system() == "Windows":
+            import subprocess
+            subprocess.run(['taskkill', '/F', '/IM', 'playit.exe'], capture_output=True, check=False)
+            subprocess.run(['taskkill', '/F', '/IM', 'playit-cli.exe'], capture_output=True, check=False)
+
+    def _get_binary_path(self) -> Any:
         system = platform.system()
         filename = "playit.exe" if system == "Windows" else "playit"
         return (BIN_DIR / filename).resolve()
 
-    def _clean_stale_binaries(self):
+    def _clean_stale_binaries(self) -> None:
         if not BIN_DIR.exists():
             return
         for f in BIN_DIR.iterdir():
@@ -60,7 +73,7 @@ class PlayitManager:
                 except OSError:
                     pass
 
-    def ensure_binary(self):
+    def ensure_binary(self) -> bool:
         if not BIN_DIR.exists():
             BIN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -103,7 +116,7 @@ class PlayitManager:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
 
-    def get_or_create_tunnel(self, port: int) -> str:
+    def get_or_create_tunnel(self, port: int) -> Optional[str]:
         if not self.api_client.load_secret_key():
             self.console_callback("[Playit] Agent not linked yet.")
             return None
@@ -137,7 +150,7 @@ class PlayitManager:
                 self.console_callback(f"[Playit] API Error: {e}")
             return None
 
-    def start(self, port: int = 25565):
+    def start(self, port: int = 25565) -> None:
         with self._lock:
             if self.running:
                 self.console_callback("[Playit] Agent already running.")
@@ -153,7 +166,7 @@ class PlayitManager:
             self.console_callback(f"[Playit] Internal start failure: {e}")
             self.status_callback("Error", None)
 
-    def _start_internal(self, port: int):
+    def _start_internal(self, port: int) -> None:
         with self._lock:
             self._api_dns = None
             self.current_address = None
@@ -231,7 +244,7 @@ class PlayitManager:
             self.running = False
             self.status_callback("Error", None)
 
-    def stop(self, force=False):
+    def stop(self, force: bool = False) -> None:
         with self._lock:
             proc = self.process
             self.process = None
@@ -263,7 +276,7 @@ class PlayitManager:
             self._api_dns = None
             self.status_callback("Offline", None)
 
-    def reset(self, mode="full"):
+    def reset(self, mode: str = "full") -> None:
         try:
             if mode == "full":
                 self.console_callback("[Playit] Starting full reset...")
@@ -329,7 +342,7 @@ class PlayitManager:
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 
-    def link_manually(self, setup_code: str):
+    def link_manually(self, setup_code: str) -> bool:
         if not setup_code or len(setup_code.strip()) < 8:
             self.console_callback("[Playit] Invalid setup code. Must be at least 8 characters.")
             if self.notification_callback:
@@ -358,7 +371,7 @@ class PlayitManager:
                 self.notification_callback(f"Link failed: {e}", "error")
         return False
 
-    def _fix_permissions(self):
+    def _fix_permissions(self) -> None:
         if platform.system() != "Windows" and os.path.exists(self.toml_path):
             try:
                 mode = os.stat(self.toml_path).st_mode
@@ -373,13 +386,17 @@ class PlayitManager:
     # 1. get_or_create_tunnel() (15s window in create_tunnel)
     # 2. _dns_polling_loop() (infinite API poll - THIS METHOD)
     # 3. _parse_line() (stdout regex from agent)
-    def _dns_polling_loop(self):
-        while self.running:
+    def _dns_polling_loop(self) -> None:
+        while True:
+            with self._lock:
+                if not self.running:
+                    return
             time.sleep(5)
-            if not self.running:
-                return
-            if self._api_dns or self._stdout_dns:
-                return
+            with self._lock:
+                if not self.running:
+                    return
+                if self._api_dns or self._stdout_dns:
+                    return
             try:
                 addresses = self.api_client.get_tunnels()
                 if addresses:
@@ -399,27 +416,39 @@ class PlayitManager:
             except Exception as e:
                 logger.warning("[Playit] DNS polling error: %s", e)
 
-    def _heartbeat_loop(self):
-        max_failures = 3
-        fail_count = 0
-        while self.running:
-            time.sleep(15)
-            if not self.running:
-                break
+    def _heartbeat_loop(self) -> None:
+        max_attempts = 10
+        attempt_count = 0
+        backoff = 1
+        
+        while True:
             with self._lock:
-                if self.process is None or self.process.poll() is not None:
-                    fail_count += 1
-                    logger.warning("[Playit] Heartbeat #%d: process not running.", fail_count)
-                    if fail_count >= max_failures:
-                        self.console_callback("[Playit] CRITICAL: Agent process dead. Auto-restarting...")
-                        if self.notification_callback:
-                            self.notification_callback("Playit agent crashed. Restarting...", "error")
-                        port = getattr(self, '_current_port', 25565)
-                        threading.Thread(target=self.start, args=(port,), daemon=True).start()
-                        fail_count = 0
-                        break
+                if not self.running:
+                    break
+            time.sleep(15)
+            with self._lock:
+                if not self.running:
+                    break
+                
+                is_dead = (self.process is None or self.process.poll() is not None)
+            
+            if is_dead:
+                attempt_count += 1
+                logger.warning("[Playit] Heartbeat #%d: process not running.", attempt_count)
+                if attempt_count >= max_attempts:
+                    self.console_callback("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
+                    if self.notification_callback:
+                        self.notification_callback("Playit agent failed to start after multiple attempts.", "error")
+                    break
                 else:
-                    fail_count = 0
+                    self.console_callback(f"[Playit] Agent dead. Restarting in {backoff}s (Attempt {attempt_count}/{max_attempts})...")
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 300)
+                    port = getattr(self, '_current_port', 25565)
+                    threading.Thread(target=self.start, args=(port,), daemon=True).start()
+            else:
+                attempt_count = 0
+                backoff = 1
 
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",
@@ -434,7 +463,7 @@ class PlayitManager:
     # --- CRITICAL DNS: regex-based domain extraction from agent stdout ---
     # DO NOT MODIFY. This is the 3rd and final DNS recovery mechanism.
     # Extracts .ply.gg / .playit.gg / .joinmc.link domains from agent log lines.
-    def _parse_line(self, line):
+    def _parse_line(self, line: str) -> None:
         if not line:
             return
         if self._api_dns or self._stdout_dns:
@@ -460,7 +489,7 @@ class PlayitManager:
                     self.on_ready_callback()
                 return
 
-    def _read_output(self):
+    def _read_output(self) -> None:
         try:
             while self.running and self.process:
                 try:
@@ -476,7 +505,7 @@ class PlayitManager:
                     logger.warning("[Playit] decode error: %s", e)
                     continue
                 if line:
-                    clean_line = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', line)
+                    clean_line = _ANSI_RE.sub('', line)
                     is_spam = any(s in clean_line for s in self.SPAM_LOGS)
                     if not is_spam:
                         self.console_callback(f"[Playit] {clean_line}")

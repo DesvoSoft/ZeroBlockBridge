@@ -140,6 +140,8 @@ class TestServerMeta:
 
     def teardown_method(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
+        from app.core.logic import _meta_cache
+        _meta_cache.clear()
 
     @patch("app.core.logic.SERVERS_DIR", new_callable=lambda: None)
     def test_get_server_meta_missing_returns_empty(self, mock_servers_dir):

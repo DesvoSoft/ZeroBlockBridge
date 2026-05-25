@@ -10,10 +10,14 @@ import sys
 import datetime
 import time
 from pathlib import Path
+from typing import Optional, Callable, Any
 
 from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
+import re
+
+_ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 # Per-server threading.Events for jar normalization synchronization
 _jar_ready_events: dict[str, threading.Event] = {}
@@ -42,7 +46,7 @@ def wait_for_jar_ready(server_dir: str, timeout: float = 5.0) -> bool:
 
 logger = logging.getLogger(__name__)
 
-def load_config():
+def load_config() -> dict:
     """Loads the configuration from config.json."""
     default_config = {
         "java_path": "auto",
@@ -64,51 +68,85 @@ def load_config():
         save_config(default_config)
         return default_config
 
-def save_config(config):
+def save_config(config: dict) -> None:
     """Saves the configuration to config.json."""
     APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(APP_CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
-def get_server_meta(server_name):
-    """Centralized reader for server metadata.json."""
-    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    if not os.path.exists(meta_path):
-        return {}
-    try:
-        with open(meta_path, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.error("Failed to load metadata for %s: %s", server_name, e)
-        return {}
+_meta_lock = threading.Lock()
+_meta_cache = {}
 
-def set_server_meta(server_name, key, value):
+def get_server_meta(server_name: str) -> dict:
+    """Centralized reader for server metadata.json with caching."""
+    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    with _meta_lock:
+        now = time.time()
+        if server_name in _meta_cache:
+            cache_time, data = _meta_cache[server_name]
+            if now - cache_time < 5.0:
+                return data.copy()
+                
+        if not os.path.exists(meta_path):
+            return {}
+        try:
+            with open(meta_path, "r") as f:
+                data = json.load(f)
+                _meta_cache[server_name] = (now, data)
+                return data.copy()
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error("Failed to load metadata for %s: %s", server_name, e)
+            return {}
+
+def set_server_meta(server_name: str, key: str, value: Any) -> bool:
     """Centralized writer for server metadata.json."""
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    try:
-        meta = get_server_meta(server_name)
-        meta[key] = value
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
-        return True
-    except (OSError, json.JSONDecodeError) as e:
-        logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
-        return False
+    with _meta_lock:
+        try:
+            now = time.time()
+            if server_name in _meta_cache and now - _meta_cache[server_name][0] < 5.0:
+                meta = _meta_cache[server_name][1].copy()
+            else:
+                if os.path.exists(meta_path):
+                    with open(meta_path, "r") as f:
+                        meta = json.load(f)
+                else:
+                    meta = {}
+            
+            meta[key] = value
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=4)
+            _meta_cache[server_name] = (time.time(), meta)
+            return True
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
+            return False
 
-def update_server_meta(server_name, updates):
+def update_server_meta(server_name: str, updates: dict) -> bool:
     """Atomic multi-key update for server metadata.json."""
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    try:
-        meta = get_server_meta(server_name)
-        meta.update(updates)
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
-        return True
-    except (OSError, json.JSONDecodeError) as e:
-        logger.error("Failed to update metadata for %s: %s", server_name, e)
-        return False
+    with _meta_lock:
+        try:
+            now = time.time()
+            if server_name in _meta_cache and now - _meta_cache[server_name][0] < 5.0:
+                meta = _meta_cache[server_name][1].copy()
+            else:
+                if os.path.exists(meta_path):
+                    with open(meta_path, "r") as f:
+                        meta = json.load(f)
+                else:
+                    meta = {}
+                    
+            meta.update(updates)
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=4)
+            _meta_cache[server_name] = (time.time(), meta)
+            return True
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("Failed to update metadata for %s: %s", server_name, e)
+            return False
 
-def check_java():
+def check_java() -> Optional[str]:
     """Check if a compatible Java installation is available on the system.
     
     Returns:
@@ -124,7 +162,7 @@ def check_java():
         return best.path
     return None
 
-def create_server_directory(server_name, server_type="Vanilla", version="1.20.1"):
+def create_server_directory(server_name: str, server_type: str = "Vanilla", version: str = "1.20.1") -> str:
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
@@ -136,7 +174,7 @@ def create_server_directory(server_name, server_type="Vanilla", version="1.20.1"
             json.dump({"name": server_name, "ram": 2048, "type": server_type, "version": version}, f, indent=4)
     return path
 
-def download_server(server_name, server_type, version, progress_callback=None):
+def download_server(server_name: str, server_type: str, version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
     """Downloads the server jar with SHA1 verification (PROV-04)."""
     vm = VersionManager()
     url = vm.get_download_url(server_type, version)
@@ -191,13 +229,13 @@ def download_server(server_name, server_type, version, progress_callback=None):
     normalize_server_jar(server_path)
     return jar_path
 
-def accept_eula(server_name):
+def accept_eula(server_name: str) -> None:
     """Writes eula.txt=true by delegating to scaffolder."""
     from app.services.scaffolder import _generate_eula
     server_path = os.path.join(SERVERS_DIR, server_name)
     _generate_eula(server_path, accepted=True)
 
-def _run_installer(server_name, server_type, mc_version, installer_name, installer_args, progress_callback=None):
+def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None) -> Optional[str]:
     server_path = create_server_directory(server_name, server_type, mc_version)
     vm = VersionManager()
     installer_url = vm.get_download_url(server_type, mc_version)
@@ -229,7 +267,7 @@ def _run_installer(server_name, server_type, mc_version, installer_name, install
         return None
 
 
-def install_fabric(server_name, mc_version, progress_callback=None):
+def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
     server_path = _run_installer(server_name, "Fabric", mc_version, "fabric-installer.jar",
                                   ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback)
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
@@ -237,7 +275,7 @@ def install_fabric(server_name, mc_version, progress_callback=None):
     return None
 
 
-def normalize_server_jar(server_dir):
+def normalize_server_jar(server_dir: str) -> bool:
     """Normalize the server jar to 'server.jar' for consistent access.
 
     Forge uses dynamic names like 'forge-1.20.1-44.1.23.jar'.
@@ -362,7 +400,7 @@ def normalize_server_jar(server_dir):
     return result
 
 
-def install_forge(server_name, mc_version, progress_callback=None):
+def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
     """Installs Forge."""
     server_path = create_server_directory(server_name, "Forge", mc_version)
     vm = VersionManager()
@@ -569,9 +607,10 @@ class ServerRunner:
             return
         start_time = time.time()
         for line in self.process.stdout:
-            self.events.emit(ServerEvent.CONSOLE_LINE, line.strip())
-            self._parse_player_count(line.strip())
-            if "Done (" in line and "For help, type" in line:
+            clean_line = _ANSI_RE.sub('', line).strip()
+            self.events.emit(ServerEvent.CONSOLE_LINE, clean_line)
+            self._parse_player_count(clean_line)
+            if "Done (" in clean_line and "For help, type" in clean_line:
                 self.events.emit(ServerEvent.READY)
         self.process.wait()
         self._stderr_done.wait(timeout=2)
@@ -593,7 +632,7 @@ class ServerRunner:
             self._stderr_done.set()
             return
         for line in self.process.stderr:
-            stripped = line.strip()
+            stripped = _ANSI_RE.sub('', line).strip()
             if stripped:
                 self._stderr_buffer.append(stripped)
                 if len(self._stderr_buffer) > 100:

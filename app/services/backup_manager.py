@@ -21,30 +21,53 @@ class BackupManager:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self, retention_count: int | None = None) -> tuple[Path | None, str | None]:
+        from app.core.core import _check_disk_space
+        if not _check_disk_space(min_gb=1):
+            return None, "Not enough disk space to create backup (>1GB required)."
+
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_filename = f"{timestamp}.zip"
         backup_path = self.backup_dir / backup_filename
         abs_backup_dir = self.backup_dir.resolve()
-        try:
-            skipped_files = []
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(self.server_path):
-                    root_path = os.path.abspath(root)
-                    if "backups" in os.path.relpath(root_path, self.server_path).split(os.sep):
-                        continue
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
+        
+        skipped_files = []
+        error_container = []
+        
+        def _zip_worker():
+            try:
+                with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(self.server_path):
+                        root_path = os.path.abspath(root)
+                        if "backups" in os.path.relpath(root_path, self.server_path).split(os.sep):
                             continue
-                        arcname = os.path.relpath(file_path, self.server_path)
-                        try:
-                            zipf.write(file_path, arcname)
-                        except (PermissionError, OSError) as e:
-                            if e.errno == 13:
-                                skipped_files.append(arcname)
-                                logger.warning("Skipped locked file: %s", arcname)
-                            else:
-                                raise e
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
+                                continue
+                            arcname = os.path.relpath(file_path, self.server_path)
+                            try:
+                                zipf.write(file_path, arcname)
+                            except (PermissionError, OSError) as e:
+                                if getattr(e, 'errno', None) == 13:
+                                    skipped_files.append(arcname)
+                                    logger.warning("Skipped locked file: %s", arcname)
+                                else:
+                                    raise e
+            except Exception as e:
+                error_container.append(e)
+
+        try:
+            import threading
+            worker = threading.Thread(target=_zip_worker, daemon=True)
+            worker.start()
+            worker.join(timeout=300)
+            
+            if worker.is_alive():
+                raise TimeoutError("Backup creation timed out after 300 seconds")
+                
+            if error_container:
+                raise error_container[0]
+                
             self._apply_retention(retention_count)
             if skipped_files:
                 return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."

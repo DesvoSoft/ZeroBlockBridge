@@ -31,6 +31,10 @@ class FakeEmitter:
             self._listeners[event] = []
         self._listeners[event].append(callback)
 
+    def unsubscribe(self, event, callback):
+        if event in self._listeners and callback in self._listeners[event]:
+            self._listeners[event].remove(callback)
+
     def emit(self, event, data=None):
         self.events.append((event, data))
         for cb in self._listeners.get(event, []):

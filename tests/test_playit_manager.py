@@ -422,15 +422,15 @@ class TestHeartbeatLoop:
                 m._heartbeat_loop()
             assert m.console_callback.call_count == 0
 
-    def test_restarts_after_3_failures(self, manager):
+    def test_restarts_after_10_failures(self, manager):
         m, _, _ = manager
         m.running = True
         m.process = None
         with patch("time.sleep"):
             with patch.object(m, "start"):
                 m._heartbeat_loop()
-                m.start.assert_called_once_with(25565)
-                m.console_callback.assert_any_call("[Playit] CRITICAL: Agent process dead. Auto-restarting...")
+                assert m.start.call_count == 9
+                m.console_callback.assert_any_call("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
 
 
 class TestParseLine:

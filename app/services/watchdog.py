@@ -182,3 +182,7 @@ class Watchdog:
 
     def stop(self) -> None:
         self._listening = False
+        self._events.unsubscribe(ServerEvent.STOPPED, self._on_stopped)
+        self._events.unsubscribe(ServerEvent.READY, self._on_ready)
+        self._events.unsubscribe(ServerEvent.STARTING, self._on_starting)
+        self._events.unsubscribe(ServerEvent.ZOMBIE_DETECTED, self._on_zombie)

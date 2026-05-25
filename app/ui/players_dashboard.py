@@ -1,0 +1,176 @@
+import customtkinter as ctk
+
+class PlayersDashboard(ctk.CTkToplevel):
+    def __init__(self, master, event_bus, **kwargs):
+        super().__init__(master, **kwargs)
+        self.title("Player Management Dashboard")
+        self.geometry("600x600")
+        self.minsize(500, 500)
+        self.event_bus = event_bus
+        
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        
+        self._build_header()
+        self._build_connected_players_section()
+        self._build_whitelist_section()
+        
+        # Mock Data Initialization
+        self.connected_players = ["Steve", "Alex", "Notch"]
+        self.whitelisted_players = ["Steve", "Alex", "jeb_"]
+        
+        self.refresh_ui()
+
+    def _build_header(self):
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(20, 10))
+        
+        self.lbl_player_count = ctk.CTkLabel(
+            header_frame, 
+            text="Players Online: 0", 
+            font=ctk.CTkFont(family="Roboto", size=24, weight="bold")
+        )
+        self.lbl_player_count.pack(side="left")
+
+    def _build_connected_players_section(self):
+        # Section for connected players
+        players_frame = ctk.CTkFrame(self)
+        players_frame.grid(row=1, column=0, sticky="nsew", padx=(20, 10), pady=(10, 20))
+        players_frame.grid_rowconfigure(1, weight=1)
+        players_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_title = ctk.CTkLabel(players_frame, text="Connected Players", font=ctk.CTkFont(size=16, weight="bold"))
+        lbl_title.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
+        
+        self.scroll_players = ctk.CTkScrollableFrame(players_frame, fg_color="transparent")
+        self.scroll_players.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+
+    def _build_whitelist_section(self):
+        # Section for whitelist
+        whitelist_frame = ctk.CTkFrame(self)
+        whitelist_frame.grid(row=1, column=1, sticky="nsew", padx=(10, 20), pady=(10, 20))
+        whitelist_frame.grid_rowconfigure(3, weight=1)
+        whitelist_frame.grid_columnconfigure(0, weight=1)
+        
+        # Header and Toggle
+        header_frame = ctk.CTkFrame(whitelist_frame, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 5))
+        header_frame.grid_columnconfigure(0, weight=1)
+        
+        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist Management", font=ctk.CTkFont(size=16, weight="bold"))
+        lbl_title.grid(row=0, column=0, sticky="w")
+        
+        self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", command=self._toggle_whitelist)
+        self.switch_whitelist.grid(row=0, column=1, sticky="e")
+        self.switch_whitelist.select() # Mock default state
+        
+        # Add player to whitelist
+        add_frame = ctk.CTkFrame(whitelist_frame, fg_color="transparent")
+        add_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=5)
+        add_frame.grid_columnconfigure(0, weight=1)
+        
+        self.entry_whitelist_add = ctk.CTkEntry(add_frame, placeholder_text="Player name...")
+        self.entry_whitelist_add.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        
+        btn_add = ctk.CTkButton(add_frame, text="Add", width=60, command=self._add_to_whitelist)
+        btn_add.grid(row=0, column=1)
+        
+        # Whitelist player list
+        lbl_list_title = ctk.CTkLabel(whitelist_frame, text="Whitelisted Players:", font=ctk.CTkFont(size=12))
+        lbl_list_title.grid(row=2, column=0, sticky="w", padx=15, pady=(10, 0))
+        
+        self.scroll_whitelist = ctk.CTkScrollableFrame(whitelist_frame, fg_color="transparent")
+        self.scroll_whitelist.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
+
+    def refresh_ui(self):
+        self.lbl_player_count.configure(text=f"Players Online: {len(self.connected_players)}")
+        self._populate_connected_players()
+        self._populate_whitelist()
+
+    def _populate_connected_players(self):
+        for widget in self.scroll_players.winfo_children():
+            widget.destroy()
+            
+        if not self.connected_players:
+            lbl = ctk.CTkLabel(self.scroll_players, text="No players online", text_color="gray")
+            lbl.pack(pady=20)
+            return
+
+        for player in self.connected_players:
+            item_frame = ctk.CTkFrame(self.scroll_players, fg_color=("gray85", "gray20"))
+            item_frame.pack(fill="x", pady=2, padx=5)
+            
+            lbl_name = ctk.CTkLabel(item_frame, text=player, font=ctk.CTkFont(weight="bold"))
+            lbl_name.pack(side="left", padx=10, pady=8)
+            
+            btn_ban = ctk.CTkButton(
+                item_frame, text="Ban", width=50, height=24,
+                fg_color="#ef4444", hover_color="#dc2626",
+                command=lambda p=player: self._ban_player(p)
+            )
+            btn_ban.pack(side="right", padx=(5, 10), pady=8)
+            
+            btn_kick = ctk.CTkButton(
+                item_frame, text="Kick", width=50, height=24,
+                fg_color="#f97316", hover_color="#ea580c",
+                command=lambda p=player: self._kick_player(p)
+            )
+            btn_kick.pack(side="right", padx=5, pady=8)
+
+    def _populate_whitelist(self):
+        for widget in self.scroll_whitelist.winfo_children():
+            widget.destroy()
+            
+        if not self.whitelisted_players:
+            lbl = ctk.CTkLabel(self.scroll_whitelist, text="Whitelist empty", text_color="gray")
+            lbl.pack(pady=20)
+            return
+
+        for player in self.whitelisted_players:
+            item_frame = ctk.CTkFrame(self.scroll_whitelist, fg_color=("gray85", "gray20"))
+            item_frame.pack(fill="x", pady=2, padx=5)
+            
+            lbl_name = ctk.CTkLabel(item_frame, text=player)
+            lbl_name.pack(side="left", padx=10, pady=8)
+            
+            btn_remove = ctk.CTkButton(
+                item_frame, text="X", width=28, height=24,
+                fg_color="#ef4444", hover_color="#dc2626",
+                command=lambda p=player: self._remove_from_whitelist(p)
+            )
+            btn_remove.pack(side="right", padx=10, pady=8)
+
+    # --- Actions (Mocked) ---
+    def _kick_player(self, player):
+        print(f"[Mock] Kicking player: {player}")
+        # In a real app: self.event_bus.publish(ServerEvent.SEND_COMMAND, f"kick {player}")
+        if player in self.connected_players:
+            self.connected_players.remove(player)
+            self.refresh_ui()
+
+    def _ban_player(self, player):
+        print(f"[Mock] Banning player: {player}")
+        # In a real app: self.event_bus.publish(ServerEvent.SEND_COMMAND, f"ban {player}")
+        if player in self.connected_players:
+            self.connected_players.remove(player)
+            self.refresh_ui()
+
+    def _add_to_whitelist(self):
+        player = self.entry_whitelist_add.get().strip()
+        if player and player not in self.whitelisted_players:
+            print(f"[Mock] Adding {player} to whitelist")
+            self.whitelisted_players.append(player)
+            self.entry_whitelist_add.delete(0, "end")
+            self.refresh_ui()
+
+    def _remove_from_whitelist(self, player):
+        print(f"[Mock] Removing {player} from whitelist")
+        if player in self.whitelisted_players:
+            self.whitelisted_players.remove(player)
+            self.refresh_ui()
+
+    def _toggle_whitelist(self):
+        is_enabled = self.switch_whitelist.get()
+        state = "on" if is_enabled else "off"
+        print(f"[Mock] Whitelist turned {state}")

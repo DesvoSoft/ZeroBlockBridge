@@ -60,7 +60,10 @@ class PlayitApiClient:
             raise PlayitApiException("No secret key loaded. Cannot authenticate.")
             
         url = f"{self.api_base}/{endpoint.strip('/')}"
-        headers = {"Authorization": f"agent-key {self._secret_key}"}
+        headers = {
+            "Authorization": f"agent-key {self._secret_key}",
+            "User-Agent": "ZeroBlockBridge/1.0.4"
+        }
         try:
             response = self.session.request(method, url, json=json_data, headers=headers, timeout=10)
         except requests.RequestException as e:
@@ -219,7 +222,6 @@ class PlayitApiClient:
         if os_name == "darwin":
             os_name = "macos"
 
-        from app.core.constants import PLAYIT_VERSION
         proto_data = {
             "agent_version": {
                 "official": True,
@@ -227,7 +229,7 @@ class PlayitApiClient:
                 "variant": self._get_platform_variant(),
                 "version": {
                     "platform": os_name,
-                    "version": PLAYIT_VERSION,
+                    "version": "1.0.4",
                 },
             },
             "client_addr": "0.0.0.0:0",

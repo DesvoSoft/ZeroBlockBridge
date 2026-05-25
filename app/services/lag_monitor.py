@@ -44,3 +44,6 @@ class LagMonitor:
                 "window_seconds": self._window,
             })
             self._spikes.clear()
+
+    def stop(self) -> None:
+        self._events.unsubscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
