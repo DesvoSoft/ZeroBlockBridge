@@ -263,7 +263,7 @@ class TestStop:
         m.running = True
         m.process = mock_proc
         with patch.object(platform, "system", return_value="Windows"):
-            with patch("subprocess.CREATE_NO_WINDOW", 0x08000000):
+            with patch("subprocess.CREATE_NO_WINDOW", 0x08000000, create=True):
                 with patch("subprocess.run") as mock_run:
                     m.stop()
                     taskkill_calls = [c for c in mock_run.call_args_list if "taskkill" in str(c)]
