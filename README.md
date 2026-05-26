@@ -20,12 +20,13 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ## Features
 
-- **Server Management**: 3-step wizard, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), smart caching, RAM allocation, properties editor, integrated console.
-- **Automation & Backups**: One-click ZIP backups, scheduled restarts (interval or daily time), multi-stage warnings with countdown.
+- **Server Management**: 3-step wizard, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), smart caching, RAM allocation, properties editor, integrated console, player management dashboard with whitelist controls.
+- **Automation & Backups**: One-click ZIP backups, scheduled restarts (interval or daily time), multi-stage warnings with countdown, auto-backup scheduler.
+- **Performance Monitoring**: Real-time TPS indicator, lag spike detection, server heartbeat monitoring.
 - **Modrinth Mod Browser**: Search, filter, one-click install, manage installed mods, check updates against Modrinth API.
-- **Tunneling**: Built-in Playit.gg integration, persistent sessions, soft/full reset, DNS recovery chain, agent heartbeat.
-- **Auto-Healing**: Watchdog (crash detection), heartbeat (zombie detection), lag monitor, command sanitizer — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **Developer Experience**: JDK auto-installer (Adoptium 17-21), event-driven architecture, thread safety, zero bare `except:` blocks.
+- **Tunneling**: Built-in Playit.gg integration, persistent sessions, soft/full reset, DNS recovery chain, agent heartbeat, circuit breaker with exponential backoff.
+- **Auto-Healing**: Watchdog (crash detection), heartbeat (zombie detection), lag monitor, command sanitizer, disk space pre-flight check — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Developer Experience**: JDK auto-installer (bytecode analysis detects required version), event-driven architecture, thread safety, zero bare `except:` blocks.
 
 ---
 

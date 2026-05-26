@@ -17,7 +17,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app.core.constants import JDK_CACHE_DIR
+from app.core.constants import JDK_CACHE_DIR, subprocess_flags
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +87,7 @@ def get_required_java(mc_version: str) -> int:
     return 17
 
 
-def check_java_compatibility(mc_version: str, java_major: int) -> tuple:
-    required = get_required_java(mc_version)
-    if java_major == required:
-        return True, required, f"Java {java_major} is compatible with MC {mc_version} (requires {required})."
-    return False, required, f"Java {java_major} is incompatible with MC {mc_version}. Requires Java == {required}."
+
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +168,7 @@ def _probe_java(java_path: str, source: str) -> Optional[JavaInstallation]:
         result = subprocess.run(
             [java_path, "-version"],
             capture_output=True, text=True, timeout=10,
+            **subprocess_flags(),
         )
         output = result.stderr or result.stdout
         if not output:

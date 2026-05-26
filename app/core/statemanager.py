@@ -1,9 +1,11 @@
 import threading
 import time
 
+from app.core.app_config import AppConfig
+
 _last_status: str = None
 _last_time: float = 0
-_debounce_ms: int = 200
+_debounce_ms: int = AppConfig.DEBOUNCE_MS
 _lock = threading.Lock()
 
 

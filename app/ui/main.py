@@ -23,7 +23,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.core.logic import check_java, download_server, accept_eula, install_fabric, Scheduler
+from app.core.logic import download_server, accept_eula, install_fabric, Scheduler
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
 from app.ui.server_wizard import ServerWizard
@@ -167,10 +167,6 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
-        self.lbl_tps = ctk.CTkLabel(self.status_frame, text="TPS: 0.0", text_color="#64748b", font=("Roboto Medium", 13))
-        self.lbl_tps.pack(side="left", padx=10, pady=8)
-
-        # Moved from dashboard to save space
         self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
         self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
 
@@ -188,11 +184,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_stop.pack(side="left", padx=2)
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
-        self.status_right_frame.pack(side="right", padx=20, pady=8)
+        self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)
         
-        self.lbl_server_info = ctk.CTkLabel(self.status_right_frame, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_server_info.pack(side="left", padx=(0, 15))
-        
+        self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
+        self.lbl_java_ver.pack(side="right", padx=(5, 10))
+
+        self.lbl_tps = ctk.CTkLabel(self.status_right_frame, text="TPS: 0.0", text_color="#64748b", font=("Roboto Medium", 13), width=70, anchor="e")
+        self.lbl_tps.pack(side="right", padx=(5, 5))
+
         self.btn_players = ctk.CTkButton(
             self.status_right_frame, 
             text="Players: 0", 
@@ -201,12 +200,13 @@ class MCTunnelApp(ctk.CTk):
             text_color=AppConfig.COLOR_TEXT_GRAY, 
             hover_color="#334155", 
             font=AppConfig.FONT_BODY_SMALL,
-            height=28
+            height=28,
+            width=80
         )
-        self.btn_players.pack(side="left", padx=(0, 15))
+        self.btn_players.pack(side="right", padx=(5, 5))
         
-        self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_java_ver.pack(side="left", padx=(0, 15))
+        self.lbl_server_info = ctk.CTkLabel(self.status_right_frame, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
+        self.lbl_server_info.pack(side="right", padx=(5, 10))
 
 
 
@@ -423,7 +423,7 @@ class MCTunnelApp(ctk.CTk):
         if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
             loader = stype
         
-        logger.info(f"Server Info for Mod Search: {self.zbb_manager.current_server} | MC: {mc_version} | Loader: {loader or 'any'}")
+        logger.info("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.zbb_manager.current_server, mc_version, loader or 'any')
         return (self.zbb_manager.current_server, mc_version, loader)
 
     def save_advanced_settings(self, *args):
@@ -498,7 +498,7 @@ class MCTunnelApp(ctk.CTk):
         if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
             self.players_dashboard_window.focus()
         else:
-            self.players_dashboard_window = PlayersDashboard(self, self.events)
+            self.players_dashboard_window = PlayersDashboard(self, self.events, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
@@ -791,11 +791,13 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Please enter a valid Setup Code.", toast_type="error")
             return
             
+        self.btn_link_code.configure(state="disabled")
         self.tunnel_console.log(f"[System] Linking account...")
         Toast.show(self, "Verifying code with Playit...", toast_type="info")
         
         def _link_task():
             success = self.zbb_manager.link_playit_manually(code)
+            self.after(0, lambda: self.btn_link_code.configure(state="normal"))
             if success:
                 self.after(0, lambda: self.entry_setup_code.delete(0, 'end'))
                 self.after(0, lambda: setattr(self, '_setup_expanded', False))
@@ -823,6 +825,10 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
     def on_close(self):
+        # Hide window immediately so the user perceives an instant close.
+        # The actual cleanup runs invisibly afterward.
+        self.withdraw()
+
         self.zbb_manager.shutdown()
         if hasattr(self, '_instance_lock'): self._instance_lock.release()
         self.destroy()

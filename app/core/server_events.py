@@ -11,6 +11,7 @@ class ServerEvent:
     STOPPED = "stopped"
     ERROR = "error"
     PLAYER_COUNT = "player_count"
+    PLAYER_LIST = "player_list"
     CRASHED = "crashed"
     RESTARTED = "restarted"
     ZOMBIE_DETECTED = "zombie_detected"
@@ -50,4 +51,4 @@ class EventBus:
             try:
                 callback(data)
             except Exception as e:
-                logger.error(f"[EventBus] Error in callback for {event_type}: {e}", exc_info=True)
+                logger.error("[EventBus] Error in callback for %s: %s", event_type, e, exc_info=True)

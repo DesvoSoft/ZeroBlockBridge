@@ -87,39 +87,3 @@ def calculate_flags(ram_mb: int, java_major: int = 17) -> list:
     return flags
 
 
-def flags_to_string(ram_mb: int) -> str:
-    return " ".join(calculate_flags(ram_mb))
-
-
-def build_java_command(
-    java_path: str,
-    ram_mb: int,
-    jar_file: str,
-    use_aikars: bool = True,
-    extra_args: list = None,
-) -> list:
-    """
-    Build the complete java command line for starting a Minecraft server.
-
-    Args:
-        java_path: Path to java binary (or "java" for PATH).
-        ram_mb: RAM allocation in MB.
-        jar_file: Server jar filename.
-        use_aikars: Whether to apply Aikar's flags.
-        extra_args: Additional JVM arguments.
-
-    Returns:
-        List of command-line arguments for subprocess.Popen.
-    """
-    cmd = [java_path]
-
-    if use_aikars:
-        cmd.extend(calculate_flags(ram_mb))
-    else:
-        cmd.extend([f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"])
-
-    if extra_args:
-        cmd.extend(extra_args)
-
-    cmd.extend(["-jar", jar_file, "nogui"])
-    return cmd

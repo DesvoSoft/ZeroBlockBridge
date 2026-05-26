@@ -1,6 +1,6 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-05-22
+> **Última actualización:** 2026-05-25
 
 ---
 
@@ -146,7 +146,7 @@
 
 ## Fase 3: Foundation — Refactors + Thread Safety + Tests ✅
 
-**Objetivo:** Completar refactors pendientes y corregir bug risks de concurrencia identificados en la revisión de código. **Completada en su totalidad — 375 tests pasan.**
+**Objetivo:** Completar refactors pendientes y corregir bug risks de concurrencia identificados en la revisión de código. **Completada en su totalidad — 364 tests pasan.**
 
 ### 3A. Refactors Estructurales Pendientes (del plan original)
 
@@ -180,6 +180,14 @@
 | 3.25 | Cross-platform test isolation — mockear `sys.platform`, `platform.system()`, `platform.machine()` en tests existentes | `test_java_installer.py`, `test_provisioning.py` | 🟢 |
 
 ---
+
+## FIX-P3: Whitelist + TPS + Wizard Security ✅
+
+| # | Bug | Archivo | Fix |
+|---|-----|---------|-----|
+| P3.1 | Whitelist toggle no persiste a server.properties | `players_dashboard.py` | `_toggle_whitelist()` ahora llama `save_server_properties()`; switch carga estado real del archivo |
+| P3.2 | TPS máximo 10 (debe ser 20) | `orchestrators.py` | Tick loop sleep 100ms → 50ms (20Hz); max TPS ahora ~20 |
+| P3.3 | Wizard Step 3 sin settings de seguridad | `server_wizard.py`, `scaffolder.py` | 8 nuevos campos: enforce-whitelist, pvp, online-mode, max-players, spawn-protection, enable-command-block, allow-flight, enforce-secure-profile |
 
 ## Fase 4: Auto-Backup Scheduler
 
@@ -462,7 +470,7 @@ F0 → F0.5 → F1 → F2 → F3 → F4 → FA → FB → FIX-P1 → FIX-P2 → 
 
 ### Testing
 ```powershell
-python -m pytest tests/ -v           # Regresión (375 tests)
+python -m pytest tests/ -v           # Regresión (364 tests)
 python -m pytest tests/ -x -q        # Rápido (fail-fast)
 python -m py_compile app/ruta.py     # Sintaxis
 ```

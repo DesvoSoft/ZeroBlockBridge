@@ -32,6 +32,14 @@ class ServerWizard(ctk.CTkToplevel):
             "difficulty": "normal",
             "hardcore": False,
             "whitelist": False,
+            "enforce_whitelist": False,
+            "pvp": True,
+            "online_mode": True,
+            "max_players": 20,
+            "spawn_protection": 16,
+            "enable_command_block": False,
+            "allow_flight": False,
+            "enforce_secure_profile": True,
             "view_distance": "10",
             "simulation_distance": "10",
             "location": str(SERVERS_DIR),
@@ -76,6 +84,10 @@ class ServerWizard(ctk.CTkToplevel):
         self.transient(parent)
         self.wait_visibility()
         self.grab_set()
+
+    def destroy(self):
+        self.vm.remove_callback(self.on_versions_refreshed)
+        super().destroy()
 
     def update_header(self, title):
         self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps}")
@@ -161,7 +173,8 @@ class ServerWizard(ctk.CTkToplevel):
         try:
             img = ctk.CTkImage(Image.open(path), size=(100, 100))
             self.icon_preview.configure(image=img, text="")
-        except Exception:
+        except Exception as e:
+            logger.debug("Error loading image: %s", e)
             self.icon_preview.configure(text="Error")
 
     # --- Step 2: Engine & Resources ---
@@ -352,20 +365,24 @@ class ServerWizard(ctk.CTkToplevel):
         self.clear_content()
         self.update_header("Rules & World")
         
+        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+        p = scroll
+        
         # Game Mode
-        ctk.CTkLabel(self.content_frame, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_gamemode = ctk.CTkOptionMenu(self.content_frame, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
+        ctk.CTkLabel(p, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.combo_gamemode = ctk.CTkOptionMenu(p, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
         self.combo_gamemode.pack(fill="x", pady=(0, 10))
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         
         # Difficulty
-        ctk.CTkLabel(self.content_frame, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_difficulty = ctk.CTkOptionMenu(self.content_frame, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
+        ctk.CTkLabel(p, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.combo_difficulty = ctk.CTkOptionMenu(p, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         
         # Toggles Frame
-        toggles_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        toggles_frame = ctk.CTkFrame(p, fg_color="transparent")
         toggles_frame.pack(fill="x", pady=(0, 15))
         
         self.var_hardcore = ctk.BooleanVar(value=self.wizard_data["hardcore"])
@@ -379,23 +396,69 @@ class ServerWizard(ctk.CTkToplevel):
         self.var_auto_jdk = ctk.BooleanVar(value=self.wizard_data["auto_install_jdk"])
         self.chk_auto_jdk = ctk.CTkSwitch(toggles_frame, text="Auto-install JDK if missing", variable=self.var_auto_jdk)
         self.chk_auto_jdk.pack(side="left", padx=(20, 0))
+
+        # Security section
+        sec_frame = ctk.CTkFrame(p, fg_color="transparent")
+        sec_frame.pack(fill="x", pady=(10, 10))
+
+        ctk.CTkLabel(sec_frame, text="Security:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+
+        sec_toggles = ctk.CTkFrame(sec_frame, fg_color="transparent")
+        sec_toggles.pack(fill="x")
+
+        self.var_online_mode = ctk.BooleanVar(value=self.wizard_data["online_mode"])
+        self.chk_online_mode = ctk.CTkSwitch(sec_toggles, text="Online Mode", variable=self.var_online_mode)
+        self.chk_online_mode.pack(side="left", padx=(0, 20))
+
+        self.var_enforce_whitelist = ctk.BooleanVar(value=self.wizard_data["enforce_whitelist"])
+        self.chk_enforce_whitelist = ctk.CTkSwitch(sec_toggles, text="Enforce Whitelist", variable=self.var_enforce_whitelist)
+        self.chk_enforce_whitelist.pack(side="left", padx=(0, 20))
+
+        self.var_pvp = ctk.BooleanVar(value=self.wizard_data["pvp"])
+        self.chk_pvp = ctk.CTkSwitch(sec_toggles, text="PvP", variable=self.var_pvp)
+        self.chk_pvp.pack(side="left", padx=(0, 20))
+
+        self.var_allow_flight = ctk.BooleanVar(value=self.wizard_data["allow_flight"])
+        self.chk_allow_flight = ctk.CTkSwitch(sec_toggles, text="Allow Flight", variable=self.var_allow_flight)
+        self.chk_allow_flight.pack(side="left", padx=(0, 20))
+
+        self.var_enforce_secure_profile = ctk.BooleanVar(value=self.wizard_data["enforce_secure_profile"])
+        self.chk_enforce_secure_profile = ctk.CTkSwitch(sec_toggles, text="Secure Profile", variable=self.var_enforce_secure_profile)
+        self.chk_enforce_secure_profile.pack(side="left")
+
+        sec_row2 = ctk.CTkFrame(p, fg_color="transparent")
+        sec_row2.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(sec_row2, text="Max Players:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
+        self.entry_max_players = ctk.CTkEntry(sec_row2, width=60, corner_radius=12, height=32)
+        self.entry_max_players.pack(side="left", padx=(0, 20))
+        self.entry_max_players.insert(0, str(self.wizard_data["max_players"]))
+
+        ctk.CTkLabel(sec_row2, text="Spawn Protection:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
+        self.entry_spawn_protection = ctk.CTkEntry(sec_row2, width=60, corner_radius=12, height=32)
+        self.entry_spawn_protection.pack(side="left", padx=(0, 20))
+        self.entry_spawn_protection.insert(0, str(self.wizard_data["spawn_protection"]))
+
+        self.var_enable_command_block = ctk.BooleanVar(value=self.wizard_data["enable_command_block"])
+        self.chk_enable_command_block = ctk.CTkSwitch(sec_row2, text="Command Blocks", variable=self.var_enable_command_block)
+        self.chk_enable_command_block.pack(side="left")
         
         # Seed
-        ctk.CTkLabel(self.content_frame, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(self.content_frame, placeholder_text="Leave blank for random", corner_radius=12, height=36)
+        ctk.CTkLabel(p, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=12, height=36)
         self.entry_seed.pack(fill="x", pady=(0, 10))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
             
         # Playit.gg Port
-        ctk.CTkLabel(self.content_frame, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_port = ctk.CTkEntry(self.content_frame, placeholder_text="25565", corner_radius=12, height=36)
+        ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        self.entry_port = ctk.CTkEntry(p, placeholder_text="25565", corner_radius=12, height=36)
         self.entry_port.pack(fill="x", pady=(0, 10))
         if self.wizard_data.get("playit_port"):
             self.entry_port.insert(0, str(self.wizard_data["playit_port"]))
             
         # Distances (Sliders)
-        dist_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        dist_frame = ctk.CTkFrame(p, fg_color="transparent")
         dist_frame.pack(fill="x", pady=(0, 10))
         
         # View Distance
@@ -449,6 +512,22 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
             
+            self.wizard_data["online_mode"] = self.var_online_mode.get()
+            self.wizard_data["enforce_whitelist"] = self.var_enforce_whitelist.get()
+            self.wizard_data["pvp"] = self.var_pvp.get()
+            self.wizard_data["allow_flight"] = self.var_allow_flight.get()
+            self.wizard_data["enforce_secure_profile"] = self.var_enforce_secure_profile.get()
+            self.wizard_data["enable_command_block"] = self.var_enable_command_block.get()
+            
+            try:
+                self.wizard_data["max_players"] = int(self.entry_max_players.get().strip())
+            except ValueError:
+                self.wizard_data["max_players"] = 20
+            try:
+                self.wizard_data["spawn_protection"] = int(self.entry_spawn_protection.get().strip())
+            except ValueError:
+                self.wizard_data["spawn_protection"] = 16
+            
             port_val = self.entry_port.get().strip()
             self.wizard_data["playit_port"] = port_val if port_val else "25565"
             
@@ -467,6 +546,21 @@ class ServerWizard(ctk.CTkToplevel):
             self.wizard_data["whitelist"] = self.var_whitelist.get()
             self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
             self.wizard_data["seed"] = self.entry_seed.get().strip()
+            
+            self.wizard_data["online_mode"] = self.var_online_mode.get()
+            self.wizard_data["enforce_whitelist"] = self.var_enforce_whitelist.get()
+            self.wizard_data["pvp"] = self.var_pvp.get()
+            self.wizard_data["allow_flight"] = self.var_allow_flight.get()
+            self.wizard_data["enforce_secure_profile"] = self.var_enforce_secure_profile.get()
+            self.wizard_data["enable_command_block"] = self.var_enable_command_block.get()
+            try:
+                self.wizard_data["max_players"] = int(self.entry_max_players.get().strip())
+            except ValueError:
+                pass
+            try:
+                self.wizard_data["spawn_protection"] = int(self.entry_spawn_protection.get().strip())
+            except ValueError:
+                pass
             
             port_val = getattr(self, "entry_port", None)
             if port_val:

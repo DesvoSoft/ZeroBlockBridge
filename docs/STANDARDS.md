@@ -27,7 +27,7 @@ self.events.subscribe(ServerEvent.STATUS_CHANGED, self._update_ui_status)
 ## 2. Concurrency Standards
 ZBB is a multi-threaded application handling multiple server processes and network monitors.
 
-*   **Thread Safety**: Use `threading.RLock` for all shared state access (e.g., in `EventBus` or `CircularBuffer`).
+*   **Thread Safety**: Use `threading.Lock` for shared state access. EventBus uses `threading.RLock` for safe recursive subscribe/unsubscribe during iteration.
 *   **Daemon Threads**: All background threads (monitors, listeners, API pollers) **must** be initialized with `daemon=True` to ensure the application exits cleanly.
 *   **Non-Blocking UI**: Never perform I/O, heavy computation, or network requests on the main thread. Use `threading.Thread` for these tasks.
 *   **Race Condition Prevention**: Always use context managers (`with self._lock:`) when accessing shared resources.

@@ -33,6 +33,7 @@ class HeartbeatMonitor:
         self._check_interval = check_interval
         self._suspect_after = suspect_after
         self._probe_timeout = probe_timeout
+        self._lock = threading.Lock()
         self._last_output = time.time()
         self._last_probe = 0.0
         self._last_response = 0.0
@@ -50,34 +51,36 @@ class HeartbeatMonitor:
         self._events.unsubscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
     def observe_line(self, line: str) -> None:
-        if not self._running: return
-        self._last_output = time.time()
-        if any(p in line for p in PLAYER_LIST_PATTERNS):
-            self._last_response = time.time()
-            self._waiting_for_probe = False
+        with self._lock:
+            if not self._running: return
+            self._last_output = time.time()
+            if any(p in line for p in PLAYER_LIST_PATTERNS):
+                self._last_response = time.time()
+                self._waiting_for_probe = False
 
     def tick(self, now: float) -> None:
-        if not self._running:
-            return
+        with self._lock:
+            if not self._running:
+                return
 
-        runner = self._get_runner()
-        if not runner or not runner.running:
-            return
+            runner = self._get_runner()
+            if not runner or not runner.running:
+                return
 
-        if self._waiting_for_probe:
-            if now - self._last_probe >= self._probe_timeout:
-                if self._last_response < self._last_probe:
-                    logger.warning("Heartbeat: zombie detected (no response to probe)")
-                    silence = now - self._last_output
-                    self._events.emit(ServerEvent.ZOMBIE_DETECTED, {"silence_seconds": silence})
-                self._waiting_for_probe = False
-            return
+            if self._waiting_for_probe:
+                if now - self._last_probe >= self._probe_timeout:
+                    if self._last_response < self._last_probe:
+                        logger.warning("Heartbeat: zombie detected (no response to probe)")
+                        silence = now - self._last_output
+                        self._events.emit(ServerEvent.ZOMBIE_DETECTED, {"silence_seconds": silence})
+                    self._waiting_for_probe = False
+                return
 
-        if now - self._last_check >= self._check_interval:
-            self._last_check = now
-            silence = now - self._last_output
-            if silence >= self._suspect_after:
-                logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
-                runner.send_command("list")
-                self._last_probe = now
-                self._waiting_for_probe = True
+            if now - self._last_check >= self._check_interval:
+                self._last_check = now
+                silence = now - self._last_output
+                if silence >= self._suspect_after:
+                    logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
+                    runner.send_command("list")
+                    self._last_probe = now
+                    self._waiting_for_probe = True

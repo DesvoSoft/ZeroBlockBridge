@@ -17,6 +17,9 @@ from app.core.playit_manager import PlayitManager
 from app.services.console_buffer import CircularBuffer
 from app.core.app_config import AppConfig
 from app.core.version_manager import VersionManager
+from app.services.java_installer import JdkManagerInstance
+from app.services.java_detector import JavaDetector, get_required_java
+from app.services.bytecode_analyzer import analyze_jar_bytecode
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +29,7 @@ class ServerState(Enum):
     ONLINE = auto()
     STOPPING = auto()
 
-def _check_disk_space(min_gb=1):
-    import shutil
-    try:
-        total, used, free = shutil.disk_usage("/")
-        return free >= min_gb * (1024**3)
-    except Exception:
-        return True
+
 
 from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
 from app.core.protocols import ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol
@@ -47,7 +44,7 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
         self.current_server: Optional[str] = None
         self.server_runner: Optional[ServerRunner] = None
         self.state: ServerState = ServerState.OFFLINE
-        self.executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="ZBB_Worker")
+        self.executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="ZBB_Worker")
         
         # Monitors
         self._watchdog: Optional[Watchdog] = None
@@ -138,9 +135,10 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
 
     def select_server(self, server_name: str) -> None:
         self.current_server = server_name
+        from app.core.logic import invalidate_meta_cache
+        invalidate_meta_cache(server_name)
 
     def _auto_install_java(self, required_java: int) -> Optional[str]:
-        from app.services.java_installer import JdkManagerInstance
         try:
             java_bin = JdkManagerInstance.ensure_java(required_java)
             self._jdk_source = "portable"
@@ -148,7 +146,8 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Using auto-installed JDK {required_java} at {java_bin}")
             self.events.emit(ServerEvent.STARTING, {"jdk_source": "portable", "required_java": required_java})
             return java_bin
-        except Exception:
+        except Exception as e:
+            logger.error("Auto-install failed: %s", e)
             return None
 
     def _launch_server(self, ram: str, java_bin: str, use_aikars: bool, required_java: int, config: dict) -> bool:
@@ -162,9 +161,6 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
     def _resolve_java_bin(self, server_dir: str, mc_version: str,
                           required_java_cached: Optional[int],
                           auto_install_jdk: bool) -> Optional[tuple[str, int]]:
-        from app.services.java_detector import JavaDetector, get_required_java
-        from app.services.bytecode_analyzer import analyze_jar_bytecode
-
         if required_java_cached:
             required_java = required_java_cached
             source = "cached-metadata"
@@ -326,6 +322,7 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
     def _stop_monitors(self) -> None:
         if self._heartbeat: self._heartbeat.stop()
         if self._watchdog: self._watchdog.stop()
+        if self._lag_monitor: self._lag_monitor.stop()
 
     # --- Tunnel Management ---
     def get_server_port(self, server_name: Optional[str] = None) -> int:
@@ -358,12 +355,6 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
     def _start_tick_loop(self) -> None:
         self.scheduler_orchestrator._start_tick_loop()
 
-    def _check_auto_backup(self) -> None:
-        self.backup_orchestrator._check_auto_backup()
-
-    def _run_auto_backup(self) -> None:
-        self.backup_orchestrator._run_auto_backup()
-
     def _send_system_message(self, message: str) -> None:
         """Sends a message to the console and in-game via CommandSanitizer."""
         if self.server_runner and self.server_runner.running:
@@ -372,14 +363,14 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
 
     def _handle_restart_request(self, data: Optional[dict] = None) -> None:
         """Handles internal requests to restart the server gracefully."""
-        if not self._restart_lock.acquire(blocking=False):
-            logger.warning("[ZBBManager] Restart already in progress, ignoring duplicate request.")
-            return
-        reason = (data or {}).get("reason", "manual")
-        self.events.emit(ServerEvent.CONSOLE_LINE, f"[ZBBManager] Handling restart request (reason: {reason})...")
-
         def _restart():
+            if not self._restart_lock.acquire(blocking=False):
+                logger.warning("[ZBBManager] Restart already in progress, ignoring duplicate request.")
+                return
             try:
+                reason = (data or {}).get("reason", "manual")
+                self.events.emit(ServerEvent.CONSOLE_LINE, f"[ZBBManager] Handling restart request (reason: {reason})...")
+
                 for i in [5, 4, 3, 2]:
                     self._send_system_message(f"Restarting in {i}...")
                     time.sleep(1)
@@ -399,13 +390,11 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
                         else:
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
 
-                    # Since it is a blocking step in the restart sequence, we keep it as a thread or block.
-                    # Or we can submit to executor and wait for the future
                     future = self.executor.submit(_do_backup)
                     try:
                         future.result(timeout=300)
                     except Exception as e:
-                        logger.error(f"Backup during restart failed or timed out: {e}")
+                        logger.error("Backup during restart failed or timed out: %s", e)
                     time.sleep(1)
 
                 self.stop_server()
@@ -429,17 +418,62 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
         self.executor.submit(_restart)
 
     def shutdown(self) -> None:
-        """Cleanly stops all services on app exit."""
+        """Cleanly stops all services on app exit.
+
+        Independent subsystems (monitors, tunnel, tick-loop) are stopped
+        concurrently while the Minecraft server gracefully drains, so the
+        overall wall-clock time is dominated by the server stop rather
+        than the sum of all timeouts.
+        """
+        # 1. Signal the tick loop to exit (non-blocking flag flip)
         self._tick_running = False
-        if self._tick_thread and self._tick_thread.is_alive():
-            self._tick_thread.join(timeout=5.0)
-            
+
+        # 2. Stop monitors immediately (they are just event listeners)
+        self._stop_monitors()
+
+        # 3. Stop tunnel and server concurrently — they are independent.
+        #    NOTE: Do NOT set _shutdown_done = True here. The flag is set only
+        #    after the tunnel thread completes. If join() times out before
+        #    stop() finishes, the atexit backstop in PlayitManager will still
+        #    fire the by-name taskkill to guarantee no orphaned playit.exe.
+        tunnel_thread = threading.Thread(
+            target=self._safe_stop_tunnel, daemon=True, name="ShutdownTunnel"
+        )
+        tunnel_thread.start()
+
+        # Server stop (sends 'stop' command, waits for graceful exit)
         self.stop_server()
         if self.server_runner and self.server_runner.process:
             try:
                 self.server_runner.process.wait(timeout=5)
-            except Exception:
-                pass
-                
-        self._stop_monitors()
-        self.stop_tunnel()
+            except Exception as e:
+                logger.debug("Error waiting for server process: %s", e)
+
+        # 4. Wait for tick thread — short timeout since it runs at 100ms
+        if self._tick_thread and self._tick_thread.is_alive():
+            self._tick_thread.join(timeout=2.0)
+
+        # 5. Wait for tunnel teardown to finish (stop() blocks until process
+        #    is confirmed dead, so this join is almost always instant).
+        tunnel_thread.join(timeout=5.0)
+
+        # 6. Mark playit as done AFTER the tunnel is confirmed stopped, so
+        #    the atexit backstop doesn't skip the by-name kill prematurely.
+        self.playit_manager._shutdown_done = True
+
+        # 7. Drain the thread pool (15s max). wait=True can hang if a task
+        #    is stuck (e.g., playit exponential-backoff sleep). Instead,
+        #    shutdown(wait=False) and manually join with timeout.
+        try:
+            self.executor.shutdown(wait=False)
+            for t in getattr(self.executor, '_threads', []):
+                t.join(timeout=15.0)
+        except Exception as e:
+            logger.debug("Error shutting down executor: %s", e)
+
+    def _safe_stop_tunnel(self) -> None:
+        """Stop tunnel in a background thread, swallowing exceptions."""
+        try:
+            self.stop_tunnel()
+        except Exception as e:
+            logger.debug("Tunnel stop during shutdown: %s", e)

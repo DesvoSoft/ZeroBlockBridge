@@ -108,6 +108,8 @@ sequenceDiagram
 | `app/core/playit_manager.py` | Ciclo de vida del agente Playit.gg |
 | `app/core/statemanager.py` | Gestión de estado global con debounce |
 | `app/core/server_events.py` | Sistema EventBus (subscribe/emit) |
+| `app/core/orchestrators.py` | 4 sub-orquestadores (Server, Backup, Tunnel, Scheduler) |
+| `app/core/protocols.py` | Protocol classes para structural typing |
 | `app/services/watchdog.py` | Detección de crashes y auto-reinicio |
 | `app/services/heartbeat.py` | Monitor de latido (detección de zombies) |
 | `app/services/lag_monitor.py` | Monitor de lag del servidor |
@@ -123,5 +125,6 @@ sequenceDiagram
 | `app/services/modrinth.py` | Cliente API de Modrinth |
 | `app/services/console_buffer.py` | Buffer circular de consola |
 | `app/services/settings_manager.py` | Configuración global de la app |
-| `app/services/toast.py` | Sistema de notificaciones toast (UI) |
+| `app/ui/toast.py` | Sistema de notificaciones toast (UI) |
+| `app/ui/players_dashboard.py` | Panel de gestión de jugadores y whitelist |
 | `app/core/app_config.py` | Configuración de la aplicación (temas, tokens) |

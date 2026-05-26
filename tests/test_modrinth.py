@@ -124,19 +124,13 @@ class TestModrinthDownload:
             }
         ]
         client = ModrinthClient()
-        # Mock the actual download to avoid network calls
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.headers = {"content-length": "0"}
-        mock_resp.iter_content.return_value = []
-        mock_resp.raise_for_status = MagicMock()
-
-        with patch.object(client.session, "get", return_value=mock_resp):
+        # Mock download_with_verification to avoid network calls
+        with patch("app.services.modrinth.download_with_verification", return_value=(True, "primary.jar", None)) as mock_dl:
             with patch("os.makedirs"):
                 with patch("builtins.open", MagicMock()):
                     client.download_mod("sodium", "test_server", "1.20.1", "fabric")
-                    client.session.get.assert_called_once()
-                    call_url = client.session.get.call_args[0][0]
+                    mock_dl.assert_called_once()
+                    call_url = mock_dl.call_args[0][0]
                     assert "primary.jar" in call_url
 
 
@@ -221,7 +215,6 @@ class TestModrinthCheckUpdates:
 
         client = ModrinthClient()
         with patch.object(client, "session") as mock_session:
-            mock_session.request.return_value = MagicMock(status_code=200, json=lambda: {})
             mock_session.post.return_value = mock_resp
             with patch("builtins.open", mock_open(read_data=b"jarcontent")):
                 results = client.check_updates("test_server", "1.20.1", "fabric")
@@ -244,7 +237,6 @@ class TestModrinthCheckUpdates:
 
         client = ModrinthClient()
         with patch.object(client, "session") as mock_session:
-            mock_session.request.return_value = MagicMock(status_code=200, json=lambda: {})
             mock_session.post.return_value = mock_resp
             with patch("builtins.open", mock_open(read_data=b"jarcontent")):
                 results = client.check_updates("test_server", "1.20.1", "fabric")

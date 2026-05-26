@@ -268,8 +268,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 info = self.get_server_info()
                 if info:
                     _, mc_version, loader = info
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Image load error: %s", e)
         self._search_query = query
         self._search_project_type = project_type
         self._search_mc_version = mc_version
@@ -301,7 +301,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 total_shown = len(hits)
                 self.after(0, lambda: self._render_results(total_shown))
             except Exception as e:
-                logger.error(f"Failed to load popular mods: {e}")
+                logger.error("Failed to load popular mods: %s", e)
             finally:
                 self.after(0, lambda: self._set_status("Ready"))
                 
@@ -472,8 +472,9 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self._do_install_version(versions[0], server_name, loader, title)
                 else:
                     self.after(0, lambda: self._show_version_picker(versions, server_name, loader, title))
-            except Exception as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+            except Exception as e:
+                logger.debug("Project fetch error: %s", e)
+                self.after(0, lambda e=e: self._set_status(f"✗ Failed to load versions: {e}"))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
@@ -701,8 +702,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             ctk_img = ctk.CTkImage(img, size=(48, 48))
             _ICON_CACHE[icon_url] = ctk_img
             self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Image fetch error: %s", e)
 
     def _apply_icon(self, icon_frame, lbl_initial, ctk_img):
         lbl_initial.destroy()

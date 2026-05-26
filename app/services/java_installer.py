@@ -147,8 +147,6 @@ def _fetch_asset_info(version: int) -> dict:
 
 
 class JdkManager:
-    def __init__(self):
-        _JDK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def get_java_path(self, version: int) -> Optional[str]:
         cache_dir = _jdk_cache_dir(version)
@@ -279,8 +277,8 @@ class JdkManager:
                             rj = meta.get("required_java")
                             if rj:
                                 active_versions.add(int(rj))
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("Failed parsing server meta: %s", e)
         if not _JDK_CACHE_DIR.exists():
             return
         for entry in _JDK_CACHE_DIR.iterdir():

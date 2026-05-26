@@ -12,12 +12,12 @@ import time
 from pathlib import Path
 from typing import Optional, Callable, Any
 
-from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL
+from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 import re
 
-_ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+from app.core.constants import ANSI_ESCAPE_RE
 
 # Per-server threading.Events for jar normalization synchronization
 _jar_ready_events: dict[str, threading.Event] = {}
@@ -75,24 +75,24 @@ def save_config(config: dict) -> None:
         json.dump(config, f, indent=4)
 
 _meta_lock = threading.Lock()
-_meta_cache = {}
+_meta_cache: dict[str, dict] = {}
+
+def invalidate_meta_cache(server_name: str) -> None:
+    with _meta_lock:
+        _meta_cache.pop(server_name, None)
 
 def get_server_meta(server_name: str) -> dict:
-    """Centralized reader for server metadata.json with caching."""
+    """Centralized reader for server metadata.json with write-through cache."""
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
     with _meta_lock:
-        now = time.time()
         if server_name in _meta_cache:
-            cache_time, data = _meta_cache[server_name]
-            if now - cache_time < 5.0:
-                return data.copy()
-                
+            return _meta_cache[server_name].copy()
         if not os.path.exists(meta_path):
             return {}
         try:
             with open(meta_path, "r") as f:
-                data = json.load(f)
-                _meta_cache[server_name] = (now, data)
+                data: dict = json.load(f)
+                _meta_cache[server_name] = data
                 return data.copy()
         except (json.JSONDecodeError, OSError) as e:
             logger.error("Failed to load metadata for %s: %s", server_name, e)
@@ -100,78 +100,37 @@ def get_server_meta(server_name: str) -> dict:
 
 def set_server_meta(server_name: str, key: str, value: Any) -> bool:
     """Centralized writer for server metadata.json."""
-    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    with _meta_lock:
-        try:
-            now = time.time()
-            if server_name in _meta_cache and now - _meta_cache[server_name][0] < 5.0:
-                meta = _meta_cache[server_name][1].copy()
-            else:
-                if os.path.exists(meta_path):
-                    with open(meta_path, "r") as f:
-                        meta = json.load(f)
-                else:
-                    meta = {}
-            
-            meta[key] = value
-            with open(meta_path, "w") as f:
-                json.dump(meta, f, indent=4)
-            _meta_cache[server_name] = (time.time(), meta)
-            return True
-        except (OSError, json.JSONDecodeError) as e:
-            logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
-            return False
+    return update_server_meta(server_name, {key: value})
 
 def update_server_meta(server_name: str, updates: dict) -> bool:
-    """Atomic multi-key update for server metadata.json."""
+    """Atomic multi-key update for server metadata.json with write-through cache."""
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
     with _meta_lock:
         try:
-            now = time.time()
-            if server_name in _meta_cache and now - _meta_cache[server_name][0] < 5.0:
-                meta = _meta_cache[server_name][1].copy()
+            if server_name in _meta_cache:
+                meta = _meta_cache[server_name].copy()
+            elif os.path.exists(meta_path):
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
             else:
-                if os.path.exists(meta_path):
-                    with open(meta_path, "r") as f:
-                        meta = json.load(f)
-                else:
-                    meta = {}
-                    
+                meta = {}
             meta.update(updates)
             with open(meta_path, "w") as f:
                 json.dump(meta, f, indent=4)
-            _meta_cache[server_name] = (time.time(), meta)
+            _meta_cache[server_name] = meta
             return True
         except (OSError, json.JSONDecodeError) as e:
             logger.error("Failed to update metadata for %s: %s", server_name, e)
             return False
 
-def check_java() -> Optional[str]:
-    """Check if a compatible Java installation is available on the system.
-    
-    Returns:
-        str: The path to the java executable if found, None otherwise.
-    """
-    from app.services.java_detector import JavaDetector
-    
-    detector = JavaDetector()
-    installations = detector.detect_all()
-    if installations:
-        # Return the path to the most preferred installation (highest Java version)
-        best = installations[0]
-        return best.path
-    return None
 
 def create_server_directory(server_name: str, server_type: str = "Vanilla", version: str = "1.20.1") -> str:
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
         os.makedirs(path)
-    # Atomic Metadata: ensure metadata.json exists immediately after folder creation
-    metadata_path = os.path.join(path, "metadata.json")
-    if not os.path.exists(metadata_path):
-        with open(metadata_path, "w") as f:
-            json.dump({"name": server_name, "ram": 2048, "type": server_type, "version": version}, f, indent=4)
+    if not os.path.exists(os.path.join(path, "metadata.json")):
+        update_server_meta(server_name, {"name": server_name, "ram": 2048, "type": server_type, "version": version})
     return path
 
 def download_server(server_name: str, server_type: str, version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
@@ -202,29 +161,16 @@ def download_server(server_name: str, server_type: str, version: str, progress_c
         except Exception as e:
             logger.warning("Failed to fetch SHA1 for validation: %s", e)
 
-    if expected_sha1:
-        from app.services.sha1_validator import download_with_verification
-        success, path, error = download_with_verification(
-            url, jar_path,
-            expected_sha1=expected_sha1,
-            progress_callback=progress_callback,
-            max_retries=3,
-        )
-        if not success:
-            logger.error("Download with SHA1 verification failed: %s", error)
-            return None
-    else:
-        # Fallback to simple download with retry on network errors
-        from app.services.sha1_validator import download_with_verification
-        success, path, error = download_with_verification(
-            url, jar_path,
-            expected_sha1=None,
-            progress_callback=progress_callback,
-            max_retries=3,
-        )
-        if not success:
-            logger.error("Download failed after retries: %s", error)
-            return None
+    from app.services.sha1_validator import download_with_verification
+    success, path, error = download_with_verification(
+        url, jar_path,
+        expected_sha1=expected_sha1,
+        progress_callback=progress_callback,
+        max_retries=3,
+    )
+    if not success:
+        logger.error("Download failed: %s", error)
+        return None
 
     normalize_server_jar(server_path)
     return jar_path
@@ -253,13 +199,14 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
-    except Exception:
+    except Exception as e:
+        logger.error("Installer failed: %s", e)
         return None
 
     cmd = ["java", "-jar", installer_name] + installer_args
     try:
         if progress_callback: progress_callback(0.5)
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
         if progress_callback: progress_callback(0.9)
         normalize_server_jar(server_path)
         return server_path
@@ -273,6 +220,20 @@ def install_fabric(server_name: str, mc_version: str, progress_callback: Optiona
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
         return os.path.join(server_path, "fabric-server-launch.jar")
     return None
+
+
+def _try_link_or_copy(src: str, dest: str, debug_name: str) -> bool:
+    try:
+        src_rel = os.path.relpath(src, os.path.dirname(dest)) if os.path.isabs(src) else src
+        os.symlink(src_rel, dest)
+        return True
+    except (OSError, NotImplementedError):
+        try:
+            shutil.copy2(src, dest)
+            return True
+        except Exception as e:
+            logger.debug("Normalize: %s copy failed: %s", debug_name, e)
+            return False
 
 
 def normalize_server_jar(server_dir: str) -> bool:
@@ -307,30 +268,14 @@ def normalize_server_jar(server_dir: str) -> bool:
     # Fabric
     fabric_jar = os.path.join(server_dir, "fabric-server-launch.jar")
     if os.path.exists(fabric_jar):
-        try:
-            os.symlink("fabric-server-launch.jar", server_jar_path)
-            result = True
-        except (OSError, NotImplementedError):
-            try:
-                shutil.copy2(fabric_jar, server_jar_path)
-                result = True
-            except Exception as e:
-                logger.debug("Normalize: fabric copy failed: %s", e)
+        result = _try_link_or_copy(fabric_jar, server_jar_path, "fabric")
 
     # Forge (legacy: forge-*.jar, excluding installer)
     if not result:
         for fname in os.listdir(server_dir):
             if fname.startswith("forge-") and fname.endswith(".jar") and "installer" not in fname:
                 src = os.path.join(server_dir, fname)
-                try:
-                    os.symlink(fname, server_jar_path)
-                    result = True
-                except (OSError, NotImplementedError):
-                    try:
-                        shutil.copy2(src, server_jar_path)
-                        result = True
-                    except Exception as e:
-                        logger.debug("Normalize: forge legacy copy failed: %s", e)
+                result = _try_link_or_copy(src, server_jar_path, "forge legacy")
                 if result:
                     break
 
@@ -343,17 +288,12 @@ def normalize_server_jar(server_dir: str) -> bool:
                 try:
                     with open(args_path, "r") as f:
                         content = f.read()
-                    import re as _re
-                    lib_jar_match = _re.search(r'([^\s]+\.jar)', content)
+                    lib_jar_match = re.search(r'([^\s]+\.jar)', content)
                     if lib_jar_match:
                         lib_rel = lib_jar_match.group(1)
                         lib_abs = os.path.join(server_dir, lib_rel)
                         if os.path.exists(lib_abs):
-                            try:
-                                os.symlink(os.path.relpath(lib_abs, server_dir), server_jar_path)
-                            except (OSError, NotImplementedError):
-                                shutil.copy2(lib_abs, server_jar_path)
-                            result = True
+                            result = _try_link_or_copy(lib_abs, server_jar_path, "forge modern")
                 except Exception as e:
                     logger.debug("Normalize: forge modern detection failed: %s", e)
                 break
@@ -363,15 +303,7 @@ def normalize_server_jar(server_dir: str) -> bool:
         for fname in os.listdir(server_dir):
             if fname.endswith(".jar") and fname not in ("forge-installer.jar", "fabric-installer.jar"):
                 src = os.path.join(server_dir, fname)
-                try:
-                    os.symlink(fname, server_jar_path)
-                    result = True
-                except (OSError, NotImplementedError):
-                    try:
-                        shutil.copy2(src, server_jar_path)
-                        result = True
-                    except Exception as e:
-                        logger.debug("Normalize: paper/purpur copy failed: %s", e)
+                result = _try_link_or_copy(src, server_jar_path, "paper/purpur")
                 if result:
                     break
 
@@ -401,46 +333,22 @@ def normalize_server_jar(server_dir: str) -> bool:
 
 
 def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
-    """Installs Forge."""
-    server_path = create_server_directory(server_name, "Forge", mc_version)
-    vm = VersionManager()
-    installer_url = vm.get_download_url("Forge", mc_version)
-    
-    if not installer_url:
-        return None
-        
-    installer_path = os.path.join(server_path, "forge-installer.jar")
-    
-    try:
-        if progress_callback: progress_callback(0.1)
-        response = requests.get(installer_url, stream=True, timeout=30)
-        response.raise_for_status()
-        with open(installer_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        if progress_callback: progress_callback(0.3)
-    except Exception as e:
+    """Installs Forge by delegating to the unified installer runner."""
+    server_path = _run_installer(
+        server_name, "Forge", mc_version, "forge-installer.jar",
+        ["--installServer"], progress_callback
+    )
+    if not server_path:
         return None
 
-    cmd = ["java", "-jar", "forge-installer.jar", "--installServer"]
-    try:
-        if progress_callback: progress_callback(0.5)
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
-        if progress_callback: progress_callback(0.9)
-        
-        # Normalize: ensure server.jar exists for bytecode analyzer
-        normalize_server_jar(server_path)
-        
-        for file in os.listdir(server_path):
-            if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                return os.path.join(server_path, file)
-        
-        if os.path.exists(os.path.join(server_path, "run.bat")):
-            return "FORGE_MODERN"
-            
-        return None
-    except subprocess.CalledProcessError:
-        return None
+    for file in os.listdir(server_path):
+        if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
+            return os.path.join(server_path, file)
+
+    if os.path.exists(os.path.join(server_path, "run.bat")):
+        return "FORGE_MODERN"
+
+    return None
 
 class ServerRunner:
     def __init__(self, server_name, ram_allocation, event_bus, java_bin="java", use_aikars=True):
@@ -466,6 +374,7 @@ class ServerRunner:
             self.ram_allocation = ram_allocation
             
         self.player_count = 0
+        self.connected_players = set()
         self._stderr_done = threading.Event()
 
     def start(self):
@@ -523,8 +432,8 @@ class ServerRunner:
             inst = _probe_java(self.java_bin, "PROBE")
             if inst:
                 java_major = inst.major
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to probe java version: %s", e)
 
         from app.services.aikars_flags import calculate_flags
         aikars = calculate_flags(ram_mb, java_major=java_major) if self.use_aikars else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"]
@@ -555,7 +464,8 @@ class ServerRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                **subprocess_flags(),
             )
             self.running = True
             threading.Thread(target=self._read_output, daemon=True).start()
@@ -607,7 +517,7 @@ class ServerRunner:
             return
         start_time = time.time()
         for line in self.process.stdout:
-            clean_line = _ANSI_RE.sub('', line).strip()
+            clean_line = ANSI_ESCAPE_RE.sub('', line).strip()
             self.events.emit(ServerEvent.CONSOLE_LINE, clean_line)
             self._parse_player_count(clean_line)
             if "Done (" in clean_line and "For help, type" in clean_line:
@@ -632,7 +542,7 @@ class ServerRunner:
             self._stderr_done.set()
             return
         for line in self.process.stderr:
-            stripped = _ANSI_RE.sub('', line).strip()
+            stripped = ANSI_ESCAPE_RE.sub('', line).strip()
             if stripped:
                 self._stderr_buffer.append(stripped)
                 if len(self._stderr_buffer) > 100:
@@ -644,12 +554,22 @@ class ServerRunner:
         return "\n".join(self._stderr_buffer[-50:])
 
     def _parse_player_count(self, line):
-        if "joined the game" in line:
-            self.player_count += 1
+        import re
+        join_match = re.search(r': (\w+) joined the game', line)
+        if join_match:
+            player = join_match.group(1)
+            self.connected_players.add(player)
+            self.player_count = len(self.connected_players)
             self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-        elif "left the game" in line:
-            self.player_count = max(0, self.player_count - 1)
-            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+            self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
+        else:
+            leave_match = re.search(r': (\w+) left the game', line)
+            if leave_match:
+                player = leave_match.group(1)
+                self.connected_players.discard(player)
+                self.player_count = len(self.connected_players)
+                self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+                self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
 
 def save_server_icon(server_name, image_path):
     try:
@@ -682,24 +602,17 @@ class Scheduler:
     def _load_metadata(self):
         return get_server_meta(self.server_name)
     
-    def _save_metadata(self, data):
-        meta_path = self.metadata_path
-        try:
-            with open(meta_path, "w") as f: 
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            logger.error("Failed to save scheduler metadata: %s", e)
+    def _make_scheduler_dict(self, enabled, interval_hours=None, restart_time=None, backup_on_restart=False):
+        if not enabled:
+            return None
+        if restart_time:
+            return {"type": "time", "restart_time": restart_time, "last_run": None, "backup_on_restart": backup_on_restart}
+        return {"type": "interval", "interval_hours": interval_hours, "last_run": datetime.datetime.now().isoformat(), "backup_on_restart": backup_on_restart}
 
     def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None, backup_on_restart=False):
-        data = self._load_metadata()
-        if not enabled:
-            if "scheduler" in data: del data["scheduler"]
-        else:
-            if restart_time:
-                data["scheduler"] = {"type": "time", "restart_time": restart_time, "last_run": None, "backup_on_restart": backup_on_restart}
-            else:
-                data["scheduler"] = {"type": "interval", "interval_hours": interval_hours, "last_run": datetime.datetime.now().isoformat(), "backup_on_restart": backup_on_restart}
-        self._save_metadata(data)
+        scheduler = self._make_scheduler_dict(enabled, interval_hours, restart_time, backup_on_restart)
+        updates = {"scheduler": scheduler} if scheduler else {"scheduler": None}
+        update_server_meta(self.server_name, updates)
 
     def get_schedule(self):
         return self._load_metadata().get("scheduler", None)
@@ -731,10 +644,11 @@ class Scheduler:
         return False
 
     def update_last_run(self):
-        data = self._load_metadata()
-        if "scheduler" in data:
-            data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
-            self._save_metadata(data)
+        data = get_server_meta(self.server_name)
+        scheduler = data.get("scheduler")
+        if scheduler:
+            scheduler["last_run"] = datetime.datetime.now().isoformat()
+            update_server_meta(self.server_name, {"scheduler": scheduler})
 
     def get_status(self):
         schedule = self.get_schedule()

@@ -118,7 +118,8 @@ class ToastNotification:
                 return
             try:
                 toast.attributes("-alpha", current)
-            except Exception:
+            except Exception as e:
+                logger.debug("Toast animate error: %s", e)
                 return
             if i < steps:
                 toast.after(delay, _step, i + 1, current + delta)
@@ -133,8 +134,8 @@ class ToastNotification:
             self._active_toasts.remove(toast)
         try:
             toast.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Toast hide error: %s", e)
 
     def dismiss(self) -> None:
         """Clear all active toasts immediately."""

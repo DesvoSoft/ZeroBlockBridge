@@ -50,7 +50,7 @@ class PlayitApiClient:
                 self._proto_key = None
                 return True
         except Exception as e:
-            logger.error(f"Failed to read playit.toml: {e}")
+            logger.error("Failed to read playit.toml: %s", e)
         return False
 
     def _request(self, endpoint: str, json_data: dict = None, method: str = "POST") -> dict:
@@ -99,7 +99,8 @@ class PlayitApiClient:
                 timeout=5,
             )
             return resp.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed checking agent status: %s", e)
             return False
 
     def _get_platform_variant(self) -> str:
@@ -191,7 +192,7 @@ class PlayitApiClient:
                 self._agent_id = data.get("data", {}).get("agent_id")
                 return self._agent_id
         except PlayitApiException as e:
-            logger.warning(f"Failed to get agent id via rundata: {e}")
+            logger.warning("Failed to get agent id via rundata: %s", e)
             
         # Fallback: try tunnels/list to see if we can find the agent_id there
         try:
@@ -203,7 +204,7 @@ class PlayitApiClient:
                     if self._agent_id:
                         return self._agent_id
         except Exception as e:
-            logger.warning(f"Fallback agent_id detection failed: {e}")
+            logger.warning("Fallback agent_id detection failed: %s", e)
         return None
 
     def get_agent_rundata(self) -> dict:
@@ -255,7 +256,7 @@ class PlayitApiClient:
             if self.is_read_only:
                 logger.info("Playit API initialized in Guest mode (Read-Only).")
                 return True
-            logger.error(f"Playit API initialization failed: {e}")
+            logger.error("Playit API initialization failed: %s", e)
             return False
 
     # --- Tunnel Management ---
@@ -370,11 +371,11 @@ class PlayitApiClient:
         # Try address directly from create response
         address = self.get_tunnel_address(tunnel)
         if address:
-            logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+            logger.info("Tunnel %s assigned to %s", tunnel_id, address)
             return tunnel
 
         # Poll until assigned (typically takes 5-10s)
-        logger.info(f"Tunnel {tunnel_id} pending, polling...")
+        logger.info("Tunnel %s pending, polling...", tunnel_id)
         for _ in range(15):
             time.sleep(1)
             tunnels = self.list_tunnels()
@@ -382,10 +383,10 @@ class PlayitApiClient:
                 if t.get("id") == tunnel_id:
                     address = self.get_tunnel_address(t)
                     if address:
-                        logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+                        logger.info("Tunnel %s assigned to %s", tunnel_id, address)
                         return t
 
-        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s.")
+        logger.warning("Tunnel %s remained pending after 15s.", tunnel_id)
         return tunnel
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
@@ -397,7 +398,7 @@ class PlayitApiClient:
             return False
         except PlayitApiException as e:
             if "401" in str(e):
-                logger.warning(f"Tunnel {tunnel_id} already inaccessible (401).")
+                logger.warning("Tunnel %s already inaccessible (401).", tunnel_id)
                 return True
             raise e
 
@@ -423,10 +424,10 @@ class PlayitApiClient:
             if "401" in str(e):
                 logger.warning("Agent deletion failed with 401. Your key might be read-only or revoked.")
                 return False
-            logger.error(f"Error during agent deletion: {e}")
+            logger.error("Error during agent deletion: %s", e)
             return False
         except Exception as e:
-            logger.error(f"Unexpected error during agent deletion: {e}")
+            logger.error("Unexpected error during agent deletion: %s", e)
             return False
 
 

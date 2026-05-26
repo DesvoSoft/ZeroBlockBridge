@@ -3,10 +3,12 @@ import time
 import os
 import threading
 from app.core.server_events import ServerEvent
-from app.core.logic import Scheduler
+from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
 from app.core.app_config import AppConfig
-from app.core.logic import BackupScheduler
+from app.core.constants import check_disk_space, SERVERS_DIR
+from app.services.scaffolder import pre_boot_scaffold
+from app.services.sanitizer import is_safe_command
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ class ServerOrchestrator:
         self.manager = manager
 
     def start_server(self) -> bool:
-        if not self._check_disk_space(min_gb=1):
+        if not check_disk_space(min_gb=1):
             self.manager.events.emit(ServerEvent.NOTIFICATION, {"msg": "Not enough disk space to start server (>1GB required).", "type": "error"})
             self.manager.events.emit(ServerEvent.CONSOLE_LINE, "[Error] Not enough disk space to start server.")
             return False
@@ -29,12 +31,12 @@ class ServerOrchestrator:
                 return False
 
             self.manager._stop_monitors()
+            from app.core.core import ServerState
+            self.manager.state = ServerState.STARTING
 
             config = self.manager.get_config()
             ram = config.get("ram_allocation", "2G")
 
-            from app.core.constants import SERVERS_DIR
-            from app.core.logic import get_server_meta
             server_dir = os.path.join(SERVERS_DIR, self.manager.current_server)
             mc_version = "1.20.1"
             java_path = "auto"
@@ -56,7 +58,6 @@ class ServerOrchestrator:
             except Exception as e:
                 logger.error("Failed to read metadata: %s", e)
 
-            from app.services.scaffolder import pre_boot_scaffold
             port = self.manager.get_server_port(self.manager.current_server)
             pre_boot_scaffold(server_dir, port=port, eula_accepted=True)
 
@@ -82,21 +83,12 @@ class ServerOrchestrator:
 
     def send_command(self, cmd: str) -> None:
         if self.manager.server_runner and self.manager.server_runner.running:
-            from app.services.sanitizer import is_safe_command
             safe, reason = is_safe_command(cmd)
             if not safe:
-                logger.warning(f"Blocked unsafe command: '{cmd}' - Reason: {reason}")
+                logger.warning("Blocked unsafe command: '%s' - Reason: %s", cmd, reason)
                 self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] Blocked unsafe command: {reason}")
                 return
             self.manager.server_runner.send_command(cmd)
-
-    def _check_disk_space(self, min_gb=1):
-        import shutil
-        try:
-            total, used, free = shutil.disk_usage("/")
-            return free >= min_gb * (1024**3)
-        except Exception:
-            return True
 
 
 class TunnelOrchestrator:
@@ -122,7 +114,7 @@ class TunnelOrchestrator:
             try:
                 self.manager.playit_manager.get_or_create_tunnel(port)
             except Exception as e:
-                logger.error(f"Auto-tunnel creation failed for {server_name}: {e}")
+                logger.error("Auto-tunnel creation failed for %s: %s", server_name, e)
         self.manager.executor.submit(_create)
 
 
@@ -212,7 +204,7 @@ class SchedulerOrchestrator:
                             self.manager.backup_orchestrator._check_auto_backup()
                 
                 elapsed = time.time() - now
-                sleep_time = max(0.0, 0.1 - elapsed)
+                sleep_time = max(0.0, 0.05 - elapsed)
                 time.sleep(sleep_time)
 
         self.manager._tick_thread = threading.Thread(target=_loop, daemon=True, name="ServerTickThread")

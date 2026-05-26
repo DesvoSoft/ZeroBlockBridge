@@ -12,7 +12,6 @@ from unittest.mock import patch, MagicMock
 from app.services.java_detector import (
     parse_java_version,
     get_required_java,
-    check_java_compatibility,
     JavaInstallation,
     JavaDetector,
     _detect_vendor,
@@ -77,26 +76,6 @@ class TestMCJavaMapping:
         assert get_required_java("99.99.99") == 17
 
 
-class TestJavaCompatibility:
-    def test_compatible(self):
-        ok, req, msg = check_java_compatibility("1.20.1", 17)
-        assert ok is True
-        assert req == 17
-
-    def test_higher_java_is_incompatible(self):
-        ok, req, msg = check_java_compatibility("1.20.1", 21)
-        assert ok is False
-
-    def test_incompatible(self):
-        ok, req, msg = check_java_compatibility("1.20.5", 17)
-        assert ok is False
-        assert req == 21
-
-    def test_legacy_mc_with_java_8(self):
-        ok, req, msg = check_java_compatibility("1.12.2", 8)
-        assert ok is True
-        assert req == 8
-
 
 class TestVendorDetection:
     def test_adoptium(self):
@@ -154,38 +133,8 @@ class TestJavaDetector:
 # =====================================================================
 # PROV-04 — SHA1 Validation
 # =====================================================================
-from app.services.sha1_validator import compute_sha1, verify_sha1, download_with_verification
+from app.services.sha1_validator import download_with_verification
 
-
-class TestSHA1Compute:
-    def test_compute_sha1_correct(self):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
-            f.write(b"hello world")
-            path = f.name
-        try:
-            expected = hashlib.sha1(b"hello world").hexdigest()
-            assert compute_sha1(path) == expected
-        finally:
-            os.unlink(path)
-
-    def test_verify_sha1_match(self):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
-            f.write(b"test data")
-            path = f.name
-        try:
-            expected = hashlib.sha1(b"test data").hexdigest()
-            assert verify_sha1(path, expected) is True
-        finally:
-            os.unlink(path)
-
-    def test_verify_sha1_mismatch(self):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
-            f.write(b"actual data")
-            path = f.name
-        try:
-            assert verify_sha1(path, "0000000000000000000000000000000000000000") is False
-        finally:
-            os.unlink(path)
 
 
 class TestDownloadWithVerification:
@@ -265,7 +214,7 @@ class TestDownloadWithVerification:
 # =====================================================================
 # PROV-05 — Aikar's Flags
 # =====================================================================
-from app.services.aikars_flags import calculate_flags, build_java_command, flags_to_string
+from app.services.aikars_flags import calculate_flags
 
 
 class TestAikarsFlags:
@@ -298,25 +247,4 @@ class TestAikarsFlags:
         flags = calculate_flags(4096)
         assert "-Dusing.aikars.flags=https://mcflags.emc.gs" in flags
 
-    def test_flags_to_string(self):
-        s = flags_to_string(2048)
-        assert isinstance(s, str)
-        assert "-Xms2048M" in s
-        assert " " in s  # space-separated
 
-    def test_build_command_with_aikars(self):
-        cmd = build_java_command("java", 4096, "server.jar", use_aikars=True)
-        assert cmd[0] == "java"
-        assert "-jar" in cmd
-        assert "server.jar" in cmd
-        assert "nogui" in cmd
-        assert "-XX:+UseG1GC" in cmd
-
-    def test_build_command_without_aikars(self):
-        cmd = build_java_command("java", 4096, "server.jar", use_aikars=False)
-        assert "-Xms4096M" in cmd
-        assert "-XX:+UseG1GC" not in cmd
-
-    def test_build_command_custom_extra_args(self):
-        cmd = build_java_command("java", 4096, "server.jar", extra_args=["-Dfoo=bar"])
-        assert "-Dfoo=bar" in cmd

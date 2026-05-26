@@ -606,7 +606,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             elif w_type == "dropdown":
                 new_props[key] = widget.get()
                 
-        save_server_properties(self.server_name, new_props)
+        save_server_properties(self.server_name, new_properties=new_props)
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()

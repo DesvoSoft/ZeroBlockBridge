@@ -1,12 +1,21 @@
+import os
+import json
+import logging
 import customtkinter as ctk
+from app.core.server_events import ServerEvent
+from app.core.constants import SERVERS_DIR
+from app.services.server_properties import load_server_properties, save_server_properties
+
+logger = logging.getLogger(__name__)
 
 class PlayersDashboard(ctk.CTkToplevel):
-    def __init__(self, master, event_bus, **kwargs):
+    def __init__(self, master, event_bus, zbb_manager, **kwargs):
         super().__init__(master, **kwargs)
         self.title("Player Management Dashboard")
         self.geometry("600x600")
         self.minsize(500, 500)
         self.event_bus = event_bus
+        self.zbb_manager = zbb_manager
         
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -16,11 +25,45 @@ class PlayersDashboard(ctk.CTkToplevel):
         self._build_connected_players_section()
         self._build_whitelist_section()
         
-        # Mock Data Initialization
-        self.connected_players = ["Steve", "Alex", "Notch"]
-        self.whitelisted_players = ["Steve", "Alex", "jeb_"]
+        self.connected_players = []
+        self.whitelisted_players = []
+        
+        self._load_data()
+        self.event_bus.subscribe(ServerEvent.PLAYER_LIST, self._on_player_list_update)
         
         self.refresh_ui()
+
+    def destroy(self):
+        self.event_bus.unsubscribe(ServerEvent.PLAYER_LIST, self._on_player_list_update)
+        super().destroy()
+
+    def _load_data(self):
+        if self.zbb_manager.is_running() and self.zbb_manager.server_runner:
+            self.connected_players = list(self.zbb_manager.server_runner.connected_players)
+        
+        server_name = self.zbb_manager.current_server
+        if not server_name:
+            return
+        
+        props = load_server_properties(server_name)
+        whitelist_enabled = props.get("white-list", "").lower() == "true"
+        if whitelist_enabled:
+            self.switch_whitelist.select()
+        else:
+            self.switch_whitelist.deselect()
+        
+        whitelist_path = os.path.join(SERVERS_DIR, server_name, "whitelist.json")
+        if os.path.exists(whitelist_path):
+            try:
+                with open(whitelist_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.whitelisted_players = [entry.get("name") for entry in data if entry.get("name")]
+            except Exception as e:
+                logger.error("Failed to read whitelist: %s", e)
+
+    def _on_player_list_update(self, players):
+        self.connected_players = players
+        self.after(0, self.refresh_ui)
 
     def _build_header(self):
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -58,12 +101,11 @@ class PlayersDashboard(ctk.CTkToplevel):
         header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 5))
         header_frame.grid_columnconfigure(0, weight=1)
         
-        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist Management", font=ctk.CTkFont(size=16, weight="bold"))
+        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist", font=ctk.CTkFont(size=16, weight="bold"))
         lbl_title.grid(row=0, column=0, sticky="w")
         
         self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", command=self._toggle_whitelist)
         self.switch_whitelist.grid(row=0, column=1, sticky="e")
-        self.switch_whitelist.select() # Mock default state
         
         # Add player to whitelist
         add_frame = ctk.CTkFrame(whitelist_frame, fg_color="transparent")
@@ -141,36 +183,39 @@ class PlayersDashboard(ctk.CTkToplevel):
             )
             btn_remove.pack(side="right", padx=10, pady=8)
 
-    # --- Actions (Mocked) ---
+    # --- Actions ---
     def _kick_player(self, player):
-        print(f"[Mock] Kicking player: {player}")
-        # In a real app: self.event_bus.publish(ServerEvent.SEND_COMMAND, f"kick {player}")
-        if player in self.connected_players:
-            self.connected_players.remove(player)
-            self.refresh_ui()
+        if self.zbb_manager.is_running():
+            self.zbb_manager.send_command(f"kick {player}")
+            logger.info("Kicking player: %s", player)
 
     def _ban_player(self, player):
-        print(f"[Mock] Banning player: {player}")
-        # In a real app: self.event_bus.publish(ServerEvent.SEND_COMMAND, f"ban {player}")
-        if player in self.connected_players:
-            self.connected_players.remove(player)
-            self.refresh_ui()
+        if self.zbb_manager.is_running():
+            self.zbb_manager.send_command(f"ban {player}")
+            logger.info("Banning player: %s", player)
 
     def _add_to_whitelist(self):
         player = self.entry_whitelist_add.get().strip()
         if player and player not in self.whitelisted_players:
-            print(f"[Mock] Adding {player} to whitelist")
+            if self.zbb_manager.is_running():
+                self.zbb_manager.send_command(f"whitelist add {player}")
             self.whitelisted_players.append(player)
             self.entry_whitelist_add.delete(0, "end")
             self.refresh_ui()
 
     def _remove_from_whitelist(self, player):
-        print(f"[Mock] Removing {player} from whitelist")
         if player in self.whitelisted_players:
+            if self.zbb_manager.is_running():
+                self.zbb_manager.send_command(f"whitelist remove {player}")
             self.whitelisted_players.remove(player)
             self.refresh_ui()
 
     def _toggle_whitelist(self):
-        is_enabled = self.switch_whitelist.get()
+        is_enabled = bool(self.switch_whitelist.get())
         state = "on" if is_enabled else "off"
-        print(f"[Mock] Whitelist turned {state}")
+        server_name = self.zbb_manager.current_server
+        if server_name:
+            save_server_properties(server_name, new_properties={"white-list": "true" if is_enabled else "false"})
+        if self.zbb_manager.is_running():
+            self.zbb_manager.send_command(f"whitelist {state}")
+        logger.info("Whitelist turned %s (persisted to server.properties)", state)

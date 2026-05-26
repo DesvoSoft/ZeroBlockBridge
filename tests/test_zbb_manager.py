@@ -35,9 +35,9 @@ def test_start_exact_java_match(mock_monitors, mock_runner_class, mock_config, m
     mock_runner_class.return_value = mock_runner
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("os.path.exists", return_value=False):
 
@@ -59,9 +59,9 @@ def test_start_flexible_java_21_for_17(mock_monitors, mock_runner_class, mock_co
     manager.events.subscribe(ServerEvent.NOTIFICATION, lambda d: notifications.append(d))
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("os.path.exists", return_value=False):
 
@@ -81,9 +81,9 @@ def test_start_blocks_experimental_java(mock_config, manager):
     manager.events.subscribe(ServerEvent.NOTIFICATION, lambda d: notifications.append(d))
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("app.services.java_installer.JdkManager.ensure_java",
                side_effect=Exception("DL failed")), \
@@ -103,9 +103,9 @@ def test_start_blocks_java_too_low(mock_config, manager):
     manager.events.subscribe(ServerEvent.NOTIFICATION, lambda d: notifications.append(d))
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("app.services.java_installer.JdkManager.ensure_java",
                side_effect=Exception("DL failed")), \
@@ -122,13 +122,13 @@ def test_start_no_java_found_auto_install_succeeds(mock_config, manager):
     manager.select_server("test_server")
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("app.core.core.ServerRunner") as mock_runner_class, \
          patch("app.core.core.ZBBManager._setup_monitors"), \
-         patch("app.services.java_installer.JdkManagerInstance.ensure_java",
+         patch("app.core.core.JdkManagerInstance.ensure_java",
                return_value="/fake/auto-jdk17/bin/java"), \
          patch("os.path.exists", return_value=False):
 
@@ -145,9 +145,9 @@ def test_start_no_java_found_auto_install_fails(mock_config, manager):
     manager.select_server("test_server")
 
     with patch("app.services.scaffolder.pre_boot_scaffold"), \
-         patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=17), \
-         patch("app.services.java_detector.JavaDetector") as mock_det_cls, \
-         patch("app.services.java_detector.get_required_java", return_value=17), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
          patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
          patch("app.services.java_installer.JdkManager.ensure_java",
                side_effect=Exception("Download failed")), \

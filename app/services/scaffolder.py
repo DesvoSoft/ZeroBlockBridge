@@ -88,6 +88,22 @@ def _generate_properties(server_dir: str, port: int, config: dict = None):
             props_to_write["hardcore"] = "true" if config["hardcore"] else "false"
         if "whitelist" in config:
             props_to_write["white-list"] = "true" if config["whitelist"] else "false"
+        if "enforce_whitelist" in config:
+            props_to_write["enforce-whitelist"] = "true" if config["enforce_whitelist"] else "false"
+        if "pvp" in config:
+            props_to_write["pvp"] = "true" if config["pvp"] else "false"
+        if "online_mode" in config:
+            props_to_write["online-mode"] = "true" if config["online_mode"] else "false"
+        if "max_players" in config:
+            props_to_write["max-players"] = str(config["max_players"])
+        if "spawn_protection" in config:
+            props_to_write["spawn-protection"] = str(config["spawn_protection"])
+        if "enable_command_block" in config:
+            props_to_write["enable-command-block"] = "true" if config["enable_command_block"] else "false"
+        if "allow_flight" in config:
+            props_to_write["allow-flight"] = "true" if config["allow_flight"] else "false"
+        if "enforce_secure_profile" in config:
+            props_to_write["enforce-secure-profile"] = "true" if config["enforce_secure_profile"] else "false"
         if "view_distance" in config:
             props_to_write["view-distance"] = str(config["view_distance"])
         if "simulation_distance" in config:

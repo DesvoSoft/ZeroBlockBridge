@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 import requests
 
 from app.core.constants import SERVERS_DIR
+from app.services.sha1_validator import download_with_verification
 
 logger = logging.getLogger(__name__)
 
@@ -168,37 +169,13 @@ class ModrinthClient:
     # ------------------------------------------------------------------
     def _download_file(self, download_url, filename, expected_sha1, dest_dir, progress_callback=None):
         dest_path = os.path.join(dest_dir, filename)
-        try:
-            resp = self.session.get(download_url, stream=True, timeout=30)
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            sha1 = hashlib.sha1()
-
-            with open(dest_path, "wb") as fp:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        fp.write(chunk)
-                        sha1.update(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback and total > 0:
-                            progress_callback(downloaded / total)
-
-            if expected_sha1 and sha1.hexdigest() != expected_sha1:
-                logger.error(
-                    "SHA1 mismatch for %s: expected %s, got %s",
-                    filename, expected_sha1, sha1.hexdigest(),
-                )
-                os.remove(dest_path)
-                return None
-
-            logger.info("Downloaded %s to %s", filename, dest_path)
-            return dest_path
-
-        except Exception as exc:
-            logger.error("Download failed for %s: %s", filename, exc)
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
+        success, path, error = download_with_verification(
+            download_url, dest_path, expected_sha1, progress_callback
+        )
+        if success:
+            return path
+        else:
+            logger.error("Download failed for %s: %s", filename, error)
             return None
 
     def _resolve_version_file(self, version):
@@ -316,11 +293,6 @@ class ModrinthClient:
 
         # Batch lookup via version-files endpoint
         try:
-            data = self._request(
-                "POST",
-                "/version_files/update",
-                params=None,
-            )
             # The batch endpoint requires a POST body, so use session directly
             resp = self.session.post(
                 f"{MODRINTH_API}/version_files/update",
@@ -344,13 +316,7 @@ class ModrinthClient:
         for old_hash, new_version in results.items():
             if old_hash not in hashes:
                 continue
-            primary = None
-            for f in new_version.get("files", []):
-                if f.get("primary"):
-                    primary = f
-                    break
-            if not primary:
-                primary = new_version["files"][0] if new_version.get("files") else None
+            primary = self._resolve_version_file(new_version)
             if primary and primary.get("hashes", {}).get("sha1") != old_hash:
                 updates.append({
                     "filename": hashes[old_hash],

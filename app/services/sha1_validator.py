@@ -20,44 +20,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds between retries
 
 
-def compute_sha1(file_path: str) -> str:
-    """
-    Compute the SHA1 hash of a file.
 
-    Args:
-        file_path: Absolute path to the file.
-
-    Returns:
-        Lowercase hex digest string.
-    """
-    sha1 = hashlib.sha1()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            sha1.update(chunk)
-    return sha1.hexdigest()
-
-
-def verify_sha1(file_path: str, expected_sha1: str) -> bool:
-    """
-    Verify the SHA1 hash of a downloaded file.
-
-    Args:
-        file_path: Path to file.
-        expected_sha1: Expected SHA1 hex digest (lowercase).
-
-    Returns:
-        True if match, False otherwise.
-    """
-    actual = compute_sha1(file_path)
-    if actual == expected_sha1.lower():
-        logger.debug("SHA1 verified: %s", os.path.basename(file_path))
-        return True
-
-    logger.warning(
-        "SHA1 mismatch for %s: expected=%s, actual=%s",
-        os.path.basename(file_path), expected_sha1, actual,
-    )
-    return False
 
 
 def download_with_verification(

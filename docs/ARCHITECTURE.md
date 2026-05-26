@@ -37,11 +37,12 @@ The core and UI are decoupled via `EventBus`. `ZBBManager` serves as the single 
 
 The application features:
 
-- **Sidebar**: Server list with selection.
+- **Sidebar**: Server list with selection, status bar with TPS indicator and player count.
 - **Dashboard**: Tunnel controls, auto-restart settings, quick backup (server start/stop merged into status bar).
 - **Tabbed Console**: Console, Tunnel Log, and Mods (Modrinth Browser) tabs.
 - **Console Input**: Send server commands directly from the UI.
 - **Properties Editor**: 7 tabs (General, World, Network, Advanced, Backups, Automation, Launch).
+- **Player Management Dashboard**: Connected player list with kick/ban, whitelist toggle and player management.
 - **Modrinth Mod Browser**: Search mods/plugins with pagination, loader/version filters, one-click install, and update checks.
 
 ---
@@ -116,6 +117,8 @@ ZeroBlockBridge/
 │   │   ├── server_wizard.py       # 3-step creation wizard
 │   │   ├── server_properties_editor.py # Tabbed properties editor
 │   │   ├── modrinth_browser.py    # Modrinth mod browser
+│   │   ├── players_dashboard.py   # Player management dashboard
+│   │   ├── toast.py               # Non-blocking notification overlay
 │   │   └── ui_components.py       # Reusable widgets (Console, ServerList, ToolTip)
 │   │
 │   ├── core/                      # Orchestration & Business Logic
@@ -126,9 +129,10 @@ ZeroBlockBridge/
 │   │   ├── version_manager.py     # Dynamic version fetching & caching
 │   │   ├── server_events.py       # EventBus, ServerEvent definitions
 │   │   ├── statemanager.py        # Tunnel status debounce (module)
-│   │   ├── scheduler_service.py   # Automated restart logic
+│   │   ├── orchestrators.py       # Server/Backup/Tunnel/Scheduler orchestrators
+│   │   ├── protocols.py           # Protocol classes (structural typing)
 │   │   ├── playit_manager.py      # Playit.gg agent lifecycle & tunnel
-│   │   └── single_instance.py     # PID lockfile (prevents duplicates)
+│   │   ├── single_instance.py     # PID lockfile (prevents duplicates)
 │   │
 │   └── services/                  # Specialized Services & Auto-Healing
 │       ├── playit_api.py          # Playit.gg REST API v2 client
@@ -146,8 +150,7 @@ ZeroBlockBridge/
 │       ├── backup_manager.py      # ZIP backup create/restore
 │       ├── modrinth.py            # Modrinth API client
 │       ├── sha1_validator.py      # SHA1 download verification
-│       ├── settings_manager.py    # App config read/write (module)
-│       └── toast.py               # Non-blocking notification overlay
+│       └── settings_manager.py    # App config read/write (module)
 │
 ├── .github/
 │   └── workflows/

@@ -8,12 +8,12 @@ import re
 import time
 import logging
 
-from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX
+from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX, subprocess_flags
 from app.services.playit_api import PlayitApiClient, PlayitApiException
 
 logger = logging.getLogger(__name__)
 
-_ANSI_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+from app.core.constants import ANSI_ESCAPE_RE
 
 from typing import Callable, Optional, Dict, Any, List
 
@@ -44,16 +44,26 @@ class PlayitManager:
             self._fix_permissions()
             logger.info("Playit linked state persisted from playit.toml")
 
+        self._shutdown_done = False
         import atexit
         atexit.register(self._atexit_stop)
 
     def _atexit_stop(self) -> None:
-        self.stop(force=True)
-        # Ensure that no orphaned playit instances remain
-        if platform.system() == "Windows":
-            import subprocess
-            subprocess.run(['taskkill', '/F', '/IM', 'playit.exe'], capture_output=True, check=False)
-            subprocess.run(['taskkill', '/F', '/IM', 'playit-cli.exe'], capture_output=True, check=False)
+        # Graceful path: skip if shutdown() already completed the full stop.
+        # However, always fire the by-name nuclear kill on Windows as a safety
+        # net in case the 3-second join timeout expired before stop() finished.
+        if not self._shutdown_done:
+            self._shutdown_done = True
+            self.stop(force=True)
+        elif platform.system() == "Windows":
+            # Backstop: taskkill silently (no window, no flash) even if we
+            # think we already stopped — harmless if process is already dead.
+            for proc_name in ["playit.exe", "playit-cli.exe"]:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", proc_name],
+                    capture_output=True, check=False,
+                    **subprocess_flags(),
+                )
 
     def _get_binary_path(self) -> Any:
         system = platform.system()
@@ -69,7 +79,7 @@ class PlayitManager:
                     continue
                 try:
                     f.unlink()
-                    logger.info(f"[Playit] Removed stale binary: {f.name}")
+                    logger.info("[Playit] Removed stale binary: %s", f.name)
                 except OSError:
                     pass
 
@@ -83,11 +93,21 @@ class PlayitManager:
             try:
                 result = subprocess.run(
                     [str(self.binary_path), "version"],
-                    capture_output=True, text=True, check=False
+                    capture_output=True, text=True, check=False,
+                    **subprocess_flags(),
                 )
                 if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
                     self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
-                    os.remove(self.binary_path)
+                    try:
+                        os.remove(self.binary_path)
+                    except OSError:
+                        self.stop(force=True)
+                        time.sleep(0.5)
+                        try:
+                            os.remove(self.binary_path)
+                        except Exception as e2:
+                            self.console_callback(f"[Playit] Could not remove old binary: {e2}")
+                            return False
                 else:
                     return True
             except OSError as e:
@@ -95,7 +115,13 @@ class PlayitManager:
                 try:
                     os.remove(self.binary_path)
                 except OSError:
-                    pass
+                    self.stop(force=True)
+                    time.sleep(0.5)
+                    try:
+                        os.remove(self.binary_path)
+                    except Exception as e2:
+                        self.console_callback(f"[Playit] Could not remove bad binary: {e2}")
+                        return False
 
         url = PLAYIT_URL_WINDOWS if platform.system() == "Windows" else PLAYIT_URL_LINUX
         self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
@@ -162,7 +188,7 @@ class PlayitManager:
         try:
             self._start_internal(port)
         except Exception as e:
-            logger.error(f"[PlayitManager] Fatal error in start thread: {e}")
+            logger.error("[PlayitManager] Fatal error in start thread: %s", e)
             self.console_callback(f"[Playit] Internal start failure: {e}")
             self.status_callback("Error", None)
 
@@ -218,7 +244,7 @@ class PlayitManager:
                 "--secret_path", str(self.toml_path),
             ]
 
-            kwargs = {}
+            kwargs = subprocess_flags()
             if platform.system() != "Windows":
                 kwargs["preexec_fn"] = os.setsid
 
@@ -251,25 +277,49 @@ class PlayitManager:
             if proc:
                 self.console_callback("[Playit] Stopping agent...")
                 pid = proc.pid
+                killed = False
                 try:
                     import psutil
                     parent = psutil.Process(pid)
                     for child in parent.children(recursive=True):
-                        child.kill()
+                        try:
+                            child.kill()
+                        except Exception:
+                            pass
                     parent.kill()
-                except Exception:
+                    killed = True
+                except Exception as e:
+                    logger.debug("psutil stop error: %s", e)
+
+                if not killed:
                     if platform.system() == "Windows":
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)],
-                                     capture_output=True, check=False)
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(pid)],
+                            capture_output=True, check=False,
+                            **subprocess_flags(),
+                        )
+                    else:
+                        try:
+                            proc.terminate()
+                        except Exception as te:
+                            logger.debug("subprocess terminate error: %s", te)
+
+                # Block until OS confirms the process is gone (max 3s).
+                # This prevents sys.exit() from racing ahead of kill completion.
+                try:
+                    proc.wait(timeout=3)
+                except Exception:
+                    pass  # Already dead or timed out — either is acceptable.
 
             if force and platform.system() == "Windows":
+                # Nuclear option: kill any stray playit process by image name.
+                # Uses CREATE_NO_WINDOW — no flash, silent noop if nothing running.
                 for proc_name in ["playit.exe", "playit-cli.exe"]:
-                    subprocess.run(['taskkill', '/F', '/IM', proc_name],
-                                 capture_output=True, check=False)
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", proc_name],
+                        capture_output=True, check=False,
+                        **subprocess_flags(),
+                    )
 
             self.running = False
             self.current_address = None
@@ -379,7 +429,7 @@ class PlayitManager:
                     os.chmod(self.toml_path, 0o600)
                     logger.info("Fixed playit.toml permissions to 600")
             except Exception as e:
-                logger.warning(f"Could not fix playit.toml permissions: {e}")
+                logger.warning("Could not fix playit.toml permissions: %s", e)
 
     # --- CRITICAL DNS: polls API indefinitely until DNS resolves or manager stops ---
     # DO NOT MODIFY without understanding the full DNS recovery chain:
@@ -505,7 +555,7 @@ class PlayitManager:
                     logger.warning("[Playit] decode error: %s", e)
                     continue
                 if line:
-                    clean_line = _ANSI_RE.sub('', line)
+                    clean_line = ANSI_ESCAPE_RE.sub('', line)
                     is_spam = any(s in clean_line for s in self.SPAM_LOGS)
                     if not is_spam:
                         self.console_callback(f"[Playit] {clean_line}")

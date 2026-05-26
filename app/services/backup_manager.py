@@ -21,8 +21,8 @@ class BackupManager:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self, retention_count: int | None = None) -> tuple[Path | None, str | None]:
-        from app.core.core import _check_disk_space
-        if not _check_disk_space(min_gb=1):
+        from app.core.constants import check_disk_space
+        if not check_disk_space(min_gb=1, target_dir=self.server_path):
             return None, "Not enough disk space to create backup (>1GB required)."
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -131,8 +131,10 @@ class BackupManager:
             return False
         tmp_backup = None
         try:
-            tmp_base = tempfile.mktemp()
-            tmp_backup = Path(shutil.make_archive(tmp_base, 'zip', self.server_path))
+            tmp_fd, tmp_base = tempfile.mkstemp(suffix=".zip")
+            os.close(tmp_fd)
+            os.unlink(tmp_base)
+            tmp_backup = Path(shutil.make_archive(tmp_base.replace('.zip', ''), 'zip', self.server_path))
 
             for item in self.server_path.iterdir():
                 if item.is_file() or item.is_symlink():
@@ -143,13 +145,14 @@ class BackupManager:
             try:
                 with zipfile.ZipFile(backup_path, 'r') as zipf:
                     zipf.extractall(self.server_path)
-            except Exception:
+            except Exception as e:
+                logger.error("Failed extracting backup, rolling back: %s", e)
                 with zipfile.ZipFile(tmp_backup, 'r') as zipf:
                     zipf.extractall(self.server_path)
                 raise
 
             return True
-        except (FileNotFoundError, zipfile.BadZipFile, OSError) as e:
+        except Exception as e:
             logger.error("Backup restore failed: %s", e)
             return False
         finally:

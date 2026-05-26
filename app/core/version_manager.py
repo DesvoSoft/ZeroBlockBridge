@@ -66,6 +66,13 @@ class VersionManager:
             if callback not in self.callbacks:
                 self.callbacks.append(callback)
 
+    def remove_callback(self, callback):
+        with self.cache_lock:
+            try:
+                self.callbacks.remove(callback)
+            except ValueError:
+                pass
+
     def _notify_callbacks(self):
         with self.cache_lock:
             cbs = list(self.callbacks)

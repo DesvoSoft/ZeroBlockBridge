@@ -58,7 +58,15 @@ class AppConfig:
     SERVER_STOP_TIMEOUT = 30
     SERVER_START_WAIT = 10
     RESTART_COOLDOWN = 5
+    DEBOUNCE_MS = 200
 
     # Playit.gg Config
     PLAYIT_BRIDGE_URL = "https://playit.auto-mcs.com/link"
     PLAYIT_WIZARD_URL = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=other"
+
+    # Server Defaults
+    DEFAULT_MC_PORT = 25565
+    DEFAULT_RAM_MB = 2048
+    BACKUP_TIMEOUT = 300
+    CONSOLE_BUFFER_SIZE = 1000
+    MAX_SUPPORTED_JAVA = 21
