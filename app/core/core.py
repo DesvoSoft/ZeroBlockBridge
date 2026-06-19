@@ -310,11 +310,38 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
         max_retries = config.get("watchdog_max_retries", 3)
         self._watchdog = Watchdog(self.server_runner, self.events, max_retries=max_retries)
         self._watchdog.listen()
+        self.events.subscribe(ServerEvent.CRASHED, self._on_server_crashed)
 
     def _stop_monitors(self) -> None:
         if self._heartbeat: self._heartbeat.stop()
         if self._watchdog: self._watchdog.stop()
         if self._lag_monitor: self._lag_monitor.stop()
+
+    def _on_server_crashed(self, payload: Any = None) -> None:
+        if payload is None:
+            payload = {}
+        reason = payload.get("reason", "unknown")
+        retry = payload.get("retry")
+        logger.error("[ZBBManager] Server crashed: reason=%s retry=%s", reason, retry)
+        msg = f"Server crashed: {reason}"
+        if retry is not None:
+            msg += f" (attempt {retry})"
+        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+        if self.current_server:
+            try:
+                from app.core.logic import get_server_meta, update_server_meta
+                import datetime
+                meta = get_server_meta(self.current_server) or {}
+                history = meta.get("crash_history", [])
+                history.append({
+                    "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "reason": reason,
+                    "exit_code": payload.get("exit_code"),
+                    "retry": retry,
+                })
+                update_server_meta(self.current_server, {"crash_history": history[-10:]})
+            except Exception as e:
+                logger.warning("Failed to write crash_history: %s", e)
 
     # --- Tunnel Management ---
     def get_server_port(self, server_name: Optional[str] = None) -> int:
