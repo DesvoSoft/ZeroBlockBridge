@@ -2,7 +2,7 @@ import logging
 import time
 import threading
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Optional
 
 from app.core.server_events import ServerEvent
 from app.core.protocols import EventEmitterProtocol, ServerRunnerProtocol

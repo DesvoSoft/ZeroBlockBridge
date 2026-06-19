@@ -12,7 +12,6 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import time
 from typing import Dict, List, Optional
 

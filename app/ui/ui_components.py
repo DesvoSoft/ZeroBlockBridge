@@ -2,7 +2,6 @@ import customtkinter as ctk
 import logging
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
-import webbrowser
 import os
 from PIL import Image
 
