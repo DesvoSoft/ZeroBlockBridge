@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
+from app.core.logic import BackupScheduler
 
 
 SETTINGS_METADATA = {
@@ -200,6 +201,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         self.backup_var = ctk.StringVar()
         self.backup_manager = BackupManager(self.server_name)
+        self._backup_scheduler_ui = BackupScheduler(self.server_name)
+        self._next_backup_lbl = ctk.CTkLabel(
+            self.frame_backups, text="", anchor="w",
+            text_color=("gray40", "gray60"), font=("Roboto", 12)
+        )
+        self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
+        self._refresh_backup_countdown()
 
     def refresh_backups(self):
         # Clear current list
@@ -254,6 +262,17 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             else:
                 messagebox.showerror("Error", "Failed to restore backup.")
 
+    def _refresh_backup_countdown(self):
+        secs = self._backup_scheduler_ui.seconds_until_next()
+        if secs is None:
+            self._next_backup_lbl.configure(text="Auto-backup: disabled")
+        elif secs == 0.0:
+            self._next_backup_lbl.configure(text="Next auto-backup: overdue")
+        else:
+            h = int(secs // 3600)
+            m = int((secs % 3600) // 60)
+            self._next_backup_lbl.configure(text=f"Next auto-backup in: {h}h {m}m")
+
     def setup_automation_tab(self):
         self.scheduler = self.logic.Scheduler(self.server_name)
         schedule = self.scheduler.get_schedule()
@@ -299,7 +318,37 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.entry_time = ctk.CTkEntry(card, height=28, width=100)
         self.entry_time.grid(row=5, column=2, sticky="e", padx=12, pady=5)
         self.entry_time.insert(0, schedule.get("restart_time", "03:00") if schedule else "03:00")
-            
+
+        # Auto-Backups card (P0.2)
+        backup_sched = BackupScheduler(self.server_name)
+        bk_cfg = backup_sched.get_config()
+
+        card_bk = self.create_section_frame(self.frame_automation, "Auto-Backups")
+
+        self.var_auto_backup = ctk.BooleanVar(value=bk_cfg.get("enabled", False))
+        ctk.CTkSwitch(card_bk, text="Enable Auto-Backups", variable=self.var_auto_backup).grid(
+            row=0, column=0, columnspan=4, sticky="w", padx=15, pady=10
+        )
+
+        ctk.CTkFrame(card_bk, height=1, fg_color=("gray90", "gray25")).grid(
+            row=1, column=0, columnspan=4, sticky="ew", padx=15, pady=2
+        )
+
+        ctk.CTkLabel(card_bk, text="Interval (Hours):", font=self.font_bold, anchor="w").grid(
+            row=2, column=0, sticky="w", padx=(12, 5), pady=8
+        )
+        vcmd2 = (self.register(self.validate_int), '%P')
+        self.entry_bk_interval = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self.entry_bk_interval.insert(0, str(bk_cfg.get("interval_hours", 24)))
+        self.entry_bk_interval.grid(row=2, column=3, sticky="e", padx=12, pady=5)
+
+        ctk.CTkLabel(card_bk, text="Keep (last N backups):", font=self.font_bold, anchor="w").grid(
+            row=3, column=0, sticky="w", padx=(12, 5), pady=8
+        )
+        self.entry_bk_retention = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self.entry_bk_retention.insert(0, str(bk_cfg.get("retention_count", 10)))
+        self.entry_bk_retention.grid(row=3, column=3, sticky="e", padx=12, pady=5)
+
         self.toggle_automation_inputs()
 
     def toggle_automation_inputs(self, *args):
@@ -326,11 +375,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
     def save_automation(self):
         if not self.var_auto_restart: return
-            
+
         enabled = self.var_auto_restart.get()
         backup = self.var_backup_restart.get()
         mode = self.var_schedule_mode.get()
-        
+
         if mode == "Interval":
             interval = 6
             try:
@@ -341,6 +390,19 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         else:
             time_val = self.entry_time.get()
             self.scheduler.set_restart_schedule(enabled, restart_time=time_val, backup_on_restart=backup)
+
+        # Save auto-backup config
+        if hasattr(self, "var_auto_backup"):
+            bk_enabled = self.var_auto_backup.get()
+            try:
+                bk_interval = int(self.entry_bk_interval.get())
+            except (ValueError, AttributeError):
+                bk_interval = 24
+            try:
+                bk_retention = int(self.entry_bk_retention.get())
+            except (ValueError, AttributeError):
+                bk_retention = 10
+            BackupScheduler(self.server_name).set_config(bk_enabled, interval_hours=bk_interval, retention_count=bk_retention)
 
     def validate_int(self, P):
         """Callback to allow only digits."""
