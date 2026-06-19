@@ -6,7 +6,7 @@ from app.core.server_events import ServerEvent
 from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
 from app.core.app_config import AppConfig
-from app.core.constants import check_disk_space, SERVERS_DIR
+from app.core.constants import check_disk_space, SERVERS_DIR, ServerState
 from app.services.scaffolder import pre_boot_scaffold
 from app.services.sanitizer import is_safe_command
 
@@ -31,7 +31,6 @@ class ServerOrchestrator:
                 return False
 
             self.manager._stop_monitors()
-            from app.core.core import ServerState
             self.manager.state = ServerState.STARTING
 
             config = self.manager.get_config()
@@ -72,7 +71,6 @@ class ServerOrchestrator:
             return self.manager._launch_server(ram, java_bin, use_aikars, required_java, config)
 
     def stop_server(self) -> None:
-        from app.core.core import ServerState
         self.manager.state = ServerState.STOPPING
         if self.manager.server_runner:
             self.manager.server_runner.stop()

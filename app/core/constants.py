@@ -4,9 +4,17 @@ import shutil
 import re
 import os
 import logging
+from enum import Enum, auto
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class ServerState(Enum):
+    OFFLINE = auto()
+    STARTING = auto()
+    ONLINE = auto()
+    STOPPING = auto()
 
 
 def subprocess_flags() -> dict:

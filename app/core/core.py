@@ -3,10 +3,10 @@ import threading
 import time
 import os
 from typing import Optional, Any, Protocol
-from enum import Enum, auto
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.server_events import EventBus, ServerEvent
+from app.core.constants import ServerState
 from app.services.backup_manager import BackupManager
 from app.core.logic import ServerRunner, load_config, save_config, Scheduler, BackupScheduler
 from app.services.watchdog import Watchdog
@@ -22,14 +22,6 @@ from app.services.java_detector import JavaDetector, get_required_java
 from app.services.bytecode_analyzer import analyze_jar_bytecode
 
 logger = logging.getLogger(__name__)
-
-class ServerState(Enum):
-    OFFLINE = auto()
-    STARTING = auto()
-    ONLINE = auto()
-    STOPPING = auto()
-
-
 
 from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
 from app.core.protocols import ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol
