@@ -55,6 +55,9 @@ class TestVersionManagerDefaults:
 
 
 class TestVersionManagerLoadCache:
+    """Tests for _load_cache(). Cache is now lazy-loaded, so tests call
+    _load_cache() directly and assign the result to vm.cache."""
+
     def setup_method(self):
         _reset_singleton()
 
@@ -70,6 +73,7 @@ class TestVersionManagerLoadCache:
     def test_load_cache_valid(self, mock_exists, mock_file, mock_fetch):
         mock_fetch.return_value = {"last_updated": datetime.datetime.now().isoformat(), "Vanilla": ["1.20.1"]}
         vm = VersionManager()
+        vm.cache = vm._load_cache()
         assert vm.cache["Vanilla"] == ["1.20.1"]
 
     @patch("app.core.version_manager.os.path.exists", return_value=True)
@@ -78,6 +82,7 @@ class TestVersionManagerLoadCache:
         mock_opener.side_effect = json.JSONDecodeError("Boom", "", 0)
         with patch("builtins.open", mock_opener):
             vm = VersionManager()
+            vm.cache = vm._load_cache()
             assert vm.cache["last_updated"] is None
             assert "1.21.11" in vm.cache["Vanilla"]
 
@@ -92,6 +97,7 @@ class TestVersionManagerLoadCache:
     @patch("app.core.version_manager.os.path.exists", return_value=True)
     def test_stale_fabric_loader_triggers_refresh(self, mock_exists, mock_file):
         vm = VersionManager()
+        vm.cache = vm._load_cache()
         # Stale Fabric triggers a return of default cache
         assert vm.cache["last_updated"] is None
         assert "1.21.11" in vm.cache["Vanilla"]
@@ -116,6 +122,7 @@ class TestVersionManagerLoadCache:
             "Purpur": ["1.21.11"],
         }
         vm = VersionManager()
+        vm.cache = vm._load_cache()
         assert vm.cache["last_updated"] is None
 
     @patch("builtins.open", new_callable=mock_open, read_data=json.dumps({
@@ -128,6 +135,7 @@ class TestVersionManagerLoadCache:
     @patch("app.core.version_manager.os.path.exists", return_value=True)
     def test_cache_within_2_days_not_stale(self, mock_exists, mock_file):
         vm = VersionManager()
+        vm.cache = vm._load_cache()
         assert vm.cache["Vanilla"] == ["1.20.1"]
 
     @patch("builtins.open", new_callable=mock_open, read_data=json.dumps({
@@ -149,6 +157,7 @@ class TestVersionManagerLoadCache:
             "Purpur": ["1.21.11"],
         }
         vm = VersionManager()
+        vm.cache = vm._load_cache()
         assert "1.21.11" in vm.cache["Vanilla"]
 
 

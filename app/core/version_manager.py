@@ -54,8 +54,10 @@ class VersionManager:
             return
         self.cache_lock = threading.RLock()
         self.fallback_cache = self._get_default_cache()
-        self.cache = self.fallback_cache
-        self.cache = self._load_cache()
+        # Start with in-memory defaults — no disk I/O in __init__.
+        # _load_cache() runs lazily on first get_versions() call.
+        self.cache = self._get_default_cache()
+        self._cache_loaded = False
         self.refresh_thread = None
         self.callbacks = []
         self._initialized = True
@@ -272,6 +274,12 @@ class VersionManager:
             logger.error("Failed to save version cache: %s", e)
 
     def get_versions(self, server_type):
+        # Lazy-load cache from disk on first call (deferred from __init__).
+        if not self._cache_loaded:
+            with self.cache_lock:
+                if not self._cache_loaded:
+                    self.cache = self._load_cache()
+                    self._cache_loaded = True
         self._check_and_refresh()
         self._wait_for_background_refresh(timeout=4)
         with self.cache_lock:
