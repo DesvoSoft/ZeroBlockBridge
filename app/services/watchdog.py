@@ -102,10 +102,6 @@ class Watchdog:
             reason=self._crash_reason, exit_code=exit_code,
             uptime=uptime, retry=next_retry,
         ))
-        self._events.emit(ServerEvent.NOTIFICATION, {
-            "msg": f"Server crashed: {self._crash_reason}",
-            "color": "red"
-        })
 
         self._trigger_restart("crash")
 
@@ -118,20 +114,12 @@ class Watchdog:
         self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
             reason="zombie", silence_seconds=silence, retry=next_retry, context="zombie",
         ))
-        self._events.emit(ServerEvent.NOTIFICATION, {
-            "msg": "Server unresponsive (zombie). Restarting...", 
-            "color": "orange"
-        })
         self._trigger_restart("zombie")
 
     def _trigger_restart(self, context):
         if self.retry_count >= self.max_retries:
             self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Max retries ({self.max_retries}) reached. Will not auto-restart.")
             logger.warning("Watchdog: max retries (%d) exhausted (%s)", self.max_retries, context)
-            self._events.emit(ServerEvent.NOTIFICATION, {
-                "msg": "Max retries reached. Server will not restart.", 
-                "color": "red"
-            })
             return
 
         self.retry_count += 1
@@ -148,10 +136,6 @@ class Watchdog:
             return
         self._runner.start()
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
-        self._events.emit(ServerEvent.NOTIFICATION, {
-            "msg": f"Server restarting (attempt {self.retry_count}/{self.max_retries})",
-            "color": "orange"
-        })
 
     def _classify_crash(self, exit_code, uptime, stderr=""):
         if self._match_stderr(stderr, JVM_ERROR_PATTERNS):
