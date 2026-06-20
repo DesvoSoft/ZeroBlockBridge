@@ -527,14 +527,14 @@ class ServerRunner:
         self.exit_code = self.process.returncode
         stderr_snapshot = self.get_stderr_snapshot()
         uptime = time.time() - start_time
-        self.running = False
-        self.process = None
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
         self.events.emit(ServerEvent.STOPPED, {
             "exit_code": self.exit_code,
             "uptime": uptime,
             "stderr": stderr_snapshot,
         })
+        self.running = False
+        self.process = None
 
     def _read_stderr(self):
         self._stderr_done.clear()
