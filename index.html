@@ -7,7 +7,7 @@
   <meta name="description" content="A desktop app that makes self-hosting a Minecraft server stupid-simple. Auto-healing, tunneling, backups, and mod management — all in one place.">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,78 +16,86 @@
        HERO
   ══════════════════════════════════════ -->
   <section id="hero">
-    <!-- Static gradient bg -->
     <div class="hero-bg"></div>
-    <!-- Tile grid (click-to-ripple, like website/ prototype) -->
     <div id="hero-tiles"></div>
 
+    <!-- Content is always present, tiles cover it initially -->
     <div class="hero-content">
-      <img src="assets/logo.png" alt="ZeroBlockBridge" class="hero-logo" width="160" height="160">
 
-      <!-- Console-style tag -->
-      <div class="mc-console-tag">
-        <span class="mc-tag-bracket">[</span>
-        <span class="mc-tag-server">Server</span>
-        <span class="mc-tag-bracket">]</span>
-        <span class="mc-tag-text"> ZeroBlockBridge loaded. </span>
-        <span class="mc-tag-cursor">█</span>
+      <!-- Logo — landscape 495×332, rendered at comfortable size -->
+      <div class="hero-logo-wrap">
+        <img src="assets/logo.png" alt="ZeroBlockBridge logo" class="hero-logo">
       </div>
 
+      <!-- Eyebrow tag -->
+      <div class="hero-eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span class="eyebrow-text">Windows Desktop App · Self-hosted Minecraft</span>
+      </div>
+
+      <!-- Main title -->
       <h1 class="hero-title">
-        Self-host Minecraft.<br>
-        <span class="vitra-gradient-text">Without the headache.</span>
+        <span class="title-zero">Zero</span><span class="title-block">Block</span><span class="title-bridge">Bridge</span>
       </h1>
+
       <p class="hero-sub">
-        ZeroBlockBridge is a Windows desktop app that takes care of everything your server needs —
-        crash recovery, public tunneling, automatic backups, Java management, and mods.
-        You just hit Start.
+        Launch, heal, tunnel, and back up your Minecraft server — all from one app.
+        No terminal. No port forwarding. No babysitting.
       </p>
 
-      <!-- Stats bar -->
+      <!-- CTA -->
+      <div class="hero-actions">
+        <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
+           class="hero-btn-primary" download>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download for Windows
+        </a>
+        <a href="#features" class="hero-btn-ghost">See features <span class="btn-arrow">→</span></a>
+      </div>
+
+      <!-- Stats strip -->
       <div class="hero-stats">
         <div class="hero-stat">
           <span class="stat-num">364</span>
           <span class="stat-label">Tests passing</span>
         </div>
-        <div class="stat-div"></div>
+        <span class="stat-sep"></span>
         <div class="hero-stat">
           <span class="stat-num">80+</span>
-          <span class="stat-label">Safe commands</span>
+          <span class="stat-label">Allowlisted commands</span>
         </div>
-        <div class="stat-div"></div>
+        <span class="stat-sep"></span>
         <div class="hero-stat">
           <span class="stat-num">0</span>
           <span class="stat-label">Port forwarding needed</span>
         </div>
+        <span class="stat-sep"></span>
+        <div class="hero-stat">
+          <span class="stat-num">1.8–1.21</span>
+          <span class="stat-label">Java Edition support</span>
+        </div>
       </div>
 
-      <div class="hero-actions">
-        <a href="#download" class="vitra-btn vitra-btn-primary vitra-btn-lg">⬇ Download for Windows</a>
-        <a href="#features" class="vitra-btn vitra-btn-ghost vitra-btn-lg">See features →</a>
-      </div>
-
-      <!-- Minecraft-flavoured version line -->
-      <p class="mc-version-line">Vanilla · Paper · Fabric · Forge · Purpur — Java Edition 1.8 – 1.21</p>
+      <!-- Hint shown before reveal -->
+      <p class="tiles-hint">Click anywhere to reveal</p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════
-       PARTICLE CANVAS (sections backdrop)
+       SECTIONS WRAP (particle backdrop)
   ══════════════════════════════════════ -->
   <div id="sections-wrap">
     <canvas id="section-particles"></canvas>
 
-    <!-- ══════════════════════════════════════
-         FEATURES
-    ══════════════════════════════════════ -->
+    <!-- FEATURES -->
     <section id="features" class="section">
       <div class="vitra-container">
         <h2 class="section-title vitra-reveal vitra-reveal-up">Everything your server needs</h2>
         <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
           From first boot to a running multiplayer world — ZBB handles it so you don't have to.
         </p>
-
         <div class="features-grid">
+
           <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
             <div class="feature-icon">⚡</div>
             <h3 class="vitra-card-title">Auto-Healing Watchdog</h3>
@@ -129,16 +137,15 @@
             <p class="vitra-card-body">80+ safe Minecraft commands on an explicit allowlist. Shell injection, pipe operators, and dangerous flags are blocked before reaching the JVM.</p>
             <div class="mc-tag-pill">Allowlist · shell=False · No injection</div>
           </div>
+
         </div>
       </div>
     </section>
 
-    <!-- ══════════════════════════════════════
-         HOW IT WORKS
-    ══════════════════════════════════════ -->
+    <!-- HOW IT WORKS -->
     <section id="how" class="section how-section">
       <div class="vitra-container">
-        <h2 class="section-title vitra-reveal vitra-reveal-up">Server up in 3 steps</h2>
+        <h2 class="section-title vitra-reveal vitra-reveal-up">Up and running in 3 steps</h2>
         <div class="steps-grid">
 
           <div class="step vitra-reveal vitra-reveal-up vitra-delay-100">
@@ -152,23 +159,21 @@
             <div class="step-num">02</div>
             <div class="step-block">🟩</div>
             <h3>Hit Start</h3>
-            <p>Java is resolved, eula.txt accepted, and the server process launches with Aikar's GC flags — optimized out of the box. No terminal needed.</p>
+            <p>Java is resolved, eula.txt accepted, and the server launches with Aikar's GC flags — optimized out of the box. No terminal needed.</p>
           </div>
 
           <div class="step vitra-reveal vitra-reveal-up vitra-delay-300">
             <div class="step-num">03</div>
             <div class="step-block">🌐</div>
             <h3>Share the link</h3>
-            <p>Playit tunnel activates. Copy the address, send it to your friends. <code>server.log</code> streams live in the console tab while ZBB keeps everything alive.</p>
+            <p>Playit tunnel activates. Copy the address, send it to friends. <code>server.log</code> streams live while ZBB keeps everything alive.</p>
           </div>
 
         </div>
       </div>
     </section>
 
-    <!-- ══════════════════════════════════════
-         DOWNLOAD
-    ══════════════════════════════════════ -->
+    <!-- DOWNLOAD -->
     <section id="download" class="section download-section">
       <div class="vitra-container">
         <div class="download-card vitra-glass vitra-reveal vitra-reveal-up">
@@ -183,8 +188,10 @@
           </div>
           <div class="download-right">
             <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
-               class="vitra-btn vitra-btn-primary vitra-btn-lg"
-               download>⬇ Download for Windows</a>
+               class="hero-btn-primary" download>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download for Windows
+            </a>
             <div class="install-block">
               <span class="install-label">Clone &amp; run</span>
               <code>pip install -r requirements.txt</code>
@@ -195,9 +202,7 @@
       </div>
     </section>
 
-    <!-- ══════════════════════════════════════
-         DOCS
-    ══════════════════════════════════════ -->
+    <!-- DOCS -->
     <section id="docs" class="section">
       <div class="vitra-container">
         <h2 class="section-title vitra-reveal vitra-reveal-up">Documentation</h2>
@@ -205,8 +210,7 @@
           Everything you need to get a server running and keep it running.
         </p>
         <div class="docs-grid">
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme"
-             target="_blank" rel="noopener"
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme" target="_blank" rel="noopener"
              class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-100">
             <span class="doc-icon">📖</span>
             <div>
@@ -215,8 +219,7 @@
             </div>
             <span class="doc-arrow">→</span>
           </a>
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/wiki"
-             target="_blank" rel="noopener"
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/wiki" target="_blank" rel="noopener"
              class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-200">
             <span class="doc-icon">⚙️</span>
             <div>
@@ -225,8 +228,7 @@
             </div>
             <span class="doc-arrow">→</span>
           </a>
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues"
-             target="_blank" rel="noopener"
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues" target="_blank" rel="noopener"
              class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-300">
             <span class="doc-icon">🐛</span>
             <div>
@@ -239,12 +241,10 @@
       </div>
     </section>
 
-    <!-- ══════════════════════════════════════
-         FOOTER
-    ══════════════════════════════════════ -->
+    <!-- FOOTER -->
     <footer class="site-footer">
       <div class="vitra-container footer-inner">
-        <img src="assets/logo.png" alt="" aria-hidden="true" width="20" height="20" class="footer-logo">
+        <img src="assets/logo.png" alt="" aria-hidden="true" height="22" class="footer-logo">
         <span class="footer-brand">ZeroBlockBridge</span>
         <span class="footer-sep">·</span>
         <span>Developed by <a href="https://github.com/DesvoSoft" target="_blank" rel="noopener">DesvoSoft</a></span>

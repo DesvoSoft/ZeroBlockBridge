@@ -1,11 +1,10 @@
-/* ZeroBlockBridge — Site Styles
-   Vitra emerald theme + hero tile grid + section particle clusters
-*/
+/* ZeroBlockBridge — Site Styles */
 
 :root {
-  --zbb-font:  'Rubik', system-ui, sans-serif;
-  --zbb-mono:  'JetBrains Mono', 'Fira Code', monospace;
-  --zbb-green: #34d399;
+  --zbb-font:    'Rubik', system-ui, sans-serif;
+  --zbb-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  --zbb-green:   #34d399;
+  --zbb-green2:  #10b981;
   --section-gap: 6rem;
 }
 
@@ -33,22 +32,25 @@ body {
   overflow: hidden;
 }
 
-/* Static emerald gradient bg */
+/* Rich emerald gradient bg */
 .hero-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 50% 0%,  rgba(16,185,129,0.18) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 40% at 80% 80%,  rgba(5,150,105,0.12)  0%, transparent 60%),
-    linear-gradient(160deg, hsl(160,22%,5%) 0%, hsl(160,18%,3%) 60%, hsl(160,14%,2%) 100%);
+    radial-gradient(ellipse 90% 55% at 50% -5%,  rgba(16,185,129,0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 85% 90%,  rgba(5,150,105,0.14)  0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 10% 75%,  rgba(6,95,70,0.10)    0%, transparent 55%),
+    linear-gradient(170deg, hsl(160,24%,5%) 0%, hsl(160,20%,3%) 55%, hsl(160,16%,2%) 100%);
 }
 
-/* ── Tile Grid ── */
+/* ── Tile Grid ─────────────────────────────────────────────── */
+/* Tiles COVER the hero by default. Click ripple reveals content. */
+
 #hero-tiles {
   position: absolute;
   inset: 0;
-  z-index: 3; /* above content — tiles cover everything initially */
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(var(--columns), 1fr);
   grid-template-rows: repeat(var(--rows), 1fr);
@@ -59,134 +61,270 @@ body {
   position: relative;
 }
 
-/* Each tile face — nearly opaque dark, matching website/ prototype */
 .tile::before {
   content: '';
   position: absolute;
   inset: 0.5px;
-  background-color: rgb(12, 18, 14);
-  transition: background-color 0.15s ease;
+  background-color: rgb(11, 16, 13);
+  transition: background-color 0.12s ease;
 }
 
-/* Hover: subtle emerald tint while tiles are covering content */
 .tile:hover::before {
-  background-color: rgb(18, 32, 22);
+  background-color: rgb(20, 36, 25);
 }
 
-/* After reveal: pointer-events off so hero is interactive */
+/* After reveal, disable pointer so hero buttons work */
 #hero.tiles-revealed #hero-tiles {
   pointer-events: none;
 }
 
-/* Hero content — BELOW tiles initially, revealed on click */
+/* ── Hero Content ──────────────────────────────────────────── */
+
 .hero-content {
   position: relative;
   z-index: 2;
   text-align: center;
-  padding: 2rem 1.5rem;
-  max-width: 860px;
+  padding: 3rem 1.5rem 2.5rem;
+  max-width: 900px;
   width: 100%;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* Logo — original 495×332, landscape */
+.hero-logo-wrap {
+  margin-bottom: 2.25rem;
+  line-height: 0;
 }
 
 .hero-logo {
-  border-radius: 26px;
-  width: 160px;
-  height: 160px;
-  margin-bottom: 1.75rem;
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-  filter: drop-shadow(0 0 40px rgba(52,211,153,0.55));
+  width: auto;
+  max-width: min(360px, 80vw);
+  height: auto;
+  border-radius: 18px;
+  filter:
+    drop-shadow(0 0 60px rgba(52,211,153,0.35))
+    drop-shadow(0 4px 24px rgba(0,0,0,0.5));
 }
 
-/* Console-style tag */
-.mc-console-tag {
+/* Eyebrow */
+.hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 0.15em;
+  gap: 0.55rem;
   font-family: var(--zbb-mono);
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   color: var(--zbb-green);
-  background: rgba(52, 211, 153, 0.07);
-  border: 1px solid rgba(52, 211, 153, 0.2);
-  border-radius: 6px;
-  padding: 0.3rem 0.75rem;
-  margin-bottom: 1.5rem;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+  opacity: 0.85;
 }
-.mc-tag-bracket { opacity: 0.5; }
-.mc-tag-server  { color: #6ee7b7; font-weight: 600; }
-.mc-tag-text    { color: rgba(255,255,255,0.55); }
-.mc-tag-cursor  { color: var(--zbb-green); line-height: 1; }
+
+.eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zbb-green);
+  animation: dot-pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ── Title ─────────────────────────────────────────────────── */
 
 .hero-title {
-  font-size: clamp(2.4rem, 6.5vw, 5rem);
-  font-weight: 700;
-  line-height: 1.1;
-  margin: 0 0 1.1rem;
-  letter-spacing: -0.025em;
+  font-size: clamp(2.8rem, 7.5vw, 5.75rem);
+  font-weight: 800;
+  line-height: 1.0;
+  margin: 0 0 1.4rem;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
 
+.title-zero,
+.title-bridge {
+  color: #fff;
+}
+
+/* "Block" — animated gradient sweep */
+.title-block {
+  position: relative;
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    #34d399 0%,
+    #6ee7b7 30%,
+    #a7f3d0 50%,
+    #6ee7b7 70%,
+    #34d399 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: block-sweep 3s linear infinite;
+}
+
+@keyframes block-sweep {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Underline glow on Block */
+.title-block::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--zbb-green), transparent);
+  opacity: 0.7;
+}
+
+/* Subtitle */
 .hero-sub {
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  font-size: clamp(1rem, 2.1vw, 1.15rem);
   color: var(--vitra-color-text-secondary);
-  line-height: 1.75;
-  margin: 0 auto 2rem;
-  max-width: 580px;
+  line-height: 1.7;
+  margin: 0 0 2rem;
+  max-width: 560px;
 }
 
-/* Stats bar */
+/* ── CTA Buttons ───────────────────────────────────────────── */
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+.hero-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.75rem 1.75rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: linear-gradient(135deg, #10b981, #34d399);
+  color: #052e16;
+  text-decoration: none;
+  transition: filter 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 28px rgba(52,211,153,0.3), 0 2px 8px rgba(0,0,0,0.3);
+  letter-spacing: 0.01em;
+}
+
+.hero-btn-primary:hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+  box-shadow: 0 0 40px rgba(52,211,153,0.45), 0 4px 16px rgba(0,0,0,0.35);
+}
+
+.hero-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.6rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.04);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  backdrop-filter: blur(6px);
+}
+
+.hero-btn-ghost:hover {
+  background: rgba(52,211,153,0.08);
+  border-color: rgba(52,211,153,0.35);
+  color: #fff;
+}
+
+.btn-arrow {
+  transition: transform 0.2s ease;
+}
+.hero-btn-ghost:hover .btn-arrow {
+  transform: translateX(4px);
+}
+
+/* ── Stats Strip ───────────────────────────────────────────── */
+
 .hero-stats {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
-  margin-bottom: 2rem;
 }
 
 .hero-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.18rem;
 }
 
 .stat-num {
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   font-weight: 700;
   color: var(--zbb-green);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
-  font-size: 0.72rem;
+  font-size: 0.67rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--vitra-color-text-secondary);
+  opacity: 0.7;
+  white-space: nowrap;
 }
 
-.stat-div {
+.stat-sep {
   width: 1px;
   height: 2rem;
-  background: var(--vitra-color-border);
-  opacity: 0.5;
+  background: rgba(255,255,255,0.1);
 }
 
-.hero-actions {
-  display: flex;
-  gap: 0.875rem;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+/* Hint shown before click */
+.tiles-hint {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--zbb-mono);
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  z-index: 4; /* above tiles so it's always visible */
+  pointer-events: none;
+  animation: hint-fade 2.5s ease-in-out infinite;
 }
 
-.mc-version-line {
-  font-size: 0.75rem;
-  color: var(--vitra-color-text-tertiary, rgba(255,255,255,0.28));
-  margin: 0;
-  letter-spacing: 0.02em;
+@keyframes hint-fade {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+/* Hide hint after reveal */
+#hero.tiles-revealed .tiles-hint {
+  display: none;
 }
 
 /* ═══════════════════════════════════════════
@@ -222,8 +360,7 @@ body {
   padding: var(--section-gap) 1.5rem;
 }
 
-.section > .vitra-container,
-.section > div {
+.section > .vitra-container {
   max-width: 1100px;
   margin-left: auto;
   margin-right: auto;
@@ -252,25 +389,32 @@ body {
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 1.25rem;
-  max-width: 1100px;
-  margin: 0 auto;
 }
 
+/* Feature icon — centered block */
 .feature-icon {
-  font-size: 2rem;
-  margin-bottom: 0.875rem;
+  font-size: 1.75rem;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(52,211,153,0.1);
+  border: 1px solid rgba(52,211,153,0.15);
+  margin-bottom: 1rem;
 }
 
 .mc-tag-pill {
   margin-top: 1rem;
   font-family: var(--zbb-mono);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   color: var(--zbb-green);
-  background: rgba(52, 211, 153, 0.08);
-  border: 1px solid rgba(52, 211, 153, 0.18);
+  background: rgba(52, 211, 153, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.16);
   border-radius: 4px;
   padding: 0.25rem 0.6rem;
   display: inline-block;
@@ -307,7 +451,7 @@ body {
 
 .step-num {
   font-family: var(--zbb-mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.15em;
   color: var(--zbb-green);
@@ -336,7 +480,7 @@ body {
 .step code {
   font-family: var(--zbb-mono);
   font-size: 0.82em;
-  background: rgba(52, 211, 153, 0.08);
+  background: rgba(52,211,153,0.08);
   padding: 0.1em 0.35em;
   border-radius: 3px;
   color: var(--zbb-green);
@@ -391,7 +535,7 @@ body {
 }
 
 .install-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--vitra-color-text-secondary);
@@ -402,8 +546,8 @@ body {
   font-family: var(--zbb-mono);
   font-size: 0.78rem;
   padding: 0.45rem 0.75rem;
-  background: rgba(52, 211, 153, 0.06);
-  border: 1px solid rgba(52, 211, 153, 0.15);
+  background: rgba(52,211,153,0.06);
+  border: 1px solid rgba(52,211,153,0.14);
   border-radius: 5px;
   color: var(--zbb-green);
   white-space: nowrap;
@@ -433,7 +577,7 @@ body {
 
 .doc-card:hover { transform: translateY(-3px); }
 
-.doc-icon { font-size: 1.6rem; flex-shrink: 0; }
+.doc-icon { font-size: 1.5rem; flex-shrink: 0; }
 
 .doc-card h4 { margin: 0 0 0.2rem; font-size: 0.95rem; font-weight: 600; }
 .doc-card p  { margin: 0; font-size: 0.83rem; color: var(--vitra-color-text-secondary); }
@@ -467,9 +611,9 @@ body {
   text-align: center;
 }
 
-.footer-logo    { border-radius: 4px; opacity: 0.65; }
-.footer-brand   { font-weight: 700; color: var(--vitra-color-text-primary); }
-.footer-sep     { opacity: 0.35; }
+.footer-logo  { border-radius: 4px; opacity: 0.55; height: 22px; width: auto; }
+.footer-brand { font-weight: 700; color: var(--vitra-color-text-primary); }
+.footer-sep   { opacity: 0.3; }
 
 .site-footer a {
   color: var(--vitra-color-text-secondary);
@@ -485,10 +629,11 @@ body {
 @media (max-width: 768px) {
   :root { --section-gap: 4rem; }
 
-  .hero-content { padding: 1.5rem 1rem; }
+  .hero-content { padding: 2rem 1rem 2rem; }
+  .hero-title   { white-space: normal; }
 
-  .hero-stats { gap: 1rem; }
-  .stat-div   { display: none; }
+  .hero-stats { gap: 0.75rem; }
+  .stat-sep   { display: none; }
 
   .features-grid,
   .steps-grid,
@@ -511,24 +656,20 @@ body {
   }
 
   .download-badges { justify-content: center; }
-
   .install-block code { white-space: normal; word-break: break-all; }
-
-  .mc-version-line { display: none; }
 }
 
 @media (max-width: 480px) {
-  .hero-title { letter-spacing: -0.015em; }
-
-  .mc-console-tag { font-size: 0.72rem; }
-
   .hero-actions {
     flex-direction: column;
     align-items: center;
   }
-
-  .hero-actions .vitra-btn { width: 100%; max-width: 280px; justify-content: center; }
-
+  .hero-btn-primary,
+  .hero-btn-ghost {
+    width: 100%;
+    max-width: 300px;
+    justify-content: center;
+  }
   .footer-inner { gap: 0.5rem; }
   .footer-sep   { display: none; }
 }
