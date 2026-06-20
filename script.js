@@ -1,23 +1,26 @@
-/* ZeroBlockBridge — Site Script
-   Particle network hero + Vitra init
-*/
+/* ZeroBlockBridge — Site Script */
 
 // ── Particle Network ───────────────────────────────────────────
 (function () {
   const canvas = document.getElementById('particle-canvas');
   const ctx    = canvas.getContext('2d');
 
-  // Emerald palette
-  const COLOR_NODE = 'rgba(52, 211, 153, 0.75)';   // bright green node
-  const COLOR_LINE = 'rgba(52, 211, 153, {a})';     // template for line
-  const COLOR_GLOW = 'rgba(16, 185, 129, 0.18)';    // glow under node
+  const COLOR_NODE = 'rgba(52, 211, 153, {a})';
+  const COLOR_LINE = 'rgba(52, 211, 153, {a})';
+  const COLOR_GLOW = 'rgba(16, 185, 129, 0.12)';
 
-  const CONNECT_DIST = 160;   // max distance to draw a line
-  const NODE_COUNT_DESKTOP = 80;
-  const NODE_COUNT_MOBILE  = 40;
-  const SPEED = 0.35;
+  const CONNECT_DIST       = 160;
+  const NODE_COUNT_DESKTOP = 70;
+  const NODE_COUNT_MOBILE  = 35;
+  const BASE_SPEED         = 0.08;   // slow, subtle drift
+
+  // Fade-in on load
+  let globalAlpha = 0;
+  const FADE_DURATION = 1200; // ms
+  let fadeStart = null;
 
   let W, H, nodes, animId;
+  let mouse = { x: -9999, y: -9999 };
 
   function resize() {
     W = canvas.width  = canvas.offsetWidth;
@@ -26,7 +29,7 @@
 
   function makeNode() {
     const angle = Math.random() * Math.PI * 2;
-    const speed = SPEED * (0.5 + Math.random() * 0.8);
+    const speed = BASE_SPEED * (0.6 + Math.random() * 0.8);
     return {
       x:  Math.random() * W,
       y:  Math.random() * H,
@@ -42,82 +45,34 @@
     nodes = Array.from({ length: count }, makeNode);
   }
 
-  function draw() {
+  function tick(ts) {
+    // Fade-in
+    if (!fadeStart) fadeStart = ts;
+    globalAlpha = Math.min(1, (ts - fadeStart) / FADE_DURATION);
+
     ctx.clearRect(0, 0, W, H);
 
-    // Update positions + bounce
+    // Update
     for (const n of nodes) {
-      n.x += n.vx;
-      n.y += n.vy;
-      if (n.x < 0 || n.x > W) n.vx *= -1;
-      if (n.y < 0 || n.y > H) n.vy *= -1;
-    }
-
-    // Draw lines
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const dx = nodes[i].x - nodes[j].x;
-        const dy = nodes[i].y - nodes[j].y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > CONNECT_DIST) continue;
-
-        const alpha = (1 - dist / CONNECT_DIST) * 0.55;
-        ctx.beginPath();
-        ctx.strokeStyle = COLOR_LINE.replace('{a}', alpha);
-        ctx.lineWidth = 0.8;
-        ctx.moveTo(nodes[i].x, nodes[i].y);
-        ctx.lineTo(nodes[j].x, nodes[j].y);
-        ctx.stroke();
-      }
-    }
-
-    // Draw nodes
-    for (const n of nodes) {
-      // Glow
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r * 3, 0, Math.PI * 2);
-      ctx.fillStyle = COLOR_GLOW;
-      ctx.fill();
-      // Core
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = COLOR_NODE;
-      ctx.fill();
-    }
-
-    animId = requestAnimationFrame(draw);
-  }
-
-  // Mouse interaction — attract nearby nodes
-  let mouse = { x: -9999, y: -9999 };
-  canvas.addEventListener('mousemove', e => {
-    const rect = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
-  });
-  canvas.addEventListener('mouseleave', () => {
-    mouse.x = -9999;
-    mouse.y = -9999;
-  });
-
-  // Mouse-attract pass runs after node update inside draw()
-  // Override draw to inject attraction
-  const _drawOrig = draw;
-
-  function drawWithAttract() {
-    ctx.clearRect(0, 0, W, H);
-
-    for (const n of nodes) {
-      // Attraction to mouse
+      // Gentle mouse attraction
       const dx = mouse.x - n.x;
       const dy = mouse.y - n.y;
       const d  = Math.sqrt(dx * dx + dy * dy);
-      if (d < 120) {
-        n.vx += (dx / d) * 0.04;
-        n.vy += (dy / d) * 0.04;
-        // Speed cap
+      if (d < 140 && d > 0) {
+        const force = 0.015;
+        n.vx += (dx / d) * force;
+        n.vy += (dy / d) * force;
+        // Soft speed cap — much lower than before
         const sp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-        if (sp > SPEED * 3) { n.vx = (n.vx / sp) * SPEED * 3; n.vy = (n.vy / sp) * SPEED * 3; }
+        const cap = BASE_SPEED * 2.5;
+        if (sp > cap) { n.vx = (n.vx / sp) * cap; n.vy = (n.vy / sp) * cap; }
+      } else {
+        // Gentle drag back to base speed
+        const sp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+        if (sp > BASE_SPEED * 1.2) {
+          n.vx *= 0.995;
+          n.vy *= 0.995;
+        }
       }
 
       n.x += n.vx;
@@ -133,10 +88,10 @@
         const dy   = nodes[i].y - nodes[j].y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > CONNECT_DIST) continue;
-        const alpha = (1 - dist / CONNECT_DIST) * 0.55;
+        const alpha = globalAlpha * (1 - dist / CONNECT_DIST) * 0.45;
         ctx.beginPath();
         ctx.strokeStyle = COLOR_LINE.replace('{a}', alpha);
-        ctx.lineWidth = 0.8;
+        ctx.lineWidth = 0.7;
         ctx.moveTo(nodes[i].x, nodes[i].y);
         ctx.lineTo(nodes[j].x, nodes[j].y);
         ctx.stroke();
@@ -145,34 +100,45 @@
 
     // Nodes
     for (const n of nodes) {
+      // Soft glow
       ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r * 3, 0, Math.PI * 2);
+      ctx.arc(n.x, n.y, n.r * 4, 0, Math.PI * 2);
       ctx.fillStyle = COLOR_GLOW;
       ctx.fill();
+      // Core dot
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = COLOR_NODE;
+      ctx.fillStyle = COLOR_NODE.replace('{a}', globalAlpha * 0.8);
       ctx.fill();
     }
 
-    animId = requestAnimationFrame(drawWithAttract);
+    animId = requestAnimationFrame(tick);
   }
+
+  // Mouse tracking on the hero section, not just canvas
+  const hero = document.getElementById('hero');
+  hero.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+  });
+  hero.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
 
   window.addEventListener('resize', () => {
     cancelAnimationFrame(animId);
     resize();
-    drawWithAttract();
+    animId = requestAnimationFrame(tick);
   });
 
   init();
-  drawWithAttract();
+  animId = requestAnimationFrame(tick);
 })();
 
 // ── Console cursor blink ───────────────────────────────────────
 (function () {
   const cursor = document.querySelector('.mc-tag-cursor');
   if (!cursor) return;
-  setInterval(() => cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0', 530);
+  setInterval(() => { cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0'; }, 530);
 })();
 
 // ── Vitra init ─────────────────────────────────────────────────

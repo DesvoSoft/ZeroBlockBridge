@@ -66,9 +66,14 @@ body {
 }
 
 .hero-logo {
-  border-radius: 18px;
-  margin-bottom: 1.25rem;
-  filter: drop-shadow(0 0 28px rgba(52,211,153,0.45));
+  border-radius: 22px;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 1.5rem;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  filter: drop-shadow(0 0 32px rgba(52,211,153,0.5));
 }
 
 /* Console-style tag */
@@ -164,7 +169,17 @@ body {
    SECTIONS
 ═══════════════════════════════════════════ */
 
-.section { padding: var(--section-gap) 1.5rem; }
+.section {
+  padding: var(--section-gap) 1.5rem;
+}
+
+/* Every section's direct content is centered via container */
+.section > .vitra-container,
+.section > div {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .section-title {
   font-size: clamp(1.75rem, 4vw, 2.75rem);
@@ -191,6 +206,8 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.25rem;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .feature-icon {
@@ -231,6 +248,9 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 2rem;
   margin-top: 1rem;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .step {
@@ -291,6 +311,8 @@ body {
   padding: 2.5rem 3rem;
   border-radius: var(--vitra-radius-lg, 16px);
   flex-wrap: wrap;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .download-left h2 {
@@ -348,6 +370,8 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 1.25rem;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .doc-card {
@@ -430,15 +454,19 @@ body {
 
   .download-card {
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     padding: 2rem 1.5rem;
     text-align: center;
   }
 
+  .download-left,
   .download-right {
     align-items: center;
     width: 100%;
+    text-align: center;
   }
+
+  .download-badges { justify-content: center; }
 
   .install-block code { white-space: normal; word-break: break-all; }
 
