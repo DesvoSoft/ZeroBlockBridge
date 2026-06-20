@@ -1,6 +1,6 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-19
+> **Última actualización:** 2026-06-20
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 364 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW encontrados, todos catalogados en BUG-AUDIT
@@ -42,13 +42,14 @@
 4. [✅ FIX-P3: Whitelist + TPS + Wizard Security](#fix-p3-whitelist--tps--wizard-security)
 5. [✅ F4: Auto-Backup (backend + UI)](#f4-auto-backup-scheduler)
 6. [⬆️ **P0: Foundation Hardening — PRIORIDAD MÁXIMA**](#p0-foundation-hardening)
-7. [⬆️ **BUG-AUDIT: 19 issues del audit 2026-06-19**](#bug-audit--2026-06-19)
-8. [▶️ F5: Crash Report Collector](#f5-crash-report-collector)
-9. [▶️ F6: Discord Webhook](#f6-discord-webhook)
-10. [▶️ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
-11. [⏸️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
-12. [⏸️ F7: Server Templates + Modpacks](#f7-server-templates--modpacks)
-13. [⏸️ F9-F11: Migration, Linux, UI 2.0](#f9-f11-migration-linux-ui-20)
+7. [⬆️ **EXE-PERF: .exe Startup/Shutdown Performance — PRIORIDAD RELEASE**](#exe-perf-exe-startupshutdown-performance)
+8. [⬆️ **BUG-AUDIT: 19 issues del audit 2026-06-19**](#bug-audit--2026-06-19)
+9. [▶️ F5: Crash Report Collector](#f5-crash-report-collector)
+10. [▶️ F6: Discord Webhook](#f6-discord-webhook)
+11. [▶️ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
+12. [⏸️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
+13. [⏸️ F7: Server Templates + Modpacks](#f7-server-templates--modpacks)
+14. [⏸️ F9-F11: Migration, Linux, UI 2.0](#f9-f11-migration-linux-ui-20)
 
 ---
 
@@ -627,6 +628,7 @@ server_version = meta.get("version", "")
 | **FIX-P3** | Whitelist + TPS + Wizard Security | ~100 | 🥇 | ✅ |
 | **F4** | Auto-Backup Scheduler | +150 | 🥇 | ⚠️ (backend ✅, UI ❌) |
 | **P0** | Foundation Hardening | ~+400 | 🥇 | ⬆️ **AHORA** |
+| **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | ~+80/-20 | 🥇 | ⬆️ **PRIORIDAD RELEASE** |
 | **F5** | Crash Report Collector | +80 | 🥇 | ⏳ (tras P0) |
 | **F6** | Discord Webhook | +60 | 🥈 | ⏳ |
 | **MODS-B** | Modrinth Browser Mejoras | +200 | 🥈 | ⏳ |
@@ -667,6 +669,85 @@ F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 (backend) ✅
 
 ---
 
+## EXE-PERF: .exe Startup/Shutdown Performance
+
+**Objetivo:** Eliminar el freeze al cerrar, los terminales vacíos que flashean, y reducir el tiempo de inicio. Bugs reproducidos en release 1.4 (.exe compilado con PyInstaller).
+
+**Diagnóstico (2026-06-20):** Inspección de `main.py`, `core.py`, `orchestrators.py`.
+
+---
+
+### Bugs Identificados
+
+#### EXE-01 — Shutdown freeze: executor join por `_threads` privado 🔴
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/core/core.py:487-490` |
+| **Síntoma** | App congela hasta ~30s al cerrar |
+| **Causa** | `executor.shutdown(wait=False)` seguido de `for t in getattr(self.executor, '_threads', []):  t.join(timeout=15.0)` — `_threads` es atributo interno no garantizado. En PyInstaller el layout del objeto puede diferir, el join falla silenciosamente o cuelga. 15s timeout **por thread** × 8 workers = hasta 120s teórico. |
+| **Fix** | Reemplazar con `executor.shutdown(wait=True, cancel_futures=True)` envuelto en `concurrent.futures.wait()` con timeout global de 3s. |
+
+#### EXE-02 — Shutdown freeze: executor de UI nunca cerrado 🔴
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/ui/main.py:70` (creación) / `app/ui/main.py:827-835` (`on_close`) |
+| **Síntoma** | `MCTunnelApp.executor` (10 workers) nunca recibe `shutdown()`. Tasks pendientes (downloads, link checks) siguen corriendo en background después de `destroy()`, haciendo callbacks a widgets destruidos. |
+| **Fix** | Llamar `self.executor.shutdown(wait=False, cancel_futures=True)` al inicio de `on_close`, antes de `zbb_manager.shutdown()`. |
+
+#### EXE-03 — Terminales flash: subprocesos huérfanos al cerrar 🔴
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/core/core.py:464-469` |
+| **Síntoma** | Ventanas de consola vacías flashean por milisegundos al cerrar |
+| **Causa** | Si `server_runner.process` o `playit_manager` tiene `subprocess.Popen` vivo al momento del `sys.exit(0)`, Windows crea console window efímera para el proceso huérfano. `CREATE_NO_WINDOW` está seteado en el spawn, pero si el proceso no murió limpiamente antes del exit, el OS lo recoge y muestra consola. |
+| **Fix** | En `on_close`, después de `zbb_manager.shutdown()`, verificar con `server_runner.process.poll()` que el proceso está muerto. Si no, hacer `process.kill()` explícito antes de `destroy()`. |
+
+#### EXE-04 — Startup lento: `VersionManager` toca disco/red en `__init__` 🟡
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/core/core.py:64` / `app/core/version_manager.py` |
+| **Síntoma** | Ventana tarda en aparecer al iniciar el .exe |
+| **Causa** | `VersionManager()` en `ZBBManager.__init__` puede leer caché de disco y (si expirada) disparar fetch de red. Esto ocurre en el thread principal antes de que `mainloop()` corra, bloqueando el render inicial. |
+| **Fix** | Mover `VersionManager()` a lazy init — instanciar en el primer uso (`get_versions()`), no en `__init__`. |
+
+#### EXE-05 — Startup lento: `sys.exit(0)` innecesario en `on_close` 🟡
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/ui/main.py:835` |
+| **Síntoma** | `sys.exit(0)` dispara atexit handlers (incluyendo `SingleInstanceLock.release`) que ya se llamaron manualmente en `on_close:833`. Double-release del lockfile. En PyInstaller, `sys.exit` puede triggear el bootstrap de cleanup que abre otra consola efímera. |
+| **Fix** | Eliminar `sys.exit(0)`. `self.destroy()` ya termina el mainloop. El proceso muere solo. |
+
+#### EXE-06 — Shutdown: `on_close` bloquea mainloop durante shutdown 🟡
+| Campo | Detalle |
+|-------|---------|
+| **Archivo** | `app/ui/main.py:827-835` |
+| **Síntoma** | Durante el freeze de cierre, la ventana (aunque oculta con `withdraw()`) sigue bloqueando. Si Tkinter tiene callbacks pendientes en la queue `after()`, no se procesan porque `mainloop` está colgado esperando que `shutdown()` retorne en el thread principal. |
+| **Fix** | Lanzar `zbb_manager.shutdown()` en thread separado. Cuando termina, llamar `self.after(0, self._do_destroy)`. `_do_destroy` hace `destroy()`. Timeout de 5s: si shutdown no termina, `_do_destroy` igual. |
+
+---
+
+### Plan de Implementación
+
+| # | Fix | Archivo | Esfuerzo | Impacto | Estado |
+|---|-----|---------|----------|---------|--------|
+| **EXE-01** | Reemplazar `_threads` join con `shutdown(wait=True, cancel_futures=True)` | `core/core.py` | 30 min | 🔴 Cierre freeze | ✅ `4bfefe8` |
+| **EXE-02** | Shutdown executor UI en `on_close` | `ui/main.py` | 15 min | 🔴 Cierre freeze | ✅ `026d13e` |
+| **EXE-03** | Kill explícito de subprocesos antes de `destroy()` | `ui/main.py` | 30 min | 🔴 Terminal flash | ✅ `026d13e` |
+| **EXE-04** | VersionManager lazy init | `core/version_manager.py` | 45 min | 🟡 Startup lento | ✅ `61a103a` |
+| **EXE-05** | Eliminar `sys.exit(0)` de `on_close` | `ui/main.py` | 5 min | 🟡 Terminal flash | ✅ `026d13e` |
+| **EXE-06** | `shutdown()` en thread separado, `on_close` no bloquea mainloop | `ui/main.py` | 30 min | 🟡 Cierre freeze | ✅ `026d13e` |
+
+**Orden recomendado:** EXE-05 → EXE-02 → EXE-01 → EXE-06 → EXE-03 → EXE-04
+
+**Criterio de aceptación:**
+- [ ] App cierra en < 2s cuando no hay servidor corriendo
+- [ ] App cierra en < 6s cuando servidor está corriendo (tiempo de graceful stop del MC)
+- [ ] Zero terminales flash al cerrar
+- [ ] Ventana aparece en < 1s al iniciar el .exe (sin contar tiempo de Python bootstrap)
+- [ ] `on_close` nunca bloquea el mainloop de Tkinter
+
+---
+
 ## BUG-AUDIT — 2026-06-19
 
 Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
@@ -684,7 +765,7 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 |----|---------|--------|---------|-----|
 | ~~HA-01~~ | ~~`services/backup_manager.py`~~ | ~~109, 125~~ | ~~`strptime` crash si hay archivos non-timestamp en carpeta de backups (ej. `notes.zip`).~~ | ✅ FIXED `146553a` |
 | ~~HA-02~~ | ~~`core/logic.py`~~ | ~~530~~ | ~~TOCTOU: `self.running = False` seteado antes de emitir `STOPPED`. Watchdog puede leer `running=False` sin que evento haya disparado.~~ | ✅ FIXED `ea4c3ff` |
-| HA-03 | `core/orchestrators.py` | 74-77 | Stop intencional puede triggear restart del Watchdog. `stop_server` setea OFFLINE síncronamente; thread de output emite `STOPPED` después, Watchdog lo ve. | Clearear `_listening` flag en Watchdog ANTES de `runner.stop()`. |
+| ~~HA-03~~ | ~~`core/orchestrators.py`~~ | ~~74-77~~ | ~~Stop intencional puede triggear restart del Watchdog. `stop_server` setea OFFLINE síncronamente; thread de output emite `STOPPED` después, Watchdog lo ve.~~ | ✅ FIXED `2fee336` |
 | ~~HA-04~~ | ~~`core/orchestrators.py`~~ | ~~202~~ | ~~Auto-backup nunca corre si restart scheduler está desactivado — `_check_auto_backup()` está dentro del `if status:` del restart scheduler.~~ | ✅ FIXED `ceb6882` |
 | HA-05 | `services/watchdog.py` | ~147 | Race en `_do_restart`: chequea `runner.running` sin lock antes de `start()`. Secuencias ZOMBIE+STOPPED rápidas pueden causar doble-start. | Agregar lock alrededor del chequeo + start. |
 | HA-06 | `core/logic.py` | 558-571 | `connected_players` no se limpia al parar server. En restart via `_do_restart` (mismo objeto), retiene jugadores stale. | Llamar `self.connected_players.clear()` en `start()`. |
@@ -715,10 +796,10 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | Severidad | Total | Resueltos | Pendientes |
 |-----------|-------|-----------|-----------|
 | 🔴 CRITICAL | 2 | 1 | 1 |
-| 🟡 HIGH | 6 | 2 | 4 |
+| 🟡 HIGH | 6 | 3 | 3 |
 | 🟡 MEDIUM | 5 | 2 | 3 |
 | 🔵 LOW | 6 | 0 | 6 |
-| **TOTAL** | **19** | **5** | **14** |
+| **TOTAL** | **19** | **6** | **13** |
 
 ---
 
