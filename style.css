@@ -1,0 +1,333 @@
+/* ═══════════════════════════════════════════
+   ZeroBlockBridge — Site Styles
+   Uses Vitra emerald theme tokens + tile overlay
+═══════════════════════════════════════════ */
+
+:root {
+  --zbb-font: 'Rubik', system-ui, sans-serif;
+  --zbb-section-gap: 7rem;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--zbb-font);
+  margin: 0;
+  background: var(--vitra-color-bg);
+  color: var(--vitra-color-text-primary);
+  overflow-x: hidden;
+}
+
+/* ── Hero ─────────────────────────────────── */
+
+#hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Vitra gradient + orbs sit behind everything */
+.vitra-gradient-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.vitra-glow-orb {
+  z-index: 0;
+}
+
+/* Tile grid — sits above Vitra bg, below text */
+#tiles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  pointer-events: none;
+}
+
+.tile {
+  position: relative;
+  cursor: default;
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: 0.5px;
+  background: rgba(0, 255, 128, 0.03);
+  transition: background 0.3s ease;
+}
+
+/* Hero content */
+.hero-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 2rem 1.5rem;
+  max-width: 780px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vitra-color-text-secondary);
+  padding: 0.35rem 0.85rem;
+  border-radius: 100px;
+  margin-bottom: 1.5rem;
+}
+
+.badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vitra-color-accent);
+  box-shadow: 0 0 8px var(--vitra-color-accent);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(0.85); }
+}
+
+.hero-title {
+  font-family: var(--zbb-font);
+  font-size: clamp(2.8rem, 7vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0 0 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.hero-sub {
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  color: var(--vitra-color-text-secondary);
+  line-height: 1.7;
+  margin: 0 auto 2.5rem;
+  max-width: 580px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── Sections ─────────────────────────────── */
+
+.section {
+  padding: var(--zbb-section-gap) 1.5rem;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 0.75rem;
+  letter-spacing: -0.02em;
+}
+
+.section-sub {
+  text-align: center;
+  color: var(--vitra-color-text-secondary);
+  font-size: 1.1rem;
+  margin: 0 auto 3.5rem;
+  max-width: 520px;
+}
+
+/* ── Features Grid ────────────────────────── */
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.5rem;
+}
+
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  line-height: 1;
+}
+
+/* ── Download ─────────────────────────────── */
+
+.download-section {
+  padding: var(--zbb-section-gap) 1.5rem;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 200, 100, 0.04) 50%,
+    transparent 100%
+  );
+}
+
+.download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 2.5rem 3rem;
+  border-radius: var(--vitra-radius-lg);
+  flex-wrap: wrap;
+}
+
+.download-left h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+}
+
+.download-left p {
+  color: var(--vitra-color-text-secondary);
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+
+.download-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.download-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.install-hint {
+  font-size: 0.82rem;
+  color: var(--vitra-color-text-secondary);
+  margin: 0;
+  max-width: 400px;
+}
+
+.install-hint code {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--vitra-color-surface);
+  border: 1px solid var(--vitra-color-border);
+  border-radius: var(--vitra-radius-sm);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+/* ── Docs Grid ────────────────────────────── */
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.doc-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  padding: 1.5rem;
+}
+
+.doc-card:hover {
+  transform: translateY(-3px);
+}
+
+.doc-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.doc-card h4 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.doc-card p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--vitra-color-text-secondary);
+}
+
+.doc-arrow {
+  margin-left: auto;
+  font-size: 1.1rem;
+  color: var(--vitra-color-accent);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.doc-card:hover .doc-arrow {
+  transform: translateX(4px);
+}
+
+/* ── Footer ───────────────────────────────── */
+
+.site-footer {
+  border-top: 1px solid var(--vitra-color-border);
+  padding: 2rem 1.5rem;
+  color: var(--vitra-color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-brand {
+  font-weight: 700;
+  color: var(--vitra-color-text-primary);
+}
+
+.footer-sep {
+  opacity: 0.4;
+}
+
+.site-footer a {
+  color: var(--vitra-color-text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.site-footer a:hover {
+  color: var(--vitra-color-accent);
+}
+
+/* ── Responsive ───────────────────────────── */
+
+@media (max-width: 640px) {
+  .download-card {
+    flex-direction: column;
+    padding: 2rem 1.5rem;
+  }
+
+  .download-right {
+    width: 100%;
+  }
+}
