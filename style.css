@@ -48,66 +48,56 @@ body {
 #hero-tiles {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 3; /* above content — tiles cover everything initially */
   display: grid;
   grid-template-columns: repeat(var(--columns), 1fr);
   grid-template-rows: repeat(var(--rows), 1fr);
-  animation: tile-sweep 12s ease-in-out infinite;
-}
-
-@keyframes tile-sweep {
-  0%, 100% { filter: brightness(1); }
-  50%       { filter: brightness(1.06); }
 }
 
 .tile {
   cursor: pointer;
   position: relative;
-  transition: opacity 0.15s ease;
 }
 
+/* Each tile face — nearly opaque dark, matching website/ prototype */
 .tile::before {
   content: '';
   position: absolute;
   inset: 0.5px;
-  background-color: rgba(10, 20, 15, 0.82);
-  transition: background-color 0.18s ease;
+  background-color: rgb(12, 18, 14);
+  transition: background-color 0.15s ease;
 }
 
+/* Hover: subtle emerald tint while tiles are covering content */
 .tile:hover::before {
-  background-color: rgba(52, 211, 153, 0.07);
+  background-color: rgb(18, 32, 22);
 }
 
-#hero.tiles-toggled .tile:hover::before {
-  background-color: rgba(52, 211, 153, 0.04) !important;
+/* After reveal: pointer-events off so hero is interactive */
+#hero.tiles-revealed #hero-tiles {
+  pointer-events: none;
 }
 
-/* Hero content — above tiles */
+/* Hero content — BELOW tiles initially, revealed on click */
 .hero-content {
   position: relative;
   z-index: 2;
   text-align: center;
   padding: 2rem 1.5rem;
-  max-width: 820px;
+  max-width: 860px;
   width: 100%;
   margin: 0 auto;
-  animation: hero-fade-in 0.9s ease both;
-}
-
-@keyframes hero-fade-in {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .hero-logo {
-  border-radius: 22px;
-  width: 120px;
-  height: 120px;
-  margin-bottom: 1.5rem;
+  border-radius: 26px;
+  width: 160px;
+  height: 160px;
+  margin-bottom: 1.75rem;
   display: block;
   margin-left: auto;
   margin-right: auto;
-  filter: drop-shadow(0 0 32px rgba(52,211,153,0.5));
+  filter: drop-shadow(0 0 40px rgba(52,211,153,0.55));
 }
 
 /* Console-style tag */
