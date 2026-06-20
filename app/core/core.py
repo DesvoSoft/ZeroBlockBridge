@@ -390,7 +390,7 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
                 reason = (data or {}).get("reason", "manual")
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[ZBBManager] Handling restart request (reason: {reason})...")
 
-                for i in [5, 4, 3, 2]:
+                for i in [5, 4, 3, 2, 1]:
                     self._send_system_message(f"Restarting in {i}...")
                     time.sleep(1)
 
