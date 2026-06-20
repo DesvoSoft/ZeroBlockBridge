@@ -825,14 +825,51 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
     def on_close(self):
-        # Hide window immediately so the user perceives an instant close.
-        # The actual cleanup runs invisibly afterward.
         self.withdraw()
 
-        self.zbb_manager.shutdown()
-        if hasattr(self, '_instance_lock'): self._instance_lock.release()
-        self.destroy()
-        sys.exit(0)
+        # Cancel in-flight UI tasks immediately (downloads, link checks, etc.)
+        self.executor.shutdown(wait=False, cancel_futures=True)
+
+        self._shutdown_event = threading.Event()
+
+        def _do_shutdown():
+            try:
+                self.zbb_manager.shutdown()
+                self._kill_orphan_processes()
+            finally:
+                if hasattr(self, '_instance_lock'):
+                    self._instance_lock.release()
+                self._shutdown_event.set()
+
+        threading.Thread(target=_do_shutdown, daemon=True, name="AppShutdown").start()
+        self._poll_shutdown(deadline=time.monotonic() + 8.0)
+
+    def _kill_orphan_processes(self):
+        """Force-kill any subprocesses still alive after graceful shutdown."""
+        runner = getattr(self.zbb_manager, 'server_runner', None)
+        if runner:
+            proc = getattr(runner, 'process', None)
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+        pm = getattr(self.zbb_manager, 'playit_manager', None)
+        if pm:
+            proc = getattr(pm, 'process', None)
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+
+    def _poll_shutdown(self, deadline: float):
+        if self._shutdown_event.is_set() or time.monotonic() >= deadline:
+            self.destroy()
+            return
+        self.after(100, lambda: self._poll_shutdown(deadline))
 
 def main():
     # --- CONV-01: Structured Logging Configuration ---
