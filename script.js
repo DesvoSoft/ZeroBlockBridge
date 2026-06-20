@@ -1,62 +1,60 @@
-/* ZeroBlockBridge — Site Script
-   Tile grid overlay for hero section
-   Vitra init runs after vitra.min.js loads (defer)
-*/
+/* ZeroBlockBridge site — tile grid + Vitra init */
 
-// ── Tile grid ──────────────────────────────
-const tilesEl = document.getElementById('tiles');
-const TILE_SIZE = 80;
+// ── Tile grid (faithful to website/script.js) ──────────────────
 
-let cols = 0;
+const wrapper = document.getElementById('tiles');
+
+let columns = 0;
 let rows = 0;
+let toggled = false;
 
-function createTile(index) {
+const toggle = () => {
+  toggled = !toggled;
+  document.getElementById('hero').classList.toggle('toggled');
+};
+
+const handleOnClick = index => {
+  toggle();
+  anime({
+    targets: '.tile',
+    opacity: toggled ? 0 : 1,
+    delay: anime.stagger(50, {
+      grid: [columns, rows],
+      from: index,
+    }),
+  });
+};
+
+const createTile = index => {
   const tile = document.createElement('div');
   tile.classList.add('tile');
+  tile.style.opacity = toggled ? 0 : 1;
+  tile.onclick = () => handleOnClick(index);
   return tile;
-}
+};
 
-function buildGrid() {
-  tilesEl.innerHTML = '';
-  cols = Math.ceil(window.innerWidth / TILE_SIZE);
-  rows = Math.ceil(window.innerHeight / TILE_SIZE);
-  tilesEl.style.setProperty('--cols', cols);
-  tilesEl.style.setProperty('--rows', rows);
-
-  const total = cols * rows;
+const createTiles = quantity => {
   const frag = document.createDocumentFragment();
-  for (let i = 0; i < total; i++) frag.appendChild(createTile(i));
-  tilesEl.appendChild(frag);
-}
+  for (let i = 0; i < quantity; i++) frag.appendChild(createTile(i));
+  wrapper.appendChild(frag);
+};
 
-// Subtle random shimmer on tiles
-function shimmerLoop() {
-  const tiles = Array.from(tilesEl.querySelectorAll('.tile'));
-  if (!tiles.length) return;
+const createGrid = () => {
+  wrapper.innerHTML = '';
+  const size = window.innerWidth > 800 ? 100 : 50;
+  columns = Math.floor(window.innerWidth / size);
+  rows    = Math.floor(window.innerHeight / size);
+  wrapper.style.setProperty('--columns', columns);
+  wrapper.style.setProperty('--rows', rows);
+  createTiles(columns * rows);
+};
 
-  const pick = tiles[Math.floor(Math.random() * tiles.length)];
+createGrid();
+window.addEventListener('resize', createGrid);
 
-  anime({
-    targets: pick.querySelector('::before') || pick,
-    opacity: [0.03, 0.18, 0.03],
-    duration: 1200,
-    easing: 'easeInOutSine',
-  });
-
-  setTimeout(shimmerLoop, 120);
-}
-
-buildGrid();
-window.addEventListener('resize', buildGrid);
-
-// Start shimmer after a short delay so tiles are in DOM
-setTimeout(shimmerLoop, 400);
-
-// ── Vitra init ─────────────────────────────
-// vitra.min.js loads with defer — wait for it
+// ── Vitra init ─────────────────────────────────────────────────
 window.addEventListener('load', () => {
   if (typeof Vitra === 'undefined') return;
-
   Vitra.theme.init({ defaultTheme: 'emerald', persist: false });
   Vitra.reveal.init({ threshold: 0.1, stagger: 80 });
   Vitra.spotlight.init();

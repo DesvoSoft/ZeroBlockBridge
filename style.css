@@ -1,20 +1,14 @@
-/* ═══════════════════════════════════════════
-   ZeroBlockBridge — Site Styles
-   Uses Vitra emerald theme tokens + tile overlay
-═══════════════════════════════════════════ */
+/* ZeroBlockBridge — Site Styles
+   Vitra emerald theme + faithful tile overlay
+*/
 
 :root {
   --zbb-font: 'Rubik', system-ui, sans-serif;
-  --zbb-section-gap: 7rem;
+  --section-gap: 7rem;
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   font-family: var(--zbb-font);
@@ -24,7 +18,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ── Hero ─────────────────────────────────── */
+/* ── Hero ────────────────────────────────────── */
 
 #hero {
   position: relative;
@@ -35,80 +29,88 @@ body {
   overflow: hidden;
 }
 
-/* Vitra gradient + orbs sit behind everything */
-.vitra-gradient-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
+/* Vitra bg layers — behind everything */
+.vitra-gradient-bg,
+.vitra-glow-orb { z-index: 0; }
 
-.vitra-glow-orb {
-  z-index: 0;
-}
-
-/* Tile grid — sits above Vitra bg, below text */
+/* Tile grid — identical mechanics to website/style.css */
 #tiles {
+  height: calc(100vh - 1px);
+  width:  calc(100vw  - 1px);
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   display: grid;
-  grid-template-columns: repeat(var(--cols), 1fr);
-  grid-template-rows: repeat(var(--rows), 1fr);
-  pointer-events: none;
+  grid-template-columns: repeat(var(--columns), 1fr);
+  grid-template-rows:    repeat(var(--rows),    1fr);
 }
 
 .tile {
+  cursor: pointer;
   position: relative;
-  cursor: default;
 }
 
 .tile::before {
+  background-color: rgb(15, 15, 15);
   content: '';
-  position: absolute;
   inset: 0.5px;
-  background: rgba(0, 255, 128, 0.03);
-  transition: background 0.3s ease;
+  position: absolute;
 }
 
-/* Hero content */
+.tile:hover::before {
+  background-color: rgb(30, 30, 30);
+}
+
+/* When toggled: reverse hover direction */
+#hero.toggled .tile:hover::before {
+  background-color: rgb(10, 10, 10) !important;
+}
+
+/* Sweep shimmer — same vibe as original body::before */
+#hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 255, 128, 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: sweep 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sweep {
+  from { background-position: 0% center; }
+  to   { background-position: -200% center; }
+}
+
+/* Hero content — above tiles */
 .hero-content {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   text-align: center;
   padding: 2rem 1.5rem;
   max-width: 780px;
+  pointer-events: none; /* let clicks pass to tiles... */
 }
 
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--vitra-color-text-secondary);
-  padding: 0.35rem 0.85rem;
-  border-radius: 100px;
+/* ...except interactive elements */
+.hero-content a,
+.hero-content button {
+  pointer-events: all;
+}
+
+.hero-logo {
+  border-radius: 16px;
   margin-bottom: 1.5rem;
-}
-
-.badge-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--vitra-color-accent);
-  box-shadow: 0 0 8px var(--vitra-color-accent);
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.6; transform: scale(0.85); }
+  filter: drop-shadow(0 0 24px rgba(0, 200, 100, 0.4));
 }
 
 .hero-title {
-  font-family: var(--zbb-font);
   font-size: clamp(2.8rem, 7vw, 5.5rem);
   font-weight: 700;
   line-height: 1.1;
@@ -129,13 +131,20 @@ body {
   gap: 1rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-bottom: 1.5rem;
 }
 
-/* ── Sections ─────────────────────────────── */
-
-.section {
-  padding: var(--zbb-section-gap) 1.5rem;
+.hero-hint {
+  font-size: 0.75rem;
+  color: var(--vitra-color-text-tertiary, rgba(255,255,255,0.3));
+  margin: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
+
+/* ── Sections ─────────────────────────────────── */
+
+.section { padding: var(--section-gap) 1.5rem; }
 
 .section-title {
   font-size: clamp(1.8rem, 4vw, 2.8rem);
@@ -153,7 +162,7 @@ body {
   max-width: 520px;
 }
 
-/* ── Features Grid ────────────────────────── */
+/* ── Features ─────────────────────────────────── */
 
 .features-grid {
   display: grid;
@@ -167,10 +176,10 @@ body {
   line-height: 1;
 }
 
-/* ── Download ─────────────────────────────── */
+/* ── Download ─────────────────────────────────── */
 
 .download-section {
-  padding: var(--zbb-section-gap) 1.5rem;
+  padding: var(--section-gap) 1.5rem;
   background: linear-gradient(
     180deg,
     transparent 0%,
@@ -197,15 +206,11 @@ body {
 
 .download-left p {
   color: var(--vitra-color-text-secondary);
-  margin: 0 0 1rem;
   font-size: 0.95rem;
+  margin: 0 0 1rem;
 }
 
-.download-badges {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
+.download-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .download-right {
   display: flex;
@@ -232,7 +237,7 @@ body {
   word-break: break-all;
 }
 
-/* ── Docs Grid ────────────────────────────── */
+/* ── Docs ─────────────────────────────────────── */
 
 .docs-grid {
   display: grid;
@@ -246,30 +251,16 @@ body {
   gap: 1rem;
   text-decoration: none;
   color: inherit;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   padding: 1.5rem;
+  transition: transform 0.2s ease;
 }
 
-.doc-card:hover {
-  transform: translateY(-3px);
-}
+.doc-card:hover { transform: translateY(-3px); }
 
-.doc-icon {
-  font-size: 1.8rem;
-  flex-shrink: 0;
-}
+.doc-icon { font-size: 1.8rem; flex-shrink: 0; }
 
-.doc-card h4 {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.doc-card p {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--vitra-color-text-secondary);
-}
+.doc-card h4 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
+.doc-card p  { margin: 0; font-size: 0.875rem; color: var(--vitra-color-text-secondary); }
 
 .doc-arrow {
   margin-left: auto;
@@ -279,11 +270,9 @@ body {
   transition: transform 0.2s ease;
 }
 
-.doc-card:hover .doc-arrow {
-  transform: translateX(4px);
-}
+.doc-card:hover .doc-arrow { transform: translateX(4px); }
 
-/* ── Footer ───────────────────────────────── */
+/* ── Footer ───────────────────────────────────── */
 
 .site-footer {
   border-top: 1px solid var(--vitra-color-border);
@@ -300,14 +289,13 @@ body {
   justify-content: center;
 }
 
-.footer-brand {
-  font-weight: 700;
-  color: var(--vitra-color-text-primary);
+.footer-logo {
+  border-radius: 4px;
+  opacity: 0.7;
 }
 
-.footer-sep {
-  opacity: 0.4;
-}
+.footer-brand { font-weight: 700; color: var(--vitra-color-text-primary); }
+.footer-sep   { opacity: 0.4; }
 
 .site-footer a {
   color: var(--vitra-color-text-secondary);
@@ -315,19 +303,11 @@ body {
   transition: color 0.2s;
 }
 
-.site-footer a:hover {
-  color: var(--vitra-color-accent);
-}
+.site-footer a:hover { color: var(--vitra-color-accent); }
 
-/* ── Responsive ───────────────────────────── */
+/* ── Responsive ───────────────────────────────── */
 
 @media (max-width: 640px) {
-  .download-card {
-    flex-direction: column;
-    padding: 2rem 1.5rem;
-  }
-
-  .download-right {
-    width: 100%;
-  }
+  .download-card  { flex-direction: column; padding: 2rem 1.5rem; }
+  .download-right { width: 100%; }
 }
