@@ -480,13 +480,11 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
         #    the atexit backstop doesn't skip the by-name kill prematurely.
         self.playit_manager._shutdown_done = True
 
-        # 7. Drain the thread pool (15s max). wait=True can hang if a task
-        #    is stuck (e.g., playit exponential-backoff sleep). Instead,
-        #    shutdown(wait=False) and manually join with timeout.
+        # 7. Drain the thread pool. cancel_futures drops queued-but-not-started
+        #    tasks; wait=True blocks until running tasks finish (bounded by the
+        #    server stop that already happened above, so this is near-instant).
         try:
-            self.executor.shutdown(wait=False)
-            for t in getattr(self.executor, '_threads', []):
-                t.join(timeout=15.0)
+            self.executor.shutdown(wait=True, cancel_futures=True)
         except Exception as e:
             logger.debug("Error shutting down executor: %s", e)
 
