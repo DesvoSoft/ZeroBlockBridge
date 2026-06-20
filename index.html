@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZeroBlockBridge — Minecraft Server Manager</title>
-  <meta name="description" content="A powerful desktop app for managing Minecraft servers — auto-healing, tunneling, backups, and mod management.">
+  <meta name="description" content="A desktop app that makes self-hosting a Minecraft server stupid-simple. Auto-healing, tunneling, backups, and mod management — all in one place.">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -18,8 +18,8 @@
   <section id="hero">
     <!-- Static gradient bg -->
     <div class="hero-bg"></div>
-    <!-- Particle network canvas -->
-    <canvas id="particle-canvas"></canvas>
+    <!-- Tile grid (click-to-ripple, like website/ prototype) -->
+    <div id="hero-tiles"></div>
 
     <div class="hero-content">
       <img src="assets/logo.png" alt="ZeroBlockBridge" class="hero-logo" width="120" height="120">
@@ -34,11 +34,13 @@
       </div>
 
       <h1 class="hero-title">
-        Zero<span class="vitra-gradient-text">Block</span>Bridge
+        Self-host Minecraft.<br>
+        <span class="vitra-gradient-text">Without the headache.</span>
       </h1>
       <p class="hero-sub">
-        Your Minecraft server deserves better than babysitting.<br>
-        Auto-healing, tunneling, backups, and mod management — all in one place.
+        ZeroBlockBridge is a Windows desktop app that takes care of everything your server needs —
+        crash recovery, public tunneling, automatic backups, Java management, and mods.
+        You just hit Start.
       </p>
 
       <!-- Stats bar -->
@@ -60,193 +62,202 @@
       </div>
 
       <div class="hero-actions">
-        <a href="#download" class="vitra-btn vitra-btn-primary vitra-btn-lg">⬇ Download</a>
+        <a href="#download" class="vitra-btn vitra-btn-primary vitra-btn-lg">⬇ Download for Windows</a>
         <a href="#features" class="vitra-btn vitra-btn-ghost vitra-btn-lg">See features →</a>
       </div>
 
       <!-- Minecraft-flavoured version line -->
-      <p class="mc-version-line">Supports Minecraft Java Edition 1.8 – 1.21 · Fabric · Forge · Paper · Purpur · Vanilla</p>
+      <p class="mc-version-line">Vanilla · Paper · Fabric · Forge · Purpur — Java Edition 1.8 – 1.21</p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════
-       FEATURES
+       PARTICLE CANVAS (sections backdrop)
   ══════════════════════════════════════ -->
-  <section id="features" class="section">
-    <div class="vitra-container">
-      <h2 class="section-title vitra-reveal vitra-reveal-up">Everything you need</h2>
-      <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
-        From first boot to full survival server — ZBB handles it.
-      </p>
+  <div id="sections-wrap">
+    <canvas id="section-particles"></canvas>
 
-      <div class="features-grid">
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
-          <div class="feature-icon">⚡</div>
-          <h3 class="vitra-card-title">Auto-Healing Watchdog</h3>
-          <p class="vitra-card-body">Detects crashes, zombie processes, and TPS lag spikes. Exponential backoff restarts keep your server alive — even when you're offline.</p>
-          <div class="mc-tag-pill">Watchdog · Heartbeat · Lag Monitor</div>
-        </div>
+    <!-- ══════════════════════════════════════
+         FEATURES
+    ══════════════════════════════════════ -->
+    <section id="features" class="section">
+      <div class="vitra-container">
+        <h2 class="section-title vitra-reveal vitra-reveal-up">Everything your server needs</h2>
+        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
+          From first boot to a running multiplayer world — ZBB handles it so you don't have to.
+        </p>
 
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
-          <div class="feature-icon">🌐</div>
-          <h3 class="vitra-card-title">Instant Public Tunnel</h3>
-          <p class="vitra-card-body">Integrated Playit.gg agent gives your server a permanent public address. No router config, no DynDNS — friends just type the address and join.</p>
-          <div class="mc-tag-pill">Playit.gg · No Port Forwarding</div>
-        </div>
-
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
-          <div class="feature-icon">☕</div>
-          <h3 class="vitra-card-title">Smart Java Management</h3>
-          <p class="vitra-card-body">Reads bytecode from your server JAR to pick the exact Java version. Downloads the right JDK silently — never touches your system installation.</p>
-          <div class="mc-tag-pill">Java 8 · 16 · 17 · 21 · Auto-detect</div>
-        </div>
-
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
-          <div class="feature-icon">💾</div>
-          <h3 class="vitra-card-title">Scheduled Backups</h3>
-          <p class="vitra-card-body">Configure automatic ZIP backups by interval and retention count. Restores safety-copy your world first — no data loss, ever.</p>
-          <div class="mc-tag-pill">Auto-schedule · ZIP · World-only mode</div>
-        </div>
-
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
-          <div class="feature-icon">🧩</div>
-          <h3 class="vitra-card-title">Modrinth Mod Browser</h3>
-          <p class="vitra-card-body">Search, install, and update mods directly from inside ZBB. Per-server mod lists, version picker, and one-click update checker.</p>
-          <div class="mc-tag-pill">Modrinth API · Fabric · Forge · Quilt</div>
-        </div>
-
-        <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
-          <div class="feature-icon">🛡️</div>
-          <h3 class="vitra-card-title">Command Sanitizer</h3>
-          <p class="vitra-card-body">80+ safe Minecraft commands on an explicit allowlist. Shell injection, pipe operators, and dangerous flags are blocked before reaching the JVM.</p>
-          <div class="mc-tag-pill">Allowlist · shell=False · No injection</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════
-       HOW IT WORKS  (Minecraft-flavoured)
-  ══════════════════════════════════════ -->
-  <section id="how" class="section how-section">
-    <div class="vitra-container">
-      <h2 class="section-title vitra-reveal vitra-reveal-up">Server up in 3 steps</h2>
-      <div class="steps-grid">
-
-        <div class="step vitra-reveal vitra-reveal-up vitra-delay-100">
-          <div class="step-num">01</div>
-          <div class="step-block">⬜</div>
-          <h3>Pick your server type</h3>
-          <p>Vanilla, Paper, Fabric, Forge, Purpur — choose version and loader. ZBB downloads the JAR and scaffolds <code>server.properties</code> automatically.</p>
-        </div>
-
-        <div class="step vitra-reveal vitra-reveal-up vitra-delay-200">
-          <div class="step-num">02</div>
-          <div class="step-block">🟩</div>
-          <h3>Hit Start</h3>
-          <p>Java is resolved, eula.txt accepted, and the server process launches with Aikar's GC flags — optimized out of the box. No terminal needed.</p>
-        </div>
-
-        <div class="step vitra-reveal vitra-reveal-up vitra-delay-300">
-          <div class="step-num">03</div>
-          <div class="step-block">🌐</div>
-          <h3>Share the link</h3>
-          <p>Playit tunnel activates. Copy the address, send it to your friends. <code>server.log</code> streams live in the console tab while ZBB keeps everything alive.</p>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════
-       DOWNLOAD
-  ══════════════════════════════════════ -->
-  <section id="download" class="section download-section">
-    <div class="vitra-container">
-      <div class="download-card vitra-glass vitra-reveal vitra-reveal-up">
-        <div class="download-left">
-          <h2>Get ZeroBlockBridge</h2>
-          <p class="dl-meta">Windows · Python 3.10+ · 4 dependencies</p>
-          <div class="download-badges">
-            <span class="vitra-badge">Open Source</span>
-            <span class="vitra-badge vitra-badge-outline">AGPL-3.0</span>
-            <span class="vitra-badge vitra-badge-outline">Active Development</span>
+        <div class="features-grid">
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
+            <div class="feature-icon">⚡</div>
+            <h3 class="vitra-card-title">Auto-Healing Watchdog</h3>
+            <p class="vitra-card-body">Detects crashes, zombie processes, and TPS lag spikes. Exponential backoff restarts keep your server alive — even when you're offline.</p>
+            <div class="mc-tag-pill">Watchdog · Heartbeat · Lag Monitor</div>
           </div>
-        </div>
-        <div class="download-right">
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
-             class="vitra-btn vitra-btn-primary vitra-btn-lg"
-             download>⬇ Download for Windows</a>
-          <div class="install-block">
-            <span class="install-label">Clone &amp; run</span>
-            <code>pip install -r requirements.txt</code>
-            <code>py app/launcher.py</code>
+
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
+            <div class="feature-icon">🌐</div>
+            <h3 class="vitra-card-title">Instant Public Tunnel</h3>
+            <p class="vitra-card-body">Integrated Playit.gg agent gives your server a permanent public address. No router config, no DynDNS — friends just type the address and join.</p>
+            <div class="mc-tag-pill">Playit.gg · No Port Forwarding</div>
+          </div>
+
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
+            <div class="feature-icon">☕</div>
+            <h3 class="vitra-card-title">Smart Java Management</h3>
+            <p class="vitra-card-body">Reads bytecode from your server JAR to pick the exact Java version. Downloads the right JDK silently — never touches your system installation.</p>
+            <div class="mc-tag-pill">Java 8 · 16 · 17 · 21 · Auto-detect</div>
+          </div>
+
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
+            <div class="feature-icon">💾</div>
+            <h3 class="vitra-card-title">Scheduled Backups</h3>
+            <p class="vitra-card-body">Configure automatic ZIP backups by interval and retention count. Restores safety-copy your world first — no data loss, ever.</p>
+            <div class="mc-tag-pill">Auto-schedule · ZIP · World-only mode</div>
+          </div>
+
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
+            <div class="feature-icon">🧩</div>
+            <h3 class="vitra-card-title">Modrinth Mod Browser</h3>
+            <p class="vitra-card-body">Search, install, and update mods directly from inside ZBB. Per-server mod lists, version picker, and one-click update checker.</p>
+            <div class="mc-tag-pill">Modrinth API · Fabric · Forge · Quilt</div>
+          </div>
+
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
+            <div class="feature-icon">🛡️</div>
+            <h3 class="vitra-card-title">Command Sanitizer</h3>
+            <p class="vitra-card-body">80+ safe Minecraft commands on an explicit allowlist. Shell injection, pipe operators, and dangerous flags are blocked before reaching the JVM.</p>
+            <div class="mc-tag-pill">Allowlist · shell=False · No injection</div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ══════════════════════════════════════
-       DOCS
-  ══════════════════════════════════════ -->
-  <section id="docs" class="section">
-    <div class="vitra-container">
-      <h2 class="section-title vitra-reveal vitra-reveal-up">Documentation</h2>
-      <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
-        Everything you need to get a server running and keep it running.
-      </p>
-      <div class="docs-grid">
-        <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme"
-           target="_blank" rel="noopener"
-           class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-100">
-          <span class="doc-icon">📖</span>
-          <div>
-            <h4>Getting Started</h4>
-            <p>Install, create your first server, and get online in minutes.</p>
+    <!-- ══════════════════════════════════════
+         HOW IT WORKS
+    ══════════════════════════════════════ -->
+    <section id="how" class="section how-section">
+      <div class="vitra-container">
+        <h2 class="section-title vitra-reveal vitra-reveal-up">Server up in 3 steps</h2>
+        <div class="steps-grid">
+
+          <div class="step vitra-reveal vitra-reveal-up vitra-delay-100">
+            <div class="step-num">01</div>
+            <div class="step-block">⬜</div>
+            <h3>Pick your server type</h3>
+            <p>Vanilla, Paper, Fabric, Forge, Purpur — choose version and loader. ZBB downloads the JAR and scaffolds <code>server.properties</code> automatically.</p>
           </div>
-          <span class="doc-arrow">→</span>
-        </a>
-        <a href="https://github.com/DesvoSoft/ZeroBlockBridge/wiki"
-           target="_blank" rel="noopener"
-           class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-200">
-          <span class="doc-icon">⚙️</span>
-          <div>
-            <h4>Configuration</h4>
-            <p>server.properties editor, watchdog tuning, backup scheduling.</p>
+
+          <div class="step vitra-reveal vitra-reveal-up vitra-delay-200">
+            <div class="step-num">02</div>
+            <div class="step-block">🟩</div>
+            <h3>Hit Start</h3>
+            <p>Java is resolved, eula.txt accepted, and the server process launches with Aikar's GC flags — optimized out of the box. No terminal needed.</p>
           </div>
-          <span class="doc-arrow">→</span>
-        </a>
-        <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues"
-           target="_blank" rel="noopener"
-           class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-300">
-          <span class="doc-icon">🐛</span>
-          <div>
-            <h4>Report an Issue</h4>
-            <p>Found a bug? Open an issue on GitHub.</p>
+
+          <div class="step vitra-reveal vitra-reveal-up vitra-delay-300">
+            <div class="step-num">03</div>
+            <div class="step-block">🌐</div>
+            <h3>Share the link</h3>
+            <p>Playit tunnel activates. Copy the address, send it to your friends. <code>server.log</code> streams live in the console tab while ZBB keeps everything alive.</p>
           </div>
-          <span class="doc-arrow">→</span>
-        </a>
+
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ══════════════════════════════════════
-       FOOTER
-  ══════════════════════════════════════ -->
-  <footer class="site-footer">
-    <div class="vitra-container footer-inner">
-      <img src="assets/logo.png" alt="" aria-hidden="true" width="20" height="20" class="footer-logo">
-      <span class="footer-brand">ZeroBlockBridge</span>
-      <span class="footer-sep">·</span>
-      <span>Developed by <a href="https://github.com/DesvoSoft" target="_blank" rel="noopener">DesvoSoft</a></span>
-      <span class="footer-sep">·</span>
-      <a href="https://github.com/DesvoSoft/ZeroBlockBridge" target="_blank" rel="noopener">GitHub</a>
-      <span class="footer-sep">·</span>
-      <span>AGPL-3.0</span>
-    </div>
-  </footer>
+    <!-- ══════════════════════════════════════
+         DOWNLOAD
+    ══════════════════════════════════════ -->
+    <section id="download" class="section download-section">
+      <div class="vitra-container">
+        <div class="download-card vitra-glass vitra-reveal vitra-reveal-up">
+          <div class="download-left">
+            <h2>Get ZeroBlockBridge</h2>
+            <p class="dl-meta">Windows · Python 3.10+ · 4 dependencies</p>
+            <div class="download-badges">
+              <span class="vitra-badge">Open Source</span>
+              <span class="vitra-badge vitra-badge-outline">AGPL-3.0</span>
+              <span class="vitra-badge vitra-badge-outline">Active Development</span>
+            </div>
+          </div>
+          <div class="download-right">
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
+               class="vitra-btn vitra-btn-primary vitra-btn-lg"
+               download>⬇ Download for Windows</a>
+            <div class="install-block">
+              <span class="install-label">Clone &amp; run</span>
+              <code>pip install -r requirements.txt</code>
+              <code>py app/launcher.py</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
+    <!-- ══════════════════════════════════════
+         DOCS
+    ══════════════════════════════════════ -->
+    <section id="docs" class="section">
+      <div class="vitra-container">
+        <h2 class="section-title vitra-reveal vitra-reveal-up">Documentation</h2>
+        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
+          Everything you need to get a server running and keep it running.
+        </p>
+        <div class="docs-grid">
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme"
+             target="_blank" rel="noopener"
+             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-100">
+            <span class="doc-icon">📖</span>
+            <div>
+              <h4>Getting Started</h4>
+              <p>Install, create your first server, and get online in minutes.</p>
+            </div>
+            <span class="doc-arrow">→</span>
+          </a>
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/wiki"
+             target="_blank" rel="noopener"
+             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-200">
+            <span class="doc-icon">⚙️</span>
+            <div>
+              <h4>Configuration</h4>
+              <p>server.properties editor, watchdog tuning, backup scheduling.</p>
+            </div>
+            <span class="doc-arrow">→</span>
+          </a>
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues"
+             target="_blank" rel="noopener"
+             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-300">
+            <span class="doc-icon">🐛</span>
+            <div>
+              <h4>Report an Issue</h4>
+              <p>Found a bug? Open an issue on GitHub.</p>
+            </div>
+            <span class="doc-arrow">→</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════
+         FOOTER
+    ══════════════════════════════════════ -->
+    <footer class="site-footer">
+      <div class="vitra-container footer-inner">
+        <img src="assets/logo.png" alt="" aria-hidden="true" width="20" height="20" class="footer-logo">
+        <span class="footer-brand">ZeroBlockBridge</span>
+        <span class="footer-sep">·</span>
+        <span>Developed by <a href="https://github.com/DesvoSoft" target="_blank" rel="noopener">DesvoSoft</a></span>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/DesvoSoft/ZeroBlockBridge" target="_blank" rel="noopener">GitHub</a>
+        <span class="footer-sep">·</span>
+        <span>AGPL-3.0</span>
+      </div>
+    </footer>
+
+  </div><!-- /sections-wrap -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.js" defer></script>
   <script src="script.js"></script>
 </body>
