@@ -1,21 +1,20 @@
 /* ZeroBlockBridge — Site Script */
 
 // ── Hero Tile Grid ─────────────────────────────────────────────
-// Tiles START opaque (covering hero content). Click reveals content via ripple.
 (function () {
   const wrapper = document.getElementById('hero-tiles');
-  if (!wrapper) return;
+  const hero    = document.getElementById('hero');
+  if (!wrapper || !hero) return;
 
-  let columns = 0, rows = 0, revealed = false;
+  let columns = 0, rows = 0, toggled = false;
 
   const handleOnClick = index => {
-    if (revealed) return; // one-shot reveal; ignore further clicks
-    revealed = true;
-    document.getElementById('hero').classList.add('tiles-revealed');
+    toggled = !toggled;
+    hero.classList.toggle('toggled');
 
     anime({
       targets: '#hero-tiles .tile',
-      opacity: 0,
+      opacity: toggled ? 0 : 1,
       delay: anime.stagger(50, {
         grid: [columns, rows],
         from: index,
@@ -28,19 +27,19 @@
   const createTile = index => {
     const tile = document.createElement('div');
     tile.classList.add('tile');
-    tile.style.opacity = 1; // start fully opaque
+    tile.style.opacity = 1;
     tile.onclick = () => handleOnClick(index);
     return tile;
   };
 
   const createGrid = () => {
     wrapper.innerHTML = '';
-    revealed = false;
-    document.getElementById('hero').classList.remove('tiles-revealed');
+    toggled = false;
+    hero.classList.remove('toggled');
 
-    const size = window.innerWidth > 800 ? 100 : 50;
-    columns = Math.floor(window.innerWidth / size);
-    rows    = Math.floor(window.innerHeight / size);
+    const size = window.innerWidth > 800 ? 80 : 50;
+    columns = Math.max(4, Math.floor(window.innerWidth / size));
+    rows    = Math.max(4, Math.floor(window.innerHeight / size));
 
     wrapper.style.setProperty('--columns', columns);
     wrapper.style.setProperty('--rows', rows);
@@ -50,6 +49,20 @@
 
   createGrid();
   window.addEventListener('resize', createGrid);
+
+  // ── Scroll-out: hero fades as user scrolls (no slide) ───────
+  const FADE_RANGE = 220;
+  let rafId;
+
+  window.addEventListener('scroll', () => {
+    if (rafId !== undefined) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = undefined;
+      const progress = Math.max(0, Math.min(1, window.scrollY / FADE_RANGE));
+      hero.style.opacity       = String(1 - progress);
+      hero.style.pointerEvents = progress > 0.95 ? 'none' : 'auto';
+    });
+  });
 })();
 
 // ── Section Particle Clusters ──────────────────────────────────
@@ -169,13 +182,6 @@
 
   init();
   animId = requestAnimationFrame(tick);
-})();
-
-// ── Console cursor blink ───────────────────────────────────────
-(function () {
-  const cursor = document.querySelector('.mc-tag-cursor');
-  if (!cursor) return;
-  setInterval(() => { cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0'; }, 530);
 })();
 
 // ── Vitra init ─────────────────────────────────────────────────

@@ -79,3 +79,10 @@ skills-lock.json
 # Local development files (not needed in repo)
 opencode.json
 scripts/
+
+# Site branch - exclude app source (GitHub Pages only)
+app/
+tests/
+.serena/
+CLAUDE.md
+website-referencia/

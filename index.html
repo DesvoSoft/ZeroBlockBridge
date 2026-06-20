@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZeroBlockBridge — Minecraft Server Manager</title>
-  <meta name="description" content="A desktop app that makes self-hosting a Minecraft server stupid-simple. Auto-healing, tunneling, backups, and mod management — all in one place.">
+  <meta name="description" content="Your Minecraft server deserves better than babysitting. Auto-healing, tunneling, backups, and mod management — all in one place.">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -19,65 +19,30 @@
     <div class="hero-bg"></div>
     <div id="hero-tiles"></div>
 
-    <!-- Content is always present, tiles cover it initially -->
     <div class="hero-content">
-
-      <!-- Logo — landscape 495×332, rendered at comfortable size -->
       <div class="hero-logo-wrap">
-        <img src="assets/logo.png" alt="ZeroBlockBridge logo" class="hero-logo">
+        <img src="assets/logo.png" alt="ZeroBlockBridge" class="hero-logo">
       </div>
 
-      <!-- Eyebrow tag -->
-      <div class="hero-eyebrow">
-        <span class="eyebrow-dot"></span>
-        <span class="eyebrow-text">Windows Desktop App · Self-hosted Minecraft</span>
-      </div>
-
-      <!-- Main title -->
       <h1 class="hero-title">
         <span class="title-zero">Zero</span><span class="title-block">Block</span><span class="title-bridge">Bridge</span>
       </h1>
 
-      <p class="hero-sub">
-        Launch, heal, tunnel, and back up your Minecraft server — all from one app.
-        No terminal. No port forwarding. No babysitting.
-      </p>
+      <p class="hero-sub">Self-host your Minecraft server — crash detection, tunneling, backups and Java management, all without complex or time-consuming setups.</p>
 
-      <!-- CTA -->
       <div class="hero-actions">
         <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
            class="hero-btn-primary" download>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download for Windows
+          <img src="assets/windows.svg" width="17" height="17" alt="" aria-hidden="true" class="btn-icon btn-icon-invert">
+          Download
         </a>
-        <a href="#features" class="hero-btn-ghost">See features <span class="btn-arrow">→</span></a>
+        <a href="https://github.com/DesvoSoft/ZeroBlockBridge" target="_blank" rel="noopener" class="hero-btn-ghost">
+          <img src="assets/github.svg" width="17" height="17" alt="" aria-hidden="true" class="btn-icon btn-icon-invert">
+          GitHub
+        </a>
       </div>
 
-      <!-- Stats strip -->
-      <div class="hero-stats">
-        <div class="hero-stat">
-          <span class="stat-num">364</span>
-          <span class="stat-label">Tests passing</span>
-        </div>
-        <span class="stat-sep"></span>
-        <div class="hero-stat">
-          <span class="stat-num">80+</span>
-          <span class="stat-label">Allowlisted commands</span>
-        </div>
-        <span class="stat-sep"></span>
-        <div class="hero-stat">
-          <span class="stat-num">0</span>
-          <span class="stat-label">Port forwarding needed</span>
-        </div>
-        <span class="stat-sep"></span>
-        <div class="hero-stat">
-          <span class="stat-num">1.8–1.21</span>
-          <span class="stat-label">Java Edition support</span>
-        </div>
-      </div>
-
-      <!-- Hint shown before reveal -->
-      <p class="tiles-hint">Click anywhere to reveal</p>
+      <p class="tiles-hint">Click to reveal</p>
     </div>
   </section>
 
@@ -193,7 +158,7 @@
               Download for Windows
             </a>
             <div class="install-block">
-              <span class="install-label">Clone &amp; run</span>
+              <span class="install-label">Or clone &amp; run</span>
               <code>pip install -r requirements.txt</code>
               <code>py app/launcher.py</code>
             </div>
