@@ -72,6 +72,10 @@ class ServerOrchestrator:
 
     def stop_server(self) -> None:
         self.manager.state = ServerState.STOPPING
+        # Silence watchdog BEFORE stopping so the STOPPED event it sees
+        # is not misclassified as a crash (HA-03).
+        if self.manager._watchdog:
+            self.manager._watchdog.stop()
         if self.manager.server_runner:
             self.manager.server_runner.stop()
         self.manager.state = ServerState.OFFLINE
