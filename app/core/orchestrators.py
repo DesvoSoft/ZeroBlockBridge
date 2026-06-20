@@ -191,15 +191,15 @@ class SchedulerOrchestrator:
                                 if key:
                                     self.manager._send_system_message(message)
                                     self.manager.restart_warnings_sent.add(key)
-                            
+
                             if status["is_due"]:
                                 self.manager.events.emit(ServerEvent.CONSOLE_LINE, "[System] Scheduled restart due. Initiating final countdown...")
                                 self.manager.events.emit(ServerEvent.REQUEST_RESTART, {"reason": "scheduled"})
                                 service.update_last_run()
                                 with self.manager._restart_warnings_lock:
                                     self.manager.restart_warnings_sent.clear()
-                            
-                            self.manager.backup_orchestrator._check_auto_backup()
+
+                        self.manager.backup_orchestrator._check_auto_backup()
                 
                 elapsed = time.time() - now
                 sleep_time = max(0.0, 0.05 - elapsed)
