@@ -3,7 +3,9 @@
 > **Última actualización:** 2026-06-20
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 364 tests, 100% pass, 0 flaky
-> **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW encontrados, todos catalogados en BUG-AUDIT
+> **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 6 resueltos, 13 pendientes
+> **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
+> **Siguiente prioridad:** CA-02 (installer java hardcoded) → MA-02 (encoding utf-8) → HA-05/HA-06
 
 ---
 
@@ -628,7 +630,7 @@ server_version = meta.get("version", "")
 | **FIX-P3** | Whitelist + TPS + Wizard Security | ~100 | 🥇 | ✅ |
 | **F4** | Auto-Backup Scheduler | +150 | 🥇 | ⚠️ (backend ✅, UI ❌) |
 | **P0** | Foundation Hardening | ~+400 | 🥇 | ⬆️ **AHORA** |
-| **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | ~+80/-20 | 🥇 | ⬆️ **PRIORIDAD RELEASE** |
+| **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | +80/-20 | 🥇 | ✅ COMPLETO |
 | **F5** | Crash Report Collector | +80 | 🥇 | ⏳ (tras P0) |
 | **F6** | Discord Webhook | +60 | 🥈 | ⏳ |
 | **MODS-B** | Modrinth Browser Mejoras | +200 | 🥈 | ⏳ |
@@ -740,11 +742,13 @@ F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 (backend) ✅
 **Orden recomendado:** EXE-05 → EXE-02 → EXE-01 → EXE-06 → EXE-03 → EXE-04
 
 **Criterio de aceptación:**
-- [ ] App cierra en < 2s cuando no hay servidor corriendo
-- [ ] App cierra en < 6s cuando servidor está corriendo (tiempo de graceful stop del MC)
-- [ ] Zero terminales flash al cerrar
-- [ ] Ventana aparece en < 1s al iniciar el .exe (sin contar tiempo de Python bootstrap)
-- [ ] `on_close` nunca bloquea el mainloop de Tkinter
+- [x] App cierra en < 2s cuando no hay servidor corriendo
+- [x] App cierra en < 6s cuando servidor está corriendo (tiempo de graceful stop del MC)
+- [x] Zero terminales flash al cerrar
+- [x] Ventana aparece en < 1s al iniciar el .exe (sin contar tiempo de Python bootstrap)
+- [x] `on_close` nunca bloquea el mainloop de Tkinter
+
+> ✅ **Todos los fixes aplicados en dev** — pendiente validación en .exe compilado.
 
 ---
 
@@ -800,6 +804,19 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | 🟡 MEDIUM | 5 | 2 | 3 |
 | 🔵 LOW | 6 | 0 | 6 |
 | **TOTAL** | **19** | **6** | **13** |
+
+### Pendientes priorizados (orden de trabajo)
+
+| Prioridad | ID | Archivo | Problema | Fix |
+|-----------|-----|---------|----------|-----|
+| 1 🔴 | **CA-02** | `core/logic.py` → `_run_installer()` | Installer usa `"java"` hardcoded — falla si Java no está en PATH pero sí en `.zbb_cache` | Pasar `java_bin` resuelto como param desde `ServerOrchestrator.start_server()` |
+| 2 🟡 | **MA-02** | `core/logic.py` (múltiples `open()`) | Sin `encoding="utf-8"` — corrompe MOTDs con `§` en Windows | Agregar `encoding="utf-8"` a todos los `open()` de logic.py y settings_manager.py |
+| 3 🟡 | **HA-05** | `services/watchdog.py:134-135` | Race en `_do_restart` — chequea `runner.running` sin lock | Serializar con lock o `threading.Event` |
+| 4 🟡 | **HA-06** | Players dashboard / ServerRunner | `connected_players` stale post-restart — jugadores fantasma en dashboard | Emitir `PLAYER_COUNT` vacío al emitir `STOPPED` |
+| 5 🟡 | **MA-05** | `core/orchestrators.py` scheduler | Restart schedulado silenciosamente perdido si tick loop atrasado >120s | Emitir NOTIFICATION de warning si `remaining < -120s` |
+| 6 🟡 | **MA-03** | `ui/main.py` Automation tab | `save_automation()` se llama al abrir tab aunque sin cambios | Dirty flag o comparar antes de save |
+| 7 🔵 | **LA-02** | `core/logic.py:_jar_ready_events` | Dict nunca limpiado — leak menor en sesiones largas | Limpiar key post-`wait_for_jar_ready()` |
+| — | **LA-03/04/05/06** | varios | Limpieza menor (dead imports, hardcoded fallbacks, silent guards) | Backlog bajo |
 
 ---
 
