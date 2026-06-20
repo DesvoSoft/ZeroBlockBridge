@@ -101,12 +101,17 @@ class BackupManager:
             return backups
         for f in self.backup_dir.iterdir():
             if f.is_file() and f.suffix == ".zip":
+                try:
+                    date_str = datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+                except ValueError:
+                    logger.warning("Skipping non-timestamp backup file: %s", f.name)
+                    continue
                 size_mb = f.stat().st_size / (1024 * 1024)
                 backups.append({
                     "name": f.name,
                     "path": str(f),
                     "size": f"{size_mb:.2f} MB",
-                    "date": datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+                    "date": date_str,
                 })
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
@@ -114,7 +119,14 @@ class BackupManager:
     def get_latest_backup(self) -> dict[str, Any] | None:
         if not self.backup_dir.exists():
             return None
-        backups = [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"]
+        backups = []
+        for f in self.backup_dir.iterdir():
+            if f.is_file() and f.suffix == ".zip":
+                try:
+                    datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S")
+                except ValueError:
+                    continue
+                backups.append(f)
         if not backups:
             return None
         backups.sort(key=lambda x: x.name, reverse=True)
@@ -122,7 +134,7 @@ class BackupManager:
         return {
             "name": latest.name,
             "path": str(latest),
-            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M"),
         }
 
     def restore_backup(self, backup_path_str: str) -> bool:
