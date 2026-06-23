@@ -554,22 +554,25 @@ class ServerRunner:
         return "\n".join(self._stderr_buffer[-50:])
 
     def _parse_player_count(self, line):
-        import re
         join_match = re.search(r': (\w+) joined the game', line)
         if join_match:
             player = join_match.group(1)
             self.connected_players.add(player)
-            self.player_count = len(self.connected_players)
-            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-            self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
+            new_count = len(self.connected_players)
+            if new_count != self.player_count:
+                self.player_count = new_count
+                self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+                self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
         else:
             leave_match = re.search(r': (\w+) left the game', line)
             if leave_match:
                 player = leave_match.group(1)
                 self.connected_players.discard(player)
-                self.player_count = len(self.connected_players)
-                self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-                self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
+                new_count = len(self.connected_players)
+                if new_count != self.player_count:
+                    self.player_count = new_count
+                    self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+                    self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
 
 def save_server_icon(server_name, image_path):
     try:

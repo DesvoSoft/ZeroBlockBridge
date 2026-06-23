@@ -34,6 +34,7 @@ class AppConfig:
     COLOR_STATUS_OFFLINE = "#64748b"  # slate-500  (gris neutro, no blanco)
     COLOR_STATUS_STARTING = "#f59e0b" # amber-400
     COLOR_STATUS_ERROR = "#f87171"    # red-400    (más suave que rojo puro)
+    COLOR_TEXT_PRIMARY = "#f1f5f9"    # slate-100
     COLOR_TEXT_GRAY = "#94a3b8"       # slate-400  (consistente con NOTE)
     COLOR_TEXT_NOTE = "#64748b"       # slate-500  (más sutil que antes)
     COLOR_TEXT_MUTED = "#475569"      # slate-600  (muy sutil)

@@ -97,7 +97,7 @@ class VersionManager:
                 forge_versions = data.get("Forge", [])
                 if forge_versions:
                     first = forge_versions[0]
-                    if not first.startswith("1.") or re.match(r'^\d+\.\d+', first):
+                    if not first.startswith("1."):
                         logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
                         return self._fetch_defaults_sync()
 

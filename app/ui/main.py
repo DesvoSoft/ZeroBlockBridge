@@ -214,10 +214,6 @@ class MCTunnelApp(ctk.CTk):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
  
-        # --- Separator ---
-        sep = ctk.CTkFrame(self.dashboard_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
-        sep.pack(fill="x", padx=15, pady=4)
-
         # --- Tunnel ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
         self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 1))
@@ -251,10 +247,10 @@ class MCTunnelApp(ctk.CTk):
         self._setup_expanded = False
         self.btn_toggle_setup = ctk.CTkButton(
             self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
-            fg_color="#1e293b", hover_color="#334155",
-            border_width=1, border_color="#f97316",
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
             width=70, corner_radius=12, height=36,
-            font=("Roboto Medium", 12), text_color="#f97316",
+            font=("Roboto Medium", 12), text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
         self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
@@ -338,7 +334,7 @@ class MCTunnelApp(ctk.CTk):
                 best = installations[0]
                 source_badge = "Portable" if best.source == "PORTABLE" else "System"
                 label = f"Java {best.major} ({source_badge})"
-                self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color="green"))
+                self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=AppConfig.COLOR_BTN_SUCCESS))
                 self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
                 self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
@@ -387,7 +383,7 @@ class MCTunnelApp(ctk.CTk):
         
         meta = logic.get_server_meta(server_name)
         mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color="white")
+        self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
         
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
         
