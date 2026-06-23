@@ -6,8 +6,8 @@
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 6 resueltos, 13 pendientes
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
 > **UI Dirt Block:** ✅ Palette aplicada en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
-> **Bugs críticos resueltos (sesión 2026-06-23):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map)
-> **Siguiente prioridad:** CA-02 (installer java hardcoded) → MA-02/A2-B02 (encoding utf-8) → HA-05/HA-06 → NR-03/06/07/08 → A2-B03 (backup restore atómico)
+> **Bugs críticos resueltos (sesión 2026-06-23):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
+> **Siguiente prioridad:** MA-02/A2-B02 (encoding utf-8) → A2-B05 (atexit guard) → NR-03/06/07/08 → A2-B07 (TPS 1x/seg) → A2-B03 (backup restore atómico)
 
 ---
 
@@ -846,7 +846,7 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | ID | Archivo | Líneas | Problema | Fix |
 |----|---------|--------|---------|-----|
 | ~~CA-01~~ | ~~`services/watchdog.py`~~ | ~~105-108, 121-124 + `core/core.py:329`~~ | ~~Double toast por crash — Watchdog emite `NOTIFICATION` Y `_on_server_crashed` emite otra. Usuario ve 2 popups por crash.~~ | ✅ FIXED `6b00462` |
-| CA-02 | `core/logic.py` | ~206 | Installer usa `"java"` hardcodeado, no el JDK resuelto. Fabric/Forge falla con "java not found" aunque ZBB ya descargó JDK correcto. | Aceptar `java_bin` param en `_run_installer`, pasar bin resuelto desde caller. |
+| ~~CA-02~~ | ~~`core/logic.py`~~ | ~~206~~ | ~~Installer usa `"java"` hardcodeado — Fabric/Forge falla si java no en PATH aunque ZBB tiene JDK cacheado~~ | ✅ `java_bin` param en `_run_installer`/`install_fabric`/`install_forge`; wizard resuelve via `JdkManagerInstance.ensure_java` antes de llamar (commit 3117759) |
 | ~~JAVA-FLOOR~~ | ~~`core/core.py`~~ | ~~`_resolve_java_bin`~~ | ~~Shim de Forge bootstrap compilado en Java 8 bytecode — bytecode_analyzer detectaba v52=Java8, overrideaba version-map → `UnsupportedClassVersionError` → `jvm_config_error`~~ | ✅ `bytecode_java` y `required_java_cached` solo se usan si `>= get_required_java(mc_version)` (commit a4a909c) |
 
 ### 🟡 HIGH (6)
@@ -895,7 +895,7 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 
 | Prioridad | ID | Archivo | Problema | Fix |
 |-----------|-----|---------|----------|-----|
-| 1 🔴 | **CA-02** | `core/logic.py` → `_run_installer()` | Installer usa `"java"` hardcoded — falla si Java no está en PATH pero sí en `.zbb_cache` | Pasar `java_bin` resuelto como param desde `ServerOrchestrator.start_server()` |
+| ~~1 🔴~~ | ~~**CA-02**~~ | ~~`core/logic.py` → `_run_installer()`~~ | ~~Installer usa `"java"` hardcoded~~ | ✅ commit 3117759 |
 | 2 🟡 | **MA-02** | `core/logic.py` (múltiples `open()`) | Sin `encoding="utf-8"` — corrompe MOTDs con `§` en Windows | Agregar `encoding="utf-8"` a todos los `open()` de logic.py y settings_manager.py |
 | 3 🟡 | **HA-05** | `services/watchdog.py:134-135` | Race en `_do_restart` — chequea `runner.running` sin lock | Serializar con lock o `threading.Event` |
 | 4 🟡 | **HA-06** | Players dashboard / ServerRunner | `connected_players` stale post-restart — jugadores fantasma en dashboard | Emitir `PLAYER_COUNT` vacío al emitir `STOPPED` |
@@ -1162,60 +1162,62 @@ Todas las features requieren **0 nuevas dependencias externas**.
 ### Estado del branch
 
 - **Branch activo:** `dev`
-- **Último commit:** `a4a909c` — fix java floor check
-- **Commits esta sesión:** `e37cc0a` (NR+A2 fixes UI+logic), `a4a909c` (java floor fix)
-- **Push pendiente:** NO — el usuario hace push manualmente cuando esté listo
+- **Último commit:** `3117759` — CA-02 fix (java_bin en installers)
+- **Commits esta sesión:** `e37cc0a` → `a4a909c` → `6a2308c` → `3117759`
+- **Push pendiente:** NO — usuario hace push manualmente
 
 ### Qué se resolvió esta sesión
 
-| ID | Archivo | Fix |
-|----|---------|-----|
-| NR-DASH | `ui/main.py` | Separador horizontal entre stats y tunnel eliminado |
-| NR-01 | `ui/main.py` + `app_config.py` | `text_color="white"` → `COLOR_TEXT_PRIMARY` (token nuevo) |
-| NR-02 | `ui/main.py` | `text_color="green"` en Java check → `COLOR_BTN_SUCCESS` |
-| NR-09 | `ui/main.py` | `#f97316` hardcodeado → `COLOR_ACCENT_AMBER` |
-| A2-B04 | `core/version_manager.py` | Forge stale detection siempre-True corregida |
-| A2-B06/D02 | `core/logic.py` | `PLAYER_COUNT` ahora solo emite si valor cambió; `import re` movido a top |
-| JAVA-FLOOR | `core/core.py` | **Bug crítico:** Forge bootstrap shim detectado como Java 8 → `jvm_config_error`. Fix: `bytecode_java` y `required_java_cached` son floored por `get_required_java(mc_version)` |
+| ID | Commit | Archivo(s) | Fix |
+|----|--------|------------|-----|
+| NR-DASH | e37cc0a | `ui/main.py` | Separador horizontal entre stats y tunnel eliminado |
+| NR-01 | e37cc0a | `ui/main.py` + `app_config.py` | `text_color="white"` → `COLOR_TEXT_PRIMARY` (token nuevo) |
+| NR-02 | e37cc0a | `ui/main.py` | `text_color="green"` en Java check → `COLOR_BTN_SUCCESS` |
+| NR-09 | e37cc0a | `ui/main.py` | `#f97316` hardcodeado → `COLOR_ACCENT_AMBER` |
+| A2-B04 | e37cc0a | `core/version_manager.py` | Forge stale detection regex siempre-True corregida |
+| A2-B06/D02 | e37cc0a | `core/logic.py` | `PLAYER_COUNT` emite solo si valor cambió; `import re` al top |
+| JAVA-FLOOR | a4a909c | `core/core.py` | Forge bootstrap shim (class v52=Java8) overrideaba version-map → `jvm_config_error`. Fix: `bytecode_java` y `required_java_cached` floored por `get_required_java(mc_version)` |
+| CA-02 | 3117759 | `core/logic.py`, `ui/main.py` | `_run_installer` usaba `"java"` hardcodeado. `install_fabric`/`install_forge` ahora aceptan `java_bin`. Wizard resuelve bin correcto via `JdkManagerInstance.ensure_java` antes de llamar. Bytecode section del wizard también aplica floor check y guarda `required_java` correcto en metadata. |
 
 ### Próximos fixes recomendados (en orden)
 
-**Bloque 1 — Seguridad/corrección (< 1 hora total):**
-1. **CA-02** — `core/logic.py:_run_installer` usa `"java"` hardcodeado. Fabric/Forge installer falla si `java` no está en PATH aunque ZBB tiene el JDK cacheado. Fix: pasar `java_bin` resuelto como parámetro desde `ServerOrchestrator`.
-2. **MA-02 / A2-B02** — Dos `open()` sin `encoding="utf-8"`: `logic.py:check_eula` y `logic.py:load_config`. En Windows con MOTDs que tienen `§` (§-section), crashea silenciosamente.
-3. **A2-B05** — `core/core.py:_atexit_stop` sin try/except. Si falla al cerrar → traceback en consola. Fix: wrap simple.
+**Bloque 1 — Corrección datos/encoding (< 30 min):**
+1. **MA-02 / A2-B02** — `open()` sin `encoding="utf-8"` en `logic.py:check_eula` (~línea 588) y `logic.py:load_config` (~línea 64). En Windows con MOTDs con `§` crashea silenciosamente. Fix: agregar `encoding="utf-8"` a ambos opens. CLAUDE.md lo exige explícitamente.
+2. **A2-B05** — `core/core.py:_atexit_stop` (buscar con grep) sin try/except. Wrap simple.
 
-**Bloque 2 — UX (30 min total):**
-4. **NR-03** — `os.startfile()` en `main.py:open_server_folder`. Ya hay el patrón correcto con `subprocess` en `open_mods_folder_action`. Unificar ambos.
-5. **NR-06** — Server type detectado por heurística de archivos. Usar `meta.get("type")` en su lugar.
-6. **NR-07** — "No servers found." label sin acción. Reemplazar con botón "→ Create your first server".
-7. **NR-08** — Console input activo antes de seleccionar servidor. Deshabilitar `entry_console` + `btn_send` hasta que `current_server` esté definido.
+**Bloque 2 — UX (30-45 min):**
+3. **NR-03** — `os.startfile()` en `main.py:open_server_folder` (~línea 403). Patrón correcto ya existe en `open_mods_folder_action` (~línea 453). Unificar: extraer método `_open_in_file_manager(path)` con subprocess platform-check, reutilizar en ambos sitios. CLAUDE.md prohíbe `os.startfile`.
+4. **NR-06** — Server type en `on_server_select` detectado por heurística de archivos (~línea 382-386). Usar `meta.get("type")` en su lugar — el meta ya lo tiene.
+5. **NR-07** — `_render_server_list`: "No servers found." label sin acción. Reemplazar con botón `→ Create your first server` que llame `self.create_server_dialog()`.
+6. **NR-08** — Console `entry_console` + `btn_send` activos antes de seleccionar servidor. Deshabilitar en `__init__`, habilitar en `on_server_select`.
 
-**Bloque 3 — Crítico de datos (separado, requiere tests):**
-8. **A2-B03** — `backup_manager.py:restore_backup` extrae directo al servidor sin swap atómico. Si falla a mitad → server corrupto. Fix: extraer a temp dir, luego swap.
+**Bloque 3 — Performance (15-20 min):**
+7. **A2-B07/P02** — `orchestrators.py` emite `TPS_UPDATE` cada 50ms. Cambiar a 1x/seg: añadir `_last_tps_emit = 0`, emitir solo si `time.monotonic() - _last_tps_emit >= 1.0`.
+8. **A2-P03** — `JavaDetector._shared_cache` sin TTL. Si usuario instala Java mientras ZBB corre, no lo ve hasta restart. Agregar `_cache_time` + TTL de 300s.
 
-**Bloque 4 — Performance/deuda:**
-9. **A2-B07/P02** — `TPS_UPDATE` cada 50ms. Emitir 1x/seg.
-10. **A2-A01** — `import re` mid-module en `logic.py` (era en `_parse_player_count`, ya movido al top ✅, pero hay otro `import` en medio del módulo).
-11. **A2-P03** — `JavaDetector._shared_cache` sin TTL. Puede servir datos obsoletos si el usuario instala Java mientras ZBB corre.
+**Bloque 4 — Crítico de datos (requiere tests antes de merge):**
+9. **A2-B03** — `backup_manager.py:restore_backup` extrae directo al dir del servidor sin swap atómico. Si falla a mitad → server corrupto. Fix: extraer a `<server>_restore_tmp`, luego renombrar original a `<server>_bak_<ts>`, renombrar tmp a nombre final.
 
 ### Cosas importantes a saber
 
-- **Commits:** Siempre `git -c user.name="DesvoSoft" -c user.email="desvox23@gmail.com"`. Nunca co-author, nunca Claude como contributor.
-- **PowerShell heredoc:** Usar `@'...'@` con `'@` en columna 0. No usar bash `<<'EOF'` — no funciona en PS.
-- **`rtk` no disponible en PS:** Usar git/commands directos en PowerShell. RTK solo funciona en Bash.
-- **`os.startfile` está prohibido** por CLAUDE.md — solo usar subprocess con plataforma-check.
-- **Versión de Forge en metadata:** El campo `"version"` del server "test" contiene `"26.2"` (versión loader de Forge, no MC). `get_required_java("26.2")` devuelve 17 por default — funciona, pero hay deuda: el wizard debería guardar la MC version, no el loader version.
-- **test_server** funciona bien (Java 17, Vanilla 1.20.1).
-- **test** es Forge 1.20.x — después del fix JAVA-FLOOR debería arrancar correctamente.
+- **Commits:** Siempre `git -c user.name="DesvoSoft" -c user.email="desvox23@gmail.com"`. **Nunca co-author, nunca Claude como contributor.**
+- **PowerShell heredoc:** `@'...'@` con `'@` en columna 0. Bash `<<'EOF'` no funciona en PS.
+- **`rtk` no disponible en PS:** Usar git/commands directos. RTK solo funciona en Bash.
+- **`os.startfile` prohibido** por CLAUDE.md — siempre subprocess con platform-check.
+- **Versión de Forge en metadata:** `"version": "26.2"` en `servers/test/metadata.json` es la versión del loader de Forge, no la MC version. `get_required_java("26.2")` devuelve 17 por default — funciona, pero es deuda: el wizard debería guardar la MC version en un campo separado (ej. `"mc_version"`).
+- **`test_server`** (Vanilla 1.20.1, Java 17 portable) — funciona correctamente.
+- **`test`** (Forge 1.20.x) — después de JAVA-FLOOR + CA-02 debería arrancar. Validar con usuario.
+- **`app/servers/`** está en `.gitignore` — no se commitea metadata de servidores.
 
 ### Archivos modificados esta sesión
 
 ```
 app/core/app_config.py        — COLOR_TEXT_PRIMARY token nuevo
-app/core/core.py              — _resolve_java_bin floor check
-app/core/logic.py             — _parse_player_count guard + import re cleanup
+app/core/core.py              — _resolve_java_bin: floor check bytecode vs version-map
+app/core/logic.py             — _run_installer/install_fabric/install_forge: java_bin param
+                                _parse_player_count: diff guard + import re al top
 app/core/version_manager.py  — Forge stale detection fix
-app/ui/main.py                — NR-DASH/01/02/09 fixes
-roadmap.md                    — Estado actualizado
+app/ui/main.py                — NR-DASH/01/02/09; wizard: java_bin resuelto antes de install,
+                                bytecode floor check, update_server_meta con java correcto
+roadmap.md                    — Estado actualizado + handover
 ```
