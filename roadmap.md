@@ -1,11 +1,13 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-20
+> **Última actualización:** 2026-06-23
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 364 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 6 resueltos, 13 pendientes
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
-> **Siguiente prioridad:** CA-02 (installer java hardcoded) → MA-02 (encoding utf-8) → HA-05/HA-06
+> **UI Dirt Block:** ✅ Palette aplicada en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
+> **Bugs críticos resueltos (sesión 2026-06-23):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map)
+> **Siguiente prioridad:** CA-02 (installer java hardcoded) → MA-02/A2-B02 (encoding utf-8) → HA-05/HA-06 → NR-03/06/07/08 → A2-B03 (backup restore atómico)
 
 ---
 
@@ -845,6 +847,7 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 |----|---------|--------|---------|-----|
 | ~~CA-01~~ | ~~`services/watchdog.py`~~ | ~~105-108, 121-124 + `core/core.py:329`~~ | ~~Double toast por crash — Watchdog emite `NOTIFICATION` Y `_on_server_crashed` emite otra. Usuario ve 2 popups por crash.~~ | ✅ FIXED `6b00462` |
 | CA-02 | `core/logic.py` | ~206 | Installer usa `"java"` hardcodeado, no el JDK resuelto. Fabric/Forge falla con "java not found" aunque ZBB ya descargó JDK correcto. | Aceptar `java_bin` param en `_run_installer`, pasar bin resuelto desde caller. |
+| ~~JAVA-FLOOR~~ | ~~`core/core.py`~~ | ~~`_resolve_java_bin`~~ | ~~Shim de Forge bootstrap compilado en Java 8 bytecode — bytecode_analyzer detectaba v52=Java8, overrideaba version-map → `UnsupportedClassVersionError` → `jvm_config_error`~~ | ✅ `bytecode_java` y `required_java_cached` solo se usan si `>= get_required_java(mc_version)` (commit a4a909c) |
 
 ### 🟡 HIGH (6)
 
@@ -910,11 +913,11 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 
 | ID | Archivo | Línea | Problema | Fix | Esfuerzo |
 |----|---------|-------|---------|-----|---------|
-| **NR-01** | `ui/main.py` | ~390 | `text_color="white"` hardcodeado en `lbl_server_info` — se rompe en light mode | Usar `AppConfig.COLOR_TEXT_NOTE` o dejar sin `text_color` | 5 min |
-| **NR-02** | `ui/main.py` | ~341 | `text_color="green"` hardcodeado en `check_java_startup` | Usar `AppConfig.COLOR_STATUS_ONLINE` | 5 min |
+| ~~**NR-01**~~ | ~~`ui/main.py`~~ | ~~390~~ | ~~`text_color="white"` hardcodeado en `lbl_server_info`~~ | ✅ `COLOR_TEXT_PRIMARY` (commit e37cc0a) | ~~5 min~~ |
+| ~~**NR-02**~~ | ~~`ui/main.py`~~ | ~~341~~ | ~~`text_color="green"` hardcodeado en `check_java_startup`~~ | ✅ `COLOR_BTN_SUCCESS` (commit e37cc0a) | ~~5 min~~ |
 | **NR-03** | `ui/main.py` | ~403 | `os.startfile()` viola regla de CLAUDE.md (no `os.startfile`) — no funciona en Linux | Reemplazar con `subprocess.run(["explorer", path])` en Windows, `open` en macOS, `xdg-open` en Linux | 10 min |
-| **NR-09** | `ui/main.py` | ~255-257 | `border_color="#f97316"`, `text_color="#f97316"` hardcodeados en `btn_toggle_setup` | Usar `AppConfig.COLOR_BTN_WARNING` / `AppConfig.COLOR_ACCENT_AMBER` | 5 min |
-| **NR-DASH** | `ui/main.py` | 218-219 | Línea separadora horizontal entre stats del server y sección tunnel — visualmente innecesaria, añade ruido | Eliminar el `CTkFrame height=2` de `_build_dashboard()` | 2 min |
+| ~~**NR-09**~~ | ~~`ui/main.py`~~ | ~~255-257~~ | ~~`border_color="#f97316"` hardcodeado en `btn_toggle_setup`~~ | ✅ `COLOR_ACCENT_AMBER` (commit e37cc0a) | ~~5 min~~ |
+| ~~**NR-DASH**~~ | ~~`ui/main.py`~~ | ~~218-219~~ | ~~Línea separadora horizontal innecesaria~~ | ✅ Eliminada (commit e37cc0a) | ~~2 min~~ |
 
 ### NR-MED: Fixes de lógica (30 min - 1 hr, riesgo 🟡)
 
@@ -965,10 +968,10 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 | **A2-B01** | `core/logic.py` | ~556–572 | 🟡 | `_parse_player_count` accede a `self.connected_players` (set) desde output thread sin lock — race si otro thread lee simultáneamente | Proteger con `threading.Lock` |
 | **A2-B02** | `core/logic.py` | ~592 | 🟡 | `check_eula` abre `eula.txt` sin `encoding="utf-8"` | Agregar encoding |
 | **A2-B03** | `services/backup_manager.py` | ~149–155 | 🟡 | `restore_backup` destruye directorio del servidor ANTES de extraer — si extracción falla a mitad, mundo del jugador queda destruido sin rollback | Extraer en temp dir → swap atómico post-éxito |
-| **A2-B04** | `core/version_manager.py` | ~100 | 🟡 | Detección de stale Forge: `re.match(r'^\d+\.\d+', first)` siempre True para versiones válidas — fuerza refresh innecesario en cada arranque | Simplificar a `not first.startswith("1.")` |
+| ~~**A2-B04**~~ | ~~`core/version_manager.py`~~ | ~~100~~ | ~~🟡~~ | ~~Forge stale detection regex siempre True para versiones válidas~~ | ✅ `not first.startswith("1.")` (commit e37cc0a) |
 | **A2-B05** | `core/playit_manager.py` | ~49 | 🔵 | `atexit.register(self._atexit_stop)` puede disparar en estado parcial si la app cierra por excepción durante init | Agregar `try/except` en `_atexit_stop` |
-| **A2-B06** | `orchestrators.py` | ~185 | 🟡 | `PLAYER_COUNT` emitido cada 50ms **sin diff check** — 20 eventos/segundo al EventBus aunque el conteo no haya cambiado. Cada subscriber UI se activa 20x/seg | Solo emitir si el valor cambió desde el último emit |
-| **A2-B07** | `orchestrators.py` | ~176 | 🟡 | `TPS_UPDATE` cada 50ms con valor calculado del tick loop del proceso (no del servidor real) — 20 updates/seg a la UI para un número que no refleja el TPS real del servidor MC | Emitir solo 1x/seg o derivar de logs del servidor |
+| ~~**A2-B06**~~ | ~~`orchestrators.py`~~ | ~~185~~ | ~~🟡~~ | ~~`PLAYER_COUNT` emitido sin diff check — 20 eventos/seg~~ | ✅ Guard en `logic.py._parse_player_count` (commit e37cc0a) |
+| **A2-B07** | `orchestrators.py` | ~176 | 🟡 | `TPS_UPDATE` cada 50ms con valor no-real — 20 updates/seg a la UI | Emitir solo 1x/seg o derivar de logs del servidor |
 
 ---
 
@@ -1035,10 +1038,10 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 ```
 Rápidos/seguros primero:
 A2-D02 (import re, 5min) → A2-B02 (eula encoding, 5min) → A2-B05 (atexit guard, 10min)
-→ A2-A01 (import en medio, 5min) → A2-B04 (forge stale detection, 10min)
+→ A2-A01 (import en medio, 5min) → ~~A2-B04~~ ✅ (forge stale detection, resuelto e37cc0a)
 
 Rendimiento (alto impacto):
-A2-B06+A2-P01 (PLAYER_COUNT diff, 15min) → A2-B07+A2-P02 (TPS 1x/seg, 15min)
+~~A2-B06+A2-P01~~ ✅ (PLAYER_COUNT diff, resuelto e37cc0a) → A2-B07+A2-P02 (TPS 1x/seg, 15min)
 → A2-P04 (eliminar wait_for_background_refresh, 20min)
 
 Arquitectura:
@@ -1151,3 +1154,68 @@ Todas las features requieren **0 nuevas dependencias externas**.
 | **Orchestrator** | Sub-orquestador de lifecycle (Server, Backup, Tunnel, Scheduler) |
 | **Pre-flight check** | Verificación de requisitos ANTES de operación |
 | **FakeRunner / FakeEmitter** | Test doubles en conftest.py |
+
+---
+
+## Handover — Sesión 2026-06-23
+
+### Estado del branch
+
+- **Branch activo:** `dev`
+- **Último commit:** `a4a909c` — fix java floor check
+- **Commits esta sesión:** `e37cc0a` (NR+A2 fixes UI+logic), `a4a909c` (java floor fix)
+- **Push pendiente:** NO — el usuario hace push manualmente cuando esté listo
+
+### Qué se resolvió esta sesión
+
+| ID | Archivo | Fix |
+|----|---------|-----|
+| NR-DASH | `ui/main.py` | Separador horizontal entre stats y tunnel eliminado |
+| NR-01 | `ui/main.py` + `app_config.py` | `text_color="white"` → `COLOR_TEXT_PRIMARY` (token nuevo) |
+| NR-02 | `ui/main.py` | `text_color="green"` en Java check → `COLOR_BTN_SUCCESS` |
+| NR-09 | `ui/main.py` | `#f97316` hardcodeado → `COLOR_ACCENT_AMBER` |
+| A2-B04 | `core/version_manager.py` | Forge stale detection siempre-True corregida |
+| A2-B06/D02 | `core/logic.py` | `PLAYER_COUNT` ahora solo emite si valor cambió; `import re` movido a top |
+| JAVA-FLOOR | `core/core.py` | **Bug crítico:** Forge bootstrap shim detectado como Java 8 → `jvm_config_error`. Fix: `bytecode_java` y `required_java_cached` son floored por `get_required_java(mc_version)` |
+
+### Próximos fixes recomendados (en orden)
+
+**Bloque 1 — Seguridad/corrección (< 1 hora total):**
+1. **CA-02** — `core/logic.py:_run_installer` usa `"java"` hardcodeado. Fabric/Forge installer falla si `java` no está en PATH aunque ZBB tiene el JDK cacheado. Fix: pasar `java_bin` resuelto como parámetro desde `ServerOrchestrator`.
+2. **MA-02 / A2-B02** — Dos `open()` sin `encoding="utf-8"`: `logic.py:check_eula` y `logic.py:load_config`. En Windows con MOTDs que tienen `§` (§-section), crashea silenciosamente.
+3. **A2-B05** — `core/core.py:_atexit_stop` sin try/except. Si falla al cerrar → traceback en consola. Fix: wrap simple.
+
+**Bloque 2 — UX (30 min total):**
+4. **NR-03** — `os.startfile()` en `main.py:open_server_folder`. Ya hay el patrón correcto con `subprocess` en `open_mods_folder_action`. Unificar ambos.
+5. **NR-06** — Server type detectado por heurística de archivos. Usar `meta.get("type")` en su lugar.
+6. **NR-07** — "No servers found." label sin acción. Reemplazar con botón "→ Create your first server".
+7. **NR-08** — Console input activo antes de seleccionar servidor. Deshabilitar `entry_console` + `btn_send` hasta que `current_server` esté definido.
+
+**Bloque 3 — Crítico de datos (separado, requiere tests):**
+8. **A2-B03** — `backup_manager.py:restore_backup` extrae directo al servidor sin swap atómico. Si falla a mitad → server corrupto. Fix: extraer a temp dir, luego swap.
+
+**Bloque 4 — Performance/deuda:**
+9. **A2-B07/P02** — `TPS_UPDATE` cada 50ms. Emitir 1x/seg.
+10. **A2-A01** — `import re` mid-module en `logic.py` (era en `_parse_player_count`, ya movido al top ✅, pero hay otro `import` en medio del módulo).
+11. **A2-P03** — `JavaDetector._shared_cache` sin TTL. Puede servir datos obsoletos si el usuario instala Java mientras ZBB corre.
+
+### Cosas importantes a saber
+
+- **Commits:** Siempre `git -c user.name="DesvoSoft" -c user.email="desvox23@gmail.com"`. Nunca co-author, nunca Claude como contributor.
+- **PowerShell heredoc:** Usar `@'...'@` con `'@` en columna 0. No usar bash `<<'EOF'` — no funciona en PS.
+- **`rtk` no disponible en PS:** Usar git/commands directos en PowerShell. RTK solo funciona en Bash.
+- **`os.startfile` está prohibido** por CLAUDE.md — solo usar subprocess con plataforma-check.
+- **Versión de Forge en metadata:** El campo `"version"` del server "test" contiene `"26.2"` (versión loader de Forge, no MC). `get_required_java("26.2")` devuelve 17 por default — funciona, pero hay deuda: el wizard debería guardar la MC version, no el loader version.
+- **test_server** funciona bien (Java 17, Vanilla 1.20.1).
+- **test** es Forge 1.20.x — después del fix JAVA-FLOOR debería arrancar correctamente.
+
+### Archivos modificados esta sesión
+
+```
+app/core/app_config.py        — COLOR_TEXT_PRIMARY token nuevo
+app/core/core.py              — _resolve_java_bin floor check
+app/core/logic.py             — _parse_player_count guard + import re cleanup
+app/core/version_manager.py  — Forge stale detection fix
+app/ui/main.py                — NR-DASH/01/02/09 fixes
+roadmap.md                    — Estado actualizado
+```
