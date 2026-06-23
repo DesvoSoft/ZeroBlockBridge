@@ -153,7 +153,8 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
     def _resolve_java_bin(self, server_dir: str, mc_version: str,
                           required_java_cached: Optional[int],
                           auto_install_jdk: bool) -> Optional[tuple[str, int]]:
-        if required_java_cached:
+        version_map_java = get_required_java(mc_version)
+        if required_java_cached and required_java_cached >= version_map_java:
             required_java = required_java_cached
             source = "cached-metadata"
         else:
@@ -171,8 +172,12 @@ class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelO
                 except Exception as e:
                     self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
 
-            required_java = bytecode_java if bytecode_java else get_required_java(mc_version)
-            source = "bytecode" if bytecode_java else "version-map"
+            if bytecode_java and bytecode_java >= version_map_java:
+                required_java = bytecode_java
+                source = "bytecode"
+            else:
+                required_java = version_map_java
+                source = "version-map"
 
             from app.core.logic import update_server_meta
             update_server_meta(self.current_server, {"required_java": required_java})
