@@ -84,7 +84,7 @@ class ConsoleWidget(ctk.CTkTextbox):
             font=AppConfig.FONT_MONO,
             fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK),
             border_width=2,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, "gray20"),
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             wrap="word"
         )
         self.max_lines = max_lines
@@ -149,9 +149,9 @@ class ServerListItem(ctk.CTkFrame):
         
         self.configure(
             corner_radius=12,
-            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK),
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
             border_width=1,
-            border_color=("gray85", AppConfig.COLOR_BORDER_DARK)
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)
         )
         
         self.grid_columnconfigure(0, weight=0)
@@ -205,12 +205,12 @@ class ServerListItem(ctk.CTkFrame):
         self.lbl_icon.configure(cursor=cursor_type)
 
     def _on_enter(self, event=None):
-        self.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
-        self.configure(border_color=("gray60", "gray50"))
+        self.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, "#2d3f55"))
+        self.configure(border_color=(AppConfig.COLOR_ACCENT_GREEN, AppConfig.COLOR_ACCENT_GREEN))
 
     def _on_leave(self, event=None):
-        self.configure(fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.configure(border_color=("gray85", AppConfig.COLOR_BORDER_DARK))
+        self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         
     def _on_select(self):
         if self.on_click:
@@ -238,8 +238,8 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             corner_radius=12,
             fg_color="transparent",
             border_width=1,
-            border_color=("gray70", "gray30"),
-            hover_color=("gray90", "gray20"),
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             command=self._on_cancel
         )
         self.btn_cancel.pack(pady=(10, 20))

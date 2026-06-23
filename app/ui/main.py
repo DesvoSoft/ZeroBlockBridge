@@ -145,12 +145,12 @@ class MCTunnelApp(ctk.CTk):
         self.server_list_frame = ctk.CTkScrollableFrame(
             self.sidebar_frame, label_text="", corner_radius=12, 
             border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            fg_color=("gray95", "gray12")
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
         )
         self.server_list_frame.grid(row=4, column=0, padx=20, pady=(5, 15), sticky="nsew")
 
     def _build_main_area(self):
-        self.main_frame = ctk.CTkFrame(self, corner_radius=0)
+        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.main_frame.grid(row=0, column=1, sticky="nsew")
         self.main_frame.grid_rowconfigure(0, weight=0) # Status bar
         self.main_frame.grid_rowconfigure(1, weight=0) # Compact Dashboard (Controls & Tunnel)
@@ -161,7 +161,7 @@ class MCTunnelApp(ctk.CTk):
         self._build_console_tabs()
 
     def _build_status_bar(self):
-        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=12, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
         
         self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
@@ -211,7 +211,7 @@ class MCTunnelApp(ctk.CTk):
 
 
     def _build_dashboard(self):
-        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
  
         # --- Separator ---
@@ -261,7 +261,9 @@ class MCTunnelApp(ctk.CTk):
         self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
         self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=12, height=36)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel,
+                                   fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                   width=45, corner_radius=12, height=36)
         self.btn_reset.pack(side="left", padx=2)
 
         # Initial UI State Check
@@ -692,7 +694,7 @@ class MCTunnelApp(ctk.CTk):
 
         def _update():
             # 1. Update Status Label and Colors
-            color = "gray"
+            color = AppConfig.COLOR_STATUS_OFFLINE
             icon = "●"
             if status == "Online": color = "green"
             elif status == "Error": color, icon = "red", "✖"

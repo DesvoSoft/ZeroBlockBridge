@@ -5,6 +5,7 @@ import psutil
 import threading
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
+from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from PIL import Image
 
@@ -55,26 +56,38 @@ class ServerWizard(ctk.CTkToplevel):
         self.grid_rowconfigure(2, weight=0) # Footer
         
         # Header
-        self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0)
+        self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0,
+                                         fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.header_frame.grid(row=0, column=0, sticky="ew")
-        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 3", font=ctk.CTkFont(size=14))
+        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 3",
+                                     font=ctk.CTkFont(size=13), text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_step.pack(side="left", padx=20, pady=10)
-        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity", font=ctk.CTkFont(size=16, weight="bold"))
+        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity",
+                                      font=ctk.CTkFont(size=16, weight="bold"))
         self.lbl_title.pack(side="right", padx=20, pady=10)
-        
+
         # Content Frame
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
-        
+
         # Footer
-        self.footer_frame = ctk.CTkFrame(self, height=60, corner_radius=0)
+        self.footer_frame = ctk.CTkFrame(self, height=60, corner_radius=0,
+                                         fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.footer_frame.grid(row=2, column=0, sticky="ew")
-        
-        self.btn_back = ctk.CTkButton(self.footer_frame, text="Back", command=self.go_back, state="disabled", corner_radius=12)
-        self.btn_back.pack(side="left", padx=20, pady=15)
-        
-        self.btn_next = ctk.CTkButton(self.footer_frame, text="Next", command=self.go_next, corner_radius=12)
-        self.btn_next.pack(side="right", padx=20, pady=15)
+
+        self.btn_back = ctk.CTkButton(
+            self.footer_frame, text="← Back", command=self.go_back, state="disabled",
+            corner_radius=12, height=36,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+        )
+        self.btn_back.pack(side="left", padx=20, pady=12)
+
+        self.btn_next = ctk.CTkButton(
+            self.footer_frame, text="Next →", command=self.go_next,
+            corner_radius=12, height=36,
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+        )
+        self.btn_next.pack(side="right", padx=20, pady=12)
         
         self.vm = VersionManager()
         self.vm.add_callback(self.on_versions_refreshed)
@@ -99,9 +112,13 @@ class ServerWizard(ctk.CTkToplevel):
             self.btn_back.configure(state="normal")
             
         if self.current_step == self.total_steps:
-            self.btn_next.configure(text="Create Server", fg_color="green", hover_color="darkgreen")
+            self.btn_next.configure(text="✓ Create Server",
+                                    fg_color=AppConfig.COLOR_BTN_SUCCESS,
+                                    hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         else:
-            self.btn_next.configure(text="Next", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#325882", "#14375e"])
+            self.btn_next.configure(text="Next →",
+                                    fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                                    hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
 
     def clear_content(self):
         for widget in self.content_frame.winfo_children():
@@ -140,18 +157,23 @@ class ServerWizard(ctk.CTkToplevel):
         self.entry_location.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.entry_location.insert(0, self.wizard_data["location"])
         
-        btn_browse_loc = ctk.CTkButton(loc_frame, text="Browse...", command=self.browse_location, corner_radius=12, width=80, fg_color="gray", hover_color="gray30")
+        btn_browse_loc = ctk.CTkButton(loc_frame, text="Browse...", command=self.browse_location,
+                                        corner_radius=12, width=90, height=36,
+                                        fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse_loc.pack(side="right")
             
         ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
         
-        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon", width=100, height=100, fg_color="gray30", corner_radius=12)
+        self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon", width=100, height=100,
+                                          fg_color=AppConfig.COLOR_BTN_GHOST, corner_radius=12)
         self.icon_preview.pack(pady=10)
-        
+
         if self.wizard_data["icon_path"]:
             self._update_icon_preview(self.wizard_data["icon_path"])
-            
-        btn_browse = ctk.CTkButton(self.content_frame, text="Select Image...", command=self.browse_icon, corner_radius=12, fg_color="gray", hover_color="gray30")
+
+        btn_browse = ctk.CTkButton(self.content_frame, text="Select Image...", command=self.browse_icon,
+                                    corner_radius=12, height=32,
+                                    fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse.pack(pady=10)
 
     def browse_location(self):
@@ -198,7 +220,7 @@ class ServerWizard(ctk.CTkToplevel):
             rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
             rb.pack(side="left", padx=(0, 12))
 
-        self.lbl_ram_hint = ctk.CTkLabel(engine_res_frame, text="", text_color="gray", font=ctk.CTkFont(size=12))
+        self.lbl_ram_hint = ctk.CTkLabel(engine_res_frame, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=ctk.CTkFont(size=12))
         self.lbl_ram_hint.pack(anchor="w", pady=(0, 5))
 
         # Version Search
@@ -212,7 +234,9 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_refresh.pack(side="right")
 
         # Versions List
-        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=12, fg_color=("gray90", "gray15"), height=120)
+        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=12,
+                                                       fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
+                                                       height=120)
         self.scroll_versions.pack(fill="x", pady=(0, 15))
 
         self.version_var = ctk.StringVar(value=self.wizard_data["version"])
@@ -244,8 +268,8 @@ class ServerWizard(ctk.CTkToplevel):
 
         slider_range = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
         slider_range.pack(fill="x")
-        ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=ctk.CTkFont(size=10), text_color="gray").pack(side="left")
-        self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color="gray")
+        ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left")
+        self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_ram_util.pack(side="right")
 
         self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color="red", font=ctk.CTkFont(size=12))
@@ -253,7 +277,8 @@ class ServerWizard(ctk.CTkToplevel):
 
         # --- Pre-flight Java Check ---
         ctk.CTkLabel(engine_res_frame, text="Java:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
-        self.java_frame = ctk.CTkFrame(engine_res_frame, corner_radius=8, fg_color=("gray90", "gray20"))
+        self.java_frame = ctk.CTkFrame(engine_res_frame, corner_radius=8,
+                                        fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.java_frame.pack(fill="x", pady=(0, 5))
 
         self.lbl_java_status = ctk.CTkLabel(self.java_frame, text="Detecting Java...", font=ctk.CTkFont(size=13), anchor="w")
@@ -277,7 +302,7 @@ class ServerWizard(ctk.CTkToplevel):
     def _update_java_check(self):
         version = self.version_var.get()
         if not version:
-            self.lbl_java_status.configure(text="Select a version to check Java compatibility.", text_color="gray")
+            self.lbl_java_status.configure(text="Select a version to check Java compatibility.", text_color=AppConfig.COLOR_TEXT_GRAY)
             return
         detector = JavaDetector()
         installations = detector.detect_all()
@@ -294,7 +319,7 @@ class ServerWizard(ctk.CTkToplevel):
         best_label = f"Java {best.major} ({best.source})"
         self.lbl_java_status.configure(
             text=f"{compat_text} {best_label} — MC {version} requires Java {required}",
-            text_color=None
+            text_color=AppConfig.COLOR_BTN_SUCCESS if compatible else AppConfig.COLOR_ACCENT_AMBER
         )
 
     def update_ram_from_entry(self, event=None):
@@ -324,41 +349,69 @@ class ServerWizard(ctk.CTkToplevel):
     def _render_versions(self):
         for widget in self.scroll_versions.winfo_children():
             widget.destroy()
-            
-        engine = self.engine_var.get()
-        versions = self.vm.get_versions(engine)
-        search_q = self.entry_search.get().lower()
-        
-        def version_key(v):
-            try:
-                import re
-                parts = []
-                for part in v.split('.'):
-                    if part.isdigit():
-                        parts.append(int(part))
-                    else:
-                        match = re.match(r"(\d+)", part)
-                        parts.append(int(match.group(1)) if match else 0)
-                return tuple(parts)
-            except (ValueError, TypeError) as e:
-                logger.debug("Wizard version_key parse failed: %s", e)
-                return (0, 0, 0)
 
-        versions.sort(key=version_key, reverse=True)
-        filtered = [v for v in versions if search_q in v.lower()]
-        
-        if not filtered:
-            ctk.CTkLabel(self.scroll_versions, text="No versions found.").pack(pady=20)
-            return
-            
-        for v in filtered[:100]:
-            rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var, value=v, command=self._update_java_check)
-            rb.pack(anchor="w", padx=10, pady=5)
-            
-        if self.wizard_data["version"] in filtered:
-            self.version_var.set(self.wizard_data["version"])
-        elif filtered:
-            self.version_var.set(filtered[0])
+        engine = self.engine_var.get()
+
+        # Show loading indicator immediately — fetch happens in background
+        loading_lbl = ctk.CTkLabel(self.scroll_versions, text="Loading versions...",
+                                    text_color=AppConfig.COLOR_TEXT_GRAY)
+        loading_lbl.pack(pady=20)
+        self.scroll_versions.update_idletasks()
+
+        def fetch_and_render():
+            import re
+            versions = self.vm.get_versions(engine)
+            search_q = self.entry_search.get().lower()
+
+            def version_key(v):
+                try:
+                    parts = []
+                    for part in v.split('.'):
+                        if part.isdigit():
+                            parts.append(int(part))
+                        else:
+                            match = re.match(r"(\d+)", part)
+                            parts.append(int(match.group(1)) if match else 0)
+                    return tuple(parts)
+                except (ValueError, TypeError) as e:
+                    logger.debug("Wizard version_key parse failed: %s", e)
+                    return (0, 0, 0)
+
+            versions.sort(key=version_key, reverse=True)
+            filtered = [v for v in versions if search_q in v.lower()]
+
+            def render_ui():
+                if not self.winfo_exists():
+                    return
+                for widget in self.scroll_versions.winfo_children():
+                    widget.destroy()
+
+                if not filtered:
+                    ctk.CTkLabel(self.scroll_versions, text="No versions found.",
+                                  text_color=AppConfig.COLOR_TEXT_GRAY).pack(pady=20)
+                    return
+
+                for v in filtered[:100]:
+                    rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var,
+                                             value=v, command=self._update_java_check)
+                    rb.pack(anchor="w", padx=10, pady=5)
+
+                # Reset version selection when engine changes — each engine has its own list
+                if self.wizard_data.get("_last_engine") != engine:
+                    self.wizard_data["_last_engine"] = engine
+                    self.wizard_data["version"] = filtered[0] if filtered else ""
+                    self.version_var.set(self.wizard_data["version"])
+                elif self.wizard_data["version"] in filtered:
+                    self.version_var.set(self.wizard_data["version"])
+                elif filtered:
+                    self.version_var.set(filtered[0])
+                    self.wizard_data["version"] = filtered[0]
+
+                self._update_java_check()
+
+            self.after(0, render_ui)
+
+        threading.Thread(target=fetch_and_render, daemon=True).start()
 
     # --- Step 3: Rules & World ---
     def show_step_3(self):
@@ -403,27 +456,30 @@ class ServerWizard(ctk.CTkToplevel):
 
         ctk.CTkLabel(sec_frame, text="Security:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
 
-        sec_toggles = ctk.CTkFrame(sec_frame, fg_color="transparent")
-        sec_toggles.pack(fill="x")
+        sec_row1 = ctk.CTkFrame(sec_frame, fg_color="transparent")
+        sec_row1.pack(fill="x", pady=(0, 6))
 
         self.var_online_mode = ctk.BooleanVar(value=self.wizard_data["online_mode"])
-        self.chk_online_mode = ctk.CTkSwitch(sec_toggles, text="Online Mode", variable=self.var_online_mode)
+        self.chk_online_mode = ctk.CTkSwitch(sec_row1, text="Online Mode", variable=self.var_online_mode)
         self.chk_online_mode.pack(side="left", padx=(0, 20))
 
         self.var_enforce_whitelist = ctk.BooleanVar(value=self.wizard_data["enforce_whitelist"])
-        self.chk_enforce_whitelist = ctk.CTkSwitch(sec_toggles, text="Enforce Whitelist", variable=self.var_enforce_whitelist)
+        self.chk_enforce_whitelist = ctk.CTkSwitch(sec_row1, text="Enforce Whitelist", variable=self.var_enforce_whitelist)
         self.chk_enforce_whitelist.pack(side="left", padx=(0, 20))
 
         self.var_pvp = ctk.BooleanVar(value=self.wizard_data["pvp"])
-        self.chk_pvp = ctk.CTkSwitch(sec_toggles, text="PvP", variable=self.var_pvp)
-        self.chk_pvp.pack(side="left", padx=(0, 20))
+        self.chk_pvp = ctk.CTkSwitch(sec_row1, text="PvP", variable=self.var_pvp)
+        self.chk_pvp.pack(side="left")
+
+        sec_row2_sec = ctk.CTkFrame(sec_frame, fg_color="transparent")
+        sec_row2_sec.pack(fill="x", pady=(0, 4))
 
         self.var_allow_flight = ctk.BooleanVar(value=self.wizard_data["allow_flight"])
-        self.chk_allow_flight = ctk.CTkSwitch(sec_toggles, text="Allow Flight", variable=self.var_allow_flight)
+        self.chk_allow_flight = ctk.CTkSwitch(sec_row2_sec, text="Allow Flight", variable=self.var_allow_flight)
         self.chk_allow_flight.pack(side="left", padx=(0, 20))
 
         self.var_enforce_secure_profile = ctk.BooleanVar(value=self.wizard_data["enforce_secure_profile"])
-        self.chk_enforce_secure_profile = ctk.CTkSwitch(sec_toggles, text="Secure Profile", variable=self.var_enforce_secure_profile)
+        self.chk_enforce_secure_profile = ctk.CTkSwitch(sec_row2_sec, text="Secure Profile", variable=self.var_enforce_secure_profile)
         self.chk_enforce_secure_profile.pack(side="left")
 
         sec_row2 = ctk.CTkFrame(p, fg_color="transparent")

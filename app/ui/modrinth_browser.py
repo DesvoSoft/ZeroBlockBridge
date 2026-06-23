@@ -86,8 +86,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._build_results_area()
         self._build_status_bar()
         
-        # Load popular mods on startup
-        self.after(500, self._load_popular_mods)
+        # Defer popular mods load until the tab is first shown (avoids blocking startup)
+        self._popular_loaded = False
+        self.bind("<Visibility>", self._on_first_shown)
 
     # ------------------------------------------------------------------
     # Layout: Search Bar
@@ -110,7 +111,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             height=36,
             font=AppConfig.FONT_BODY,
             border_width=0,
-            fg_color=("gray95", "gray15"),
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
         )
         self.entry_search.grid(row=0, column=1, sticky="ew", padx=4, pady=8)
         self.entry_search.bind("<Return>", self._on_search)
@@ -173,7 +174,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _build_results_area(self):
         self.results_frame = ctk.CTkScrollableFrame(
             self, corner_radius=12,
-            fg_color=("white", "gray14"),
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             label_text="",
@@ -275,6 +276,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._search_mc_version = mc_version
         self._search_loader = loader
         self._do_search(reset=True)
+
+    def _on_first_shown(self, event=None):
+        if not self._popular_loaded:
+            self._popular_loaded = True
+            self.after(50, self._load_popular_mods)
 
     def _load_popular_mods(self):
         """Fetch and show popular mods."""

@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import customtkinter as ctk
+from app.core.app_config import AppConfig
 from app.core.server_events import ServerEvent
 from app.core.constants import SERVERS_DIR
 from app.services.server_properties import load_server_properties, save_server_properties
@@ -135,12 +136,12 @@ class PlayersDashboard(ctk.CTkToplevel):
             widget.destroy()
             
         if not self.connected_players:
-            lbl = ctk.CTkLabel(self.scroll_players, text="No players online", text_color="gray")
+            lbl = ctk.CTkLabel(self.scroll_players, text="No players online", text_color=AppConfig.COLOR_TEXT_GRAY)
             lbl.pack(pady=20)
             return
 
         for player in self.connected_players:
-            item_frame = ctk.CTkFrame(self.scroll_players, fg_color=("gray85", "gray20"))
+            item_frame = ctk.CTkFrame(self.scroll_players, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=8)
             item_frame.pack(fill="x", pady=2, padx=5)
             
             lbl_name = ctk.CTkLabel(item_frame, text=player, font=ctk.CTkFont(weight="bold"))
@@ -165,12 +166,12 @@ class PlayersDashboard(ctk.CTkToplevel):
             widget.destroy()
             
         if not self.whitelisted_players:
-            lbl = ctk.CTkLabel(self.scroll_whitelist, text="Whitelist empty", text_color="gray")
+            lbl = ctk.CTkLabel(self.scroll_whitelist, text="Whitelist empty", text_color=AppConfig.COLOR_TEXT_GRAY)
             lbl.pack(pady=20)
             return
 
         for player in self.whitelisted_players:
-            item_frame = ctk.CTkFrame(self.scroll_whitelist, fg_color=("gray85", "gray20"))
+            item_frame = ctk.CTkFrame(self.scroll_whitelist, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=8)
             item_frame.pack(fill="x", pady=2, padx=5)
             
             lbl_name = ctk.CTkLabel(item_frame, text=player)

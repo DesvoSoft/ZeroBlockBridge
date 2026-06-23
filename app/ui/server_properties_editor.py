@@ -151,10 +151,14 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.btn_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
         
-        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy, fg_color="gray")
+        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
+                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                         corner_radius=12, height=36)
         self.btn_cancel.pack(side="right", padx=5)
-        
-        self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties, fg_color="green")
+
+        self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties,
+                                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
+                                      corner_radius=12, height=36)
         self.btn_save.pack(side="right", padx=5)
         
         # Make modal
@@ -204,7 +208,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._backup_scheduler_ui = BackupScheduler(self.server_name)
         self._next_backup_lbl = ctk.CTkLabel(
             self.frame_backups, text="", anchor="w",
-            text_color=("gray40", "gray60"), font=("Roboto", 12)
+            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY), font=("Roboto", 12)
         )
         self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
         self._refresh_backup_countdown()
@@ -291,7 +295,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.chk_backup_restart.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
 
         # Separator
-        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
+        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
         
         # Mode Selection
         ctk.CTkLabel(card, text="Schedule Mode:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=8)
@@ -330,7 +334,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             row=0, column=0, columnspan=4, sticky="w", padx=15, pady=10
         )
 
-        ctk.CTkFrame(card_bk, height=1, fg_color=("gray90", "gray25")).grid(
+        ctk.CTkFrame(card_bk, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(
             row=1, column=0, columnspan=4, sticky="ew", padx=15, pady=2
         )
 
@@ -359,19 +363,19 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 self.entry_interval.configure(state="normal")
                 self.lbl_interval.configure(text_color=("black", "white"))
                 self.entry_time.configure(state="disabled")
-                self.lbl_time.configure(text_color="gray")
+                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             else:
                 self.entry_interval.configure(state="disabled")
-                self.lbl_interval.configure(text_color="gray")
+                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
                 self.entry_time.configure(state="normal")
                 self.lbl_time.configure(text_color=("black", "white"))
         else:
             self.combo_mode.configure(state="disabled")
             self.chk_backup_restart.configure(state="disabled")
             self.entry_interval.configure(state="disabled")
-            self.lbl_interval.configure(text_color="gray")
+            self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             self.entry_time.configure(state="disabled")
-            self.lbl_time.configure(text_color="gray")
+            self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
 
     def save_automation(self):
         if not self.var_auto_restart: return
@@ -439,7 +443,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                                text_color="royalblue", anchor="w")
             lbl.pack(fill="x", padx=15, pady=(15, 5))
 
-        card = ctk.CTkFrame(parent, fg_color=("white", "gray17"), corner_radius=12)
+        card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=12)
         card.pack(fill="x", padx=10, pady=(0, 5))
         
         card.grid_columnconfigure(0, weight=1) # Label
@@ -459,7 +463,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # 1. Separator
         if current_row > 0:
-            sep = ctk.CTkFrame(parent_card, height=1, fg_color=("gray90", "gray25"))
+            sep = ctk.CTkFrame(parent_card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
             sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
             current_row += 1
 
@@ -471,7 +475,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
                                      width=18, height=18, corner_radius=12,
-                                     fg_color=("gray85", "gray30"), text_color=("gray40", "gray70"))
+                                     fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST), text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY))
             help_icon.grid(row=current_row, column=1, sticky="w", padx=2)
             help_icon.tooltip_ref = ToolTip(help_icon, text=description)
             
@@ -525,11 +529,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         ctk.CTkLabel(card_identity, text="Server Icon", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
         btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon, 
-                            width=100, height=28, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"))
+                            width=100, height=28, fg_color="transparent", border_width=1,
+                            border_color=AppConfig.COLOR_BORDER_DARK,
+                            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY))
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
         current_row = card_identity.grid_size()[1]
-        sep = ctk.CTkFrame(card_identity, height=1, fg_color=("gray90", "gray25"))
+        sep = ctk.CTkFrame(card_identity, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
         current_row += 1
 
@@ -705,7 +711,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.combo_java.grid(row=0, column=2, columnspan=2, sticky="e", padx=12, pady=5)
 
         # Aikar's Flags
-        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
+        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
         
         ctk.CTkLabel(card, text="Use Aikar's Flags:", font=self.font_bold, anchor="w").grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
         self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
@@ -714,7 +720,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
-        ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder, fg_color="gray30", height=32).pack(fill="x", padx=15, pady=10)
+        ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder,
+                          fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                          corner_radius=12, height=36).pack(fill="x", padx=15, pady=10)
 
     def open_folder(self):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)
