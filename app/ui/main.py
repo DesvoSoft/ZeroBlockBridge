@@ -553,10 +553,16 @@ class MCTunnelApp(ctk.CTk):
                     success = logic.download_server(name, engine, version, dialog.update_progress)
                 elif engine == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
-                    success = logic.install_fabric(name, version, dialog.update_progress)
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
+                    success = logic.install_fabric(name, version, dialog.update_progress, java_bin=_java_bin)
                 elif engine == "Forge":
                     self.server_console.log(f"[System] Installing Forge {version}...")
-                    success = logic.install_forge(name, version, dialog.update_progress)
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
+                    success = logic.install_forge(name, version, dialog.update_progress, java_bin=_java_bin)
                 else:
                     self.server_console.log(f"[Error] Unknown server type: {engine}")
                     success = False
@@ -604,20 +610,24 @@ class MCTunnelApp(ctk.CTk):
                         except Exception as e:
                             self.server_console.log(f"[Warning] Bytecode analysis crashed: {e}")
 
-                    if required_java:
-                        self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
-                        # Pre-download JDK during wizard so it's ready when server starts
-                        from app.services.java_installer import JdkManagerInstance
-                        if not JdkManagerInstance.get_java_path(required_java):
-                            dialog.update_progress(0.65, f"Downloading Java {required_java}...")
-                            self.server_console.log(f"[System] Downloading Java {required_java}...")
-                            try:
-                                JdkManagerInstance.ensure_java(required_java)
-                                self.server_console.log(f"[System] Java {required_java} ready.")
-                            except Exception as jde:
-                                self.server_console.log(f"[Warning] Java {required_java} download failed: {jde}")
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    version_map_java = get_required_java(version)
+                    # Floor bytecode result against version-map to avoid Forge shim (Java 8) overriding correct version
+                    if required_java and required_java >= version_map_java:
+                        final_java = required_java
                     else:
-                        self.server_console.log("[System] Bytecode analysis inconclusive; will use version map at startup.")
+                        final_java = version_map_java
+                    self.server_console.log(f"[System] Java {final_java} required (source: {'bytecode' if required_java and required_java >= version_map_java else 'version-map'}).")
+                    logic.update_server_meta(name, {"required_java": final_java})
+                    if not JdkManagerInstance.get_java_path(final_java):
+                        dialog.update_progress(0.65, f"Downloading Java {final_java}...")
+                        self.server_console.log(f"[System] Downloading Java {final_java}...")
+                        try:
+                            JdkManagerInstance.ensure_java(final_java)
+                            self.server_console.log(f"[System] Java {final_java} ready.")
+                        except Exception as jde:
+                            self.server_console.log(f"[Warning] Java {final_java} download failed: {jde}")
 
                     dialog.update_progress(0.70, "Setting up Playit tunnel...")
                     self.server_console.log(f"[System] Server '{name}' created successfully.")

@@ -181,7 +181,7 @@ def accept_eula(server_name: str) -> None:
     server_path = os.path.join(SERVERS_DIR, server_name)
     _generate_eula(server_path, accepted=True)
 
-def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None) -> Optional[str]:
+def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
     server_path = create_server_directory(server_name, server_type, mc_version)
     vm = VersionManager()
     installer_url = vm.get_download_url(server_type, mc_version)
@@ -203,7 +203,7 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
         logger.error("Installer failed: %s", e)
         return None
 
-    cmd = ["java", "-jar", installer_name] + installer_args
+    cmd = [java_bin, "-jar", installer_name] + installer_args
     try:
         if progress_callback: progress_callback(0.5)
         subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
@@ -214,9 +214,9 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
         return None
 
 
-def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
+def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
     server_path = _run_installer(server_name, "Fabric", mc_version, "fabric-installer.jar",
-                                  ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback)
+                                  ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback, java_bin=java_bin)
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
         return os.path.join(server_path, "fabric-server-launch.jar")
     return None
@@ -332,11 +332,11 @@ def normalize_server_jar(server_dir: str) -> bool:
     return result
 
 
-def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
+def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
     """Installs Forge by delegating to the unified installer runner."""
     server_path = _run_installer(
         server_name, "Forge", mc_version, "forge-installer.jar",
-        ["--installServer"], progress_callback
+        ["--installServer"], progress_callback, java_bin=java_bin
     )
     if not server_path:
         return None
