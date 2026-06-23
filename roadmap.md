@@ -609,13 +609,96 @@ server_version = meta.get("version", "")
 | 10.4 | stop() con wait(timeout=5) + kill() en Linux | 🟡 |
 | 10.5 | single_instance.py verificar captura de SIGTERM | 🟢 |
 
-### F11: UI/UX — ZBB 2.0
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 11.1-11.5 | ServerWizard rediseñado (pre-flight, progreso, resumen, templates, start now) | 🟡 |
-| 11.6-11.10 | ServerPropertiesEditor rediseñado (4 tabs, SettingsField, inline validation) | 🟠 |
-| 11.11-11.17 | Layout + Console (sidebar colapsable, dashboard compacto, console search) | 🟡 |
-| 11.18-11.20 | Performance dashboard, dark/light mode, tooltips | 🟠 |
+### F11: UI/UX — ZBB 2.0 — "Dirt Block" Design Language
+
+**Objetivo:** Modernizar la UI con identidad visual propia inspirada en Minecraft (tierra pixelada, verdes apagados, marrones slate) sin caer en kitsch. Mantener usabilidad, mejorar jerarquía visual y primera impresión.
+
+**Diagnóstico (2026-06-22):** Inspección de `app/ui/main.py`, `app/core/app_config.py`.
+
+#### Problemas Identificados
+| # | Problema | Impacto visual | Esfuerzo fix |
+|---|---------|---------------|-------------|
+| UI-01 | Paleta genérica de customtkinter (`gray14/17/25`) — sin identidad propia | Alto | Bajo |
+| UI-02 | Sin jerarquía visual — status bar, dashboard, console, sidebar tienen el mismo peso | Alto | Medio |
+| UI-03 | Sidebar plana — server items sin micro-estados (hover, selected, badge de estado) | Alto | Medio |
+| UI-04 | Iconografía Unicode (`▶ ■ 📁 ⚙`) — pixelada en ciertos DPIs, sin consistencia de estilo | Medio | Medio |
+| UI-05 | Botones de acción sin label (`▶` y `■` solos) — no intuitivos para usuarios nuevos | Medio | Bajo |
+| UI-06 | 6+ colores de botón distintos — sin sistema de color coherente | Medio | Bajo |
+| UI-07 | Dashboard de tunnel ocupa espacio fijo aunque esté offline — desplaza la consola | Medio | Bajo |
+| UI-08 | Console muestra logs crudos de Java sin syntax coloring — intimidante para usuarios casuales | Medio | Medio |
+
+#### Propuestas ordenadas por esfuerzo/riesgo (menor → mayor)
+
+**Bloque A — Solo `app_config.py`, sin tocar lógica. Riesgo: 🟢 Muy bajo.**
+
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.A1 | **Palette "Dirt Block"** — reemplazar grays genéricos con palette propia: `#0f172a` (slate-950 sidebar), `#1a1a2e` bg, `#78350f` accent marrón, `#4d7c0f` accent verde apagado, `#d97706` amber highlight | `app_config.py` | ~20 | 30 min |
+| 11.A2 | **Sistema de botones** — consolidar a 3 roles: Primary (acción), Danger (destructivo), Ghost (secundario). Eliminar `COLOR_BTN_INFO`, `COLOR_BTN_SECONDARY` no usados | `app_config.py` | ~10 | 15 min |
+| 11.A3 | **Botones con label** — `▶ Start`, `■ Stop` en status bar (en vez de solo símbolo). Width ajustado. | `main.py` | ~10 | 20 min |
+
+**Palette "Dirt Block" propuesta:**
+```python
+# Backgrounds — slate oscuro propio (no gray genérico de CTK)
+COLOR_BG_DARK       = "#111827"   # gray-900 (main bg)
+COLOR_BG_SIDEBAR_DARK = "#0f172a" # slate-950 (sidebar más oscura)
+COLOR_BG_CARD_DARK  = "#1e293b"   # slate-800 (cards/panels)
+COLOR_BORDER_DARK   = "#334155"   # slate-700
+
+# Accent — inspirado en dirt block de Minecraft
+COLOR_ACCENT_BROWN  = "#78350f"   # amber-900 (marrón tierra)
+COLOR_ACCENT_GREEN  = "#4d7c0f"   # lime-800 (verde pasto apagado)
+COLOR_ACCENT_AMBER  = "#d97706"   # amber-600 (highlight/warning cálido)
+COLOR_ACCENT_BLUE   = "#3b82f6"   # blue-500 (links/primary — ya existía)
+
+# Status (sin cambio semántico)
+COLOR_STATUS_ONLINE  = "#84cc16"  # lime-400 (verde más pixelado/MC)
+COLOR_STATUS_OFFLINE = "#64748b"  # slate-500
+COLOR_STATUS_STARTING = "#f59e0b" # amber-400
+```
+
+**Bloque B — Cambios visuales en `main.py`, sin tocar lógica. Riesgo: 🟢 Bajo.**
+
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.B1 | **Sidebar accent line** — borde izquierdo de 3px `COLOR_ACCENT_GREEN` en item seleccionado (efecto "tab activo" moderno) | `ui_components.py` | ~15 | 30 min |
+| 11.B2 | **Server list items como cards** — fondo `COLOR_BG_CARD_DARK` con dot de color de estado, nombre en bold, versión/tipo chico abajo. Hover sutil. | `ui_components.py` | ~40 | 1 hr |
+| 11.B3 | **Dashboard tunnel colapsado por defecto** cuando tunnel está offline — solo muestra "Tunnel: Offline" + botón Start. Se expande al activar. | `main.py` | ~20 | 45 min |
+| 11.B4 | **Status bar topbar** — fondo `COLOR_BG_CARD_DARK` levemente diferente al main bg, separación visual más clara del área de consola | `main.py` | ~10 | 20 min |
+
+**Bloque C — Console coloring. Riesgo: 🟡 Medio (tocar ConsoleWidget).**
+
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.C1 | **Syntax coloring básico en consola** — regex patterns: `ERROR/WARN` → rojo/amarillo, `joined the game` → lime, `left the game` → slate, `[Server]` → azul | `ui_components.py` (ConsoleWidget) | ~40 | 1 hr |
+
+**Bloque D — Rediseño mayor. Riesgo: 🟠 Medio-alto. Depende de A+B estables.**
+
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.D1 | ServerWizard rediseñado (pre-flight, progreso, resumen, templates, start now) | `server_wizard.py` | +150 | 3 hrs |
+| 11.D2 | ServerPropertiesEditor rediseñado (4 tabs, SettingsField, inline validation) | `server_properties_editor.py` | +200 | 4 hrs |
+| 11.D3 | Sidebar colapsable (toggle con animación simple) | `main.py` | ~60 | 1.5 hrs |
+| 11.D4 | Performance dashboard visual (TPS graph, RAM usage) | `main.py` + nuevo archivo | +150 | 3 hrs |
+| 11.D5 | Dark/light mode toggle persistido en settings | `main.py` + `app_config.py` | ~40 | 1 hr |
+| 11.D6 | Tooltips en botones de acción | `main.py` | ~30 | 45 min |
+
+#### Criterio de aceptación global
+- [ ] Palette "Dirt Block" aplicada — ningún `gray14/17/25` genérico visible
+- [ ] Server list items son cards con dot de estado
+- [ ] Botones Start/Stop tienen label legible
+- [ ] Console colorea ERROR rojo, WARN amarillo, joins verde
+- [ ] Dashboard tunnel colapsado cuando offline
+- [ ] Todos los tests existentes pasan (UI changes no afectan lógica)
+- [ ] .exe compilado sin regresión visual en Windows
+
+#### Orden de ejecución recomendado
+```
+11.A1 (palette) → 11.A2 (botones sistema) → 11.A3 (labels)
+    → 11.B4 (topbar) → 11.B3 (tunnel colapso) → 11.B1+B2 (sidebar cards)
+        → 11.C1 (console coloring)
+            → 11.D* (rediseño mayor — próxima iteración)
+```
 
 ---
 
@@ -814,6 +897,160 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | 3 🟡 | **HA-05** | `services/watchdog.py:134-135` | Race en `_do_restart` — chequea `runner.running` sin lock | Serializar con lock o `threading.Event` |
 | 4 🟡 | **HA-06** | Players dashboard / ServerRunner | `connected_players` stale post-restart — jugadores fantasma en dashboard | Emitir `PLAYER_COUNT` vacío al emitir `STOPPED` |
 | 5 🟡 | **MA-05** | `core/orchestrators.py` scheduler | Restart schedulado silenciosamente perdido si tick loop atrasado >120s | Emitir NOTIFICATION de warning si `remaining < -120s` |
+
+---
+
+## NR: No-Roadmap — Hallazgos inspección 2026-06-22
+
+**Origen:** Revisión profunda del código UI/core durante sesión de modernización visual. Bugs y oportunidades no contemplados previamente.
+
+**Diagnóstico:** Inspección de `app/ui/main.py`, `app/ui/server_wizard.py`, `app/ui/modrinth_browser.py`, `app/core/core.py`.
+
+### NR-QUICK: Fixes rápidos (< 30 min cada uno, riesgo 🟢)
+
+| ID | Archivo | Línea | Problema | Fix | Esfuerzo |
+|----|---------|-------|---------|-----|---------|
+| **NR-01** | `ui/main.py` | ~390 | `text_color="white"` hardcodeado en `lbl_server_info` — se rompe en light mode | Usar `AppConfig.COLOR_TEXT_NOTE` o dejar sin `text_color` | 5 min |
+| **NR-02** | `ui/main.py` | ~341 | `text_color="green"` hardcodeado en `check_java_startup` | Usar `AppConfig.COLOR_STATUS_ONLINE` | 5 min |
+| **NR-03** | `ui/main.py` | ~403 | `os.startfile()` viola regla de CLAUDE.md (no `os.startfile`) — no funciona en Linux | Reemplazar con `subprocess.run(["explorer", path])` en Windows, `open` en macOS, `xdg-open` en Linux | 10 min |
+| **NR-09** | `ui/main.py` | ~255-257 | `border_color="#f97316"`, `text_color="#f97316"` hardcodeados en `btn_toggle_setup` | Usar `AppConfig.COLOR_BTN_WARNING` / `AppConfig.COLOR_ACCENT_AMBER` | 5 min |
+| **NR-DASH** | `ui/main.py` | 218-219 | Línea separadora horizontal entre stats del server y sección tunnel — visualmente innecesaria, añade ruido | Eliminar el `CTkFrame height=2` de `_build_dashboard()` | 2 min |
+
+### NR-MED: Fixes de lógica (30 min - 1 hr, riesgo 🟡)
+
+| ID | Archivo | Línea | Problema | Fix | Esfuerzo |
+|----|---------|-------|---------|-----|---------|
+| **NR-04** | `ui/server_wizard.py` | `_update_java_check()` | `JavaDetector()` instanciado en UI thread — si hay I/O lento, freezea la UI al cambiar versión/engine | Mover a `threading.Thread` + `self.after(0, render)` igual que `_render_versions()` | 30 min |
+| **NR-05** | `ui/modrinth_browser.py` | `_load_popular_mods` | Sin feedback visible si no hay internet — usuario ve panel vacío sin explicación | Mostrar label "No internet connection" + botón Retry si la llamada falla | 20 min |
+| **NR-06** | `ui/main.py` | `on_server_select():382-386` | Tipo de server detectado por heurística de archivos (`fabric-server-launch.jar`, `run.bat`) — puede ser incorrecto. `meta.json` ya tiene `type` guardado | Usar `meta.get("type", "Vanilla")` directo en vez de heurística | 10 min |
+| **NR-07** | `ui/main.py` | `_render_server_list()` | "No servers found." sin acción — usuario queda perdido | Reemplazar label por `CTkButton "→ Create your first server"` que dispara `create_server_dialog()` | 15 min |
+
+### NR-PALETTE: Deuda de palette restante (Bloque B del roadmap F11)
+
+| ID | Archivo | Problema |
+|----|---------|---------|
+| **NR-10** | `ui/modrinth_browser.py` | Constantes locales `_CARD_BG_DARK`, `_CARD_HOVER_DARK`, `_SEPARATOR_DARK` duplican `AppConfig` — deuda de palette. Reemplazar con `AppConfig.COLOR_BG_CARD_DARK`, `AppConfig.COLOR_BORDER_DARK` |
+| **NR-08** | `ui/main.py` | Console input (entry + btn_send) habilitados aunque no haya servidor seleccionado — confunde al usuario. Deshabilitar hasta que se seleccione servidor |
+
+### Orden de ejecución recomendado
+
+```
+NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 min)
+→ NR-06 (tipo server, 10 min) → NR-07 (empty state, 15 min)
+→ NR-04 (java detector thread, 30 min) → NR-05 (modrinth error state, 20 min)
+→ NR-08 (console input disabled, 15 min) → NR-10 (palette deuda modrinth, 20 min)
+```
+
+### Criterio de aceptación
+
+- [ ] Ningún `"green"`, `"white"`, `"gray"` como `text_color` literal en UI — solo constantes de `AppConfig`
+- [ ] `os.startfile` eliminado — solo `subprocess` cross-platform
+- [ ] Tipo de server en status bar viene de `meta.json`, no de heurística de archivos
+- [ ] Estado vacío de server list tiene acción clickable
+- [ ] Java check en wizard no bloquea UI thread
+- [ ] Modrinth muestra error legible si no hay internet
+
+---
+
+## AUDIT-2: Auditoría profunda core+services — 2026-06-22
+
+**Origen:** Inspección completa de todos los archivos no-UI: `core/logic.py`, `core/orchestrators.py`, `core/protocols.py`, `core/playit_manager.py`, `core/statemanager.py`, todos los `services/`.
+
+---
+
+### AUDIT2-BUG: Bugs reales
+
+| ID | Archivo | Línea | Sev | Problema | Fix |
+|----|---------|-------|-----|---------|-----|
+| **A2-B01** | `core/logic.py` | ~556–572 | 🟡 | `_parse_player_count` accede a `self.connected_players` (set) desde output thread sin lock — race si otro thread lee simultáneamente | Proteger con `threading.Lock` |
+| **A2-B02** | `core/logic.py` | ~592 | 🟡 | `check_eula` abre `eula.txt` sin `encoding="utf-8"` | Agregar encoding |
+| **A2-B03** | `services/backup_manager.py` | ~149–155 | 🟡 | `restore_backup` destruye directorio del servidor ANTES de extraer — si extracción falla a mitad, mundo del jugador queda destruido sin rollback | Extraer en temp dir → swap atómico post-éxito |
+| **A2-B04** | `core/version_manager.py` | ~100 | 🟡 | Detección de stale Forge: `re.match(r'^\d+\.\d+', first)` siempre True para versiones válidas — fuerza refresh innecesario en cada arranque | Simplificar a `not first.startswith("1.")` |
+| **A2-B05** | `core/playit_manager.py` | ~49 | 🔵 | `atexit.register(self._atexit_stop)` puede disparar en estado parcial si la app cierra por excepción durante init | Agregar `try/except` en `_atexit_stop` |
+| **A2-B06** | `orchestrators.py` | ~185 | 🟡 | `PLAYER_COUNT` emitido cada 50ms **sin diff check** — 20 eventos/segundo al EventBus aunque el conteo no haya cambiado. Cada subscriber UI se activa 20x/seg | Solo emitir si el valor cambió desde el último emit |
+| **A2-B07** | `orchestrators.py` | ~176 | 🟡 | `TPS_UPDATE` cada 50ms con valor calculado del tick loop del proceso (no del servidor real) — 20 updates/seg a la UI para un número que no refleja el TPS real del servidor MC | Emitir solo 1x/seg o derivar de logs del servidor |
+
+---
+
+### AUDIT2-ARCH: Arquitectura
+
+| ID | Archivo | Sev | Problema | Fix |
+|----|---------|-----|---------|-----|
+| **A2-A01** | `core/logic.py` | 🟡 | Import en medio del módulo (`from app.services.server_properties import ...` ~línea 594) — viola PEP8, enmascara circular imports | Mover al top |
+| **A2-A02** | `core/logic.py` | 🔵 | Import de función privada `_probe_java` desde `java_detector` — acoplamiento frágil a internals | Exponer como función pública `probe_java` |
+| **A2-A03** | `core/statemanager.py` | 🟡 | Globals mutables `_last_status`, `_last_time` a nivel de módulo — no tiene ciclo de vida, no reseteable entre tests, solo sirve de debounce para tunnel status | Convertir en clase o inlinar en `PlayitManager` |
+| **A2-A04** | `core/protocols.py` | 🔵 | `BackupOrchestratorProtocol` expone métodos privados (`_check_auto_backup`, `_run_auto_backup`) en contrato público — viola encapsulación | Renombrar a públicos o eliminar del Protocol |
+
+---
+
+### AUDIT2-DEBT: Deuda técnica
+
+| ID | Archivo | Sev | Problema | Fix |
+|----|---------|-----|---------|-----|
+| **A2-D01** | `services/modrinth.py` | 🟡 | `check_updates` llama `self.session.post()` directamente — bypassa `_request()` que tiene rate-limit handling y error normalization | Refactorizar para usar `_request` con POST |
+| **A2-D02** | `core/logic.py` | 🔵 | `import re` dentro de `_parse_player_count` — import en hot path (llamado por cada línea de output del servidor) | Mover al top del módulo |
+| **A2-D03** | `services/backup_manager.py` | 🔵 | `_zip_worker` crea `threading.Thread` interno aunque ya se ejecuta en un executor thread — double-threading innecesario | Hacer síncrono; el caller ya está en background |
+
+---
+
+### AUDIT2-STACK: Stack tecnológico
+
+| Dependencia | Estado | Riesgo | Acción |
+|-------------|--------|--------|--------|
+| `customtkinter` | Sin pinnear | 🟡 | Pinnear a `>=5.2,<6` |
+| `requests` | Sin pinnear | 🟡 | Pinnear; `httpx` es alternativa async si se necesita en el futuro (no cambiar ahora) |
+| `Pillow` | Sin pinnear | 🟡 | CVEs frecuentes — pinnear a versión específica y monitorear |
+| `psutil` | Sin pinnear | 🔵 | API estable; OK |
+| **Python 3.14** | En uso | 🔴 | **Muy nuevo** — 3.14 es beta/pre-release. Dependencias pueden no tener wheels para 3.14. Para distribución de EXE a usuarios considerar bajar a **Python 3.12 LTS** |
+| Playit agent `0.17.1` | Hardcodeado | 🟡 | Si Playit saca 0.18 hay que hacer release manual de ZBB. Considerar versión configurable o auto-detect |
+
+**Pin deps task** → ya era P0.4 en roadmap — confirmar que incluye todos los anteriores.
+
+---
+
+### AUDIT2-TEST: Gaps de cobertura
+
+| Área | Gap | Sev |
+|------|-----|-----|
+| `ServerRunner` | Sin tests de `start()`, `stop()`, `_parse_player_count()`, `_read_output()` — solo existe `FakeRunner` mock. Es el corazón del producto | 🟡 HIGH |
+| `logic.py` meta | `get_server_meta`, `update_server_meta` con caché no testeados bajo concurrencia | 🟡 |
+| `orchestrators.py` | `SchedulerOrchestrator` tick loop y `BackupOrchestrator._run_auto_backup` sin tests | 🟡 |
+| `playit_manager.py` | Tests parciales — probablemente mockean demasiado el proceso externo | 🔵 |
+
+---
+
+### AUDIT2-PERF: Rendimiento
+
+| ID | Archivo | Sev | Problema | Fix |
+|----|---------|-----|---------|-----|
+| **A2-P01** | `orchestrators.py` | 🟡 | (mismo que A2-B06) 20 `PLAYER_COUNT` events/seg sin diff — spam al EventBus | Diff check antes de emit |
+| **A2-P02** | `orchestrators.py` | 🟡 | (mismo que A2-B07) 20 `TPS_UPDATE` events/seg con valor falso | 1x/seg o desde logs reales |
+| **A2-P03** | `services/java_detector.py` | 🔵 | `_shared_cache` class-level sin TTL — si usuario instala Java con la app abierta, nunca se detecta | Agregar TTL de 60s o método `invalidate()` |
+| **A2-P04** | `version_manager.py` | 🟡 | `_wait_for_background_refresh(timeout=4)` en `get_versions()` bloquea el hilo llamador hasta 4s — si viene del UI thread (wizard), freezea UI | Eliminar el join; usar solo callbacks para notificar |
+
+---
+
+### Orden de ejecución AUDIT2 recomendado
+
+```
+Rápidos/seguros primero:
+A2-D02 (import re, 5min) → A2-B02 (eula encoding, 5min) → A2-B05 (atexit guard, 10min)
+→ A2-A01 (import en medio, 5min) → A2-B04 (forge stale detection, 10min)
+
+Rendimiento (alto impacto):
+A2-B06+A2-P01 (PLAYER_COUNT diff, 15min) → A2-B07+A2-P02 (TPS 1x/seg, 15min)
+→ A2-P04 (eliminar wait_for_background_refresh, 20min)
+
+Arquitectura:
+A2-A03 (statemanager → clase, 30min) → A2-A04 (protocols cleanup, 20min)
+
+Crítico/delicado:
+A2-B03 (backup restore atómico, 45min) → A2-B01 (player count lock, 20min)
+A2-D01 (modrinth post via _request, 20min)
+
+Stack:
+P0.4 ya en roadmap — agregar Python 3.12 LTS como consideración de distribución
+```
 | 6 🟡 | **MA-03** | `ui/main.py` Automation tab | `save_automation()` se llama al abrir tab aunque sin cambios | Dirty flag o comparar antes de save |
 | 7 🔵 | **LA-02** | `core/logic.py:_jar_ready_events` | Dict nunca limpiado — leak menor en sesiones largas | Limpiar key post-`wait_for_jar_ready()` |
 | — | **LA-03/04/05/06** | varios | Limpieza menor (dead imports, hardcoded fallbacks, silent guards) | Backlog bajo |
