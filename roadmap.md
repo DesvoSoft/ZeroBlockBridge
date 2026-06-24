@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-24
+> **Última actualización:** 2026-06-24 (rev 2)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 364 tests, 100% pass, 0 flaky
+> **Test count:** 399 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
@@ -11,7 +11,8 @@
 > **Sesión 2026-06-23 (2):** MA-02/A2-B02 (encoding utf-8 × 7 opens), A2-B05 (atexit guard), NR-03 (os.startfile → subprocess), NR-06 (server type from meta), NR-07 (empty list CTA), NR-08 (console disabled until server selected)
 > **Sesión 2026-06-24:** A3-B01 (encoding VM) ✅ A3-B02/B03 (TPS falso eliminado + PLAYER_COUNT rate-limit) ✅ A3-A01 (_winapi → os.symlink) ✅ A3-A02 (probe_java público) ✅ A3-M01 (ERROR dead event) ✅ — 364 tests pass
 > **Sesión 2026-06-24 (2):** A3-B04 ✅ A3-A03 ✅ A3-A05 ✅ A3-M02 ✅ F5 ✅ — 373 tests pass
-> **Siguiente prioridad:** F6 (Discord Webhook)
+> **Sesión 2026-06-24 (3):** P0.1 ✅ (26 tests orchestrators) P0.4 ✅ parcial (requirements pinneados, falta pyproject.toml) P0.7 ✅ parcial (dead imports eliminados en 9 archivos) SPE winfo_exists bug ✅ — 399 tests pass
+> **Siguiente prioridad:** P0.4 completo (pyproject.toml) → P0.5 (circular dep) → F6 (Discord Webhook)
 
 ---
 
@@ -272,50 +273,19 @@
 
 **Orden de ejecución:** El orden importa — hacer tests primero da seguridad para refactorizar.
 
-### P0.1: Tests para Orchestrators 🔴🔴🔴
+### P0.1: Tests para Orchestrators ✅
 
 | Campo | Detalle |
 |-------|---------|
-| **Archivo destino** | `tests/test_orchestrators.py` (nuevo) |
-| **LOC estimado** | ~250-350 |
-| **Esfuerzo** | 2-3 hrs |
-| **Riesgo** | 🟡 Medio (requiere entender mocking de ZBBManager) |
-
-**Qué testear:**
-- `ServerOrchestrator`: start_server (success + fail), stop_server (running + already stopped), restart_server, handle_server_crash, zombie detection
-- `BackupOrchestrator`: _check_auto_backup (due + not due + enabled + disabled), backup_in_progress mutex, event emission
-- `TunnelOrchestrator`: start_tunnel, stop_tunnel, is_tunnel_active, reset_tunnel (soft + full)
-- `SchedulerOrchestrator`: tick_loop iteration, scheduler check interval, backup overdue detection
-
-**Mocking strategy:**
-- `ZBBManager` → `MagicMock(spec=...)` con FakeEventBus
-- `EventBus` → `FakeEmitter` (ya existe en conftest.py)
-- `ServerRunner` → `FakeRunner` (ya existe en conftest.py)
-- Evitar `threading.Thread` real — mockear o usar callbacks síncronos
-- Usar `pytest.mark.timeout(2)` para loops que podrían colgar
+| **Archivo** | `tests/test_orchestrators.py` |
+| **Tests** | 26 tests — ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator |
+| **Estado** | ✅ Implementado — 26 passed |
 
 **Criterio de aceptación:**
-- [ ] 20+ tests que cubren todos los orchestrators
-- [ ] 100% pass en Windows y Linux
-- [ ] Mock de ZBBManager sin llamadas reales a I/O
-- [ ] Tests detectan correctamente estados erróneos
-
-**Nota para devs/agentes:**
-```python
-# Patrón recomendado para testear orchestrators:
-class FakeZBBManager:
-    def __init__(self):
-        self.events = FakeEmitter()
-        self.backup_manager = MagicMock()
-        # ... etc
-
-def test_server_orchestrator_start_success():
-    zbb = FakeZBBManager()
-    orch = ServerOrchestrator(zbb, "myserver")
-    orch.start_server()
-    assert orch.is_running is True
-    zbb.events.assert_emitted(ServerEvent.SERVER_STARTED)
-```
+- [x] 20+ tests que cubren todos los orchestrators
+- [x] 100% pass en Windows
+- [x] Mock de ZBBManager sin llamadas reales a I/O
+- [x] Tests detectan correctamente estados erróneos
 
 ### P0.2: F4 UI — Automation Tab ✅ (Completar 4.5)
 
@@ -325,41 +295,41 @@ Ver [detalle en F4.5](#detalle-45). Es la prioridad #2 porque el backend ya est�
 
 Ver [detalle en F4.6](#detalle-46).
 
-### P0.4: Pin Dependencies + pyproject.toml
+### P0.4: Pin Dependencies + pyproject.toml ⚠️ PARCIAL
 
 | Campo | Detalle |
 |-------|---------|
-| **Archivos** | `requirements.txt`, `pyproject.toml` (nuevo) |
-| **LOC estimado** | ~30 |
-| **Esfuerzo** | 1-1.5 hrs |
-| **Riesgo** | 🟢 Bajo |
+| **Archivos** | `requirements.txt` ✅, `pyproject.toml` ⬜ pendiente |
+| **Estado** | `requirements.txt` pinneado con versiones mínimas reales. `pyproject.toml` no creado aún. |
 
-**Qué hacer:**
+**Hecho:**
+```txt
+customtkinter>=5.2.2
+requests>=2.33.1
+Pillow>=12.2.0
+psutil>=7.2.2
+packaging>=26.0
+```
+
+**Pendiente — crear `pyproject.toml`:**
 ```toml
 [project]
 name = "zeroblockbridge"
 version = "1.4.0"
 requires-python = ">=3.10"
 dependencies = [
-    "customtkinter>=5.2.0",
-    "requests>=2.28.0",
-    "psutil>=5.9.0",
-    "Pillow>=9.0.0",
+    "customtkinter>=5.2.2",
+    "requests>=2.33.1",
+    "psutil>=7.2.2",
+    "Pillow>=12.2.0",
+    "packaging>=26.0",
 ]
 ```
 
-```txt
-# requirements.txt
-customtkinter>=5.2.0
-requests>=2.28.0
-psutil>=5.9.0
-Pillow>=9.0.0
-```
-
 **Criterio de aceptación:**
+- [x] Todas las dependencias tienen versión mínima en requirements.txt
+- [ ] `pyproject.toml` creado con metadata del proyecto
 - [ ] `pip install -e .` funciona
-- [ ] `python -m app.launcher` funciona desde cualquier directorio
-- [ ] Todas las dependencias tienen versión mínima
 - [ ] Python mínimo especificado (3.10)
 - [ ] Tests pasan después del cambio
 
@@ -384,50 +354,47 @@ Pillow>=9.0.0
 - [ ] Todos los tests pasan
 - [ ] No hay imports inline de `ServerState` en ningún archivo
 
-### P0.6: Suscribir CRASHED Event
+### P0.6: Suscribir CRASHED Event ✅
 
 | Campo | Detalle |
 |-------|---------|
-| **Archivos** | `core/core.py` (ZBBManager._setup_monitors), `services/watchdog.py` |
-| **LOC estimado** | ~20 |
-| **Esfuerzo** | 30 min |
-| **Riesgo** | 🟢 Bajo |
+| **Archivos** | `core/core.py:328`, `core/core.py:336` |
+| **Estado** | Implementado — `_on_server_crashed` suscrito en `_setup_monitors()` |
 
-**Qué hacer:**
-Actualmente Watchdog emite `ServerEvent.CRASHED` con payload `{reason, exit_code, uptime, retry_count}` pero nadie lo escucha. Añadir suscriptor en `ZBBManager._setup_monitors()` que:
-1. Registre el crash en metadata.json (`crash_history` array, últimos 10)
-2. Emita `ServerEvent.NOTIFICATION` con mensaje de crash (para que la UI muestre toast)
-3. (Opcional) Escriba log level ERROR
+**Implementado:**
+- `CRASHED` subscriber en `core.py:328`
+- Emite `NOTIFICATION` tipo "error" con toast en UI
+- Escribe `crash_history` en metadata.json (últimos 10 crashes)
+- `CrashReporter` integrado en F5
 
 **Criterio de aceptación:**
-- [ ] `CRASHED` event tiene al menos 1 suscriptor
-- [ ] Al crash, aparece toast/notification en UI
-- [ ] Crash se registra en metadata.json
-- [ ] Tests existentes de watchdog no se rompen
+- [x] `CRASHED` event tiene al menos 1 suscriptor
+- [x] Al crash, aparece toast/notification en UI
+- [x] Crash se registra en metadata.json
+- [x] Tests existentes de watchdog no se rompen
 
-### P0.7: Clean Up Dead Imports
+### P0.7: Clean Up Dead Imports ✅ PARCIAL
 
 | Campo | Detalle |
 |-------|---------|
-| **Archivos** | Múltiples (ver lista) |
-| **LOC** | ~10 líneas eliminadas |
-| **Esfuerzo** | 30 min |
-| **Riesgo** | 🟢 Muy bajo |
+| **Estado** | Eliminados en 9 archivos en sesión 2026-06-24 (3). Pendiente verificación con flake8. |
 
-**Imports muertos identificados:**
-| Archivo | Import |
-|---------|--------|
-| `core/core.py:6` | `import auto` (de Enum) |
-| `core/version_manager.py:8` | `from pathlib import Path` |
-| `services/heartbeat.py:5` | `from typing import Any` |
-| `services/backup_manager.py:5` | `import tempfile` |
-| `services/modrinth.py:15` | `import shutil` |
-| `ui/modrinth_browser.py:10` | `import io` |
-| `ui/ui_components.py:5` | `import webbrowser` |
+**Resueltos:**
+| Archivo | Import eliminado |
+|---------|-----------------|
+| `core/core.py` | `BackupScheduler` (no usado desde core.py) |
+| `core/logic.py` | `from pathlib import Path`, `from app.services.server_properties import load_server_properties, save_server_properties` |
+| `core/playit_manager.py` | `atexit`, `Dict`, `Any`, `List` no usados |
+| `core/version_manager.py` | `import re` |
+| `services/java_detector.py` | `field` de dataclasses |
+| `services/java_installer.py` | `import io`, `BASE_DIR` |
+| `services/playit_api.py` | `json`, `sys`, `PLAYIT_VERSION` |
+| `ui/modrinth_browser.py` | `Optional` de typing |
+| `ui/server_wizard.py` | `import os` |
 
-**Criterio de aceptación:**
-- [ ] `flake8 app/ --select=F401` reporta 0 unused imports
-- [ ] Todos los tests pasan
+**Pendiente:**
+- [ ] `flake8 app/ --select=F401` para verificar 0 restantes
+- [ ] `_CARD_BG_DARK` y constantes locales en `modrinth_browser.py` → migrar a `AppConfig` (ver NR-10)
 
 ---
 
@@ -812,10 +779,10 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 | **FIX-P1** | 7 Critical Bugs | -50 / +80 | 🥇 | ✅ |
 | **FIX-P2** | Thread Safety + Dead Code | -20 / +40 | 🥇 | ✅ |
 | **FIX-P3** | Whitelist + TPS + Wizard Security | ~100 | 🥇 | ✅ |
-| **F4** | Auto-Backup Scheduler | +150 | 🥇 | ⚠️ (backend ✅, UI ❌) |
-| **P0** | Foundation Hardening | ~+400 | 🥇 | ⬆️ **AHORA** |
+| **F4** | Auto-Backup Scheduler | +150 | 🥇 | ✅ |
+| **P0** | Foundation Hardening | ~+400 | 🥇 | ⚠️ PARCIAL (P0.1✅ P0.4⚠️ P0.5⬜ P0.6✅ P0.7⚠️) |
 | **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | +80/-20 | 🥇 | ✅ COMPLETO |
-| **F5** | Crash Report Collector | +80 | 🥇 | ⏳ (tras P0) |
+| **F5** | Crash Report Collector | +80 | 🥇 | ✅ |
 | **F6** | Discord Webhook | +60 | 🥈 | ⏳ |
 | **MODS-B** | Modrinth Browser Mejoras | +200 | 🥈 | ⏳ |
 | **F8** | Bulk Mod Operations | +200 | 🥈 | ⏳ |
@@ -827,19 +794,21 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 ### Orden de Ejecución Recomendado
 
 ```
-F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 (backend) ✅
-                                              ↓
-                                       F4 (UI) ✅ ← P0.2 + P0.3
-                                              ↓
-                                    ┌──── P0.1 (orchestrator tests) ────┐
-                                    │         P0.4 (pin deps)           │
-                                    │         P0.5 (circular dep)       │
-                                    │         P0.6 (CRASHED sub) ✅     │
-                                    │         P0.7 (dead imports) ✅     │
-                                    └───────────┬───────────────────────┘
-                                                 ↓
-                                      BUG-AUDIT (19 issues, 2026-06-19)
-                                                 ↓
+F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 ✅ → F5 ✅
+                                                         ↓
+                                    ┌──── P0 Foundation Hardening ───────────────┐
+                                    │  P0.1 (orchestrator tests) ✅ 26 tests      │
+                                    │  P0.2 + P0.3 (F4 UI) ✅                    │
+                                    │  P0.4 (pin deps) ⚠️ requirements✅ toml⬜  │
+                                    │  P0.5 (circular dep) ⬜                    │
+                                    │  P0.6 (CRASHED sub) ✅                     │
+                                    │  P0.7 (dead imports) ⚠️ parcial            │
+                                    └──────────────────┬─────────────────────────┘
+                                                       ↓
+                                         P0.4 pyproject.toml → P0.5 (circular dep)
+                                                       ↓
+                                      BUG-AUDIT pendientes (HA-05, HA-06, MA-03, MA-05)
+                                                       ↓
                                     AUDIT-3 (validación externa, 2026-06-24)
                                                  ↓
                               ┌──────────────────┼──────────────────┐
@@ -988,9 +957,9 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 |-----------|-------|-----------|-----------|
 | 🔴 CRITICAL | 2 | 2 | 0 |
 | 🟡 HIGH | 6 | 3 | 3 |
-| 🟡 MEDIUM | 5 | 2 | 3 |
+| 🟡 MEDIUM | 5 | 4 | 1 |
 | 🔵 LOW | 6 | 0 | 6 |
-| **TOTAL** | **19** | **7** | **12** |
+| **TOTAL** | **19** | **9** | **10** |
 
 ### Pendientes priorizados (orden de trabajo)
 
@@ -1068,11 +1037,11 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 |----|---------|-------|-----|---------|-----|
 | **A2-B01** | `core/logic.py` | ~556–572 | 🟡 | `_parse_player_count` accede a `self.connected_players` (set) desde output thread sin lock — race si otro thread lee simultáneamente | Proteger con `threading.Lock` |
 | **A2-B02** | `core/logic.py` | ~592 | 🟡 | `check_eula` abre `eula.txt` sin `encoding="utf-8"` | Agregar encoding |
-| **A2-B03** | `services/backup_manager.py` | ~149–155 | 🟡 | `restore_backup` destruye directorio del servidor ANTES de extraer — si extracción falla a mitad, mundo del jugador queda destruido sin rollback | Extraer en temp dir → swap atómico post-éxito |
+| ~~**A2-B03**~~ | ~~`services/backup_manager.py`~~ | ~~149–155~~ | ~~🟡~~ | ~~`restore_backup` destruye directorio sin rollback~~ | ✅ Atomic swap con tempfile.mkdtemp + rename (commit 9ffa2a9) |
 | ~~**A2-B04**~~ | ~~`core/version_manager.py`~~ | ~~100~~ | ~~🟡~~ | ~~Forge stale detection regex siempre True para versiones válidas~~ | ✅ `not first.startswith("1.")` (commit e37cc0a) |
 | **A2-B05** | `core/playit_manager.py` | ~49 | 🔵 | `atexit.register(self._atexit_stop)` puede disparar en estado parcial si la app cierra por excepción durante init | Agregar `try/except` en `_atexit_stop` |
 | ~~**A2-B06**~~ | ~~`orchestrators.py`~~ | ~~185~~ | ~~🟡~~ | ~~`PLAYER_COUNT` emitido sin diff check — 20 eventos/seg~~ | ✅ Guard en `logic.py._parse_player_count` (commit e37cc0a) |
-| **A2-B07** | `orchestrators.py` | ~176 | 🟡 | `TPS_UPDATE` cada 50ms con valor no-real — 20 updates/seg a la UI | Emitir solo 1x/seg o derivar de logs del servidor |
+| ~~**A2-B07**~~ | ~~`orchestrators.py`~~ | ~~176~~ | ~~🟡~~ | ~~`TPS_UPDATE` cada 50ms con valor no-real~~ | ✅ `TPS_UPDATE` eliminado del enum y UI completamente (commit 0b964fd) |
 
 ---
 
@@ -1128,7 +1097,7 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 | ID | Archivo | Sev | Problema | Fix |
 |----|---------|-----|---------|-----|
 | **A2-P01** | `orchestrators.py` | 🟡 | (mismo que A2-B06) 20 `PLAYER_COUNT` events/seg sin diff — spam al EventBus | Diff check antes de emit |
-| **A2-P02** | `orchestrators.py` | 🟡 | (mismo que A2-B07) 20 `TPS_UPDATE` events/seg con valor falso | 1x/seg o desde logs reales |
+| ~~**A2-P02**~~ | ~~`orchestrators.py`~~ | ~~🟡~~ | ~~(mismo que A2-B07) 20 `TPS_UPDATE` events/seg~~ | ✅ TPS_UPDATE eliminado (commit 0b964fd) |
 | **A2-P03** | `services/java_detector.py` | 🔵 | `_shared_cache` class-level sin TTL — si usuario instala Java con la app abierta, nunca se detecta | Agregar TTL de 60s o método `invalidate()` |
 | **A2-P04** | `version_manager.py` | 🟡 | `_wait_for_background_refresh(timeout=4)` en `get_versions()` bloquea el hilo llamador hasta 4s — si viene del UI thread (wizard), freezea UI | Eliminar el join; usar solo callbacks para notificar |
 
@@ -1244,7 +1213,7 @@ A3-B05 (TOCTOU race, 5min — oportunístico)
 
 ### Reglas de Oro
 1. **Sin sobreingeniería**: Si se puede hacer con 3 funciones, no se necesita una clase
-2. **364 tests deben pasar siempre**: `python -m pytest tests/ -q` antes de cada commit
+2. **399 tests deben pasar siempre**: `python -m pytest tests/ -q` antes de cada commit
 3. **Cross-platform**: `sys.platform == "win32"` y `platform.system()` guards obligatorios
 4. **Sin merge commits**: Solo fast-forward o squash merges
 5. **Commits atómicos**: Un commit = un cambio lógico completo
@@ -1254,9 +1223,8 @@ A3-B05 (TOCTOU race, 5min — oportunístico)
 - No crear nuevas dependencias circulares
 
 ### Eventos Huérfanos (no suscritos)
-- `ServerEvent.CRASHED` — sin subscriber (ver P0.6)
-- `ServerEvent.RESTARTED` — sin subscriber
-- `ServerEvent.ERROR` — sin subscriber, nunca emitido (dead code candidate)
+- `ServerEvent.RESTARTED` — sin subscriber (emitido, nunca consumido — hook futuro)
+- `ServerEvent.ERROR` — eliminado del enum (commit 0b964fd, era dead code)
 
 ### Errores Comunes a Evitar
 1. No usar `bare except:` — siempre especificar excepción
