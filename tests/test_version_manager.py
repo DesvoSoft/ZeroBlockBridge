@@ -167,8 +167,7 @@ class TestVersionManagerGetVersions:
 
     @patch("app.core.version_manager.os.path.exists", return_value=False)
     @patch("app.core.version_manager.VersionManager._check_and_refresh")
-    @patch("app.core.version_manager.VersionManager._wait_for_background_refresh")
-    def test_get_versions_returns_list(self, mock_wait, mock_check, mock_exists):
+    def test_get_versions_returns_list(self, mock_check, mock_exists):
         vm = VersionManager()
         result = vm.get_versions("Vanilla")
         assert isinstance(result, list)
@@ -176,20 +175,17 @@ class TestVersionManagerGetVersions:
 
     @patch("app.core.version_manager.os.path.exists", return_value=False)
     @patch("app.core.version_manager.VersionManager._check_and_refresh")
-    @patch("app.core.version_manager.VersionManager._wait_for_background_refresh")
-    def test_get_versions_unknown_type_returns_empty(self, mock_wait, mock_check, mock_exists):
+    def test_get_versions_unknown_type_returns_empty(self, mock_check, mock_exists):
         vm = VersionManager()
         result = vm.get_versions("Unknown")
         assert result == []
 
     @patch("app.core.version_manager.os.path.exists", return_value=False)
-    def test_get_versions_calls_refresh_and_wait(self, mock_exists):
+    def test_get_versions_calls_check_and_refresh(self, mock_exists):
         vm = VersionManager()
         with patch.object(vm, "_check_and_refresh") as mock_check:
-            with patch.object(vm, "_wait_for_background_refresh") as mock_wait:
-                vm.get_versions("Vanilla")
-                mock_check.assert_called_once()
-                mock_wait.assert_called_once_with(timeout=4)
+            vm.get_versions("Vanilla")
+            mock_check.assert_called_once()
 
 
 class TestVersionManagerURLResolution:
@@ -443,25 +439,6 @@ class TestVersionManagerRefresh:
         vm._check_and_refresh()
         assert vm.refresh_thread.is_alive()
 
-    @patch("app.core.version_manager.os.path.exists", return_value=False)
-    def test_wait_for_background_refresh_no_thread(self, mock_exists):
-        vm = VersionManager()
-        vm.refresh_thread = None
-        result = vm._wait_for_background_refresh(timeout=1)
-        assert result is False
-
-    @patch("app.core.version_manager.os.path.exists", return_value=False)
-    def test_wait_for_background_refresh_with_completed_thread(self, mock_exists):
-        vm = VersionManager()
-        done = threading.Event()
-
-        def quick_thread():
-            done.set()
-        vm.refresh_thread = threading.Thread(target=quick_thread)
-        vm.refresh_thread.start()
-        vm.refresh_thread.join()
-        result = vm._wait_for_background_refresh(timeout=1)
-        assert result is False
 
 
 class TestVersionManagerCallbacks:

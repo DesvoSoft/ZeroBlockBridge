@@ -280,17 +280,11 @@ class VersionManager:
                 if not self._cache_loaded:
                     self.cache = self._load_cache()
                     self._cache_loaded = True
+        # Fire background refresh if stale — do NOT block; wizard uses
+        # add_callback(on_versions_refreshed) to repopulate when ready.
         self._check_and_refresh()
-        self._wait_for_background_refresh(timeout=4)
         with self.cache_lock:
             return list(self.cache.get(server_type, []))
-
-    def _wait_for_background_refresh(self, timeout=4):
-        thread = getattr(self, 'refresh_thread', None)
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=timeout)
-            return not thread.is_alive()
-        return False
 
     def _check_and_refresh(self):
         with self.cache_lock:
