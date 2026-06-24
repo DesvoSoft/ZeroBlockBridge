@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 import os
-from typing import Optional, Any, Protocol
+from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.server_events import EventBus, ServerEvent
@@ -24,9 +24,8 @@ from app.services.bytecode_analyzer import analyze_jar_bytecode
 logger = logging.getLogger(__name__)
 
 from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
-from app.core.protocols import ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol
 
-class ZBBManager(ServerOrchestratorProtocol, BackupOrchestratorProtocol, TunnelOrchestratorProtocol, SchedulerOrchestratorProtocol):
+class ZBBManager:
     """
     Central orchestrator for ZeroBlockBridge logic.
     Decouples UI from the server lifecycle, background monitors, and tunneling.
