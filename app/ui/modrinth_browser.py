@@ -712,6 +712,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             logger.debug("Image fetch error: %s", e)
 
     def _apply_icon(self, icon_frame, lbl_initial, ctk_img):
+        if not icon_frame.winfo_exists():
+            return
         lbl_initial.destroy()
         lbl_icon = ctk.CTkLabel(icon_frame, image=ctk_img, text="")
         lbl_icon.place(relx=0.5, rely=0.5, anchor="center")

@@ -52,18 +52,21 @@ class PlayitManager:
         # Graceful path: skip if shutdown() already completed the full stop.
         # However, always fire the by-name nuclear kill on Windows as a safety
         # net in case the 3-second join timeout expired before stop() finished.
-        if not self._shutdown_done:
-            self._shutdown_done = True
-            self.stop(force=True)
-        elif platform.system() == "Windows":
-            # Backstop: taskkill silently (no window, no flash) even if we
-            # think we already stopped — harmless if process is already dead.
-            for proc_name in ["playit.exe", "playit-cli.exe"]:
-                subprocess.run(
-                    ["taskkill", "/F", "/IM", proc_name],
-                    capture_output=True, check=False,
-                    **subprocess_flags(),
-                )
+        try:
+            if not self._shutdown_done:
+                self._shutdown_done = True
+                self.stop(force=True)
+            elif platform.system() == "Windows":
+                # Backstop: taskkill silently (no window, no flash) even if we
+                # think we already stopped — harmless if process is already dead.
+                for proc_name in ["playit.exe", "playit-cli.exe"]:
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", proc_name],
+                        capture_output=True, check=False,
+                        **subprocess_flags(),
+                    )
+        except Exception as e:
+            logger.debug("atexit_stop suppressed: %s", e)
 
     def _get_binary_path(self) -> Any:
         system = platform.system()
