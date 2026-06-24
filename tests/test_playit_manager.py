@@ -218,24 +218,28 @@ class TestStart:
 
     def test_start_not_linked(self, manager):
         m, _, _ = manager
-        m.is_linked = False
+        def _exists_side_effect(path):
+            if str(path) == str(m.toml_path):
+                return False
+            return True
         with patch.object(m, "ensure_binary", return_value=True):
-            m.start(25565)
-            m.console_callback.assert_any_call("[Playit] No playit.toml found. Link account first.")
+            with patch("os.path.exists", side_effect=_exists_side_effect):
+                with patch("os.makedirs"):
+                    m.start(25565)
+                    m.console_callback.assert_any_call("[Playit] No playit.toml found. Link account first.")
 
     def test_start_full_flow(self, manager):
         m, mock_api, _ = manager
         m.is_linked = True
-        mock_api.initialize.return_value = True
         with patch.object(m, "ensure_binary", return_value=True):
-            with patch.object(m, "get_or_create_tunnel", return_value="tunnel.ply.gg:25565"):
-                with patch.object(m, "_current_port", 25565, create=True):
-                    with patch("os.path.exists", return_value=True):
-                        with patch("subprocess.Popen") as mock_popen:
-                            mock_popen.return_value = FakeProcess()
-                            with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
-                                m.start(25565)
-                                assert m.current_address == "tunnel.ply.gg:25565"
+            with patch.object(m, "_current_port", 25565, create=True):
+                with patch("os.path.exists", return_value=True):
+                    with patch("subprocess.Popen") as mock_popen:
+                        mock_popen.return_value = FakeProcess()
+                        with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
+                            m.start(25565)
+                            # Agent launched — address resolved via _parse_line or dns poll, not in start()
+                            assert m.running is True
 
     def test_oserror_handling(self, manager):
         m, _, _ = manager

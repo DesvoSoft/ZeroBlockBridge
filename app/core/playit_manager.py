@@ -43,6 +43,11 @@ class PlayitManager:
             self._fix_permissions()
             logger.info("Playit linked state persisted from playit.toml")
 
+        # Set when agent exits due to auth failure — suppresses heartbeat restart
+        self._auth_failed = False
+        # Set when agent reports InvalidAgentKey (0 tunnels) — dns loop creates tunnel
+        self._needs_tunnel_create = False
+
         self._shutdown_done = False
         import atexit
         atexit.register(self._atexit_stop)
@@ -199,6 +204,8 @@ class PlayitManager:
             self._api_dns = None
             self.current_address = None
             self._current_port = port
+            self._auth_failed = False
+            self._needs_tunnel_create = False
 
         self.status_callback("Starting...", None)
 
@@ -210,28 +217,12 @@ class PlayitManager:
             os.makedirs(CONFIG_DIR)
 
         self.is_linked = os.path.exists(self.toml_path)
-        if self.is_linked:
-            self.api_client.is_read_only = False
-            self.console_callback("[Playit] Launching tunnel agent...")
-            try:
-                if self.api_client.initialize():
-                    address = self.get_or_create_tunnel(port)
-                    if address:
-                        self._api_dns = address
-                        self.current_address = address
-                        self.status_callback("Online", address)
-                        self.console_callback(f"[Playit] Tunnel ready: {address}")
-                        if self.notification_callback:
-                            self.notification_callback(f"Tunnel Online: {address}", "success")
-                        if self.on_ready_callback:
-                            self.on_ready_callback()
-                    else:
-                        self.console_callback("[Playit] Waiting for tunnel DNS assignment...")
-            except Exception as e:
-                self.console_callback(f"[Playit] API tunnel setup: {e}")
-        else:
+        if not self.is_linked:
             self.console_callback("[Playit] No playit.toml found. Link account first.")
             return
+
+        self.api_client.is_read_only = False
+        self.console_callback("[Playit] Launching tunnel agent...")
 
         try:
             env = os.environ.copy()
@@ -485,6 +476,33 @@ class PlayitManager:
                 is_dead = (self.process is None or self.process.poll() is not None)
             
             if is_dead:
+                # Auth failures are not recoverable by restart — user must re-link
+                if self._auth_failed:
+                    logger.warning("[Playit] Heartbeat: agent exited due to auth failure — not restarting.")
+                    break
+
+                # Agent had 0 tunnels — try create via API before restarting (best-effort)
+                if self._needs_tunnel_create:
+                    self._needs_tunnel_create = False
+                    port = getattr(self, '_current_port', 25565)
+                    try:
+                        if self.api_client.initialize():
+                            address = self.get_or_create_tunnel(port)
+                            if address:
+                                self._api_dns = address
+                                self.current_address = address
+                                self.console_callback(f"[Playit] Tunnel created: {address}")
+                        else:
+                            self.console_callback(
+                                "[Playit] No tunnels configured. Create one at https://playit.gg/dashboard"
+                            )
+                    except Exception as e:
+                        logger.warning("[Playit] Tunnel create failed: %s", e)
+                        self.console_callback(
+                            "[Playit] Could not create tunnel automatically. "
+                            "Create one manually at https://playit.gg/dashboard"
+                        )
+
                 attempt_count += 1
                 logger.warning("[Playit] Heartbeat #%d: process not running.", attempt_count)
                 if attempt_count >= max_attempts:
@@ -565,6 +583,16 @@ class PlayitManager:
                         self.status_callback("Error", None)
                         self.console_callback("[Playit] ERROR: Account limit reached!")
                         self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
+                        self._auth_failed = True
+                    elif "Invalid secret" in clean_line or "invalid secret" in clean_line:
+                        # Corrupted/expired secret key — user must re-link
+                        self._auth_failed = True
+                        self.status_callback("Error", None)
+                        self.console_callback("[Playit] ERROR: Agent secret invalid. Use 'Reset Tunnel' to re-link.")
+                    elif "InvalidAgentKey" in clean_line:
+                        # Agent has no tunnels configured — signal DNS loop to create one
+                        self._needs_tunnel_create = True
+                        self.console_callback("[Playit] No tunnel found. Creating tunnel via API...")
                     # --- CRITICAL DNS: must call _parse_line on every line ---
                     self._parse_line(clean_line)
         except Exception as e:
