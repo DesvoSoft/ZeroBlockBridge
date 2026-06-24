@@ -41,6 +41,7 @@ class ZBBManager:
         self._watchdog: Optional[Watchdog] = None
         self._lag_monitor: Optional[LagMonitor] = None
         self._heartbeat: Optional[HeartbeatMonitor] = None
+        self._crash_reporter = None
         
         # Scheduler State
         self._tick_thread: Optional[threading.Thread] = None
@@ -307,6 +308,7 @@ class ZBBManager:
 
     # --- Monitors ---
     def _setup_monitors(self, config: dict) -> None:
+        from app.services.crash_reporter import CrashReporter
         self._lag_monitor = LagMonitor(event_emitter=self.events)
         self._heartbeat = HeartbeatMonitor(
             event_emitter=self.events,
@@ -316,12 +318,20 @@ class ZBBManager:
         max_retries = config.get("watchdog_max_retries", 3)
         self._watchdog = Watchdog(self.server_runner, self.events, max_retries=max_retries)
         self._watchdog.listen()
+        self._crash_reporter = CrashReporter(
+            events=self.events,
+            server_name_getter=lambda: self.current_server,
+            console_buffer_getter=lambda: self.console_buffer,
+            server_runner_getter=lambda: self.server_runner,
+            config_getter=self.get_config,
+        )
         self.events.subscribe(ServerEvent.CRASHED, self._on_server_crashed)
 
     def _stop_monitors(self) -> None:
         if self._heartbeat: self._heartbeat.stop()
         if self._watchdog: self._watchdog.stop()
         if self._lag_monitor: self._lag_monitor.stop()
+        if self._crash_reporter: self._crash_reporter.stop()
 
     def _on_server_crashed(self, payload: Any = None) -> None:
         if payload is None:

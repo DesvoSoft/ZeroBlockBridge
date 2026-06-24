@@ -10,8 +10,8 @@
 > **Sesión 2026-06-23 (1):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
 > **Sesión 2026-06-23 (2):** MA-02/A2-B02 (encoding utf-8 × 7 opens), A2-B05 (atexit guard), NR-03 (os.startfile → subprocess), NR-06 (server type from meta), NR-07 (empty list CTA), NR-08 (console disabled until server selected)
 > **Sesión 2026-06-24:** A3-B01 (encoding VM) ✅ A3-B02/B03 (TPS falso eliminado + PLAYER_COUNT rate-limit) ✅ A3-A01 (_winapi → os.symlink) ✅ A3-A02 (probe_java público) ✅ A3-M01 (ERROR dead event) ✅ — 364 tests pass
-> **Sesión 2026-06-24 (2):** A3-B04 ✅ A3-A03 ✅ A3-A05 ✅ A3-M02 ✅ — 362 tests pass
-> **Siguiente prioridad:** F5 (Crash Report Collector) → F6 (Discord Webhook)
+> **Sesión 2026-06-24 (2):** A3-B04 ✅ A3-A03 ✅ A3-A05 ✅ A3-M02 ✅ F5 ✅ — 373 tests pass
+> **Siguiente prioridad:** F6 (Discord Webhook)
 
 ---
 
@@ -540,11 +540,13 @@ R1-02 (JavaResolver, independiente) → R1-01 (steps, depende de R1-02 para el s
 - Usar `server_events.py` ServerEvent.CRASHED payload
 
 ### Criterio de aceptación
-- [ ] Reporte JSON escrito en `servers/<name>/crash_reports/` al emitirse CRASHED
-- [ ] Reporte contiene server info, crash info, stderr tail, console tail, system info
-- [ ] No se interrumpe si el directorio crash_reports no existe (crearlo)
-- [ ] Límite de 50 reportes máximos por servidor (rotación FIFO)
-- [ ] Tests con CRASHED event mock + temp dir
+- [x] Reporte JSON escrito en `servers/<name>/crash_reports/` al emitirse CRASHED
+- [x] Reporte contiene server info, crash info, stderr tail, console tail, system info
+- [x] No se interrumpe si el directorio crash_reports no existe (crearlo)
+- [x] Límite de 50 reportes máximos por servidor (rotación FIFO)
+- [x] Tests con CRASHED event mock + temp dir
+
+**✅ Implementado 2026-06-24 — 11 tests, 373 total**
 
 ---
 
