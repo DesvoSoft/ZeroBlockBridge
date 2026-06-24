@@ -10,8 +10,8 @@
 > **Sesión 2026-06-23 (1):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
 > **Sesión 2026-06-23 (2):** MA-02/A2-B02 (encoding utf-8 × 7 opens), A2-B05 (atexit guard), NR-03 (os.startfile → subprocess), NR-06 (server type from meta), NR-07 (empty list CTA), NR-08 (console disabled until server selected)
 > **Sesión 2026-06-24:** A3-B01 (encoding VM) ✅ A3-B02/B03 (TPS falso eliminado + PLAYER_COUNT rate-limit) ✅ A3-A01 (_winapi → os.symlink) ✅ A3-A02 (probe_java público) ✅ A3-M01 (ERROR dead event) ✅ — 364 tests pass
-> **Sesión 2026-06-24 (2):** A3-B04 (backup restore atómico + _zip_worker eliminado) ✅ — 364 tests pass
-> **Siguiente prioridad:** A3-A03 (Protocol IS-A arch PR) → A3-A05 (get_versions freeze) → A3-M02 (metadata migration)
+> **Sesión 2026-06-24 (2):** A3-B04 ✅ A3-A03 ✅ A3-A05 ✅ A3-M02 ✅ — 362 tests pass
+> **Siguiente prioridad:** F5 (Crash Report Collector) → F6 (Discord Webhook)
 
 ---
 
@@ -1183,9 +1183,9 @@ P0.4 ya en roadmap — agregar Python 3.12 LTS como consideración de distribuci
 |----|---------|-----|---------|-----|--------|
 | **A3-A01** | `core/logic.py` | 31 | 🟡 | `_winapi.CreateJunction` — API interna de Windows no documentada públicamente; breakable en actualizaciones de Python. `os.symlink(source, dest, target_is_directory=True)` funciona desde Python 3.8 en Windows con Developer Mode o admin | Reemplazar con `os.symlink(source, dest, target_is_directory=True)` | ✅ Resuelto |
 | **A3-A02** | `core/logic.py` | 431 | 🟡 | Import de función privada `_probe_java` dentro del método `start()` — hot path, símbolo privado, rompe si se refactoriza `java_detector` | Exponer `probe_java` como función pública en `java_detector.py`, mover import al top de `logic.py` | ✅ Resuelto |
-| **A3-A03** | `core/core.py` | 29 | 🟡 | `ZBBManager` hereda 4 Protocols (IS-A) pero delega a sub-orquestadores (HAS-A) — los Protocols deberían tipar los orchestrators individuales, no el manager. Además `BackupOrchestratorProtocol` expone `_check_auto_backup`/`_run_auto_backup` (privados) en contrato público | Eliminar herencia de Protocol en ZBBManager; mover protocols a orchestrators. Abordar junto con P0.5 | ⬜ Pendiente (arch PR) |
+| **A3-A03** | `core/core.py` | 29 | 🟡 | `ZBBManager` hereda 4 Protocols (IS-A) pero delega a sub-orquestadores (HAS-A) — los Protocols deberían tipar los orchestrators individuales, no el manager. Además `BackupOrchestratorProtocol` expone `_check_auto_backup`/`_run_auto_backup` (privados) en contrato público | Eliminar herencia de Protocol en ZBBManager; mover protocols a orchestrators. Abordar junto con P0.5 | ✅ Resuelto |
 | **A3-A04** | `core/core.py` | 104–259 | 🔵 | 4 inline imports de `update_server_meta` y `SERVERS_DIR` dentro de métodos (`_save_jdk_metadata`, `select_server`, `_resolve_java_bin`, `load_server_manually`) — workarounds de circular deps. Fix oportunístico: mover al top cuando se toque core.py por otra razón | Mover imports al top + resolver circular dep | ⬜ On-radar |
-| **A3-A05** | `services/version_manager.py` | 284 | 🟡 | `get_versions()` llama `_wait_for_background_refresh(timeout=4)` con `thread.join(4)` — si viene de UI thread (wizard), freezea UI hasta 4s. Ya en A2-P04 | Eliminar join; usar callbacks para notificar al caller | ⬜ Pendiente |
+| **A3-A05** | `services/version_manager.py` | 284 | 🟡 | `get_versions()` llama `_wait_for_background_refresh(timeout=4)` con `thread.join(4)` — si viene de UI thread (wizard), freezea UI hasta 4s. Ya en A2-P04 | Eliminar join; usar callbacks para notificar al caller | ✅ Resuelto |
 
 ---
 
@@ -1194,7 +1194,7 @@ P0.4 ya en roadmap — agregar Python 3.12 LTS como consideración de distribuci
 | ID | Archivo | Sev | Problema | Fix | Estado |
 |----|---------|-----|---------|-----|--------|
 | **A3-M01** | `core/server_events.py` | 🔵 | `ServerEvent.ERROR` existe pero **nunca emitido** ni suscrito — dead code confirmado. `RESTARTED`, `BACKUP_COMPLETED`, `BACKUP_FAILED` sí emitidos pero sin subscribers en UI — candidatos a conectar o documentar como hooks futuros | Eliminar `ERROR`. Documentar los 3 restantes como "available for future UI subscribers" en server_events.py | ✅ Resuelto |
-| **A3-M02** | `servers/*/metadata.json` | 🟡 | Servers creados antes del wizard moderno pueden carecer del campo `"type"` en metadata.json. Código hace `meta.get("type", "Vanilla")` como fallback pero el display y Modrinth search quedan incorrectos si el server era Fabric/Forge | Migration script one-shot: para cada `metadata.json` sin `"type"`, inferir del nombre del JAR o prompting al usuario en primer arranque. Activar en `bootstrap()` check | ⬜ Pendiente |
+| **A3-M02** | `servers/*/metadata.json` | 🟡 | Servers creados antes del wizard moderno pueden carecer del campo `"type"` en metadata.json. Código hace `meta.get("type", "Vanilla")` como fallback pero el display y Modrinth search quedan incorrectos si el server era Fabric/Forge | Migration script one-shot: para cada `metadata.json` sin `"type"`, inferir del nombre del JAR o prompting al usuario en primer arranque. Activar en `bootstrap()` check | ✅ Resuelto — `migrate_legacy_metadata()` en bootstrap, infiere type de JARs presentes |
 
 ---
 
