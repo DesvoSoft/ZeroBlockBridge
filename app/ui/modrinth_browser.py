@@ -2,17 +2,19 @@
 Modrinth Mod Browser — Neo-Modern UI for ZeroBlockBridge.
 
 Integrated as a tab within the main console area. Provides search,
-version filtering, one-click install, and update checking for
-Modrinth-hosted mods and plugins.
+version filtering, one-click install, update checking, installed mod
+management, and .mrpack modpack import for Modrinth-hosted content.
 """
 
 import customtkinter as ctk
+import hashlib
 import io
 import logging
 import os
 import threading
+import tkinter.filedialog
 import tkinter.messagebox
-from typing import Callable
+from typing import Callable, Optional
 
 import requests
 from PIL import Image
@@ -24,23 +26,20 @@ from app.services.modrinth import ModrinthClient, ModrinthException
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Design tokens (extending AppConfig's Neo-Modern palette)
+# Design tokens — Modrinth-specific (non-duplicates of AppConfig)
 # ---------------------------------------------------------------------------
 _MODRINTH_GREEN = "#1bd96a"
 _MODRINTH_GREEN_HOVER = "#15b858"
-_CARD_BG_LIGHT = "#f1f5f9"   # slate-100
-_CARD_BG_DARK = "#1e293b"    # slate-800
-_CARD_HOVER_LIGHT = "#e2e8f0"
-_CARD_HOVER_DARK = "#334155"
-_BADGE_BG_LIGHT = "#dbeafe"  # blue-100
+_BADGE_BG_LIGHT = "#dbeafe"   # blue-100
 _BADGE_BG_DARK = "#1e3a5f"
-_BADGE_TEXT_LIGHT = "#1e40af" # blue-800
-_BADGE_TEXT_DARK = "#93c5fd"  # blue-300
-_SEPARATOR_LIGHT = "#e2e8f0"
-_SEPARATOR_DARK = "#334155"
-_DOWNLOADS_COLOR = "#94a3b8"  # slate-400
+_BADGE_TEXT_LIGHT = "#1e40af"  # blue-800
+_BADGE_TEXT_DARK = "#93c5fd"   # blue-300
+_DOWNLOADS_COLOR = "#94a3b8"   # slate-400
 
+_ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
+
+_PAGE_SIZE = 20
 
 
 class ModrinthBrowser(ctk.CTkFrame):
@@ -56,8 +55,16 @@ class ModrinthBrowser(ctk.CTkFrame):
         {"slug": "lithium", "name": "Lithium", "description": "General-purpose game code optimizer."},
         {"slug": "ferrite-core", "name": "FerriteCore", "description": "Memory usage optimization."},
         {"slug": "starlight", "name": "Starlight", "description": "Rewrite of light engine for performance."},
-        {"slug": "iris", "name": "Iris Shaders", "description": "Modern shader support for Sodium."}
+        {"slug": "iris", "name": "Iris Shaders", "description": "Modern shader support for Sodium."},
     ]
+
+    _SORT_OPTIONS = {
+        "Relevance": "relevance",
+        "Downloads": "downloads",
+        "Follows": "follows",
+        "Newest": "newest",
+        "Updated": "updated",
+    }
 
     def __init__(self, master, get_server_info: Callable = None, **kwargs):
         """
@@ -70,25 +77,47 @@ class ModrinthBrowser(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.get_server_info = get_server_info
         self.client = ModrinthClient()
-        self._current_hits = []
-        self._search_thread = None
+
+        # Search state
         self._search_query = ""
         self._search_project_type = "mod"
-        self._search_mc_version = None
-        self._search_loader = None
-        self._search_offset = 0
+        self._search_mc_version: Optional[str] = None
+        self._search_loader: Optional[str] = None
+        self._search_sort = "relevance"
+        self._current_page = 0    # 0-based
+        self._total_pages = 0
         self._search_total = 0
+        self._current_hits: list = []
+
+        # View state: "search" or "installed"
+        self._view = "search"
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         self._build_search_bar()
         self._build_results_area()
+        self._build_pagination_bar()
         self._build_status_bar()
-        
-        # Defer popular mods load until the tab is first shown (avoids blocking startup)
+
+        # Defer popular mods load until the tab is first shown
         self._popular_loaded = False
         self.bind("<Visibility>", self._on_first_shown)
+
+    # ------------------------------------------------------------------
+    # Server context helper (M.1)
+    # ------------------------------------------------------------------
+    def _resolve_server_context(self) -> Optional[tuple[str, str, str]]:
+        """Return (server_name, mc_version, loader) or None."""
+        if not self.get_server_info:
+            return None
+        try:
+            info = self.get_server_info()
+            if info:
+                return info
+        except Exception as exc:
+            logger.debug("get_server_info failed: %s", exc)
+        return None
 
     # ------------------------------------------------------------------
     # Layout: Search Bar
@@ -99,11 +128,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         bar.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
         bar.grid_columnconfigure(1, weight=1)
 
-        # Modrinth icon label
         lbl_icon = ctk.CTkLabel(bar, text="🔍", font=("Roboto", 16))
         lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=8)
 
-        # Search entry
         self.entry_search = ctk.CTkEntry(
             bar,
             placeholder_text="Search Modrinth for mods, plugins, shaders…",
@@ -124,49 +151,69 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         self.combo_type.set("mod")
         self.combo_type.grid(row=0, column=2, padx=4, pady=8)
-        # Fix clickable anywhere
         self.combo_type._entry.bind("<Button-1>", lambda e: self.combo_type._open_dropdown_menu())
         self.combo_type._entry.configure(cursor="arrow")
 
+        # Sort dropdown (M.7)
+        self.combo_sort = ctk.CTkComboBox(
+            bar,
+            values=list(self._SORT_OPTIONS.keys()),
+            width=105, height=36, corner_radius=12,
+        )
+        self.combo_sort.set("Relevance")
+        self.combo_sort.grid(row=0, column=3, padx=4, pady=8)
+        self.combo_sort._entry.bind("<Button-1>", lambda e: self.combo_sort._open_dropdown_menu())
+        self.combo_sort._entry.configure(cursor="arrow")
+
         # Search button
         self.btn_search = ctk.CTkButton(
-            bar, text="Search", width=90, height=36,
+            bar, text="Search", width=80, height=36,
             corner_radius=12,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_search,
         )
-        self.btn_search.grid(row=0, column=3, padx=4, pady=8)
+        self.btn_search.grid(row=0, column=4, padx=4, pady=8)
 
-        # Optimizer button
+        # Optimizer bundle button
         self.btn_opt = ctk.CTkButton(
             bar, text="⚡ Optimizers", width=100, height=36,
             corner_radius=12,
-            fg_color="#3b82f6", hover_color="#2563eb",
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color="white", font=("Roboto Medium", 12),
             command=self._on_install_optimizers,
         )
-        self.btn_opt.grid(row=0, column=4, padx=(4, 0), pady=8)
+        self.btn_opt.grid(row=0, column=5, padx=(4, 0), pady=8)
 
-        # Check for Updates button
+        # Check updates button
         self.btn_updates = ctk.CTkButton(
             bar, text="Check Updates", width=110, height=36,
             corner_radius=12,
-            fg_color="#f59e0b", hover_color="#d97706",
+            fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
             text_color="white", font=("Roboto Medium", 11),
             command=self._on_check_updates,
         )
-        self.btn_updates.grid(row=0, column=5, padx=(4, 4), pady=8)
+        self.btn_updates.grid(row=0, column=6, padx=(4, 4), pady=8)
 
-        # Installed mods button
+        # Installed toggle button (M.6)
         self.btn_installed = ctk.CTkButton(
             bar, text="Installed", width=90, height=36,
             corner_radius=12,
-            fg_color="#64748b", hover_color="#475569",
-            text_color="white", font=("Roboto Medium", 11),
-            command=self._on_show_installed,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=("Roboto Medium", 11),
+            command=self._toggle_installed_view,
         )
-        self.btn_installed.grid(row=0, column=6, padx=(4, 12), pady=8)
+        self.btn_installed.grid(row=0, column=7, padx=(4, 4), pady=8)
+
+        # Import modpack button (CA-M04)
+        self.btn_mrpack = ctk.CTkButton(
+            bar, text="📦 Import .mrpack", width=130, height=36,
+            corner_radius=12,
+            fg_color="#7c3aed", hover_color="#6d28d9",
+            text_color="white", font=("Roboto Medium", 11),
+            command=self._on_import_mrpack,
+        )
+        self.btn_mrpack.grid(row=0, column=8, padx=(4, 12), pady=8)
 
     # ------------------------------------------------------------------
     # Layout: Results Area (scrollable)
@@ -182,7 +229,6 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.results_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         self.results_frame.grid_columnconfigure(0, weight=1)
 
-        # Placeholder
         self._show_placeholder("Search for mods on Modrinth to get started.\nResults will appear here.")
 
     def _show_placeholder(self, text: str):
@@ -197,12 +243,53 @@ class ModrinthBrowser(ctk.CTkFrame):
         lbl.grid(row=0, column=0, pady=60, padx=20)
 
     # ------------------------------------------------------------------
+    # Layout: Pagination bar (classic Prev/Next)
+    # ------------------------------------------------------------------
+    def _build_pagination_bar(self):
+        self.pagination_bar = ctk.CTkFrame(self, height=36, corner_radius=12,
+                                            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.pagination_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(4, 0))
+
+        self.btn_prev = ctk.CTkButton(
+            self.pagination_bar, text="< Prev", width=80, height=28,
+            corner_radius=8,
+            fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=(AppConfig.COLOR_BORDER_DARK, AppConfig.COLOR_BTN_GHOST_HOVER),
+            text_color=(AppConfig.COLOR_TEXT_NOTE, AppConfig.COLOR_TEXT_PRIMARY),
+            font=("Roboto Medium", 12),
+            command=self._on_prev_page,
+            state="disabled",
+        )
+        self.btn_prev.pack(side="left", padx=(12, 4), pady=4)
+
+        self.lbl_page = ctk.CTkLabel(
+            self.pagination_bar, text="",
+            font=AppConfig.FONT_BODY_SMALL,
+            text_color=AppConfig.COLOR_TEXT_NOTE,
+        )
+        self.lbl_page.pack(side="left", padx=8)
+
+        self.btn_next = ctk.CTkButton(
+            self.pagination_bar, text="Next >", width=80, height=28,
+            corner_radius=8,
+            fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=(AppConfig.COLOR_BORDER_DARK, AppConfig.COLOR_BTN_GHOST_HOVER),
+            text_color=(AppConfig.COLOR_TEXT_NOTE, AppConfig.COLOR_TEXT_PRIMARY),
+            font=("Roboto Medium", 12),
+            command=self._on_next_page,
+            state="disabled",
+        )
+        self.btn_next.pack(side="left", padx=(4, 0), pady=4)
+
+        self.pagination_bar.grid_remove()  # hidden until first search
+
+    # ------------------------------------------------------------------
     # Layout: Status Bar
     # ------------------------------------------------------------------
     def _build_status_bar(self):
         self.status_bar = ctk.CTkFrame(self, height=28, corner_radius=12,
                                         fg_color=("gray95", "gray15"))
-        self.status_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(6, 0))
+        self.status_bar.grid(row=3, column=0, sticky="ew", padx=0, pady=(4, 0))
 
         self.lbl_status = ctk.CTkLabel(
             self.status_bar, text="Ready",
@@ -221,12 +308,12 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Search logic
     # ------------------------------------------------------------------
-    def _do_search(self, reset=False):
-        if reset:
-            self._current_hits = []
-            self._search_offset = 0
-            self.btn_search.configure(state="disabled")
+    def _do_search(self):
+        """Fetch _current_page of results and render."""
+        self.btn_search.configure(state="disabled")
         self._set_status("Searching…", busy=True)
+        offset = self._current_page * _PAGE_SIZE
+        sort = self._search_sort
 
         def _search():
             try:
@@ -235,15 +322,13 @@ class ModrinthBrowser(ctk.CTkFrame):
                     mc_version=self._search_mc_version,
                     loader=self._search_loader,
                     project_type=self._search_project_type,
-                    limit=25,
-                    offset=self._search_offset,
+                    limit=_PAGE_SIZE,
+                    offset=offset,
+                    index=sort,
                 )
                 hits = results.get("hits", [])
-                self._current_hits.extend(hits)
-                self._search_total = results.get("total_hits", len(hits))
-                total_shown = len(self._current_hits)
-                self._search_offset += len(hits)
-                self.after(0, lambda: self._render_results(total_shown))
+                total = results.get("total_hits", len(hits))
+                self.after(0, lambda: self._on_search_done(hits, total))
             except ModrinthException as exc:
                 logger.error("Modrinth search failed: %s", exc)
                 msg = f"Search failed:\n{exc}"
@@ -253,29 +338,63 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._set_status("Ready"))
 
         threading.Thread(target=_search, daemon=True).start()
-    
-    def _on_load_more(self):
-        self._do_search(reset=False)
+
+    def _on_search_done(self, hits: list, total: int):
+        self._current_hits = hits
+        self._search_total = total
+        self._total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        self._render_results()
+        self._update_pagination()
 
     def _on_search(self, event=None):
         query = self.entry_search.get().strip()
         if not query:
             return
         project_type = self.combo_type.get()
+        sort_label = self.combo_sort.get()
+        sort = self._SORT_OPTIONS.get(sort_label, "relevance")
+
         mc_version = None
         loader = None
-        if self.get_server_info:
-            try:
-                info = self.get_server_info()
-                if info:
-                    _, mc_version, loader = info
-            except Exception as e:
-                logger.debug("Image load error: %s", e)
+        ctx = self._resolve_server_context()
+        if ctx:
+            _, mc_version, loader = ctx
+
         self._search_query = query
         self._search_project_type = project_type
         self._search_mc_version = mc_version
         self._search_loader = loader
-        self._do_search(reset=True)
+        self._search_sort = sort
+        self._current_page = 0
+
+        if self._view == "installed":
+            self._toggle_installed_view()  # switch back to search view
+
+        self._do_search()
+
+    def _on_prev_page(self):
+        if self._current_page > 0:
+            self._current_page -= 1
+            self._do_search()
+
+    def _on_next_page(self):
+        if self._current_page < self._total_pages - 1:
+            self._current_page += 1
+            self._do_search()
+
+    def _update_pagination(self):
+        if self._search_total == 0:
+            self.pagination_bar.grid_remove()
+            return
+
+        self.pagination_bar.grid()
+        page_num = self._current_page + 1
+        self.lbl_page.configure(text=f"Page {page_num} of {self._total_pages}")
+        self.btn_prev.configure(state="normal" if self._current_page > 0 else "disabled")
+        self.btn_next.configure(state="normal" if self._current_page < self._total_pages - 1 else "disabled")
+        self.lbl_count.configure(
+            text=f"{len(self._current_hits)} of {self._search_total} results"
+        )
 
     def _on_first_shown(self, event=None):
         if not self._popular_loaded:
@@ -283,34 +402,34 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.after(50, self._load_popular_mods)
 
     def _load_popular_mods(self):
-        """Fetch and show popular mods."""
         mc_version = None
         loader = None
-        if self.get_server_info:
-            try:
-                info = self.get_server_info()
-                if info: _, mc_version, loader = info
-            except Exception as e:
-                logger.debug("Modrinth get_server_info failed: %s", e)
+        ctx = self._resolve_server_context()
+        if ctx:
+            _, mc_version, loader = ctx
 
         self._set_status("Loading popular mods...", busy=True)
-        
+        self._search_query = ""
+        self._search_project_type = "mod"
+        self._search_mc_version = mc_version
+        self._search_loader = loader
+        self._search_sort = "downloads"
+        self._current_page = 0
+
         def _do_load():
             try:
                 results = self.client.search(
                     "", mc_version=mc_version, loader=loader,
-                    project_type="mod", limit=20,
+                    project_type="mod", limit=_PAGE_SIZE, index="downloads",
                 )
                 hits = results.get("hits", [])
-                self._current_hits = hits
-                self._search_total = results.get("total_hits", len(hits))
-                total_shown = len(hits)
-                self.after(0, lambda: self._render_results(total_shown))
-            except Exception as e:
-                logger.error("Failed to load popular mods: %s", e)
+                total = results.get("total_hits", len(hits))
+                self.after(0, lambda: self._on_search_done(hits, total))
+            except Exception as exc:
+                logger.error("Failed to load popular mods: %s", exc)
             finally:
                 self.after(0, lambda: self._set_status("Ready"))
-                
+
         threading.Thread(target=_do_load, daemon=True).start()
 
     def _set_status(self, text: str, busy: bool = False):
@@ -319,7 +438,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Render results
     # ------------------------------------------------------------------
-    def _render_results(self, total_shown: int):
+    def _render_results(self):
         for w in self.results_frame.winfo_children():
             w.destroy()
 
@@ -328,39 +447,23 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.lbl_count.configure(text="0 results")
             return
 
-        self.lbl_count.configure(text=f"{total_shown} of {self._search_total} results")
-
         for idx, hit in enumerate(self._current_hits):
-            card = self._create_mod_card(hit, idx)
+            card = self._create_mod_card(hit)
             card.grid(row=idx, column=0, sticky="ew", padx=6, pady=3)
 
-        if total_shown < self._search_total:
-            btn_more = ctk.CTkButton(
-                self.results_frame, text="Load More", width=140, height=36,
-                corner_radius=12,
-                fg_color=("#e2e8f0", "#334155"),
-                hover_color=("#cbd5e1", "#475569"),
-                text_color=("black", "white"),
-                font=("Roboto Medium", 12),
-                command=self._on_load_more,
-            )
-            btn_more.grid(row=len(self._current_hits), column=0, pady=10)
-
-    def _create_mod_card(self, hit: dict, index: int) -> ctk.CTkFrame:
+    def _create_mod_card(self, hit: dict) -> ctk.CTkFrame:
         title = hit.get("title", "Unknown")
         initial = title[0].upper() if title else "?"
         icon_url = hit.get("icon_url", "")
-        import hashlib
-        _ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
         color = _ICON_COLORS[int(hashlib.md5(title.encode()).hexdigest(), 16) % len(_ICON_COLORS)]
 
         card = ctk.CTkFrame(
             self.results_frame,
             corner_radius=12,
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
         )
         card.grid_columnconfigure(1, weight=1)
-        card_inner = ctk.CTkScrollableFrame(card, fg_color="transparent")
-        
+
         icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=12, fg_color=color)
         icon_frame.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12, sticky="n")
         icon_frame.grid_propagate(False)
@@ -368,33 +471,29 @@ class ModrinthBrowser(ctk.CTkFrame):
                                    text_color="white")
         lbl_initial.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Async load real icon
         if icon_url and icon_url not in _ICON_CACHE:
-            threading.Thread(target=self._load_icon, args=(icon_url, icon_frame, lbl_initial), daemon=True).start()
+            threading.Thread(target=self._load_icon, args=(icon_url, icon_frame, lbl_initial),
+                             daemon=True).start()
         elif icon_url in _ICON_CACHE:
             self._apply_icon(icon_frame, lbl_initial, _ICON_CACHE[icon_url])
 
-        # --- Info section ---
+        # Info section
         info_frame = ctk.CTkFrame(card, fg_color="transparent")
         info_frame.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=(10, 0))
         info_frame.grid_columnconfigure(0, weight=1)
 
-        # Title row
         title_row = ctk.CTkFrame(info_frame, fg_color="transparent")
         title_row.grid(row=0, column=0, sticky="ew")
 
-        lbl_title = ctk.CTkLabel(title_row, text=title, font=("Roboto Medium", 14),
-                                 anchor="w")
+        lbl_title = ctk.CTkLabel(title_row, text=title, font=("Roboto Medium", 14), anchor="w")
         lbl_title.pack(side="left")
 
-        # Author
         author = hit.get("author", "Unknown")
         lbl_author = ctk.CTkLabel(title_row, text=f"by {author}",
                                   text_color=_DOWNLOADS_COLOR,
                                   font=AppConfig.FONT_BODY_SMALL, anchor="w")
         lbl_author.pack(side="left", padx=(8, 0))
 
-        # Description
         desc = hit.get("description", "")[:120]
         lbl_desc = ctk.CTkLabel(info_frame, text=desc,
                                 text_color=(AppConfig.COLOR_TEXT_GRAY, "#cbd5e1"),
@@ -402,7 +501,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                                 anchor="w", wraplength=500, justify="left")
         lbl_desc.grid(row=1, column=0, sticky="ew", pady=(2, 0))
 
-        # --- Badges row ---
+        # Badges row
         badge_frame = ctk.CTkFrame(card, fg_color="transparent")
         badge_frame.grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(2, 10))
 
@@ -413,7 +512,6 @@ class ModrinthBrowser(ctk.CTkFrame):
                               font=AppConfig.FONT_BODY_SMALL)
         lbl_dl.pack(side="left", padx=(0, 10))
 
-        # Category badges
         categories = hit.get("categories", [])[:3]
         for cat in categories:
             badge = ctk.CTkLabel(
@@ -425,7 +523,6 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             badge.pack(side="left", padx=(0, 4))
 
-        # --- Install button ---
         btn_install = ctk.CTkButton(
             card, text="Install", width=80, height=32,
             corner_radius=12,
@@ -435,37 +532,116 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         btn_install.grid(row=0, column=2, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
-        # Hover effect
-        def _on_enter(e):
-            card.configure(fg_color=(_CARD_HOVER_LIGHT, _CARD_HOVER_DARK))
-        def _on_leave(e):
-            card.configure(fg_color=(_CARD_BG_LIGHT, _CARD_BG_DARK))
-        card.bind("<Enter>", _on_enter)
-        card.bind("<Leave>", _on_leave)
+        # Hover effect (M.8 — bind only on card itself, not children)
+        bg_normal = (AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
+        bg_hover = (AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
+        card.bind("<Enter>", lambda e: card.configure(fg_color=bg_hover))
+        card.bind("<Leave>", lambda e: card.configure(fg_color=bg_normal))
 
         return card
+
+    # ------------------------------------------------------------------
+    # Installed view toggle (M.6)
+    # ------------------------------------------------------------------
+    def _toggle_installed_view(self):
+        if self._view == "search":
+            self._view = "installed"
+            self.btn_installed.configure(
+                fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                text="Search",
+            )
+            self.pagination_bar.grid_remove()
+            self._render_installed()
+        else:
+            self._view = "search"
+            self.btn_installed.configure(
+                fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                text="Installed",
+            )
+            if self._current_hits:
+                self._render_results()
+                self._update_pagination()
+            else:
+                self._show_placeholder("Search for mods on Modrinth to get started.\nResults will appear here.")
+
+    def _render_installed(self):
+        for w in self.results_frame.winfo_children():
+            w.destroy()
+
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self._show_placeholder("Select a server to view installed mods.")
+            return
+        server_name = ctx[0]
+
+        mods_dir = os.path.join(SERVERS_DIR, server_name, "mods")
+        plugins_dir = os.path.join(SERVERS_DIR, server_name, "plugins")
+        files = []
+        for d in [mods_dir, plugins_dir]:
+            if os.path.isdir(d):
+                for fname in sorted(os.listdir(d)):
+                    if fname.endswith(".jar"):
+                        files.append(os.path.join(d, fname))
+
+        header = ctk.CTkLabel(
+            self.results_frame,
+            text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
+            font=("Roboto Medium", 13),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            anchor="w",
+        )
+        header.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+
+        if not files:
+            ctk.CTkLabel(
+                self.results_frame,
+                text="No mods or plugins installed.",
+                font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_NOTE,
+            ).grid(row=1, column=0, pady=20)
+            return
+
+        for i, fpath in enumerate(files):
+            fname = os.path.basename(fpath)
+            row_frame = ctk.CTkFrame(self.results_frame, corner_radius=8,
+                                     fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+            row_frame.grid(row=i + 1, column=0, sticky="ew", padx=6, pady=2)
+            row_frame.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(row_frame, text=fname, font=("Roboto", 12), anchor="w").grid(
+                row=0, column=0, sticky="w", padx=10, pady=6)
+
+            btn_del = ctk.CTkButton(
+                row_frame, text="Delete", width=64, height=28,
+                corner_radius=8,
+                fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+                font=("Roboto Medium", 11),
+                command=lambda fp=fpath: self._confirm_delete_mod(fp),
+            )
+            btn_del.grid(row=0, column=1, padx=(0, 6), pady=4)
+
+    def _confirm_delete_mod(self, filepath: str):
+        fname = os.path.basename(filepath)
+        if not tkinter.messagebox.askyesno("Delete Mod", f"Delete '{fname}'?"):
+            return
+        try:
+            os.remove(filepath)
+            self._set_status(f"✓ Deleted {fname}")
+            self._render_installed()  # refresh inline
+        except OSError as exc:
+            self._set_status(f"✗ Failed to delete {fname}: {exc}")
 
     # ------------------------------------------------------------------
     # Install action
     # ------------------------------------------------------------------
     def _on_install(self, hit: dict):
-        if not self.get_server_info:
-            self._set_status("⚠ No server selected — cannot install.")
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self._set_status("⚠ Select a server first.")
             return
-
-        try:
-            info = self.get_server_info()
-            if not info:
-                self._set_status("⚠ Select a server first.")
-                return
-            server_name, mc_version, loader = info
-        except Exception:
-            self._set_status("⚠ Could not determine server context.")
-            return
+        server_name, mc_version, loader = ctx
 
         slug = hit.get("slug", hit.get("project_id", ""))
         title = hit.get("title", slug)
-
         self._set_status(f"Loading versions for {title}…", busy=True)
 
         def _fetch_versions():
@@ -478,14 +654,15 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self._do_install_version(versions[0], server_name, loader, title)
                 else:
                     self.after(0, lambda: self._show_version_picker(versions, server_name, loader, title))
-            except Exception as e:
-                logger.debug("Project fetch error: %s", e)
-                self.after(0, lambda e=e: self._set_status(f"✗ Failed to load versions: {e}"))
+            except Exception as exc:
+                logger.debug("Project fetch error: %s", exc)
+                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
     def _do_install_version(self, version, server_name, loader, title):
         self._set_status(f"Installing {title}…", busy=True)
+
         def _install():
             try:
                 path = self.client.download_version(
@@ -502,6 +679,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Install failed: {e}"))
+
         threading.Thread(target=_install, daemon=True).start()
 
     def _show_version_picker(self, versions, server_name, loader, title):
@@ -515,7 +693,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
 
         ctk.CTkLabel(
-            frame, text=f"Select a version to install:",
+            frame, text="Select a version to install:",
             font=("Roboto Medium", 14), anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
@@ -548,36 +726,38 @@ class ModrinthBrowser(ctk.CTkFrame):
                        corner_radius=12, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
                        text_color="white", command=_on_confirm).pack(side="right", padx=4)
 
+    # ------------------------------------------------------------------
+    # Optimizer bundle
+    # ------------------------------------------------------------------
     def _on_install_optimizers(self):
-        if not self.get_server_info: return
-        info = self.get_server_info()
-        if not info:
+        ctx = self._resolve_server_context()
+        if not ctx:
             self._set_status("⚠ Select a server first.")
             return
-        server_name, mc_version, loader = info
-        
+        server_name, mc_version, loader = ctx
+
         self._set_status("Installing Optimizer Bundle...", busy=True)
+
         def _run_opt():
             for mod in self.OPTIMIZERS:
                 self.after(0, lambda m=mod: self._set_status(f"Installing {m['name']}..."))
                 try:
-                    self.client.download_mod(
-                        mod["slug"], server_name, mc_version, loader
-                    )
-                except Exception as e:
-                    logger.error("Failed to install %s: %s", mod["name"], e)
+                    self.client.download_mod(mod["slug"], server_name, mc_version, loader)
+                except Exception as exc:
+                    logger.error("Failed to install %s: %s", mod["name"], exc)
             self.after(0, lambda: self._set_status("Ready"))
+
         threading.Thread(target=_run_opt, daemon=True).start()
 
+    # ------------------------------------------------------------------
+    # Update checker
+    # ------------------------------------------------------------------
     def _on_check_updates(self):
-        if not self.get_server_info:
-            self._set_status("⚠ No server selected.")
-            return
-        info = self.get_server_info()
-        if not info:
+        ctx = self._resolve_server_context()
+        if not ctx:
             self._set_status("⚠ Select a server first.")
             return
-        server_name, mc_version, loader = info
+        server_name, mc_version, loader = ctx
 
         self._set_status("Checking for updates…", busy=True)
 
@@ -606,11 +786,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
         frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-        lbl_title = ctk.CTkLabel(
+        ctk.CTkLabel(
             frame, text=f"{len(updates)} update(s) available",
             font=("Roboto Medium", 16), anchor="w",
-        )
-        lbl_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         for i, u in enumerate(updates):
             card = ctk.CTkFrame(frame, corner_radius=8)
@@ -623,84 +802,50 @@ class ModrinthBrowser(ctk.CTkFrame):
                          font=AppConfig.FONT_BODY_SMALL, anchor="w").grid(
                 row=1, column=0, sticky="w", padx=10, pady=(0, 8))
 
-        btn_close = ctk.CTkButton(dialog, text="Close", width=100, height=32,
-                                   corner_radius=12, command=dialog.destroy)
-        btn_close.pack(pady=8)
+        ctk.CTkButton(dialog, text="Close", width=100, height=32,
+                       corner_radius=12, command=dialog.destroy).pack(pady=8)
 
-    def _on_show_installed(self):
-        if not self.get_server_info:
-            self._set_status("⚠ No server selected.")
-            return
-        info = self.get_server_info()
-        if not info:
+    # ------------------------------------------------------------------
+    # .mrpack modpack import (CA-M04)
+    # ------------------------------------------------------------------
+    def _on_import_mrpack(self):
+        ctx = self._resolve_server_context()
+        if not ctx:
             self._set_status("⚠ Select a server first.")
             return
-        server_name = info[0]
+        server_name, mc_version, loader = ctx
 
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Installed Mods / Plugins")
-        dialog.geometry("500x400")
-        dialog.transient(self.winfo_toplevel())
-        dialog.grab_set()
-
-        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
-        frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
-        frame.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            frame, text=f"Installed files for '{server_name}':",
-            font=("Roboto Medium", 14), anchor="w",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
-
-        mods_dir = os.path.join(SERVERS_DIR, server_name, "mods")
-        plugins_dir = os.path.join(SERVERS_DIR, server_name, "plugins")
-        files = []
-        for d in [mods_dir, plugins_dir]:
-            if os.path.isdir(d):
-                for fname in sorted(os.listdir(d)):
-                    if fname.endswith(".jar"):
-                        files.append(os.path.join(d, fname))
-
-        if not files:
-            ctk.CTkLabel(frame, text="No mods or plugins installed.",
-                         font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_NOTE).grid(
-                row=1, column=0, pady=20)
-        else:
-            delete_btns = []
-            for i, fpath in enumerate(files):
-                fname = os.path.basename(fpath)
-                row_frame = ctk.CTkFrame(frame, corner_radius=8)
-                row_frame.grid(row=i + 1, column=0, sticky="ew", pady=2)
-                row_frame.grid_columnconfigure(0, weight=1)
-
-                ctk.CTkLabel(row_frame, text=fname, font=("Roboto", 12), anchor="w").grid(
-                    row=0, column=0, sticky="w", padx=10, pady=6)
-
-                btn_del = ctk.CTkButton(
-                    row_frame, text="🗑", width=36, height=28,
-                    corner_radius=8,
-                    fg_color="#ef4444", hover_color="#dc2626",
-                    font=("Roboto", 12),
-                    command=lambda fp=fpath: self._confirm_delete_mod(fp, dialog),
-                )
-                btn_del.grid(row=0, column=1, padx=(0, 6), pady=4)
-
-        ctk.CTkButton(dialog, text="Close", width=100, height=32,
-                       corner_radius=12, command=dialog.destroy).pack(pady=10)
-
-    def _confirm_delete_mod(self, filepath, dialog):
-        fname = os.path.basename(filepath)
-        if not tkinter.messagebox.askyesno("Delete Mod", f"Delete '{fname}'?"):
+        mrpack_path = tkinter.filedialog.askopenfilename(
+            title="Select Modpack File",
+            filetypes=[("Modrinth Modpack", "*.mrpack"), ("All files", "*.*")],
+        )
+        if not mrpack_path:
             return
-        try:
-            os.remove(filepath)
-            self._set_status(f"✓ Deleted {fname}")
-            dialog.destroy()
-            self._on_show_installed()
-        except OSError as e:
-            self._set_status(f"✗ Failed to delete {fname}: {e}")
 
-    def _load_icon(self, icon_url, icon_frame, lbl_initial):
+        self._set_status("Importing modpack…", busy=True)
+        self.btn_mrpack.configure(state="disabled")
+
+        def _import():
+            try:
+                from app.services.mrpack_installer import install_mrpack
+                count = install_mrpack(
+                    mrpack_path=mrpack_path,
+                    server_name=server_name,
+                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
+                )
+                self.after(0, lambda: self._set_status(f"✓ Modpack installed — {count} mods"))
+            except Exception as exc:
+                logger.error("mrpack import failed: %s", exc)
+                self.after(0, lambda e=exc: self._set_status(f"✗ Import failed: {e}"))
+            finally:
+                self.after(0, lambda: self.btn_mrpack.configure(state="normal"))
+
+        threading.Thread(target=_import, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Icon loading
+    # ------------------------------------------------------------------
+    def _load_icon(self, icon_url: str, icon_frame, lbl_initial):
         try:
             resp = requests.get(icon_url, timeout=8)
             resp.raise_for_status()
@@ -708,8 +853,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             ctk_img = ctk.CTkImage(img, size=(48, 48))
             _ICON_CACHE[icon_url] = ctk_img
             self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
-        except Exception as e:
-            logger.debug("Image fetch error: %s", e)
+        except Exception as exc:
+            logger.debug("Image fetch error: %s", exc)
 
     def _apply_icon(self, icon_frame, lbl_initial, ctk_img):
         if not icon_frame.winfo_exists():

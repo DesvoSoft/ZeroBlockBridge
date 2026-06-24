@@ -95,6 +95,7 @@ class ModrinthClient:
         project_type: str = "mod",
         limit: int = 20,
         offset: int = 0,
+        index: str = "relevance",
     ) -> Dict:
         """
         Search for projects on Modrinth.
@@ -106,6 +107,7 @@ class ModrinthClient:
             project_type: One of "mod", "modpack", "resourcepack", "shader", "plugin".
             limit: Max results per page (1-100).
             offset: Pagination offset.
+            index: Sort order — "relevance", "downloads", "follows", "newest", "updated".
 
         Returns:
             dict with keys: hits (list), total_hits, offset, limit.
@@ -122,6 +124,7 @@ class ModrinthClient:
             "query": query,
             "limit": min(limit, 100),
             "offset": offset,
+            "index": index,
         }
         if facets:
             params["facets"] = f"[{','.join(facets)}]"
