@@ -119,6 +119,45 @@ def update_server_meta(server_name: str, updates: dict) -> bool:
             return False
 
 
+def _infer_server_type(server_dir: str) -> str:
+    """Infer server type from files present in the server directory."""
+    try:
+        files = [f.lower() for f in os.listdir(server_dir)]
+    except OSError:
+        return "Vanilla"
+    for f in files:
+        if "fabric" in f and f.endswith(".jar"):
+            return "Fabric"
+        if "forge" in f and f.endswith(".jar"):
+            return "Forge"
+        if "purpur" in f and f.endswith(".jar"):
+            return "Purpur"
+        if "paper" in f and f.endswith(".jar"):
+            return "Paper"
+        if "spigot" in f and f.endswith(".jar"):
+            return "Paper"
+    return "Vanilla"
+
+
+def migrate_legacy_metadata() -> None:
+    """One-shot migration: add 'type' field to metadata.json for servers that lack it."""
+    if not os.path.isdir(SERVERS_DIR):
+        return
+    try:
+        server_names = [d for d in os.listdir(SERVERS_DIR)
+                        if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+    except OSError as e:
+        logger.warning("migrate_legacy_metadata: failed to list servers: %s", e)
+        return
+    for server_name in server_names:
+        meta = get_server_meta(server_name)
+        if meta and "type" not in meta:
+            server_dir = os.path.join(SERVERS_DIR, server_name)
+            inferred = _infer_server_type(server_dir)
+            update_server_meta(server_name, {"type": inferred})
+            logger.info("migrate_legacy_metadata: %s -> type=%s", server_name, inferred)
+
+
 def create_server_directory(server_name: str, server_type: str = "Vanilla", version: str = "1.20.1") -> str:
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)

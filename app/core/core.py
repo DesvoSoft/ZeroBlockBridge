@@ -122,6 +122,8 @@ class ZBBManager:
     # --- Core Server Operations ---
     def bootstrap(self) -> None:
         logger.info("[ZBBManager] Bootstrapping core services...")
+        from app.core.logic import migrate_legacy_metadata
+        migrate_legacy_metadata()
         self._start_tick_loop()
 
     def select_server(self, server_name: str) -> None:
