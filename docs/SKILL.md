@@ -68,8 +68,8 @@ sequenceDiagram
     Core->>Srv: iniciar operación
     Srv-->>EB: Emit(CONSOLE_LINE)
     EB-->>UI: deliver(CONSOLE_LINE)
-    Srv-->>EB: Emit(STATUS_CHANGED)
-    EB-->>UI: deliver(STATUS_CHANGED)
+    Srv-->>EB: Emit(READY)
+    EB-->>UI: deliver(READY)
     UI->>UI: actualizar interfaz
 ```
 

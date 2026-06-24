@@ -37,7 +37,7 @@ The core and UI are decoupled via `EventBus`. `ZBBManager` serves as the single 
 
 The application features:
 
-- **Sidebar**: Server list with selection, status bar with TPS indicator and player count.
+- **Sidebar**: Server list with selection, status bar with player count.
 - **Dashboard**: Tunnel controls, auto-restart settings, quick backup (server start/stop merged into status bar).
 - **Tabbed Console**: Console, Tunnel Log, and Mods (Modrinth Browser) tabs.
 - **Console Input**: Send server commands directly from the UI.
@@ -103,7 +103,7 @@ All auto-healing events display a **Toast notification** (bottom-right overlay, 
 - Retry exhaustion (red)
 - Restart attempts (orange)
 
-> **Known gap (P0.6):** `ServerEvent.CRASHED` has no subscriber in `ZBBManager._setup_monitors()`. Crash history is not persisted to `metadata.json`. See roadmap P0.6.
+> **Note:** `ServerEvent.CRASHED` is subscribed in `ZBBManager._setup_monitors()` — by `_on_server_crashed` (crash history + notification) and `CrashReporter` (JSON diagnostic report to `servers/<name>/crash_reports/`).
 
 ---
 
@@ -149,7 +149,8 @@ ZeroBlockBridge/
 │       ├── watchdog.py            # Crash detection & auto-restart
 │       ├── heartbeat.py           # Zombie server detection
 │       ├── lag_monitor.py         # TPS lag spike detection
-│       ├── backup_manager.py      # ZIP backup create/restore
+│       ├── backup_manager.py      # ZIP backup create/atomic restore
+│       ├── crash_reporter.py      # JSON crash diagnostic reports
 │       ├── modrinth.py            # Modrinth API client
 │       ├── sha1_validator.py      # SHA1 download verification
 │       └── settings_manager.py    # App config read/write (module)
@@ -174,7 +175,8 @@ ZeroBlockBridge/
 │   └── <server-name>/
 │       ├── server.jar
 │       ├── server.properties
-│       └── metadata.json
+│       ├── metadata.json
+│       └── crash_reports/         # (Generated) JSON crash diagnostics (max 50, FIFO)
 │
 ├── backups/                       # (Generated) ZIP backups
 │   └── <server-name>/

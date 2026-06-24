@@ -11,15 +11,15 @@ ZBB is built on a strict **decoupled architecture** to ensure the core logic can
 *   **Event-Driven Communication**: All communication between the UI and the Core (`app/core/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
 *   **Headless-Ready**: Every feature must be implemented such that it could function via a CLI or REST API without a GUI. 
 *   **Single Source of Truth**: `ZBBManager` is the orchestrator. No other component should directly manage server lifecycles or global configurations.
-*   **Platform Neutrality**: Queda prohibido el uso de `os.startfile` y `_winapi` en el núcleo. Toda interacción con el sistema operativo debe usar abstracciones que detecten `sys.platform`. Las rutas se construyen exclusivamente con `pathlib.Path` para garantizar compatibilidad entre Windows y Linux.
+*   **Platform Neutrality**: `os.startfile` and `_winapi` are banned. All OS interaction must use cross-platform abstractions (`subprocess`, `os.symlink`). Paths use `pathlib.Path` exclusively. Directory symlinks use `os.symlink(src, dst, target_is_directory=True)` — never `_winapi.CreateJunction`.
 
 ### Code Example: Emitting Events
 ```python
 # In Core/Service
-self.events.emit(ServerEvent.STATUS_CHANGED, {"server": name, "status": "running"})
+self.events.emit(ServerEvent.READY, {"server": name})
 
 # In UI (Subscription)
-self.events.subscribe(ServerEvent.STATUS_CHANGED, self._update_ui_status)
+self.events.subscribe(ServerEvent.READY, self._update_ui_status)
 ```
 
 ---
