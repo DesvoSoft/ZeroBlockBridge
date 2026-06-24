@@ -26,7 +26,7 @@ class ServerEvent:
 
 class EventBus:
     def __init__(self):
-        self._listeners: Dict[str, List[Callable]] = {}
+        self._listeners: dict[str, list[Callable]] = {}
         self._lock = threading.RLock()
 
     def subscribe(self, event_type: str, callback: Callable):

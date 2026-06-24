@@ -55,14 +55,16 @@ Protocol classes in `app/core/protocols.py` define structural typing contracts (
 
 ### EventBus (app/core/server_events.py)
 
-Decouples all components. `ServerEvent` enum: `STATUS_CHANGED`, `CONSOLE_LINE`, `CRASHED`, `ZOMBIE_DETECTED`, `LAG_SPIKE`, `TUNNEL_STATUS`, etc. `TPS_UPDATE` and `ERROR` were removed (dead events).
+Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `CRASHED`, `ZOMBIE_DETECTED`, `LAG_SPIKE`, `TUNNEL_STATUS`, `PLAYER_COUNT`, `PLAYER_LIST`, `CONSOLE_LINE`, `TUNNEL_CONSOLE_LINE`, `NOTIFICATION`, `REQUEST_RESTART`, `BACKUP_COMPLETED`, `BACKUP_FAILED`. `TPS_UPDATE` and `ERROR` were removed (dead events).
 
 ### Auto-healing system
 
-- `watchdog.py` -- crash detection by exit code + stderr pattern. Exponential backoff restart. Stability resets after 10 min uptime.
-- `heartbeat.py` -- zombie detection. Sends `list` every 60s; no response in 15s -> emits `ZOMBIE_DETECTED`.
+- `watchdog.py` -- crash detection by exit code + stderr pattern. Exponential backoff restart (cap 3600s). Stability resets after 10 min uptime. Never emits NOTIFICATION (only `_on_server_crashed` in core.py owns crash toasts).
+- `heartbeat.py` -- zombie detection. Sends `list` every 60s; no response in 15s -> emits `ZOMBIE_DETECTED`. `_last_probe` set BEFORE `send_command()` to prevent false positive.
 - `lag_monitor.py` -- TPS lag via `"Can't keep up!"` pattern. Sliding 5-spike/5-min window.
-- `sanitizer.py` -- command allowlist (80+ safe MC commands) + character filter (`;|&` etc.).
+- `sanitizer.py` -- command allowlist (80+ safe MC commands) + character filter (`;|&` etc.). `%` is allowed (valid in MC commands).
+- `crash_reporter.py` -- subscribes to CRASHED event. Writes JSON diagnostic to `servers/<name>/crash_reports/`. Max 50 reports (FIFO rotation).
+- `discord_webhook.py` -- optional Discord notifications. Active only when `discord_webhook_url` is configured in SettingsManager. Queue worker thread, 2s rate-limit.
 
 ### Threading rules
 
@@ -70,6 +72,8 @@ Decouples all components. `ServerEvent` enum: `STATUS_CHANGED`, `CONSOLE_LINE`, 
 - File check before reading: `os.path.exists` + `os.path.getsize > 0` with 5s timeout (OS may not flush before thread event fires).
 - `threading.Lock` for shared mutable state.
 - `__init__` must init all data attributes before starting threads or subscribing to EventBus.
+- `ServerRunner.running` is a **property** backed by `_state_lock` -- do not access `_running` directly.
+- `ServerRunner.connected_players` mutations (join/leave) inside `_players_lock`. Cleared in `start()` before Popen.
 
 ### Java version management
 
@@ -115,6 +119,17 @@ logger = logging.getLogger(__name__)  # every module
 - Slate-based palette. Roboto (body) / Roboto Medium (headings).
 - All buttons need `hover_color`.
 
+### Do NOT do (ever)
+
+- No `Co-Authored-By` lines in commits. No Claude name anywhere in git history.
+- No confirmation prompts before committing or editing — just do it.
+- No README or docs files unless explicitly requested.
+- No refactoring beyond the task scope. Three similar lines beats a premature abstraction.
+- No error handling for scenarios that can't happen. Trust framework guarantees.
+- No `print()`. Logger only.
+- No `os.startfile`, no `_winapi`. Use `pathlib.Path` + `subprocess`.
+- No bare `except: pass`. Specific exceptions only.
+
 ### Git workflow
 
 ```
@@ -129,4 +144,4 @@ feature/<name>
 
 ### Test helpers (conftest.py)
 
-`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe`. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter.
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 410 tests in 22 files.

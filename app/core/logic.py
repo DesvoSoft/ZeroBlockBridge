@@ -377,16 +377,6 @@ class ServerRunner:
         self.java_bin = java_bin
         self.use_aikars = use_aikars
 
-    @property
-    def running(self) -> bool:
-        with self._state_lock:
-            return self._running
-
-    @running.setter
-    def running(self, value: bool) -> None:
-        with self._state_lock:
-            self._running = value
-
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r", encoding="utf-8") as f:
                 meta = json.load(f)
@@ -397,11 +387,21 @@ class ServerRunner:
         except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
             logger.warning("Could not load metadata for %s: %s", server_name, e)
             self.ram_allocation = ram_allocation
-            
+
         self.player_count = 0
         self.connected_players = set()
         self._players_lock = threading.Lock()
         self._stderr_done = threading.Event()
+
+    @property
+    def running(self) -> bool:
+        with self._state_lock:
+            return self._running
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        with self._state_lock:
+            self._running = value
 
     def start(self):
         if self.running:

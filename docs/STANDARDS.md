@@ -1,170 +1,277 @@
-# ZeroBlockBridge (ZBB) - Master Technical Standards
+# ZeroBlockBridge — Technical Standards
 
-This document defines the technical identity, architectural philosophy, and coding standards for the ZeroBlockBridge project. All contributors (Human or AI) must adhere to these rules to ensure the maintainability and scalability of the platform.
+This document defines the coding standards, architectural philosophy, and quality criteria for ZeroBlockBridge.
+All contributors (human or AI) must adhere to these rules.
 
----
-
-## 1. Architectural Philosophy: Event-Driven & Decoupled
-ZBB is built on a strict **decoupled architecture** to ensure the core logic can run independently of any specific interface.
-
-*   **Model-View-Controller (MVC) Hybrid**: The UI (`app/ui/main.py`) must never contain business logic. It serves only as a visual shell.
-*   **Event-Driven Communication**: All communication between the UI and the Core (`app/core/core.py`) must occur through the `EventBus`. Prohibir explícitamente el uso de `.on()` en favor de `.subscribe()`.
-*   **Headless-Ready**: Every feature must be implemented such that it could function via a CLI or REST API without a GUI. 
-*   **Single Source of Truth**: `ZBBManager` is the orchestrator. No other component should directly manage server lifecycles or global configurations.
-*   **Platform Neutrality**: `os.startfile` and `_winapi` are banned. All OS interaction must use cross-platform abstractions (`subprocess`, `os.symlink`). Paths use `pathlib.Path` exclusively. Directory symlinks use `os.symlink(src, dst, target_is_directory=True)` — never `_winapi.CreateJunction`.
-
-### Code Example: Emitting Events
-```python
-# In Core/Service
-self.events.emit(ServerEvent.READY, {"server": name})
-
-# In UI (Subscription)
-self.events.subscribe(ServerEvent.READY, self._update_ui_status)
-```
+> **Last updated:** 2026-06-24 — 410 tests, 100% pass.
 
 ---
 
-## 2. Concurrency Standards
-ZBB is a multi-threaded application handling multiple server processes and network monitors.
+## 1. Architectural Philosophy
 
-*   **Thread Safety**: Use `threading.Lock` for shared state access. EventBus uses `threading.RLock` for safe recursive subscribe/unsubscribe during iteration.
-*   **Daemon Threads**: All background threads (monitors, listeners, API pollers) **must** be initialized with `daemon=True` to ensure the application exits cleanly.
-*   **Non-Blocking UI**: Never perform I/O, heavy computation, or network requests on the main thread. Use `threading.Thread` for these tasks.
-*   **Race Condition Prevention**: Always use context managers (`with self._lock:`) when accessing shared resources.
-*   **Protocolo de Sincronía "Atomic-First" (Bytecode & IO)**:
-    *   **Integridad de Archivos**: Antes de invocar cualquier analizador de archivos (Bytecode, Logs, Configs), es OBLIGATORIO realizar un bucle de verificación de existencia en disco (`os.path.exists`) y tamaño (`os.path.getsize > 0`) con un timeout de 5s. Los eventos de hilos no son suficientes para garantizar que el SO ha liberado el archivo.
+### 1.1 Event-Driven & Decoupled
+
+ZBB is built on strict **decoupled architecture**:
+
+- **UI → Core → Services** (one-way). Never the reverse.
+- All UI↔Core communication via `EventBus`. No direct service calls from `app/ui/`.
+- `ZBBManager` is the single orchestrator for server lifecycle. No other component manages lifecycles.
+- **Headless-ready**: every feature must work without a GUI (preparatory for CLI/REST API).
+- Use `events.subscribe()` — `.on()` is banned.
+
+### 1.2 Platform Neutrality
+
+- `os.startfile` and `_winapi` are banned. Use `subprocess` + platform check.
+- Directory symlinks: `os.symlink(src, dst, target_is_directory=True)` — never `_winapi.CreateJunction`.
+- Paths: `pathlib.Path` exclusively (or `os.path.join` where pathlib isn't available).
+
+### 1.3 Lean Engineering
+
+- No feature unless it solves a problem the user encounters at least once per session.
+- Three similar lines beats a premature abstraction.
+- No error handling for scenarios that can't happen. Trust framework guarantees.
+- No half-finished implementations. No `# TODO: fix later` left in production code.
 
 ---
 
-## 3. Logging Protocol (CONV-01)
-The use of `print()` is strictly prohibited in the production codebase.
+## 2. Code Quality Rules
 
-*   **Logger Initialization**: Every module must initialize its own logger: `logger = logging.getLogger(__name__)`.
-*   **Standard Prefixes**: Logs should follow the format: `[LEVEL] [Module] Message`.
-*   **Prohibition of Emojis**: Do not use emojis in logging strings. Keep it technical and clean.
-*   **Log Levels**:
-    *   `DEBUG`: Detailed diagnostic information.
-    *   `INFO`: General confirmation of application milestones.
-    *   `WARNING`: Recoverable issues or unexpected behavior.
-    *   `ERROR`: Non-recoverable failures that require attention.
+### 2.1 Imports
 
-### 3a. Silent Failure Prevention (No-Silent Failures)
-Queda **estrictamente prohibido** el uso de `except: pass`.
+- All imports at **module top** (PEP 8). Inline imports only to break confirmed circular dependencies — document why with a comment.
+- No unused imports. `flake8 --select=F401` must return zero violations.
+- `from typing import Dict, List` is dead weight in Python 3.9+. Use `dict[str, ...]` and `list[...]`.
 
-**Requisitos obligatorios para todo bloque `except`:**
-1. La excepción capturada debe ser lo más específica posible (`ValueError`, `OSError`, `requests.ConnectionError`, etc.).
-2. Antes de cualquier retorno por defecto, se debe llamar a `logger.exception()` o `logger.warning()` con un mensaje que describa el contexto del fallo.
-3. Excepciones admitidas (con justificación documentada): operaciones de limpieza en destructores o cierres donde el error no afecta al estado del programa.
+### 2.2 Exceptions
+
+**Strictly prohibited:** `except: pass` and bare `except Exception: pass` without logging.
+
+Every `except` block must:
+1. Catch the most specific exception type possible.
+2. Call `logger.warning()` or `logger.exception()` with context.
+3. Document in a comment if swallowing is intentional (destructor cleanup, atexit, etc.).
 
 ```python
-# Correcto
+# Correct
 try:
     data = json.loads(raw)
 except json.JSONDecodeError as e:
-    logger.exception("Failed to parse server metadata: %s", e)
+    logger.warning("Failed to parse server metadata: %s", e)
     data = {}
 
-# Incorrecto
+# Wrong — never do this
 try:
     data = json.loads(raw)
 except:
     pass
 ```
 
----
+### 2.3 Logging
 
-## 4. Aesthetics & UI: Neo-Modern Brand Book
-The ZBB interface follows a **Neo-Modern** aesthetic designed to feel premium and state-of-the-art.
+- Every module: `logger = logging.getLogger(__name__)`.
+- No `print()` in production code.
+- No emojis in log strings.
+- Use `%`-formatting in log calls (not f-strings) — avoids wasteful string construction when log level is disabled:
+  ```python
+  logger.warning("Invalid port: %s", port)   # correct
+  logger.warning(f"Invalid port: {port}")     # wasteful
+  ```
+- Log levels:
+  - `DEBUG`: Detailed diagnostics.
+  - `INFO`: Milestones and confirmations.
+  - `WARNING`: Recoverable unexpected behavior, missed windows, fallback paths.
+  - `ERROR`: Non-recoverable failures needing attention.
 
-*   **Corner Radius (Regla del 12)**: Un `corner_radius=12` uniforme es **obligatorio** para todos los frames, botones y campos de entrada (excepto Toasts y alertas modales que usan `corner_radius=0` por diseño cuadrado). Esta es una métrica de certificación visual: cualquier componente con un valor distinto (sin excepción documentada) se considera una regression.
-*   **Color Palette**: Use **Slate**-based palettes for both Dark and Light modes to avoid high-contrast fatigue.
-*   **Typography**: Use **Roboto** (Body) and **Roboto Medium** (Headings/Titles).
-*   **Component Pattern**: Data-rich results (like the Modrinth Browser) must use **Cards** with subtle hover effects and clean borders.
-*   **Visual Feedback**: Buttons must have defined `hover_color` tokens.
+### 2.4 File I/O
 
----
+- Every `open()` for text must include `encoding="utf-8"`. Critical on Windows with non-UTF8 locale — MOTD with `§` characters corrupts otherwise.
+- `strptime` on user-directory filenames: always wrap in `try/except ValueError`. Users drop arbitrary files.
+- Atomic file operations: before reading a file written by another thread, verify `os.path.exists` + `os.path.getsize > 0` with a 5s timeout loop.
 
-## 5. Code Quality & Verification
-Quality is non-negotiable. ZBB maintains a robust testing culture.
+### 2.5 Threading
 
-*   **Linting First**: All code **must** pass `flake8 --select=E9,F63,F7,F82` with zero errors before committing.
-*   **Linting**: Adhere to PEP 8 standards. Use `flake8` for static analysis to ensure code cleanliness.
-*   **Documentation Integrity**: Preserving existing comments and docstrings is mandatory. New features must be documented using Google-style docstrings.
+- All background threads: `daemon=True`.
+- Shared mutable state: always protect with `threading.Lock`.
+- UI thread: only reads, never blocks. All I/O and computation in worker threads.
+- `self.after(0, callback)` for all UI updates from background threads.
+- `__init__` must initialize all data attributes before starting threads or subscribing to EventBus.
 
----
+### 2.6 NOTIFICATION Payload
 
-## 6. Quality Certification (Health Score)
+Always `{"msg": str, "type": "error" | "warning" | "info"}`. Never `"color"` key.
 
-Cada fase del Roadmap debe finalizar con una auditoría técnica que garantice un **Health Score > 90/100**.
+### 2.7 Crash Notifications
 
-### Criterios de Evaluación
-
-| Categoría | Máx | Penalización |
-|---|---|---|
-| **Código Muerto** | 25 pts | -5 pts por cada stub, import no usado, o función huérfana |
-| **Manejo de Errores** | 25 pts | -10 pts por cada `except: pass` sin registro |
-| **Consistencia Visual** | 20 pts | -5 pts por cada widget con `corner_radius` distinto de 12 (excluyendo Toasts y alertas con `corner_radius=0` documentado) |
-| **Documentación** | 15 pts | -5 pts por cada ruta obsoleta o enlace roto en docs/ |
-| **Neutralidad de Plataforma** | 15 pts | -5 pts por cada uso de `os.startfile` o `_winapi` sin abstracción |
-
-### Proceso de Certificación
-1. Ejecutar `flake8 --select=E9,F63,F7,F82 --statistics app/` — tolerancia cero.
-2. Escanear el código en busca de `except:`, `os.startfile`, `_winapi`.
-3. Verificar que todos los `corner_radius` en la UI sean `12` (excepción documentada: Toasts y alertas modales pueden usar `0`).
-4. Validar que no haya enlaces rotos en `docs/`.
-
-Un Health Score por debajo de 90 requiere una fase correctiva antes de continuar con el siguiente hito del Roadmap.
+Only `_on_server_crashed` in `core.py` emits crash `NOTIFICATION` toasts.
+Watchdog must never emit `NOTIFICATION` directly.
 
 ---
 
+## 3. UI Standards
+
+### 3.1 Framework
+
+`customtkinter` with tokens from `app/core/app_config.py`.
+
+### 3.2 Corner Radius Rule
+
+`corner_radius=12` on all widgets.
+**Documented exceptions** (must not be changed):
+- `toast.py`: `corner_radius=0` — intentional square design.
+- Modal alerts: `corner_radius=0`.
+
+Any value other than 12 (or documented 0) is a visual regression.
+
+### 3.3 Colors
+
+Use `AppConfig` constants only. Hardcoded color literals (`"green"`, `"white"`, `"gray"`, `"#f97316"`) in widget calls are banned. "Dirt Block" palette:
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `COLOR_BG_DARK` | `#111827` | Main background |
+| `COLOR_BG_SIDEBAR_DARK` | `#0f172a` | Sidebar |
+| `COLOR_BG_CARD_DARK` | `#1e293b` | Cards/panels |
+| `COLOR_ACCENT_AMBER` | `#d97706` | Highlights, warnings |
+| `COLOR_BTN_SUCCESS` | lime-400 | Start buttons |
+| `COLOR_BTN_DANGER` | red | Stop/destructive |
+
+### 3.4 Typography
+
+- Body: Roboto
+- Headings/Titles: Roboto Medium
+
+### 3.5 Buttons
+
+All buttons must define `hover_color`. No button without explicit hover feedback.
+
+### 3.6 UI Thread Safety
+
+Never read widgets from a background thread. Always `self.after(0, lambda: self.widget.configure(...))`.
+
 ---
 
-## 7. Git Workflow & Release Strategy
+## 4. Git Workflow
 
 ### Branch Hierarchy
+
 ```
-main        Production-ready releases (stable)
-  └─ dev    Integration branch for features
-       └─ feature/<name>   Feature branches from dev
-```
-
-### Workflow Rules
-1. **Feature branches** branch from `dev` and merge back to `dev` via `--ff-only`.
-2. `dev` merges to `main` only at release milestones (see Release Cadence below).
-3. Commits must be in **English**, with conventional prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
-4. No emojis in commit messages, PR descriptions, or branch names.
-5. Every merge to `dev` must pass the full test suite (`pytest tests/ -q`).
-6. Every merge to `main` must additionally pass linting (`flake8 --select=E9,F63,F7,F82`).
-
-### Release Cadence (Recommended)
-| Milestone | Tag | Merge to main |
-|-----------|-----|---------------|
-| Foundation complete (F3) | `v0.9.0-alpha` | ✅ done |
-| First user-visible feature (F4 UI) | `v1.0.0-beta` | After F4 UI complete |
-| External integration (F6 Discord) | `v1.0.0-rc` | After F6 |
-| Full release (F11 UI) | `v2.0.0` | After F11 |
-
-> **Status (2026-06-23):** F0–F4 backend done, P0 hardening in progress. Current dev branch is pre-beta. See `roadmap.md` for canonical state.
-
-### Local Merge Protocol (no `gh` CLI)
-```bash
-git checkout dev
-git merge --ff-only feature/<name>
-git checkout main
-git merge --ff-only dev
-git push origin dev main --no-verify
+main        ← Production releases only
+  └─ dev    ← Integration branch (all feature merges here)
+       └─ feature/<name>   ← Feature branches from dev
 ```
 
-### Commit Message Template
-```
-<type>: <short summary (max 72 chars)>
+### Rules
 
-<optional body with bullet points explaining what and why,
-not how. each bullet <= 72 chars.>
-```
+1. Feature branches from `dev`, merged back via `--ff-only`.
+2. `dev` → `main` only at release milestones, full test suite + lint required.
+3. Commits: English, conventional prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `perf:`.
+4. No emojis in commit messages or branch names.
+5. No `Co-Authored-By` lines. No Claude name anywhere in git history.
+6. Git identity: `DesvoSoft / desvox23@gmail.com` (already set in local config).
+7. Every merge to `dev` must pass full test suite.
 
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `style`.
+### Release Milestones
+
+| Milestone | Tag | Condition |
+|-----------|-----|-----------|
+| F0–F4 complete | `v1.0.0-beta` | F4 UI done, test suite green |
+| F5 + F6 + P0 complete | `v1.0.0-rc` | ✅ Achieved (dev) |
+| MODS-B + CA-HIGH | `v1.1.0` | After mod browser improvements |
+| F11 UI 2.0 | `v2.0.0` | Full UI redesign |
+
+**Current dev state:** v1.0.0-rc equivalent. F0–F6 + P0 complete. 410 tests.
 
 ---
 
-**Failure to adhere to these standards is considered a regression in project quality.****
+## 5. Testing
+
+### Running Tests
+
+```bash
+# Full suite
+pytest tests/ -q
+
+# Single file
+pytest tests/test_watchdog.py -v
+
+# Single test
+pytest tests/test_watchdog.py::TestWatchdog::test_backoff_cap -v
+
+# Fail-fast
+pytest tests/ -x -q
+
+# Syntax check after editing a file
+python -m py_compile app/core/core.py
+```
+
+### Test Helpers (`tests/conftest.py`)
+
+- `FakeEmitter`: in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests.
+- `FakeRunner`: minimal `ServerRunner` stub.
+
+### Test Standards
+
+- Mock `get_server_meta` and `update_server_meta` — never write real metadata files in unit tests.
+- Use `tmp_path` (pytest fixture) for all temporary file operations.
+- `MagicMock(spec=ZBBManager)` for orchestrator tests — prevents accidental attribute creation.
+- No `time.sleep()` in tests longer than 0.2s unless unavoidable (use threading.Event instead).
+- Cross-platform: use `tempfile.gettempdir()` not `/tmp/`.
+
+---
+
+## 6. Lint Gate (CI)
+
+Must pass before any commit to `dev`:
+
+```bash
+flake8 app/ --select=E9,F63,F7,F82
+```
+
+Zero tolerance — these are syntax errors, undefined names, undefined imports, and undefined `__all__`.
+
+Full lint (non-blocking, for review):
+
+```bash
+flake8 app/ --exit-zero --max-complexity=10 --max-line-length=127
+```
+
+Dead import check (must also be zero):
+
+```bash
+flake8 app/ --select=F401
+```
+
+---
+
+## 7. Quality Score
+
+Before each release milestone, audit ensures a **Health Score > 90/100**:
+
+| Category | Max | Deduction |
+|----------|-----|-----------|
+| Dead Code | 25 pts | -5 per orphan import/function/stub |
+| Error Handling | 25 pts | -10 per bare `except: pass` without logging |
+| Visual Consistency | 20 pts | -5 per non-12 `corner_radius` (undocumented) |
+| Documentation | 15 pts | -5 per broken path or stale claim in docs/ |
+| Platform Neutrality | 15 pts | -5 per `os.startfile` / `_winapi` usage |
+
+### Certification Steps
+
+```bash
+# 1. Syntax gate
+flake8 app/ --select=E9,F63,F7,F82 --statistics
+
+# 2. Dead imports
+flake8 app/ --select=F401
+
+# 3. Banned patterns
+grep -rn "os.startfile\|_winapi\|except:\s*pass\|except Exception:\s*pass" app/
+
+# 4. corner_radius violations (manual review of UI files)
+grep -rn "corner_radius" app/ui/ | grep -v "12\|= 0"
+
+# 5. Full test suite
+pytest tests/ -q
+```
+
+**Current score (2026-06-24): 97/100** — known deductions: LA-06 (get/set_server_ram thin wrappers still used by SPE; scheduled for future inline).
