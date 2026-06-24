@@ -1,13 +1,17 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-23
+> **Última actualización:** 2026-06-24
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 364 tests, 100% pass, 0 flaky
-> **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 6 resueltos, 13 pendientes
+> **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
+> **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
 > **UI Dirt Block:** ✅ Palette aplicada en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
-> **Bugs críticos resueltos (sesión 2026-06-23):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
-> **Siguiente prioridad:** MA-02/A2-B02 (encoding utf-8) → A2-B05 (atexit guard) → NR-03/06/07/08 → A2-B07 (TPS 1x/seg) → A2-B03 (backup restore atómico)
+> **Sesión 2026-06-23 (1):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
+> **Sesión 2026-06-23 (2):** MA-02/A2-B02 (encoding utf-8 × 7 opens), A2-B05 (atexit guard), NR-03 (os.startfile → subprocess), NR-06 (server type from meta), NR-07 (empty list CTA), NR-08 (console disabled until server selected)
+> **Sesión 2026-06-24:** A3-B01 (encoding VM) ✅ A3-B02/B03 (TPS falso eliminado + PLAYER_COUNT rate-limit) ✅ A3-A01 (_winapi → os.symlink) ✅ A3-A02 (probe_java público) ✅ A3-M01 (ERROR dead event) ✅ — 364 tests pass
+> **Sesión 2026-06-24 (2):** A3-B04 (backup restore atómico + _zip_worker eliminado) ✅ — 364 tests pass
+> **Siguiente prioridad:** A3-A03 (Protocol IS-A arch PR) → A3-A05 (get_versions freeze) → A3-M02 (metadata migration)
 
 ---
 
@@ -23,6 +27,22 @@
 | Type hint coverage | ~28.5% |
 | Threads potenciales | ~38 (todos daemon) |
 | Dependencias externas | 4 (customtkinter, requests, psutil, Pillow) |
+
+### Orden de desarrollo recomendado (2026-06-24)
+
+| Prioridad | ID | Qué | Por qué antes |
+|-----------|-----|-----|---------------|
+| 1 | **A3-B04** | Backup restore atómico | Riesgo de corrupción de datos activo. Único 🟡 de datos pendiente. |
+| 2 | **A3-A03** | Protocol IS-A → HAS-A | Arch PR — limpiar contrato ZBBManager. Hacer junto con P0.5 si aplica. |
+| 3 | **A3-A05** | get_versions UI freeze | UX bug real (wizard congela 4s). |
+| 4 | **A3-M02** | metadata.json migration | Servers legacy sin campo "type". Afecta usuarios que importan servers viejos. |
+| 5 | **F5** | Crash Report Collector | Feature nueva — después de foundation estable. |
+| 6 | **F6+** | Discord Webhook, Mods-B | Features. |
+| ⏸️ | **REFACT-1** | JavaResolver + launch steps | YAGNI para pre-alpha con 1 developer. Revisitar cuando equipo crezca o flujo cambie. |
+
+> Regla: bugs de datos → arch cleanup → features.
+
+---
 
 ### Foundation Score: 6.6/10 — Sólida con fisuras conocidas
 | Dimensión | Nota | Factor limitante |
@@ -48,7 +68,9 @@
 6. [⬆️ **P0: Foundation Hardening — PRIORIDAD MÁXIMA**](#p0-foundation-hardening)
 7. [⬆️ **EXE-PERF: .exe Startup/Shutdown Performance — PRIORIDAD RELEASE**](#exe-perf-exe-startupshutdown-performance)
 8. [⬆️ **BUG-AUDIT: 19 issues del audit 2026-06-19**](#bug-audit--2026-06-19)
-9. [▶️ F5: Crash Report Collector](#f5-crash-report-collector)
+9. [⬆️ **AUDIT-3: Validación externa 2026-06-24**](#audit-3-validación-externa-de-auditoría--2026-06-24)
+10. [⏸️ **REFACT-1: Refactors estructurales (pospuesto)**](#refact-1-refactors-estructurales-validados)
+11. [▶️ F5: Crash Report Collector](#f5-crash-report-collector)
 10. [▶️ F6: Discord Webhook](#f6-discord-webhook)
 11. [▶️ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
 12. [⏸️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
@@ -214,11 +236,11 @@
 | 4.7 | Eventos BACKUP_COMPLETED / BACKUP_FAILED | server_events.py:24-25 | ~5 | ✅ |
 | 4.8 | Tests (12 tests: defaults, persistence, is_due, mark_run, set_config, seconds_until_next) | tests/test_backup_scheduler.py | ~200 | ✅ |
 
-### UI ❌ (NO iniciado)
+### UI ✅ (Completado — commit 72b2128)
 | # | Tarea | Archivo | LOC est. | Esfuerzo | Estado |
 |---|-------|---------|----------|----------|--------|
-| **4.5** | **Auto-Backups section en Automation tab** | server_properties_editor.py:257-303 | ~80 | 1.5-2 hrs | ❌ |
-| **4.6** | **Next backup countdown en Backups tab** | server_properties_editor.py:188+ | ~30 | 0.5 hrs | ❌ |
+| **4.5** | **Auto-Backups section en Automation tab** | server_properties_editor.py:257-303 | ~80 | 1.5-2 hrs | ✅ |
+| **4.6** | **Next backup countdown en Backups tab** | server_properties_editor.py:188+ | ~30 | 0.5 hrs | ✅ |
 
 **Detalle 4.5:** En `setup_automation_tab()`, añadir una CardFrame "Auto-Backups" con:
 - Switch enable/disable (wired a `BackupScheduler.set_config(enabled=...)`)
@@ -406,6 +428,81 @@ Actualmente Watchdog emite `ServerEvent.CRASHED` con payload `{reason, exit_code
 **Criterio de aceptación:**
 - [ ] `flake8 app/ --select=F401` reporta 0 unused imports
 - [ ] Todos los tests pasan
+
+---
+
+## REFACT-1: Refactors estructurales validados
+
+**Estado: ⏸️ POSPUESTO — YAGNI para pre-alpha con 1 developer. Revisitar cuando equipo crezca o `start_server`/`_resolve_java_bin` necesiten cambios de feature.**
+
+**Origen:** Propuestas de mejora estructural evaluadas 2026-06-24. Config inheritance y task framework rechazados. Los 2 items abajo son válidos pero ratio beneficio/riesgo no justifica el trabajo ahora — el hotpath `start_server` es estable y ya tiene cobertura indirecta.
+
+---
+
+### R1-01: Launch pipeline — start_server() como steps funcionales
+
+**Problema:** `ServerOrchestrator.start_server()` es un método ~70 líneas con 5 steps secuenciales mezclados. Intestable como unidad — para testear `_resolve_java_bin` hay que instanciar `ZBBManager` completo.
+
+**Fix:** Extraer cada step como función pura con firma `(ctx) -> (ok, error_msg)`. Sin framework — funciones, no clases.
+
+**Steps propuestos:**
+```python
+_step_check_disk()          # disk space guard
+_step_read_meta()           # load server metadata
+_step_scaffold()            # pre_boot_scaffold + port
+_step_resolve_java()        # delegado a JavaResolver (ver R1-02)
+_step_launch()              # instanciar ServerRunner + setup_monitors
+```
+
+Cada step es testeable aisladamente con un contexto dict mínimo. `start_server()` se convierte en un orquestador de 5 llamadas secuenciales.
+
+**Rechazado:** `execute()`/`abort()` como clases abstractas — overkill para un flujo que no tiene concurrencia entre steps ni retry por step.
+
+| Campo | Valor |
+|-------|-------|
+| Archivos | `app/core/orchestrators.py`, tests nuevos |
+| Scope | ~70 líneas refactor + ~40 líneas tests |
+| Riesgo | 🟢 Bajo — comportamiento idéntico, solo extracción |
+| Prerequisito | R1-02 (JavaResolver) |
+| Estado | ⏸️ Pospuesto |
+
+---
+
+### R1-02: JavaResolver — extraer _resolve_java_bin a service
+
+**Problema:** `ZBBManager._resolve_java_bin()` vive en `core.py` como método privado del manager. Orquesta detección + bytecode analysis + auto-install. Intestable sin ZBBManager. Viola separación de capas (lógica de negocio en orchestrator).
+
+**Fix:** Mover a `app/services/java_resolver.py` como función pura:
+
+```python
+def resolve_java_bin(
+    server_dir: str,
+    mc_version: str,
+    required_java_cached: Optional[int],
+    auto_install_jdk: bool,
+    emit: Callable[[str, Any], None],   # events.emit
+) -> Optional[tuple[str, int]]:         # (java_bin, required_java) | None
+```
+
+`ZBBManager._resolve_java_bin()` se convierte en un wrapper de 1 línea. Testeable con emit=mock.
+
+**No incluye:** Reescribir `java_detector.py`, `java_installer.py`, ni `bytecode_analyzer.py` — solo mover la orquestación.
+
+| Campo | Valor |
+|-------|-------|
+| Archivos | `app/core/core.py` (extracción), `app/services/java_resolver.py` (nuevo), tests nuevos |
+| Scope | ~80 líneas mover + ~50 líneas tests |
+| Riesgo | 🟢 Bajo — firma idéntica, solo reubicación |
+| Prerequisito | Ninguno |
+| Estado | ⏸️ Pospuesto |
+
+---
+
+### Orden de ejecución REFACT-1
+
+```
+R1-02 (JavaResolver, independiente) → R1-01 (steps, depende de R1-02 para el step de java)
+```
 
 ---
 
@@ -741,6 +838,8 @@ F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 (backend) ✅
                                                  ↓
                                       BUG-AUDIT (19 issues, 2026-06-19)
                                                  ↓
+                                    AUDIT-3 (validación externa, 2026-06-24)
+                                                 ↓
                               ┌──────────────────┼──────────────────┐
                               ↓                  ↓                  ↓
                            F5 (Crash)        F6 (Discord)      MODS-B
@@ -885,11 +984,11 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 
 | Severidad | Total | Resueltos | Pendientes |
 |-----------|-------|-----------|-----------|
-| 🔴 CRITICAL | 2 | 1 | 1 |
+| 🔴 CRITICAL | 2 | 2 | 0 |
 | 🟡 HIGH | 6 | 3 | 3 |
 | 🟡 MEDIUM | 5 | 2 | 3 |
 | 🔵 LOW | 6 | 0 | 6 |
-| **TOTAL** | **19** | **6** | **13** |
+| **TOTAL** | **19** | **7** | **12** |
 
 ### Pendientes priorizados (orden de trabajo)
 
@@ -1060,6 +1159,85 @@ P0.4 ya en roadmap — agregar Python 3.12 LTS como consideración de distribuci
 
 ---
 
+## AUDIT-3: Validación externa de auditoría — 2026-06-24
+
+**Origen:** Reporte de auditoría externa sobre el estado actual del proyecto. Validado item-por-item contra el código real. Se excluyen items clasificados como YAGNI (ver tabla de exclusiones al final).
+
+---
+
+### AUDIT3-BUG: Bugs confirmados
+
+| ID | Archivo | Línea | Sev | Problema | Fix | Estado |
+|----|---------|-------|-----|---------|-----|--------|
+| **A3-B01** | `core/version_manager.py` | 89, 271 | 🔴 | `open()` sin `encoding="utf-8"` en `_load_cache` y `_save_cache` — en Windows con locale no-UTF8 corrompe `versions_cache.json` si contiene caracteres especiales. Mandatario por CLAUDE.md (MA-02 style) | Agregar `encoding="utf-8"` a ambos `open()` | ✅ Resuelto |
+| **A3-B02** | `core/orchestrators.py` | 176 | 🟡 | `TPS_UPDATE` emitía `1.0/dt` del tick loop Python (≈20Hz) — valor falso, no refleja TPS real del servidor MC. `ERROR` dead event eliminado. `RESTARTED/BACKUP_COMPLETED/BACKUP_FAILED` documentados como hooks futuros. | Eliminar TPS_UPDATE del enum y de la UI. Remover ServerEvent.ERROR. Documentar eventos huérfanos. | ✅ Resuelto |
+| **A3-B03** | `core/orchestrators.py` | 184 | 🟡 | `PLAYER_COUNT` emitido cada 50ms incondicionalmente en el tick loop — A2-B06 solo añadió diff guard en `logic.py` pero el tick sigue emitiendo 20x/seg desde orquestador | Rate-limit a 1x/seg con `_last_player_emit` guard en tick loop | ✅ Resuelto |
+| **A3-B04** | `services/backup_manager.py` | 149–163 | 🟡 | `restore_backup` tiene rollback vía `tmp_backup` pero no es swap atómico — si `extractall(tmp_backup)` falla en el rollback (disco lleno, permiso), corrupción total. Mismo que A2-B03, reclasificado 🔴→🟡 | Extraer a temp dir → swap atómico (mover server_path a server_path.bak, renombrar temp a server_path) | ✅ Resuelto — además eliminado _zip_worker thread innecesario (A2-LA-01) |
+| **A3-B05** | `core/playit_manager.py` | 522 | 🔵 | `_parse_line` chequea `self._api_dns or self._stdout_dns` fuera del lock (línea 522), lock recién en 532 — posible doble-emit de `TUNNEL_STATUS` bajo concurrencia | Mover el early-return check dentro del lock | ⬜ Pendiente (solo si se toca el archivo) |
+
+---
+
+### AUDIT3-ARCH: Arquitectura
+
+| ID | Archivo | Sev | Problema | Fix | Estado |
+|----|---------|-----|---------|-----|--------|
+| **A3-A01** | `core/logic.py` | 31 | 🟡 | `_winapi.CreateJunction` — API interna de Windows no documentada públicamente; breakable en actualizaciones de Python. `os.symlink(source, dest, target_is_directory=True)` funciona desde Python 3.8 en Windows con Developer Mode o admin | Reemplazar con `os.symlink(source, dest, target_is_directory=True)` | ✅ Resuelto |
+| **A3-A02** | `core/logic.py` | 431 | 🟡 | Import de función privada `_probe_java` dentro del método `start()` — hot path, símbolo privado, rompe si se refactoriza `java_detector` | Exponer `probe_java` como función pública en `java_detector.py`, mover import al top de `logic.py` | ✅ Resuelto |
+| **A3-A03** | `core/core.py` | 29 | 🟡 | `ZBBManager` hereda 4 Protocols (IS-A) pero delega a sub-orquestadores (HAS-A) — los Protocols deberían tipar los orchestrators individuales, no el manager. Además `BackupOrchestratorProtocol` expone `_check_auto_backup`/`_run_auto_backup` (privados) en contrato público | Eliminar herencia de Protocol en ZBBManager; mover protocols a orchestrators. Abordar junto con P0.5 | ⬜ Pendiente (arch PR) |
+| **A3-A04** | `core/core.py` | 104–259 | 🔵 | 4 inline imports de `update_server_meta` y `SERVERS_DIR` dentro de métodos (`_save_jdk_metadata`, `select_server`, `_resolve_java_bin`, `load_server_manually`) — workarounds de circular deps. Fix oportunístico: mover al top cuando se toque core.py por otra razón | Mover imports al top + resolver circular dep | ⬜ On-radar |
+| **A3-A05** | `services/version_manager.py` | 284 | 🟡 | `get_versions()` llama `_wait_for_background_refresh(timeout=4)` con `thread.join(4)` — si viene de UI thread (wizard), freezea UI hasta 4s. Ya en A2-P04 | Eliminar join; usar callbacks para notificar al caller | ⬜ Pendiente |
+
+---
+
+### AUDIT3-MAINT: Mantenimiento
+
+| ID | Archivo | Sev | Problema | Fix | Estado |
+|----|---------|-----|---------|-----|--------|
+| **A3-M01** | `core/server_events.py` | 🔵 | `ServerEvent.ERROR` existe pero **nunca emitido** ni suscrito — dead code confirmado. `RESTARTED`, `BACKUP_COMPLETED`, `BACKUP_FAILED` sí emitidos pero sin subscribers en UI — candidatos a conectar o documentar como hooks futuros | Eliminar `ERROR`. Documentar los 3 restantes como "available for future UI subscribers" en server_events.py | ✅ Resuelto |
+| **A3-M02** | `servers/*/metadata.json` | 🟡 | Servers creados antes del wizard moderno pueden carecer del campo `"type"` en metadata.json. Código hace `meta.get("type", "Vanilla")` como fallback pero el display y Modrinth search quedan incorrectos si el server era Fabric/Forge | Migration script one-shot: para cada `metadata.json` sin `"type"`, inferir del nombre del JAR o prompting al usuario en primer arranque. Activar en `bootstrap()` check | ⬜ Pendiente |
+
+---
+
+### AUDIT3-EXCLUIDOS (YAGNI acordado)
+
+| ID | Motivo exclusión |
+|----|-----------------|
+| 1.7 countdown UX | No bug, YAGNI |
+| 1.9 jar_events leak | Negligible en práctica — un Event por server_dir único |
+| 2.4/2.5 thread pools | 28 threads fine en hardware actual |
+| 3.2 PlayitManager callbacks vs EventBus | Arquitectura inconsistente pero funcional — refactor invasivo sin ganancia observable. No re-reportar. |
+| 3.6 statemanager globals | Tests no sangran esto, confirmado |
+| 3.7 orphan events (audit report) | **Audit se equivocó**: CRASHED sí tiene subscriber (core.py:318). RESTARTED/BACKUP_COMPLETED/BACKUP_FAILED sí emitidos — ver A3-M01. |
+| 4.1 settings_manager singleton | Works fine, debounced flush, thread-safe — refactor sin ganancia |
+| 4.4 variable name tmp_backup | Cosmético — renombrar a `pre_restore_backup` de paso si se toca por A3-B04 |
+| 4.5 legacy Dict/List typing | Cero urgencia |
+| LA-04 hardcoded fallbacks | Ya registrado en AUDIT-2. Falls silenciosos en metadata corrupta — low impact, on-radar |
+| 5.3 Python 3.14 | Consideración de release, no bug de código |
+
+---
+
+### Orden de ejecución AUDIT3 recomendado
+
+```
+Crítico primero:
+A3-B01 (encoding VM, 5min) → A3-B02 (TPS guard, 5min) → A3-B03 (PLAYER_COUNT rate-limit, 15min)
+
+Seguridad interna:
+A3-A01 (_winapi → os.symlink, 10min) → A3-A02 (probe_java público, 15min)
+
+Arquitectura (PR separado):
+A3-A03 (Protocol IS-A → HAS-A, 45min — junto con P0.5)
+A3-A04 (inline imports, 10min — on-radar, oportunístico)
+
+Rendimiento/UX:
+A3-A05 (version_manager get_versions freeze, 20min — ya A2-P04)
+
+Si se toca playit_manager.py por otra razón:
+A3-B05 (TOCTOU race, 5min — oportunístico)
+```
+
+---
+
 ## Notas para Devs y Agentes
 
 ### Reglas de Oro
@@ -1140,6 +1318,110 @@ Todas las features requieren **0 nuevas dependencias externas**.
 
 ---
 
+## COMPETITIVE-ANALYSIS — auto-mcs & Prism Launcher (2026-06-23)
+
+**Origen:** Investigación comparativa. Competidores analizados: auto-mcs (Python, server manager), Prism Launcher (Qt, client launcher).
+
+**Fuentes:** GitHub repos + sitios oficiales. Investigación ejecutada vía subagentes en sesión 2026-06-23.
+
+---
+
+### ZBB Fortalezas Únicas (mantener y profundizar)
+
+| Feature | ZBB | auto-mcs | Prism |
+|---------|-----|----------|-------|
+| Heartbeat zombie detection | ✅ | ❌ | ❌ |
+| TPS lag monitor (sliding window) | ✅ | ❌ | ❌ |
+| Exponential backoff crash recovery | ✅ | básico | ❌ |
+| Java auto-download (Adoptium) + bytecode analyzer | ✅ mejor | parcial | ✅ |
+| Scheduler (restart + backup) | ✅ | ❌ | ❌ |
+| SHA1 download validation | ✅ | — | — |
+
+ZBB lidera en **auto-healing**. Nadie más documenta zombie detection ni exponential backoff.
+
+---
+
+### Brechas Identificadas
+
+#### CA-HIGH: Alta prioridad, scope acotado
+
+| ID | Feature | Referencia | LOC est. | Esfuerzo |
+|----|---------|-----------|----------|---------|
+| **CA-H01** | **JVM args expuestos por servidor** — UI para `-Xmx`/`-Xms` + flags custom por servidor; actualmente hardcodeados o Aikar auto-set | Prism da este control por instancia | ~60 | 1.5 hrs |
+| **CA-H02** | **Player management unificado** — operators + bans + whitelist en una sola página | auto-mcs patrón | ~80 | 2 hrs |
+| **CA-H03** | **Console search/filter** — filtro por keyword/level/player en raw output | ninguno lo tiene | ~40 | 1 hr |
+| **CA-H04** | **World switching UI** — listar mundos en server dir, cambiar `level-name` sin editar server.properties a mano | auto-mcs lo tiene | ~60 | 1.5 hrs |
+
+#### CA-MED: Scope medio
+
+| ID | Feature | Referencia | LOC est. | Esfuerzo |
+|----|---------|-----------|----------|---------|
+| **CA-M01** | **NeoForge/Quilt support** — auto-mcs soporta; ZBB no | auto-mcs | ~80 | 2 hrs |
+| **CA-M02** | **CurseForge integration** — Modrinth solo; Prism integra ambos | Prism | ~120 | 3 hrs |
+| **CA-M03** | **Mod dep graph + conflict detection** — Modrinth client actual no resuelve dependencias | Prism | ~150 | 3 hrs |
+| **CA-M04** | **Modpack import** — `.mrpack` → unpack a server dir | auto-mcs, Prism | ~100 | 2 hrs |
+| **CA-M05** | **Performance metrics dashboard** — TPS detectado pero sin historial. Gráfico simple de TPS+RAM/tiempo | — | ~150 | 3 hrs |
+| **CA-M06** | **Version/modloader hot-switch** — cambiar MC version o loader sin crear server nuevo | auto-mcs | ~120 | 2.5 hrs |
+
+#### CA-LONG: Largo plazo / estructural
+
+| ID | Feature | Referencia | Notas |
+|----|---------|-----------|-------|
+| **CA-L01** | **Multi-server management** — mayor brecha vs auto-mcs. ZBB maneja 1 servidor. Requiere refactor de ZBBManager | auto-mcs | Refactor más grande del proyecto |
+| **CA-L02** | **Server profiles/instances** — modelo Prism: cada servidor como config aislada portátil | Prism | Prerrequisito de CA-L01 |
+| **CA-L03** | **Remote management** — REST API básica + cliente pareado (patrón Telepath de auto-mcs) | auto-mcs Telepath | Requiere F10 (Linux) + headless mode |
+| **CA-L04** | **Spigot/CraftBukkit/Paper plugins (Hangar)** — auto-mcs soporta más registros | auto-mcs | Agregar Hangar API client |
+
+---
+
+### Orden de Ejecución Recomendado
+
+```
+Sprint corto (< 1 semana):
+  CA-H01 (JVM args UI) → CA-H02 (unified player mgmt) → CA-H03 (console filter)
+  → CA-H04 (world switching)
+
+Sprint medio:
+  CA-M01 (NeoForge/Quilt) → CA-M04 (modpack import) → CA-M03 (dep graph)
+  → CA-M05 (perf dashboard) → CA-M06 (hot-switch)
+
+Largo plazo:
+  CA-L01 (multi-server) ← CA-L02 primero (profiles)
+  CA-L03 (remote mgmt) ← F10 (Linux) primero
+```
+
+**Dependencias:** CA-H01 require acceso a `logic.py:start_server()` JVM flags. CA-H02 extiende `players_dashboard.py`. CA-L01 requiere refactor completo de `ZBBManager` → multi-instancia.
+
+---
+
+### Feature Matrix Competitiva Completa
+
+| Área | ZBB | auto-mcs | Prism | Notas |
+|------|-----|----------|-------|-------|
+| Multi-server | ❌ | ✅ | ✅ | Brecha crítica |
+| Server types | 5 | 9 | — | ZBB sin NeoForge/Quilt/Spigot |
+| Mod manager (Modrinth) | ✅ básico | ✅ | ✅ | ZBB sin dep graph |
+| Mod manager (CurseForge) | ❌ | ❌ | ✅ | |
+| Modpack import (.mrpack) | ❌ | ✅ | ✅ | |
+| Scripting engine | ❌ | ✅ amscript | ❌ | auto-mcs único |
+| Remote management | ❌ | ✅ Telepath | ❌ | |
+| Crash recovery (backoff) | ✅ | básico | ❌ | ZBB único |
+| Zombie detection | ✅ | ❌ | ❌ | ZBB único |
+| TPS monitoring | ✅ | ❌ | ❌ | ZBB único |
+| Backup + scheduler | ✅ | ✅ | ❌ | |
+| Java auto-download | ✅ | parcial | ✅ | ZBB más detallado |
+| Bytecode analyzer | ✅ | ❌ | ❌ | ZBB único |
+| Tunnel (Playit.gg) | ✅ | ✅ | ❌ | |
+| World switching | ❌ | ✅ | ❌ | |
+| Console filter/search | ❌ | ❌ | ❌ | Oportunidad |
+| Player mgmt unificado | parcial | ✅ | ❌ | |
+| JVM args por servidor | ❌ | parcial | ✅ | |
+| Performance dashboard | ❌ | ❌ | ❌ | Oportunidad |
+| Cross-platform | Windows | Win/Linux/Mac | Win/Linux/Mac | ZBB solo Windows |
+| Headless/CLI | ❌ | ✅ Docker | ❌ | |
+
+---
+
 ## Glosario de Términos
 
 | Término | Definición |
@@ -1157,46 +1439,44 @@ Todas las features requieren **0 nuevas dependencias externas**.
 
 ---
 
-## Handover — Sesión 2026-06-23
+## Handover — Sesión 2026-06-23 (2)
 
 ### Estado del branch
 
 - **Branch activo:** `dev`
-- **Último commit:** `3117759` — CA-02 fix (java_bin en installers)
-- **Commits esta sesión:** `e37cc0a` → `a4a909c` → `6a2308c` → `3117759`
+- **Último commit:** `4af2325` — docs(roadmap): mark CA-02 resolved
+- **Commits sesión 1 (2026-06-23):** `e37cc0a` → `a4a909c` → `6a2308c` → `3117759` → `4af2325`
+- **Commits sesión 2 (2026-06-23):** sin commits nuevos — cambios pendientes de commit
 - **Push pendiente:** NO — usuario hace push manualmente
 
-### Qué se resolvió esta sesión
+### Qué se resolvió (sesión 1 + sesión 2)
 
-| ID | Commit | Archivo(s) | Fix |
+| ID | Commit / Sesión | Archivo(s) | Fix |
 |----|--------|------------|-----|
 | NR-DASH | e37cc0a | `ui/main.py` | Separador horizontal entre stats y tunnel eliminado |
-| NR-01 | e37cc0a | `ui/main.py` + `app_config.py` | `text_color="white"` → `COLOR_TEXT_PRIMARY` (token nuevo) |
+| NR-01 | e37cc0a | `ui/main.py` + `app_config.py` | `text_color="white"` → `COLOR_TEXT_PRIMARY` |
 | NR-02 | e37cc0a | `ui/main.py` | `text_color="green"` en Java check → `COLOR_BTN_SUCCESS` |
 | NR-09 | e37cc0a | `ui/main.py` | `#f97316` hardcodeado → `COLOR_ACCENT_AMBER` |
 | A2-B04 | e37cc0a | `core/version_manager.py` | Forge stale detection regex siempre-True corregida |
-| A2-B06/D02 | e37cc0a | `core/logic.py` | `PLAYER_COUNT` emite solo si valor cambió; `import re` al top |
-| JAVA-FLOOR | a4a909c | `core/core.py` | Forge bootstrap shim (class v52=Java8) overrideaba version-map → `jvm_config_error`. Fix: `bytecode_java` y `required_java_cached` floored por `get_required_java(mc_version)` |
-| CA-02 | 3117759 | `core/logic.py`, `ui/main.py` | `_run_installer` usaba `"java"` hardcodeado. `install_fabric`/`install_forge` ahora aceptan `java_bin`. Wizard resuelve bin correcto via `JdkManagerInstance.ensure_java` antes de llamar. Bytecode section del wizard también aplica floor check y guarda `required_java` correcto en metadata. |
+| A2-B06/D02 | e37cc0a | `core/logic.py` | `PLAYER_COUNT` emite solo si valor cambió |
+| JAVA-FLOOR | a4a909c | `core/core.py` | bytecode/cached java floored por version-map |
+| CA-02 | 3117759 | `core/logic.py`, `ui/main.py` | `_run_installer` java hardcoded → java_bin param |
+| MA-02/A2-B02 | sesión 2 | `core/logic.py` | `encoding="utf-8"` en los 7 `open()` de logic.py |
+| A2-B05 | sesión 2 | `core/playit_manager.py` | `_atexit_stop` wrapped en try/except |
+| NR-03 | sesión 2 | `ui/main.py` | `os.startfile` → `_open_in_file_manager(path)` subprocess |
+| NR-06 | sesión 2 | `ui/main.py` | Server type desde `meta.get("type")`, no heurística de archivos |
+| NR-07 | sesión 2 | `ui/main.py` | Lista vacía → CTA "→ Create your first server" |
+| NR-08 | sesión 2 | `ui/main.py` | Console `entry_console`/`btn_send` disabled hasta server seleccionado |
+| modrinth TclError | sesión 2 | `ui/modrinth_browser.py` | `winfo_exists()` guard en `_apply_icon` |
 
 ### Próximos fixes recomendados (en orden)
 
-**Bloque 1 — Corrección datos/encoding (< 30 min):**
-1. **MA-02 / A2-B02** — `open()` sin `encoding="utf-8"` en `logic.py:check_eula` (~línea 588) y `logic.py:load_config` (~línea 64). En Windows con MOTDs con `§` crashea silenciosamente. Fix: agregar `encoding="utf-8"` a ambos opens. CLAUDE.md lo exige explícitamente.
-2. **A2-B05** — `core/core.py:_atexit_stop` (buscar con grep) sin try/except. Wrap simple.
-
-**Bloque 2 — UX (30-45 min):**
-3. **NR-03** — `os.startfile()` en `main.py:open_server_folder` (~línea 403). Patrón correcto ya existe en `open_mods_folder_action` (~línea 453). Unificar: extraer método `_open_in_file_manager(path)` con subprocess platform-check, reutilizar en ambos sitios. CLAUDE.md prohíbe `os.startfile`.
-4. **NR-06** — Server type en `on_server_select` detectado por heurística de archivos (~línea 382-386). Usar `meta.get("type")` en su lugar — el meta ya lo tiene.
-5. **NR-07** — `_render_server_list`: "No servers found." label sin acción. Reemplazar con botón `→ Create your first server` que llame `self.create_server_dialog()`.
-6. **NR-08** — Console `entry_console` + `btn_send` activos antes de seleccionar servidor. Deshabilitar en `__init__`, habilitar en `on_server_select`.
-
 **Bloque 3 — Performance (15-20 min):**
-7. **A2-B07/P02** — `orchestrators.py` emite `TPS_UPDATE` cada 50ms. Cambiar a 1x/seg: añadir `_last_tps_emit = 0`, emitir solo si `time.monotonic() - _last_tps_emit >= 1.0`.
-8. **A2-P03** — `JavaDetector._shared_cache` sin TTL. Si usuario instala Java mientras ZBB corre, no lo ve hasta restart. Agregar `_cache_time` + TTL de 300s.
+1. **A2-B07** — `orchestrators.py` emite `TPS_UPDATE` cada 50ms. Throttle a 1x/seg: añadir `_last_tps_emit = 0`, emitir solo si `time.monotonic() - _last_tps_emit >= 1.0`.
+2. **A2-P03** — `JavaDetector._shared_cache` sin TTL. Agregar `_cache_time` + TTL de 300s.
 
 **Bloque 4 — Crítico de datos (requiere tests antes de merge):**
-9. **A2-B03** — `backup_manager.py:restore_backup` extrae directo al dir del servidor sin swap atómico. Si falla a mitad → server corrupto. Fix: extraer a `<server>_restore_tmp`, luego renombrar original a `<server>_bak_<ts>`, renombrar tmp a nombre final.
+3. **A2-B03** — `backup_manager.py:restore_backup` sin swap atómico. Fix: extraer a `<server>_restore_tmp`, renombrar original a `<server>_bak_<ts>`, renombrar tmp a nombre final.
 
 ### Cosas importantes a saber
 
@@ -1204,20 +1484,22 @@ Todas las features requieren **0 nuevas dependencias externas**.
 - **PowerShell heredoc:** `@'...'@` con `'@` en columna 0. Bash `<<'EOF'` no funciona en PS.
 - **`rtk` no disponible en PS:** Usar git/commands directos. RTK solo funciona en Bash.
 - **`os.startfile` prohibido** por CLAUDE.md — siempre subprocess con platform-check.
-- **Versión de Forge en metadata:** `"version": "26.2"` en `servers/test/metadata.json` es la versión del loader de Forge, no la MC version. `get_required_java("26.2")` devuelve 17 por default — funciona, pero es deuda: el wizard debería guardar la MC version en un campo separado (ej. `"mc_version"`).
+- **Versión de Forge en metadata:** `"version": "26.2"` en `servers/test/metadata.json` es la versión del loader de Forge, no la MC version. Deuda: wizard debería guardar `"mc_version"` separado.
 - **`test_server`** (Vanilla 1.20.1, Java 17 portable) — funciona correctamente.
-- **`test`** (Forge 1.20.x) — después de JAVA-FLOOR + CA-02 debería arrancar. Validar con usuario.
-- **`app/servers/`** está en `.gitignore` — no se commitea metadata de servidores.
+- **`test`** (Forge 1.20.x) — después de JAVA-FLOOR + CA-02 debería arrancar. Validar.
 
-### Archivos modificados esta sesión
+### Archivos modificados (sesión 2, sin commit aún)
 
 ```
-app/core/app_config.py        — COLOR_TEXT_PRIMARY token nuevo
-app/core/core.py              — _resolve_java_bin: floor check bytecode vs version-map
-app/core/logic.py             — _run_installer/install_fabric/install_forge: java_bin param
-                                _parse_player_count: diff guard + import re al top
-app/core/version_manager.py  — Forge stale detection fix
-app/ui/main.py                — NR-DASH/01/02/09; wizard: java_bin resuelto antes de install,
-                                bytecode floor check, update_server_meta con java correcto
-roadmap.md                    — Estado actualizado + handover
+app/core/logic.py             — encoding="utf-8" en los 7 open()
+app/core/playit_manager.py    — _atexit_stop wrapped en try/except
+app/ui/main.py                — NR-03/06/07/08: _open_in_file_manager, type from meta,
+                                empty list CTA, console disabled until server select
+app/ui/modrinth_browser.py    — winfo_exists() guard en _apply_icon
+CLAUDE.md                     — 3 stale KNOWN BUG blocks removidos
+docs/ARCHITECTURE.md          — Notifications section updated (CA-01 ownership, P0.6 gap)
+docs/STANDARDS.md             — Release Cadence: F3 ✅, status note 2026-06-23
+docs/SKILL.md                 — Archivos Clave table removed → pointer to ARCHITECTURE.md
+README.md                     — SKILL.md removed from docs section
+roadmap.md                    — Status fixes: F4 UI ✅, BUG-AUDIT table corrected, handover updated
 ```

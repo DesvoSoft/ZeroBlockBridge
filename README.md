@@ -109,7 +109,6 @@ ZeroBlockBridge/
 ## Documentation
 
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Auto-healing system, technical details, architecture overview.
-- **[SKILL.md](docs/SKILL.md)** — AI assistant guidelines for development.
 - **[STANDARDS.md](docs/STANDARDS.md)** — Master technical standards and architecture guide.
 - **[ROADMAP.md](roadmap.md)** — Development roadmap and phase tracking (local-only, untracked from repo).
 

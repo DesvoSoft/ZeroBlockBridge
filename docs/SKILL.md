@@ -97,34 +97,5 @@ sequenceDiagram
 - **Cadena de Fallback**: Java del Sistema → Caché JDK → Descarga → Error.
 
 ## Archivos Clave
-| Archivo | Propósito |
-|---|---|
-| `app/launcher.py` | Punto de entrada principal |
-| `app/ui/main.py` | Coordinación de la UI |
-| `app/core/core.py` | Orquestador central (ZBBManager) |
-| `app/core/logic.py` | Lógica de negocio principal (ServerRunner, Scheduler) |
-| `app/core/constants.py` | Constantes globales y rutas |
-| `app/core/version_manager.py` | Caché y descarga de versiones de Minecraft |
-| `app/core/playit_manager.py` | Ciclo de vida del agente Playit.gg |
-| `app/core/statemanager.py` | Gestión de estado global con debounce |
-| `app/core/server_events.py` | Sistema EventBus (subscribe/emit) |
-| `app/core/orchestrators.py` | 4 sub-orquestadores (Server, Backup, Tunnel, Scheduler) |
-| `app/core/protocols.py` | Protocol classes para structural typing |
-| `app/services/watchdog.py` | Detección de crashes y auto-reinicio |
-| `app/services/heartbeat.py` | Monitor de latido (detección de zombies) |
-| `app/services/lag_monitor.py` | Monitor de lag del servidor |
-| `app/services/backup_manager.py` | Creación y restauración de backups ZIP |
-| `app/services/server_properties.py` | Carga/guardado de server.properties |
-| `app/services/sanitizer.py` | Seguridad de comandos |
-| `app/services/bytecode_analyzer.py` | Análisis de versión Java desde el JAR |
-| `app/services/java_installer.py` | Descarga automática de JDK |
-| `app/services/playit_api.py` | Cliente API REST de Playit.gg |
-| `app/services/sha1_validator.py` | Verificación SHA1 de descargas |
-| `app/services/scaffolder.py` | Scaffolding pre-arranque del servidor |
-| `app/services/aikars_flags.py` | Calculadora de flags Aikar's JVM |
-| `app/services/modrinth.py` | Cliente API de Modrinth |
-| `app/services/console_buffer.py` | Buffer circular de consola |
-| `app/services/settings_manager.py` | Configuración global de la app |
-| `app/ui/toast.py` | Sistema de notificaciones toast (UI) |
-| `app/ui/players_dashboard.py` | Panel de gestión de jugadores y whitelist |
-| `app/core/app_config.py` | Configuración de la aplicación (temas, tokens) |
+
+Ver `docs/ARCHITECTURE.md` para el mapa completo de archivos y sus responsabilidades.

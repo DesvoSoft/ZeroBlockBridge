@@ -139,10 +139,12 @@ main        Production-ready releases (stable)
 ### Release Cadence (Recommended)
 | Milestone | Tag | Merge to main |
 |-----------|-----|---------------|
-| Foundation complete (F3) | `v0.9.0-alpha` | Now |
-| First user-visible feature (F4 UI) | `v1.0.0-beta` | After F4 UI |
+| Foundation complete (F3) | `v0.9.0-alpha` | ✅ done |
+| First user-visible feature (F4 UI) | `v1.0.0-beta` | After F4 UI complete |
 | External integration (F6 Discord) | `v1.0.0-rc` | After F6 |
 | Full release (F11 UI) | `v2.0.0` | After F11 |
+
+> **Status (2026-06-23):** F0–F4 backend done, P0 hardening in progress. Current dev branch is pre-beta. See `roadmap.md` for canonical state.
 
 ### Local Merge Protocol (no `gh` CLI)
 ```bash

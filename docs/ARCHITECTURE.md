@@ -97,11 +97,13 @@ Protects against OS command injection via the console:
 
 All auto-healing events display a **Toast notification** (bottom-right overlay, auto-dismiss after 4 seconds):
 
-- Server crash detected (red)
+- Server crash detected (red) — emitted by `_on_server_crashed` in `core.py` (single source; Watchdog only emits `CRASHED` event, not the notification)
 - Zombie server detected (orange)
 - Lag threshold exceeded (orange)
 - Retry exhaustion (red)
 - Restart attempts (orange)
+
+> **Known gap (P0.6):** `ServerEvent.CRASHED` has no subscriber in `ZBBManager._setup_monitors()`. Crash history is not persisted to `metadata.json`. See roadmap P0.6.
 
 ---
 
@@ -226,6 +228,36 @@ All required Python packages are listed in `requirements.txt`:
 - **requests** — HTTP client for downloads and API calls.
 - **psutil** — System resource monitoring (RAM, processes).
 - **Pillow** — Image processing (server icons).
+
+---
+
+## Competitive Context & Planned Expansions
+
+Análisis comparativo realizado 2026-06-23 contra **auto-mcs** (Python server manager) y **Prism Launcher** (Qt client). Resumen de brechas y oportunidades documentadas en `roadmap.md` (sección `COMPETITIVE-ANALYSIS`).
+
+### ZBB Diferenciadores Únicos
+
+Features que ningún competidor documentado implementa al mismo nivel:
+
+- **Heartbeat zombie detection** — `heartbeat.py` detecta Java vivo pero irresponsivo vía cmd `list` + timeout 15s.
+- **TPS lag monitor con sliding window** — `lag_monitor.py`, 5 spikes/5 min configurable.
+- **Exponential backoff crash recovery** — `watchdog.py`, counter reset tras 10 min uptime.
+- **Bytecode-based Java floor** — `bytecode_analyzer.py` extrae versión requerida del JAR antes de lanzar.
+
+### Brechas Pendientes de Alta Prioridad
+
+Estos features existen en competidores y son candidatos para sprints próximos:
+
+| ID | Feature | Archivo afectado |
+|----|---------|-----------------|
+| CA-H01 | JVM args UI por servidor | `logic.py`, `server_properties_editor.py` |
+| CA-H02 | Player management unificado (ops+bans+whitelist) | `players_dashboard.py` |
+| CA-H03 | Console search/filter | `ui_components.py` (Console widget) |
+| CA-H04 | World switching UI | nuevo `world_manager.py` + `server_properties.py` |
+| CA-M01 | NeoForge/Quilt server types | `version_manager.py`, `logic.py` |
+| CA-L01 | Multi-server management | refactor `ZBBManager`, `orchestrators.py` |
+
+Ver `roadmap.md → COMPETITIVE-ANALYSIS` para tabla completa, estimados de esfuerzo y orden de ejecución.
 
 ---
 
