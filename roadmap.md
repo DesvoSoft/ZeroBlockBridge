@@ -1,18 +1,15 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-24 (rev 2)
+> **Última actualización:** 2026-06-24 (rev 3)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 399 tests, 100% pass, 0 flaky
+> **Test count:** 409 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
 > **UI Dirt Block:** ✅ Palette aplicada en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
-> **Sesión 2026-06-23 (1):** A2-B04 (Forge stale detection), A2-B06 (PLAYER_COUNT spam), JAVA-FLOOR (shim bytecode vs version-map), CA-02 (installer java hardcoded)
-> **Sesión 2026-06-23 (2):** MA-02/A2-B02 (encoding utf-8 × 7 opens), A2-B05 (atexit guard), NR-03 (os.startfile → subprocess), NR-06 (server type from meta), NR-07 (empty list CTA), NR-08 (console disabled until server selected)
-> **Sesión 2026-06-24:** A3-B01 (encoding VM) ✅ A3-B02/B03 (TPS falso eliminado + PLAYER_COUNT rate-limit) ✅ A3-A01 (_winapi → os.symlink) ✅ A3-A02 (probe_java público) ✅ A3-M01 (ERROR dead event) ✅ — 364 tests pass
-> **Sesión 2026-06-24 (2):** A3-B04 ✅ A3-A03 ✅ A3-A05 ✅ A3-M02 ✅ F5 ✅ — 373 tests pass
 > **Sesión 2026-06-24 (3):** P0.1 ✅ (26 tests orchestrators) P0.4 ✅ parcial (requirements pinneados, falta pyproject.toml) P0.7 ✅ parcial (dead imports eliminados en 9 archivos) SPE winfo_exists bug ✅ — 399 tests pass
-> **Siguiente prioridad:** P0.4 completo (pyproject.toml) → P0.5 (circular dep) → F6 (Discord Webhook)
+> **Sesión 2026-06-24 (4):** P0.4 ✅ (pyproject.toml creado, pip install -e . ok) P0.5 ✅ (ya estaba resuelto — ServerState en constants.py) P0.7 ✅ (flake8 F401=0) HA-05/HA-06 ✅ (ServerRunner.running property con lock, clear players en start) F6 ✅ (Discord Webhook — 10 tests) — 409 tests pass
+> **Siguiente prioridad:** MODS-B → BUG-AUDIT pendientes (MA-03, MA-05) → NR-04/05/10 → CA-HIGH
 
 ---
 
@@ -557,11 +554,13 @@ class DiscordWebhookService:
 - Solo eventos importantes: CRASHED, SERVER_READY, BACKUP_COMPLETED, BACKUP_FAILED
 
 ### Criterio de aceptación
-- [ ] Mensaje POST a Discord webhook cuando ocurre evento configurado
-- [ ] Worker único secuencial (queue.Queue) sin thread exhaustion
-- [ ] Rate-limit 2s entre mensajes
-- [ ] Silencio si no hay URL configurada (0 overhead)
-- [ ] URL no se loggea ni expone
+- [x] Mensaje POST a Discord webhook cuando ocurre evento configurado
+- [x] Worker único secuencial (queue.Queue) sin thread exhaustion
+- [x] Rate-limit 2s entre mensajes
+- [x] Silencio si no hay URL configurada (0 overhead)
+- [x] URL no se loggea ni expone
+
+**✅ Implementado 2026-06-24 — 10 tests, 409 total (commit 4edafcc)**
 
 ---
 
@@ -780,10 +779,10 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 | **FIX-P2** | Thread Safety + Dead Code | -20 / +40 | 🥇 | ✅ |
 | **FIX-P3** | Whitelist + TPS + Wizard Security | ~100 | 🥇 | ✅ |
 | **F4** | Auto-Backup Scheduler | +150 | 🥇 | ✅ |
-| **P0** | Foundation Hardening | ~+400 | 🥇 | ⚠️ PARCIAL (P0.1✅ P0.4⚠️ P0.5⬜ P0.6✅ P0.7⚠️) |
+| **P0** | Foundation Hardening | ~+400 | 🥇 | ✅ COMPLETO (P0.1✅ P0.2✅ P0.3✅ P0.4✅ P0.5✅ P0.6✅ P0.7✅) |
 | **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | +80/-20 | 🥇 | ✅ COMPLETO |
 | **F5** | Crash Report Collector | +80 | 🥇 | ✅ |
-| **F6** | Discord Webhook | +60 | 🥈 | ⏳ |
+| **F6** | Discord Webhook | +60 | 🥈 | ✅ |
 | **MODS-B** | Modrinth Browser Mejoras | +200 | 🥈 | ⏳ |
 | **F8** | Bulk Mod Operations | +200 | 🥈 | ⏳ |
 | **F7** | Server Templates + Modpacks | +350 | 🥈 | ⏳ |
@@ -927,8 +926,8 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | ~~HA-02~~ | ~~`core/logic.py`~~ | ~~530~~ | ~~TOCTOU: `self.running = False` seteado antes de emitir `STOPPED`. Watchdog puede leer `running=False` sin que evento haya disparado.~~ | ✅ FIXED `ea4c3ff` |
 | ~~HA-03~~ | ~~`core/orchestrators.py`~~ | ~~74-77~~ | ~~Stop intencional puede triggear restart del Watchdog. `stop_server` setea OFFLINE síncronamente; thread de output emite `STOPPED` después, Watchdog lo ve.~~ | ✅ FIXED `2fee336` |
 | ~~HA-04~~ | ~~`core/orchestrators.py`~~ | ~~202~~ | ~~Auto-backup nunca corre si restart scheduler está desactivado — `_check_auto_backup()` está dentro del `if status:` del restart scheduler.~~ | ✅ FIXED `ceb6882` |
-| HA-05 | `services/watchdog.py` | ~147 | Race en `_do_restart`: chequea `runner.running` sin lock antes de `start()`. Secuencias ZOMBIE+STOPPED rápidas pueden causar doble-start. | Agregar lock alrededor del chequeo + start. |
-| HA-06 | `core/logic.py` | 558-571 | `connected_players` no se limpia al parar server. En restart via `_do_restart` (mismo objeto), retiene jugadores stale. | Llamar `self.connected_players.clear()` en `start()`. |
+| ~~HA-05~~ | ~~`services/watchdog.py`~~ | ~~147~~ | ~~Race en `_do_restart`: chequea `runner.running` sin lock antes de `start()`.~~ | ✅ `ServerRunner.running` promovido a property con `_state_lock` (commit 3e17fd3) |
+| ~~HA-06~~ | ~~`core/logic.py`~~ | ~~558-571~~ | ~~`connected_players` no se limpia al parar server.~~ | ✅ `clear()` en `start()` + `_players_lock` en join/leave (commit 3e17fd3) |
 
 ### 🟡 MEDIUM (5)
 
