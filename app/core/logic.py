@@ -18,26 +18,9 @@ from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
 import re
 
-# Per-server threading.Events for jar normalization synchronization
-_jar_ready_events: dict[str, threading.Event] = {}
-_jar_events_lock = threading.Lock()
-
-
 def create_junction(source: str, dest: str) -> None:
     """Create a directory symlink. target_is_directory required on Windows."""
     os.symlink(source, dest, target_is_directory=True)
-
-def _get_jar_event(server_dir: str) -> threading.Event:
-    """Get or create a threading.Event for a server's jar normalization."""
-    with _jar_events_lock:
-        if server_dir not in _jar_ready_events:
-            _jar_ready_events[server_dir] = threading.Event()
-        return _jar_ready_events[server_dir]
-
-def wait_for_jar_ready(server_dir: str, timeout: float = 5.0) -> bool:
-    """Wait until normalize_server_jar signals that the jar is ready."""
-    ev = _get_jar_event(server_dir)
-    return ev.wait(timeout=timeout)
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +279,6 @@ def normalize_server_jar(server_dir: str) -> bool:
         except OSError as e:
             logger.debug("Normalize: existing server.jar validation failed: %s", e)
         if result:
-            _get_jar_event(server_dir).set()
             return True
 
     # Fabric
@@ -361,8 +343,6 @@ def normalize_server_jar(server_dir: str) -> bool:
             logger.debug("Normalize: final verification failed: %s", e)
             result = False
 
-    # Signal consumers the jar is ready (or timeout will handle failure)
-    _get_jar_event(server_dir).set()
     return result
 
 
@@ -709,6 +689,7 @@ class Scheduler:
             return None
         now = datetime.datetime.now()
         remaining = None
+        missed = False
         if schedule["type"] == "interval":
             last_run_str = schedule.get("last_run")
             if last_run_str:
@@ -717,7 +698,10 @@ class Scheduler:
         elif schedule["type"] == "time":
             hour, minute = map(int, schedule["restart_time"].split(":"))
             remaining = (now.replace(hour=hour, minute=minute, second=0, microsecond=0) - now).total_seconds()
-        return {"is_due": self.check_due(), "remaining_seconds": remaining}
+            # Detect missed window: target time passed but check_due() already returned False
+            if remaining <= -120:
+                missed = True
+        return {"is_due": self.check_due(), "remaining_seconds": remaining, "missed": missed}
 
     @staticmethod
     def get_warning_message(remaining_seconds, sent_warnings):

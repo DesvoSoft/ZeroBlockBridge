@@ -3,7 +3,6 @@
 import os
 import sys
 import json
-import threading
 import tempfile
 import shutil
 from unittest.mock import patch, MagicMock, mock_open
@@ -12,46 +11,12 @@ TMP = tempfile.gettempdir()
 
 from app.core.logic import (
     normalize_server_jar,
-    _get_jar_event,
-    wait_for_jar_ready,
     get_server_meta,
     set_server_meta,
     update_server_meta,
     _run_installer,
     download_server,
 )
-
-
-class TestGetJarEvent:
-    def test_get_or_create_event(self):
-        ev = _get_jar_event(f"{TMP}/test_server")
-        assert isinstance(ev, threading.Event)
-        ev2 = _get_jar_event(f"{TMP}/test_server")
-        assert ev is ev2
-
-    def test_different_dirs_different_events(self):
-        ev1 = _get_jar_event(f"{TMP}/server1")
-        ev2 = _get_jar_event(f"{TMP}/server2")
-        assert ev1 is not ev2
-
-    def teardown_method(self):
-        from app.core.logic import _jar_ready_events
-        _jar_ready_events.clear()
-
-
-class TestWaitForJarReady:
-    def test_wait_returns_true_when_set(self):
-        ev = _get_jar_event(f"{TMP}/test")
-        ev.set()
-        assert wait_for_jar_ready(f"{TMP}/test", timeout=1) is True
-
-    def test_wait_returns_false_on_timeout(self):
-        result = wait_for_jar_ready(f"{TMP}/nonexistent", timeout=0.1)
-        assert result is False
-
-    def teardown_method(self):
-        from app.core.logic import _jar_ready_events
-        _jar_ready_events.clear()
 
 
 class TestNormalizeServerJar:
@@ -194,6 +159,88 @@ class TestServerMeta:
             with patch("builtins.open", side_effect=OSError("Permission denied")):
                 result = set_server_meta("test_server", "ram", 2048)
                 assert result is False
+
+
+class TestSchedulerGetStatus:
+    """Tests for Scheduler.get_status() — particularly the 'missed' field (MA-05)."""
+
+    def _make_scheduler(self, meta_override):
+        from app.core.logic import Scheduler
+        with patch("app.core.logic.get_server_meta", return_value=meta_override):
+            return Scheduler("test_server")
+
+    def test_get_status_returns_none_when_no_schedule(self):
+        from app.core.logic import Scheduler
+        with patch("app.core.logic.get_server_meta", return_value={}):
+            sched = Scheduler("test_server")
+        with patch("app.core.logic.get_server_meta", return_value={}):
+            assert sched.get_status() is None
+
+    def test_get_status_interval_not_missed(self):
+        import datetime
+        from app.core.logic import Scheduler
+        last_run = (datetime.datetime.now() - datetime.timedelta(hours=3)).isoformat()
+        meta = {"scheduler": {"type": "interval", "interval_hours": 6,
+                               "last_run": last_run, "backup_on_restart": False}}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is False
+        assert status["remaining_seconds"] > 0
+
+    def test_get_status_time_mode_missed_window(self):
+        """If >120s past target time today, missed=True."""
+        import datetime
+        from app.core.logic import Scheduler
+        now = datetime.datetime.now()
+        # Target was 5 minutes ago, not run today
+        target = now - datetime.timedelta(minutes=5)
+        meta = {"scheduler": {
+            "type": "time",
+            "restart_time": f"{target.hour:02d}:{target.minute:02d}",
+            "last_run": None,
+            "backup_on_restart": False,
+        }}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is True
+        assert status["remaining_seconds"] < -120
+
+    def test_get_status_time_mode_within_window(self):
+        """If within 0-120s of target, missed=False (window still valid)."""
+        import datetime
+        from app.core.logic import Scheduler
+        now = datetime.datetime.now()
+        # Target was 30 seconds ago — still within window
+        target = now - datetime.timedelta(seconds=30)
+        meta = {"scheduler": {
+            "type": "time",
+            "restart_time": f"{target.hour:02d}:{target.minute:02d}",
+            "last_run": None,
+            "backup_on_restart": False,
+        }}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is False
+
+    def test_get_status_has_missed_key(self):
+        """All returned dicts must have a 'missed' key."""
+        import datetime
+        from app.core.logic import Scheduler
+        last_run = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+        meta = {"scheduler": {"type": "interval", "interval_hours": 6,
+                               "last_run": last_run, "backup_on_restart": False}}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert "missed" in status
+        assert "is_due" in status
+        assert "remaining_seconds" in status
 
 
 class TestRunInstaller:

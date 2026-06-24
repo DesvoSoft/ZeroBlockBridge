@@ -54,6 +54,11 @@ class ServerOrchestrator:
                     if meta.get("advanced_mode", False):
                         java_path = meta.get("java_path", "auto")
                         use_aikars = meta.get("use_aikars", True)
+                else:
+                    logger.warning(
+                        "No metadata found for '%s'; using fallbacks: mc_version=%s, java=%s",
+                        self.manager.current_server, mc_version, required_java
+                    )
             except Exception as e:
                 logger.error("Failed to read metadata: %s", e)
 
@@ -159,7 +164,9 @@ class SchedulerOrchestrator:
         self.manager = manager
 
     def _start_tick_loop(self) -> None:
-        if self.manager._tick_running: return
+        if self.manager._tick_running:
+            logger.warning("Tick loop already running — skipping duplicate start.")
+            return
         self.manager._tick_running = True
 
         def _loop():
@@ -196,6 +203,16 @@ class SchedulerOrchestrator:
                                 service.update_last_run()
                                 with self.manager._restart_warnings_lock:
                                     self.manager.restart_warnings_sent.clear()
+                            elif status.get("missed"):
+                                logger.warning(
+                                    "Scheduled restart for '%s' was missed (target passed >120s ago). "
+                                    "Next window: tomorrow at configured time.",
+                                    self.manager.current_server
+                                )
+                                self.manager.events.emit(ServerEvent.NOTIFICATION, {
+                                    "msg": "Scheduled restart was missed (system was busy). Next attempt tomorrow.",
+                                    "type": "warning",
+                                })
 
                         self.manager.backup_orchestrator._check_auto_backup()
                 
