@@ -5,13 +5,13 @@ import platform
 import shutil
 import sys
 import zipfile
-import io
+
 from pathlib import Path
 from typing import Optional
 
 import requests
 
-from app.core.constants import BASE_DIR, JDK_CACHE_DIR
+from app.core.constants import JDK_CACHE_DIR
 
 logger = logging.getLogger(__name__)
 

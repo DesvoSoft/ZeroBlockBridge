@@ -267,6 +267,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 messagebox.showerror("Error", "Failed to restore backup.")
 
     def _refresh_backup_countdown(self):
+        if not self.winfo_exists():
+            return
         secs = self._backup_scheduler_ui.seconds_until_next()
         if secs is None:
             self._next_backup_lbl.configure(text="Auto-backup: disabled")
@@ -276,6 +278,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             h = int(secs // 3600)
             m = int((secs % 3600) // 60)
             self._next_backup_lbl.configure(text=f"Next auto-backup in: {h}h {m}m")
+        self.after(60_000, self._refresh_backup_countdown)
 
     def setup_automation_tab(self):
         self.scheduler = self.logic.Scheduler(self.server_name)

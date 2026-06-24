@@ -1,6 +1,5 @@
 import customtkinter as ctk
 import logging
-import os
 import psutil
 import threading
 from app.core.constants import SERVERS_DIR

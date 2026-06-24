@@ -4,7 +4,7 @@ import os
 import requests
 import threading
 import datetime
-import re
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,3 @@
-import atexit
 import os
 import platform
 import subprocess
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.constants import ANSI_ESCAPE_RE
 
-from typing import Callable, Optional, Dict, Any, List
+from typing import Callable, Optional, Any
 
 class PlayitManager:
     def __init__(self, console_callback: Callable[[str], None], status_callback: Callable[[str, Optional[str]], None], on_ready_callback: Optional[Callable[[], None]]=None, notification_callback: Optional[Callable[[str, str], None]]=None) -> None:

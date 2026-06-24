@@ -1,13 +1,11 @@
 import requests
-import json
 import os
-import sys
 import time
 import platform
 import uuid
 import logging
 from typing import Dict, List, Optional
-from app.core.constants import CONFIG_DIR, PLAYIT_VERSION
+from app.core.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 

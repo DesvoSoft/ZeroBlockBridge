@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core.server_events import EventBus, ServerEvent
 from app.core.constants import ServerState
 from app.services.backup_manager import BackupManager
-from app.core.logic import ServerRunner, load_config, save_config, Scheduler, BackupScheduler
+from app.core.logic import ServerRunner, load_config, save_config, Scheduler
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor

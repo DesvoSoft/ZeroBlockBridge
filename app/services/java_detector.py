@@ -14,7 +14,7 @@ import os
 import platform
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from app.core.constants import JDK_CACHE_DIR, subprocess_flags

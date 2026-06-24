@@ -23,7 +23,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.core.logic import download_server, accept_eula, install_fabric, Scheduler
+
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
 from app.ui.server_wizard import ServerWizard

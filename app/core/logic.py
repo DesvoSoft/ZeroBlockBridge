@@ -9,7 +9,7 @@ import threading
 import sys
 import datetime
 import time
-from pathlib import Path
+
 from typing import Optional, Callable, Any
 
 from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE
@@ -626,8 +626,6 @@ def check_eula(server_name):
     if not os.path.exists(eula_path): return False
     with open(eula_path, "r", encoding="utf-8") as f:
         return "eula=true" in f.read()
-
-from app.services.server_properties import load_server_properties, save_server_properties
 
 class Scheduler:
     def __init__(self, server_name):

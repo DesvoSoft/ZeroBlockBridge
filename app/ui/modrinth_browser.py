@@ -12,7 +12,7 @@ import logging
 import os
 import threading
 import tkinter.messagebox
-from typing import Callable, Optional
+from typing import Callable
 
 import requests
 from PIL import Image
