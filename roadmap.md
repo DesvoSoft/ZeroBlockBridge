@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-24 (rev 3)
+> **Última actualización:** 2026-06-24 (rev 4)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 409 tests, 100% pass, 0 flaky
+> **Test count:** 410 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
@@ -565,7 +565,7 @@ class DiscordWebhookService:
 
 ---
 
-## MODS-B: Modrinth Browser Mejoras
+## MODS-B: Modrinth Browser Mejoras ✅
 
 **Objetivo:** Refinar el Modrinth Browser con filtros, mejor UX, y pequeños refactors. No es Fase 8 (bulk operations) — son mejoras puntuales nivel B.
 
@@ -615,11 +615,16 @@ server_version = meta.get("version", "")
 - Actualizar al instalar/desinstalar
 
 ### Criterio de aceptación
-- [ ] Filtros funcionan: al seleccionar versión/loader, búsqueda se refiltra
-- [ ] Update badge visible (incluso si 0, para confirmar que funciona)
-- [ ] Installed mods inline muestra mods actuales
-- [ ] Helpers extraídos sin cambiar comportamiento
-- [ ] Sin imports circulares añadidos
+- [x] Filtros funcionan: al seleccionar versión/loader, búsqueda se refiltra
+- [x] Installed mods inline muestra mods actuales (toggle en search bar)
+- [x] Helpers extraídos sin cambiar comportamiento (_resolve_server_context)
+- [x] Sort dropdown (relevance/downloads/follows/newest/updated)
+- [x] Hover fix — bind solo en card frame
+- [x] NR-10: constantes locales migradas a AppConfig
+- [x] Paginación clásica: Prev/Next + "Page N of M", 20 results/page
+- [x] Import .mrpack — mrpack_installer.py (CA-M04)
+- [x] Sin imports circulares añadidos
+- [x] 410 tests pasan (commit 11b02f6)
 
 ---
 
@@ -784,7 +789,7 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 | **EXE-PERF** | .exe Startup/Shutdown Performance (6 bugs) | +80/-20 | 🥇 | ✅ COMPLETO |
 | **F5** | Crash Report Collector | +80 | 🥇 | ✅ |
 | **F6** | Discord Webhook | +60 | 🥈 | ✅ |
-| **MODS-B** | Modrinth Browser Mejoras | +200 | 🥈 | ⏳ |
+| **MODS-B** | Modrinth Browser Mejoras | +300 | 🥈 | ✅ (commit 11b02f6) |
 | **F8** | Bulk Mod Operations | +200 | 🥈 | ⏳ |
 | **F7** | Server Templates + Modpacks | +350 | 🥈 | ⏳ |
 | **F9** | Server Migration (.zbbpack) | +250 | 🥉 | ⏳ |
