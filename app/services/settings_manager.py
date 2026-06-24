@@ -30,6 +30,7 @@ class SettingsManager:
             "theme": "Dark",
             "servers_dir": "servers",
             "java_preferences": {"java8_path": "", "java17_path": "", "java21_path": ""},
+            "discord_webhook_url": "",
         }
 
     def _ensure_loaded(self):

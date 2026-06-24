@@ -75,11 +75,24 @@ class ZBBManager:
 
         self.events.subscribe(ServerEvent.READY, self._on_server_ready)
 
+        # Discord Webhook (optional — only active if URL is configured)
+        self._discord_webhook = None
+        self._init_discord_webhook()
+
         # Orchestrators
         self.server_orchestrator = ServerOrchestrator(self)
         self.backup_orchestrator = BackupOrchestrator(self)
         self.tunnel_orchestrator = TunnelOrchestrator(self)
         self.scheduler_orchestrator = SchedulerOrchestrator(self)
+
+    def _init_discord_webhook(self) -> None:
+        from app.services.settings_manager import SettingsManager
+        from app.services.discord_webhook import DiscordWebhookService
+        url = SettingsManager().get("discord_webhook_url", "")
+        if url:
+            server_name = self.current_server or ""
+            self._discord_webhook = DiscordWebhookService(url, self.events, server_name)
+            logger.info("Discord webhook active for %s", server_name or "(no server)")
 
     def _on_server_ready(self, data: Any = None) -> None:
         self.state = ServerState.ONLINE
@@ -462,6 +475,8 @@ class ZBBManager:
         """
         # 1. Signal the tick loop to exit (non-blocking flag flip)
         self._tick_running = False
+        if self._discord_webhook:
+            self._discord_webhook.stop()
 
         # 2. Stop monitors immediately (they are just event listeners)
         self._stop_monitors()
