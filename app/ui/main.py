@@ -583,7 +583,6 @@ class MCTunnelApp(ctk.CTk):
                     dialog.update_progress(0.50, "Analyzing Java requirements from server jar...")
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
-                    from app.core.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")

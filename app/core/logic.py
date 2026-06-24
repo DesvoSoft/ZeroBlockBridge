@@ -389,12 +389,23 @@ class ServerRunner:
         self.server_name = server_name
         self.events = event_bus
         self.process = None
-        self.running = False
+        self._running = False
+        self._state_lock = threading.Lock()
         self.exit_code = None
         self._stderr_buffer = []
         self._stderr_thread = None
         self.java_bin = java_bin
         self.use_aikars = use_aikars
+
+    @property
+    def running(self) -> bool:
+        with self._state_lock:
+            return self._running
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        with self._state_lock:
+            self._running = value
 
         try:
             with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r", encoding="utf-8") as f:
@@ -409,6 +420,7 @@ class ServerRunner:
             
         self.player_count = 0
         self.connected_players = set()
+        self._players_lock = threading.Lock()
         self._stderr_done = threading.Event()
 
     def start(self):
@@ -490,6 +502,9 @@ class ServerRunner:
         
         try:
             self._stderr_buffer = []
+            with self._players_lock:
+                self.connected_players.clear()
+                self.player_count = 0
             self.process = subprocess.Popen(
                 cmd,
                 cwd=server_path,
@@ -590,22 +605,26 @@ class ServerRunner:
         join_match = re.search(r': (\w+) joined the game', line)
         if join_match:
             player = join_match.group(1)
-            self.connected_players.add(player)
-            new_count = len(self.connected_players)
+            with self._players_lock:
+                self.connected_players.add(player)
+                new_count = len(self.connected_players)
+                snapshot = list(self.connected_players)
             if new_count != self.player_count:
                 self.player_count = new_count
                 self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-                self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
+                self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
         else:
             leave_match = re.search(r': (\w+) left the game', line)
             if leave_match:
                 player = leave_match.group(1)
-                self.connected_players.discard(player)
-                new_count = len(self.connected_players)
+                with self._players_lock:
+                    self.connected_players.discard(player)
+                    new_count = len(self.connected_players)
+                    snapshot = list(self.connected_players)
                 if new_count != self.player_count:
                     self.player_count = new_count
                     self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-                    self.events.emit(ServerEvent.PLAYER_LIST, list(self.connected_players))
+                    self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
 
 def save_server_icon(server_name, image_path):
     try:
