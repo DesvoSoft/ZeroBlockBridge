@@ -9,7 +9,8 @@
 > **UI Dirt Block:** ✅ Palette aplicada en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
 > **Sesión 2026-06-24 (3):** P0.1 ✅ (26 tests orchestrators) P0.4 ✅ parcial (requirements pinneados, falta pyproject.toml) P0.7 ✅ parcial (dead imports eliminados en 9 archivos) SPE winfo_exists bug ✅ — 399 tests pass
 > **Sesión 2026-06-24 (4):** P0.4 ✅ (pyproject.toml creado, pip install -e . ok) P0.5 ✅ (ya estaba resuelto — ServerState en constants.py) P0.7 ✅ (flake8 F401=0) HA-05/HA-06 ✅ (ServerRunner.running property con lock, clear players en start) F6 ✅ (Discord Webhook — 10 tests) — 409 tests pass
-> **Siguiente prioridad:** MODS-B → BUG-AUDIT pendientes (MA-03, MA-05) → NR-04/05/10 → CA-HIGH
+> **Sesión 2026-06-24 (5):** BUG-AUDIT completo — MA-02/03/LA-01/03 verificados ya resueltos; MA-05 ✅ (missed window warning + NOTIFICATION); LA-02 ✅ (_jar_ready_events dead code eliminado); LA-04 ✅ (warning log en fallback meta); LA-05 ✅ (tick guard warning); 5 tests nuevos TestSchedulerGetStatus — 410 tests pass
+> **Siguiente prioridad:** BUG-AUDIT = COMPLETO ✅ | Próximo: MODS-B (Modrinth browser mejoras) o CA-HIGH (JVM args UI, player mgmt unificado)
 
 ---
 
@@ -934,41 +935,50 @@ Audit completo de codebase. 19 issues encontrados. Ningún fix aplicado aún.
 | ID | Archivo | Líneas | Problema | Fix |
 |----|---------|--------|---------|-----|
 | ~~MA-01~~ | ~~`core/core.py`~~ | ~~393-395~~ | ~~Countdown omite `1` — salta 2→NOW.~~ | ✅ FIXED `a0186bc` |
-| MA-02 | `core/logic.py` | 64-65, 591 | `open()` sin `encoding="utf-8"` en lectura/escritura de config y eula.txt. MOTD con `§` se corrompe en Windows con locale no-UTF8. | Agregar `encoding="utf-8"` a todos los `open()`. |
-| MA-03 | `ui/server_properties_editor.py` | 256-344, ~660 | `save_automation()` siempre llamada aunque Automation tab nunca fue visitada — backup config silenciosamente no guardada. | Inicializar variables de automation tab con defaults o siempre crear widgets. |
+| ~~MA-02~~ | ~~`core/logic.py`~~ | ~~64-65, 591~~ | ~~`open()` sin `encoding="utf-8"`.~~ | ✅ Verificado ya resuelto en sesión anterior (todos los open() text tienen encoding) |
+| ~~MA-03~~ | ~~`ui/server_properties_editor.py`~~ | ~~256-344, ~660~~ | ~~`save_automation()` siempre llamada.~~ | ✅ Verificado ya correcto — `if not self.var_auto_restart: return` + `hasattr` guard previenen escritura sin tab visitada |
 | ~~MA-04~~ | ~~`services/watchdog.py`~~ | ~~105, 121~~ | ~~NOTIFICATION payload inconsistente: watchdog usa `color` key, resto del codebase usa `type` key. Uno silenciosamente ignorado por toast handler.~~ | ✅ FIXED `6b00462` (removed with CA-01) |
-| MA-05 | `core/logic.py` | 620-643 | Si scheduler tick es lento >120s post-target, restart silenciosamente skipeado. Sin log. | Emitir warning log cuando target time es missed. |
+| ~~MA-05~~ | ~~`core/logic.py`~~ | ~~620-643~~ | ~~Si scheduler tick es lento >120s post-target, restart silenciosamente skipeado. Sin log.~~ | ✅ `get_status()` retorna `missed=True`; orchestrator emite WARNING log + NOTIFICATION toast (commit 91c0ce2) |
 
 ### 🔵 LOW / INFO (6)
 
 | ID | Archivo | Líneas | Problema |
 |----|---------|--------|---------|
-| LA-01 | `services/backup_manager.py` | 60-63 | Thread spawneado solo para hacer zip síncronamente (join inmediato). Threading overhead sin beneficio. |
-| LA-02 | `core/logic.py` | 23-24 | `_jar_ready_events` dict crece sin límite — un `threading.Event` por `server_dir` nunca limpiado. |
-| LA-03 | `core/server_events.py` | 3 | Dead imports: `Dict`, `List` de `typing` — unused desde Python 3.9+. |
-| LA-04 | `core/orchestrators.py` | 40-41 | Fallbacks hardcodeados `mc_version="1.20.1"`, `required_java=21` sin log warning cuando metadata falta. |
-| LA-05 | `core/orchestrators.py` | 157-159 | Guard `if self.manager._tick_running: return` silencioso — debería loggear warning. |
-| LA-06 | `core/logic.py` | 736-740 | Dead code: `get_server_ram` / `set_server_ram` thin wrappers usados solo por el editor. Candidatos a inline o eliminar en próximo refactor. |
+| ~~LA-01~~ | ~~`services/backup_manager.py`~~ | ~~60-63~~ | ~~Thread innecesario en create_backup~~ | ✅ Verificado resuelto en commit 9ffa2a9 (_zip_worker eliminado) |
+| ~~LA-02~~ | ~~`core/logic.py`~~ | ~~23-24~~ | ~~`_jar_ready_events` dict nunca limpiado~~ | ✅ Mecanismo completo eliminado — `_get_jar_event`, `wait_for_jar_ready`, dict, `.set()` calls — 0 callers Python (commit 91c0ce2) |
+| ~~LA-03~~ | ~~`core/server_events.py`~~ | ~~3~~ | ~~Dead imports `Dict`, `List`~~ | ✅ Verificado ya eliminados en sesión anterior |
+| ~~LA-04~~ | ~~`core/orchestrators.py`~~ | ~~40-41~~ | ~~Fallbacks hardcodeados sin log warning~~ | ✅ logger.warning emitido cuando `meta` es None (commit 91c0ce2) |
+| ~~LA-05~~ | ~~`core/orchestrators.py`~~ | ~~157-159~~ | ~~Guard silencioso en tick loop~~ | ✅ logger.warning añadido en duplicate-start guard (commit 91c0ce2) |
+| LA-06 | `core/logic.py` | 736-740 | `get_server_ram`/`set_server_ram` — thin wrappers. | Confirmado aún usados por SPE — mantener, no dead code. |
 
 ### Status
 
 | Severidad | Total | Resueltos | Pendientes |
 |-----------|-------|-----------|-----------|
 | 🔴 CRITICAL | 2 | 2 | 0 |
-| 🟡 HIGH | 6 | 3 | 3 |
-| 🟡 MEDIUM | 5 | 4 | 1 |
-| 🔵 LOW | 6 | 0 | 6 |
-| **TOTAL** | **19** | **9** | **10** |
+| 🟡 HIGH | 6 | 6 | 0 |
+| 🟡 MEDIUM | 5 | 5 | 0 |
+| 🔵 LOW | 6 | 5 | 1 (LA-06 — confirmado no dead code) |
+| **TOTAL** | **19** | **18** | **1** |
 
 ### Pendientes priorizados (orden de trabajo)
 
-| Prioridad | ID | Archivo | Problema | Fix |
-|-----------|-----|---------|----------|-----|
-| ~~1 🔴~~ | ~~**CA-02**~~ | ~~`core/logic.py` → `_run_installer()`~~ | ~~Installer usa `"java"` hardcoded~~ | ✅ commit 3117759 |
-| 2 🟡 | **MA-02** | `core/logic.py` (múltiples `open()`) | Sin `encoding="utf-8"` — corrompe MOTDs con `§` en Windows | Agregar `encoding="utf-8"` a todos los `open()` de logic.py y settings_manager.py |
-| 3 🟡 | **HA-05** | `services/watchdog.py:134-135` | Race en `_do_restart` — chequea `runner.running` sin lock | Serializar con lock o `threading.Event` |
-| 4 🟡 | **HA-06** | Players dashboard / ServerRunner | `connected_players` stale post-restart — jugadores fantasma en dashboard | Emitir `PLAYER_COUNT` vacío al emitir `STOPPED` |
-| 5 🟡 | **MA-05** | `core/orchestrators.py` scheduler | Restart schedulado silenciosamente perdido si tick loop atrasado >120s | Emitir NOTIFICATION de warning si `remaining < -120s` |
+**BUG-AUDIT COMPLETADO — 18/19 issues resueltos. LA-06 confirmado no es dead code.**
+
+| ID | Archivo | Estado |
+|----|---------|--------|
+| ~~CA-02~~ | `core/logic.py` | ✅ commit 3117759 |
+| ~~MA-02~~ | `core/logic.py` | ✅ verificado en sesiones anteriores |
+| ~~MA-03~~ | `ui/server_properties_editor.py` | ✅ guards correctos confirmados |
+| ~~HA-05~~ | `services/watchdog.py` | ✅ commit 3e17fd3 |
+| ~~HA-06~~ | `core/logic.py` | ✅ commit 3e17fd3 |
+| ~~MA-05~~ | `core/orchestrators.py` | ✅ commit 91c0ce2 |
+| ~~LA-01~~ | `services/backup_manager.py` | ✅ commit 9ffa2a9 |
+| ~~LA-02~~ | `core/logic.py` | ✅ commit 91c0ce2 |
+| ~~LA-03~~ | `core/server_events.py` | ✅ verificado ya resuelto |
+| ~~LA-04~~ | `core/orchestrators.py` | ✅ commit 91c0ce2 |
+| ~~LA-05~~ | `core/orchestrators.py` | ✅ commit 91c0ce2 |
+| LA-06 | `core/logic.py` | 📌 Confirmado no dead code — SPE usa get/set_server_ram |
 
 ---
 
