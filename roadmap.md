@@ -10,7 +10,8 @@
 > **Sesión 2026-06-24 (3):** P0.1 ✅ (26 tests orchestrators) P0.4 ✅ parcial (requirements pinneados, falta pyproject.toml) P0.7 ✅ parcial (dead imports eliminados en 9 archivos) SPE winfo_exists bug ✅ — 399 tests pass
 > **Sesión 2026-06-24 (4):** P0.4 ✅ (pyproject.toml creado, pip install -e . ok) P0.5 ✅ (ya estaba resuelto — ServerState en constants.py) P0.7 ✅ (flake8 F401=0) HA-05/HA-06 ✅ (ServerRunner.running property con lock, clear players en start) F6 ✅ (Discord Webhook — 10 tests) — 409 tests pass
 > **Sesión 2026-06-24 (5):** BUG-AUDIT completo — MA-02/03/LA-01/03 verificados ya resueltos; MA-05 ✅ (missed window warning + NOTIFICATION); LA-02 ✅ (_jar_ready_events dead code eliminado); LA-04 ✅ (warning log en fallback meta); LA-05 ✅ (tick guard warning); 5 tests nuevos TestSchedulerGetStatus — 410 tests pass
-> **Siguiente prioridad:** BUG-AUDIT = COMPLETO ✅ | Próximo: MODS-B (Modrinth browser mejoras) o CA-HIGH (JVM args UI, player mgmt unificado)
+> **Sesión 2026-06-24 (6):** MODS-B ✅ (paginación clásica Prev/Next, sort dropdown, _resolve_server_context, installed inline, hover fix, NR-10 palette) CA-M04 ✅ (.mrpack import — mrpack_installer.py) — 410 tests pass
+> **Siguiente prioridad:** F8 (Bulk Mod Operations) o CA-H01/H02 (JVM args UI, player mgmt unificado)
 
 ---
 
@@ -19,27 +20,33 @@
 ### Métricas Clave
 | Métrica | Valor |
 |---------|-------|
-| Archivos Python | 39 app + 19 tests |
-| LOC totales (app) | ~7,880 |
-| LOC totales (tests) | ~3,007 |
-| Tests | 364 pasando, 0 fallos, 0 skipped |
+| Archivos Python | 41 app + 22 tests |
+| LOC totales (app) | ~8,200 |
+| LOC totales (tests) | ~3,200 |
+| Tests | 410 pasando, 0 fallos, 0 skipped |
 | Type hint coverage | ~28.5% |
 | Threads potenciales | ~38 (todos daemon) |
 | Dependencias externas | 4 (customtkinter, requests, psutil, Pillow) |
 
 ### Orden de desarrollo recomendado (2026-06-24)
 
-| Prioridad | ID | Qué | Por qué antes |
-|-----------|-----|-----|---------------|
-| 1 | **A3-B04** | Backup restore atómico | Riesgo de corrupción de datos activo. Único 🟡 de datos pendiente. |
-| 2 | **A3-A03** | Protocol IS-A → HAS-A | Arch PR — limpiar contrato ZBBManager. Hacer junto con P0.5 si aplica. |
-| 3 | **A3-A05** | get_versions UI freeze | UX bug real (wizard congela 4s). |
-| 4 | **A3-M02** | metadata.json migration | Servers legacy sin campo "type". Afecta usuarios que importan servers viejos. |
-| 5 | **F5** | Crash Report Collector | Feature nueva — después de foundation estable. |
-| 6 | **F6+** | Discord Webhook, Mods-B | Features. |
-| ⏸️ | **REFACT-1** | JavaResolver + launch steps | YAGNI para pre-alpha con 1 developer. Revisitar cuando equipo crezca o flujo cambie. |
+| Prioridad | ID | Qué | Estado |
+|-----------|-----|-----|--------|
+| ✅ | **A3-B04** | Backup restore atómico | ✅ Resuelto (commit 9ffa2a9) |
+| ✅ | **A3-A03** | Protocol IS-A → HAS-A | ✅ Resuelto |
+| ✅ | **A3-A05** | get_versions UI freeze | ✅ Resuelto |
+| ✅ | **A3-M02** | metadata.json migration | ✅ Resuelto (migrate_legacy_metadata en bootstrap) |
+| ✅ | **F5** | Crash Report Collector | ✅ Implementado |
+| ✅ | **F6** | Discord Webhook | ✅ Implementado (10 tests) |
+| ✅ | **MODS-B** | Modrinth Browser Mejoras | ✅ Implementado (commit 11b02f6) |
+| ✅ | **CA-M04** | .mrpack import | ✅ mrpack_installer.py |
+| 1 | **F8** | Bulk Mod Operations | Multi-select, batch delete/update — depende de MODS-B ✅ |
+| 2 | **CA-H01** | JVM args UI por servidor | `-Xmx/-Xms` + flags custom — scope acotado |
+| 3 | **CA-H02** | Player management unificado | operators + bans + whitelist en una página |
+| 4 | **F7** | Server Templates + Modpacks | Reusa F8 bulk download infra |
+| ⏸️ | **REFACT-1** | JavaResolver + launch steps | YAGNI para pre-alpha con 1 developer. |
 
-> Regla: bugs de datos → arch cleanup → features.
+> Regla: features UI → player/server management → templates/migration.
 
 ---
 
@@ -47,12 +54,12 @@
 | Dimensión | Nota | Factor limitante |
 |-----------|------|-----------------|
 | Seguridad | 9/10 | Sin eval, shell=False, sanitizer allowlist, SHA1 |
-| Tests | 8/10 | 100% pass, mocks limpios, tmp_path |
+| Tests | 8/10 | 410 tests 100% pass, mocks limpios, tmp_path |
 | Thread model | 7/10 | Daemon, EventBus RLock, SettingsManager thread-safe |
-| Arquitectura | 7/10 | UI→core→services unidireccional, 1 circular dep |
+| Arquitectura | 7/10 | UI→core→services unidireccional, deps circulares resueltas |
 | Config management | 7/10 | SettingsManager OK, config.json sin lock |
 | Type hints | 3/10 | ~28.5% tipado, sin mypy en CI |
-| Dependencias | 5/10 | Sin pin, sin lockfile, sin pyproject.toml |
+| Dependencias | 7/10 | Pin en requirements.txt ✅, pyproject.toml ✅ |
 
 ---
 
@@ -69,12 +76,13 @@
 8. [⬆️ **BUG-AUDIT: 19 issues del audit 2026-06-19**](#bug-audit--2026-06-19)
 9. [⬆️ **AUDIT-3: Validación externa 2026-06-24**](#audit-3-validación-externa-de-auditoría--2026-06-24)
 10. [⏸️ **REFACT-1: Refactors estructurales (pospuesto)**](#refact-1-refactors-estructurales-validados)
-11. [▶️ F5: Crash Report Collector](#f5-crash-report-collector)
-10. [▶️ F6: Discord Webhook](#f6-discord-webhook)
-11. [▶️ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
-12. [⏸️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
-13. [⏸️ F7: Server Templates + Modpacks](#f7-server-templates--modpacks)
-14. [⏸️ F9-F11: Migration, Linux, UI 2.0](#f9-f11-migration-linux-ui-20)
+11. [✅ F5: Crash Report Collector](#f5-crash-report-collector)
+12. [✅ F6: Discord Webhook](#f6-discord-webhook)
+13. [✅ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
+14. [▶️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
+15. [▶️ F7: Server Templates + Modpacks](#f7-server-templates--modpacks)
+16. [▶️ CA-H01/H02: JVM args + Player management](#ca-high-alta-prioridad-scope-acotado)
+17. [⏸️ F9-F11: Migration, Linux, UI 2.0](#f9-f11-migration-linux-ui-20)
 
 ---
 
@@ -799,34 +807,31 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 ### Orden de Ejecución Recomendado
 
 ```
-F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 ✅ → F5 ✅
-                                                         ↓
-                                    ┌──── P0 Foundation Hardening ───────────────┐
-                                    │  P0.1 (orchestrator tests) ✅ 26 tests      │
-                                    │  P0.2 + P0.3 (F4 UI) ✅                    │
-                                    │  P0.4 (pin deps) ⚠️ requirements✅ toml⬜  │
-                                    │  P0.5 (circular dep) ⬜                    │
-                                    │  P0.6 (CRASHED sub) ✅                     │
-                                    │  P0.7 (dead imports) ⚠️ parcial            │
-                                    └──────────────────┬─────────────────────────┘
-                                                       ↓
-                                         P0.4 pyproject.toml → P0.5 (circular dep)
-                                                       ↓
-                                      BUG-AUDIT pendientes (HA-05, HA-06, MA-03, MA-05)
-                                                       ↓
-                                    AUDIT-3 (validación externa, 2026-06-24)
+F0-F3 ✅ → FA-FB ✅ → FIX-P1/P2/P3 ✅ → F4 ✅
                                                  ↓
-                              ┌──────────────────┼──────────────────┐
-                              ↓                  ↓                  ↓
-                           F5 (Crash)        F6 (Discord)      MODS-B
-                              ↓                  ↓                  ↓
-                           F8 (Bulk Mods) ←──────┴────── MODS-B da base
+                           ┌──── P0 Foundation Hardening ✅ COMPLETO ────┐
+                           │  P0.1 ✅  P0.2 ✅  P0.3 ✅  P0.4 ✅        │
+                           │  P0.5 ✅  P0.6 ✅  P0.7 ✅                  │
+                           └──────────────────┬──────────────────────────┘
+                                              ↓
+                              BUG-AUDIT ✅ COMPLETO (18/19 resueltos)
+                                              ↓
+                              AUDIT-3 ✅ (validación externa 2026-06-24)
+                                              ↓
+                    ┌─────────────────────────┼──────────────────────────┐
+                    ↓                         ↓                          ↓
+              F5 (Crash) ✅           F6 (Discord) ✅            MODS-B ✅
+                                                                   + CA-M04 ✅
+                                              ↓
+                              ┌───────────────┼────────────────────┐
+                              ↓               ↓                    ↓
+                    F8 (Bulk Mods)      CA-H01 (JVM args)    CA-H02 (Player mgmt)
                               ↓
-                           F7 (Templates) ←── reusa bulk download
+                    F7 (Templates) ←── reusa F8 bulk download
                               ↓
-                           F9 (Migration) ←── reusa template format
+                    F9 (Migration) ←── reusa template format
                               ↓
-                     F10 (Linux) + F11 (UI 2.0)
+                    F10 (Linux) + F11 (UI 2.0)
 ```
 
 ---
