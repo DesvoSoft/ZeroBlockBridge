@@ -161,28 +161,22 @@ class SchedulerOrchestrator:
     def _start_tick_loop(self) -> None:
         if self.manager._tick_running: return
         self.manager._tick_running = True
-        
+
         def _loop():
-            last_time = time.time()
             last_sched_check = 0.0
-            
+            last_player_emit = 0.0
+
             while self.manager._tick_running:
                 now = time.time()
-                dt = now - last_time
-                last_time = now
-                
-                if self.manager.server_runner and self.manager.server_runner.running:
-                    if dt > 0:
-                        self.manager.events.emit(ServerEvent.TPS_UPDATE, 1.0 / dt)
-                else:
-                    self.manager.events.emit(ServerEvent.TPS_UPDATE, 0.0)
 
                 if getattr(self.manager, "_heartbeat", None):
                     self.manager._heartbeat.tick(now)
-                    
-                # Player Sync
+
+                # Player Sync — rate-limited to 1x/sec
                 if self.manager.server_runner and self.manager.server_runner.running:
-                    self.manager.events.emit(ServerEvent.PLAYER_COUNT, self.manager.server_runner.player_count)
+                    if now - last_player_emit >= 1.0:
+                        self.manager.events.emit(ServerEvent.PLAYER_COUNT, self.manager.server_runner.player_count)
+                        last_player_emit = now
 
                 if now - last_sched_check >= AppConfig.SCHEDULER_CHECK_INTERVAL:
                     last_sched_check = now

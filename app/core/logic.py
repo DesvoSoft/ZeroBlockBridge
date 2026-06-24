@@ -12,12 +12,11 @@ import time
 from pathlib import Path
 from typing import Optional, Callable, Any
 
-from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags
+from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
+from app.services.java_detector import probe_java
 import re
-
-from app.core.constants import ANSI_ESCAPE_RE
 
 # Per-server threading.Events for jar normalization synchronization
 _jar_ready_events: dict[str, threading.Event] = {}
@@ -25,12 +24,8 @@ _jar_events_lock = threading.Lock()
 
 
 def create_junction(source: str, dest: str) -> None:
-    """Create a cross-platform filesystem link (junction on Windows, symlink on Linux)."""
-    if sys.platform == "win32":
-        import _winapi
-        _winapi.CreateJunction(source, dest)
-    else:
-        os.symlink(source, dest)
+    """Create a directory symlink. target_is_directory required on Windows."""
+    os.symlink(source, dest, target_is_directory=True)
 
 def _get_jar_event(server_dir: str) -> threading.Event:
     """Get or create a threading.Event for a server's jar normalization."""
@@ -61,7 +56,7 @@ def load_config() -> dict:
         return default_config
     
     try:
-        with open(APP_CONFIG_PATH, "r") as f:
+        with open(APP_CONFIG_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         logger.warning("Config file corrupted. Resetting to defaults.")
@@ -71,7 +66,7 @@ def load_config() -> dict:
 def save_config(config: dict) -> None:
     """Saves the configuration to config.json."""
     APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(APP_CONFIG_PATH, "w") as f:
+    with open(APP_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
 
 _meta_lock = threading.Lock()
@@ -90,7 +85,7 @@ def get_server_meta(server_name: str) -> dict:
         if not os.path.exists(meta_path):
             return {}
         try:
-            with open(meta_path, "r") as f:
+            with open(meta_path, "r", encoding="utf-8") as f:
                 data: dict = json.load(f)
                 _meta_cache[server_name] = data
                 return data.copy()
@@ -110,12 +105,12 @@ def update_server_meta(server_name: str, updates: dict) -> bool:
             if server_name in _meta_cache:
                 meta = _meta_cache[server_name].copy()
             elif os.path.exists(meta_path):
-                with open(meta_path, "r") as f:
+                with open(meta_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
             else:
                 meta = {}
             meta.update(updates)
-            with open(meta_path, "w") as f:
+            with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=4)
             _meta_cache[server_name] = meta
             return True
@@ -286,7 +281,7 @@ def normalize_server_jar(server_dir: str) -> bool:
             if args_pattern in files:
                 args_path = os.path.join(root, args_pattern)
                 try:
-                    with open(args_path, "r") as f:
+                    with open(args_path, "r", encoding="utf-8") as f:
                         content = f.read()
                     lib_jar_match = re.search(r'([^\s]+\.jar)', content)
                     if lib_jar_match:
@@ -363,7 +358,7 @@ class ServerRunner:
         self.use_aikars = use_aikars
 
         try:
-            with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
+            with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r", encoding="utf-8") as f:
                 meta = json.load(f)
                 if "ram" in meta:
                     self.ram_allocation = f"{meta['ram']}M"
@@ -428,8 +423,7 @@ class ServerRunner:
         # Find Java major version
         java_major = 17
         try:
-            from app.services.java_detector import _probe_java
-            inst = _probe_java(self.java_bin, "PROBE")
+            inst = probe_java(self.java_bin, "PROBE")
             if inst:
                 java_major = inst.major
         except Exception as e:
@@ -591,7 +585,7 @@ def check_eula(server_name):
     server_path = os.path.join(SERVERS_DIR, server_name)
     eula_path = os.path.join(server_path, "eula.txt")
     if not os.path.exists(eula_path): return False
-    with open(eula_path, "r") as f:
+    with open(eula_path, "r", encoding="utf-8") as f:
         return "eula=true" in f.read()
 
 from app.services.server_properties import load_server_properties, save_server_properties

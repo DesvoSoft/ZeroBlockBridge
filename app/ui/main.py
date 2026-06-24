@@ -77,8 +77,6 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
         self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
-        self.events.subscribe(ServerEvent.TPS_UPDATE, self.on_tps_update)
-        
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
@@ -189,9 +187,6 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
         self.lbl_java_ver.pack(side="right", padx=(5, 10))
 
-        self.lbl_tps = ctk.CTkLabel(self.status_right_frame, text="TPS: 0.0", text_color="#64748b", font=("Roboto Medium", 13), width=70, anchor="e")
-        self.lbl_tps.pack(side="right", padx=(5, 5))
-
         self.btn_players = ctk.CTkButton(
             self.status_right_frame, 
             text="Players: 0", 
@@ -286,11 +281,11 @@ class MCTunnelApp(ctk.CTk):
         self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=12, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
         
-        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=12, height=36)
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands...", corner_radius=12, height=36, state="disabled")
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
-        
-        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
         self.btn_send.pack(side="right", padx=10, pady=5)
         
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
@@ -357,8 +352,17 @@ class MCTunnelApp(ctk.CTk):
         for widget in self.server_list_frame.winfo_children():
             widget.destroy()
         if not servers:
-            lbl = ctk.CTkLabel(self.server_list_frame, text="No servers found.")
-            lbl.pack(pady=10)
+            ctk.CTkLabel(
+                self.server_list_frame, text="No servers yet.",
+                text_color=AppConfig.COLOR_TEXT_MUTED, font=("Roboto", 13)
+            ).pack(pady=(20, 6))
+            ctk.CTkButton(
+                self.server_list_frame, text="→ Create your first server",
+                command=self.create_server_dialog,
+                fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                corner_radius=12, height=32
+            ).pack(padx=16)
         else:
             for s in servers:
                 item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select)
@@ -375,41 +379,38 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_dash_title.configure(text=f"{server_name}")
         server_path = os.path.join(SERVERS_DIR, server_name)
         
-        server_type = "Vanilla"
-        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): 
-            server_type = "Fabric"
-        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
-            server_type = "Forge"
-        
         meta = logic.get_server_meta(server_name)
+        server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
         self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
-        
+
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
-        
+
         self.btn_start.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
-        
-        self.btn_config.configure(state="normal")
-        self.server_console.log(f"[UI] Selected server: {server_name}")
-    def open_server_folder(self):
-        def _open_folder(p):
-            import subprocess
-            if sys.platform == "win32":
-                os.startfile(p)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", str(p)])
-            else:
-                subprocess.run(["xdg-open", str(p)])
 
+        self.btn_config.configure(state="normal")
+        self.entry_console.configure(state="normal", placeholder_text="Type command here...")
+        self.btn_send.configure(state="normal")
+        self.server_console.log(f"[UI] Selected server: {server_name}")
+    def _open_in_file_manager(self, path) -> None:
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["explorer", str(path)], check=False)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(path)], check=False)
+        except Exception as e:
+            self.server_console.log(f"[Error] Failed to open folder: {e}")
+
+    def open_server_folder(self):
         if not self.zbb_manager.current_server:
-            path = SERVERS_DIR
-            _open_folder(path)
+            self._open_in_file_manager(SERVERS_DIR)
             return
-            
         server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
         if os.path.exists(server_path):
-            _open_folder(server_path)
+            self._open_in_file_manager(server_path)
 
     def _get_current_server_info(self):
         if not self.zbb_manager.current_server:
@@ -445,13 +446,8 @@ class MCTunnelApp(ctk.CTk):
         if not self.zbb_manager.current_server: return
         server_path = SERVERS_DIR / self.zbb_manager.current_server
         if not server_path.exists(): return
-        try:
-            if sys.platform == "win32": os.startfile(str(server_path))
-            elif sys.platform == "darwin": subprocess.run(["open", str(server_path)])
-            else: subprocess.run(["xdg-open", str(server_path)])
-            self.server_console.log(f"[System] Opened server folder for '{self.zbb_manager.current_server}'")
-        except Exception as e:
-            self.server_console.log(f"[Error] Failed to open server folder: {e}")
+        self._open_in_file_manager(server_path)
+        self.server_console.log(f"[System] Opened server folder for '{self.zbb_manager.current_server}'")
 
     def update_console(self, text):
         if isinstance(text, str):
@@ -485,9 +481,6 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
-
-    def on_tps_update(self, tps):
-        self.after(0, lambda: self.lbl_tps.configure(text=f"TPS: {tps:.1f}"))
 
     def on_player_count_update(self, count):
         self.after(0, lambda: self.btn_players.configure(text=f"Players: {count}"))
@@ -743,7 +736,7 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_tunnel_stop.pack_forget()
                 self.setup_frame.pack_forget()
                 self.btn_reset.pack_forget()
-                self.btn_toggle_setup.pack(side="left", padx=2)
+                self.btn_toggle_setup.pack(side="left", padx=(8, 2))
                 if self._setup_expanded:
                     self.btn_toggle_setup.pack_forget()
                     self.setup_frame.pack(side="left", fill="x")

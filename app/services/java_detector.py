@@ -198,6 +198,11 @@ def _probe_java(java_path: str, source: str) -> Optional[JavaInstallation]:
         return None
 
 
+def probe_java(java_path: str, source: str = "PROBE") -> Optional[JavaInstallation]:
+    """Public wrapper around _probe_java for use outside this module."""
+    return _probe_java(java_path, source)
+
+
 # ---------------------------------------------------------------------------
 # Discovery Sources
 # ---------------------------------------------------------------------------

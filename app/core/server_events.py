@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -9,11 +9,10 @@ class ServerEvent:
     STARTING = "starting"
     READY = "ready"
     STOPPED = "stopped"
-    ERROR = "error"
     PLAYER_COUNT = "player_count"
     PLAYER_LIST = "player_list"
     CRASHED = "crashed"
-    RESTARTED = "restarted"
+    RESTARTED = "restarted"          # emitted by watchdog; available for future UI subscribers
     ZOMBIE_DETECTED = "zombie_detected"
     LAG_SPIKE = "lag_spike"
     CONSOLE_LINE = "console_line"
@@ -21,9 +20,8 @@ class ServerEvent:
     NOTIFICATION = "notification"
     REQUEST_RESTART = "request_restart"
     TUNNEL_STATUS = "tunnel_status"
-    BACKUP_COMPLETED = "backup_completed"
-    BACKUP_FAILED = "backup_failed"
-    TPS_UPDATE = "tps_update"
+    BACKUP_COMPLETED = "backup_completed"  # emitted by BackupOrchestrator; available for future UI subscribers
+    BACKUP_FAILED = "backup_failed"        # emitted by BackupOrchestrator; available for future UI subscribers
 
 
 class EventBus:

@@ -86,7 +86,7 @@ class VersionManager:
     def _load_cache(self):
         if os.path.exists(VERSIONS_CACHE_FILE):
             try:
-                with open(VERSIONS_CACHE_FILE, "r") as f:
+                with open(VERSIONS_CACHE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
                 fabric_versions = data.get("Fabric", [])
@@ -268,7 +268,7 @@ class VersionManager:
         """Persists current version cache to disk."""
         try:
             VERSIONS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(VERSIONS_CACHE_FILE, "w") as f:
+            with open(VERSIONS_CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, indent=4)
         except Exception as e:
             logger.error("Failed to save version cache: %s", e)
