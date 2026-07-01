@@ -66,6 +66,25 @@ def _generate_eula(server_dir: str, accepted: bool):
     logger.info("Generated eula.txt (accepted=%s) in %s", accepted, server_dir)
 
 
+# Maps config dict key -> (server.properties key, value transform)
+_CONFIG_PROPERTY_MAP = {
+    "game_mode": ("gamemode", str),
+    "difficulty": ("difficulty", str),
+    "hardcore": ("hardcore", lambda v: "true" if v else "false"),
+    "whitelist": ("white-list", lambda v: "true" if v else "false"),
+    "enforce_whitelist": ("enforce-whitelist", lambda v: "true" if v else "false"),
+    "pvp": ("pvp", lambda v: "true" if v else "false"),
+    "online_mode": ("online-mode", lambda v: "true" if v else "false"),
+    "max_players": ("max-players", str),
+    "spawn_protection": ("spawn-protection", str),
+    "enable_command_block": ("enable-command-block", lambda v: "true" if v else "false"),
+    "allow_flight": ("allow-flight", lambda v: "true" if v else "false"),
+    "enforce_secure_profile": ("enforce-secure-profile", lambda v: "true" if v else "false"),
+    "view_distance": ("view-distance", str),
+    "simulation_distance": ("simulation-distance", str),
+}
+
+
 def _generate_properties(server_dir: str, port: int, config: dict = None):
     """Write or patch server.properties with the assigned port and config."""
     props_path = os.path.join(server_dir, "server.properties")
@@ -78,36 +97,11 @@ def _generate_properties(server_dir: str, port: int, config: dict = None):
     }
 
     if config:
-        if "seed" in config and config["seed"]:
+        if config.get("seed"):
             props_to_write["level-seed"] = str(config["seed"])
-        if "game_mode" in config:
-            props_to_write["gamemode"] = str(config["game_mode"])
-        if "difficulty" in config:
-            props_to_write["difficulty"] = str(config["difficulty"])
-        if "hardcore" in config:
-            props_to_write["hardcore"] = "true" if config["hardcore"] else "false"
-        if "whitelist" in config:
-            props_to_write["white-list"] = "true" if config["whitelist"] else "false"
-        if "enforce_whitelist" in config:
-            props_to_write["enforce-whitelist"] = "true" if config["enforce_whitelist"] else "false"
-        if "pvp" in config:
-            props_to_write["pvp"] = "true" if config["pvp"] else "false"
-        if "online_mode" in config:
-            props_to_write["online-mode"] = "true" if config["online_mode"] else "false"
-        if "max_players" in config:
-            props_to_write["max-players"] = str(config["max_players"])
-        if "spawn_protection" in config:
-            props_to_write["spawn-protection"] = str(config["spawn_protection"])
-        if "enable_command_block" in config:
-            props_to_write["enable-command-block"] = "true" if config["enable_command_block"] else "false"
-        if "allow_flight" in config:
-            props_to_write["allow-flight"] = "true" if config["allow_flight"] else "false"
-        if "enforce_secure_profile" in config:
-            props_to_write["enforce-secure-profile"] = "true" if config["enforce_secure_profile"] else "false"
-        if "view_distance" in config:
-            props_to_write["view-distance"] = str(config["view_distance"])
-        if "simulation_distance" in config:
-            props_to_write["simulation-distance"] = str(config["simulation_distance"])
+        for config_key, (props_key, transform) in _CONFIG_PROPERTY_MAP.items():
+            if config_key in config:
+                props_to_write[props_key] = transform(config[config_key])
 
     if not os.path.exists(props_path):
         os.makedirs(os.path.dirname(props_path), exist_ok=True)
