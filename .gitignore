@@ -74,6 +74,7 @@ CHECKLIST.md
 # Agent workspace
 .opencode/
 .agent/
+.serena/
 skills-lock.json
 
 # Local development files (not needed in repo)
