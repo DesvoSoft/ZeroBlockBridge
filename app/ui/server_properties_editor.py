@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip
+from app.ui.ui_components import ToolTip, center_on_parent
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
 from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
@@ -82,6 +82,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")
         self.geometry("700x600")
+        center_on_parent(self, parent, 700, 600)
         self.resizable(True, True)
 
         self.server_name = server_name
@@ -635,7 +636,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._build_tab_from_config(self.frame_advanced, "Advanced")
         
         # Dynamic "Other Properties"
-        card_other = self.create_section_frame(self.frame_advanced, "�️ Other Properties")
+        card_other = self.create_section_frame(self.frame_advanced, "🔧 Other Properties")
         
         used_keys = set(self.widgets.keys())
         used_keys.update(["motd", "server-ip", "server-port", "white-list", "enforce-whitelist"]) 
@@ -766,7 +767,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)
         if os.path.exists(server_path):
             if sys.platform == "win32":
-                os.startfile(server_path)
+                subprocess.run(["explorer", server_path], check=False)
             elif sys.platform == "darwin":
                 subprocess.run(["open", server_path], check=False)
             else:

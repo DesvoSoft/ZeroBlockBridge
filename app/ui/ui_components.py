@@ -7,6 +7,14 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+
+def center_on_parent(toplevel, parent, width, height):
+    parent.update_idletasks()
+    x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
+    y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
+    toplevel.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
+
+
 class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -221,6 +229,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         super().__init__(master)
         self.title(title)
         self.geometry("350x180")
+        center_on_parent(self, master, 350, 180)
         self.resizable(False, False)
         self.cancelled = False
         

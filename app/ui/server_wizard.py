@@ -6,6 +6,7 @@ from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
+from app.ui.ui_components import center_on_parent
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class ServerWizard(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Create New Server - Zero Block Bridge")
         self.geometry("650x650")
+        center_on_parent(self, parent, 650, 650)
         self.resizable(False, False)
         
         self.on_complete_callback = on_complete_callback
@@ -185,7 +187,7 @@ class ServerWizard(ctk.CTkToplevel):
 
     def browse_icon(self):
         from tkinter import filedialog
-        file_path = filedialog.askopenfilename(title="Seleccionar Icono", filetypes=[("Images", "*.png;*.jpg;*.jpeg")])
+        file_path = filedialog.askopenfilename(title="Select Icon", filetypes=[("Images", "*.png;*.jpg;*.jpeg")])
         if file_path:
             self.wizard_data["icon_path"] = file_path
             self._update_icon_preview(file_path)

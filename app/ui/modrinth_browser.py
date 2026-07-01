@@ -480,15 +480,34 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._set_status("⚠ Select a server first.")
             return
 
+        if len(hits) > 1 and not tkinter.messagebox.askyesno(
+            "Confirm Install", f"Install {len(hits)} mods/modpacks?"
+        ):
+            return
+
         self._selected_hits.clear()
         self._update_install_selected_bar()
         self._set_status(f"Queuing {len(hits)} install(s)…")
 
+        batch = {"done": 0, "failed": 0, "total": len(hits)}
         for hit in hits:
             if hit.get("project_type") == "modpack":
-                self._on_install_modpack(hit)
+                self._on_install_modpack(hit, batch=batch)
             else:
-                self._on_install(hit)
+                self._on_install(hit, batch=batch)
+
+    def _note_batch_result(self, batch: dict, ok: bool):
+        if batch is None:
+            return
+        batch["done"] += 1
+        if not ok:
+            batch["failed"] += 1
+        if batch["done"] >= batch["total"]:
+            total, failed = batch["total"], batch["failed"]
+            if failed:
+                self._set_status(f"✓ Installed {total - failed}/{total} ({failed} failed)")
+            else:
+                self._set_status(f"✓ Installed {total}/{total}")
 
     # ------------------------------------------------------------------
     # Render results
@@ -828,10 +847,11 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Install action
     # ------------------------------------------------------------------
-    def _on_install(self, hit: dict):
+    def _on_install(self, hit: dict, batch: dict = None):
         ctx = self._resolve_server_context()
         if not ctx:
             self._set_status("⚠ Select a server first.")
+            self._note_batch_result(batch, ok=False)
             return
         server_name, mc_version, loader = ctx
 
@@ -844,21 +864,23 @@ class ModrinthBrowser(ctk.CTkFrame):
                 versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
                     self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
                 if len(versions) == 1:
-                    self._do_install_version(versions[0], server_name, loader, title)
+                    self._do_install_version(versions[0], server_name, loader, title, batch=batch)
                 else:
                     self.after(0, lambda: self._show_version_picker(
                         versions, title,
-                        on_confirm=lambda v: self._do_install_version(v, server_name, loader, title),
+                        on_confirm=lambda v: self._do_install_version(v, server_name, loader, title, batch=batch),
                     ))
             except Exception as exc:
                 logger.debug("Project fetch error: %s", exc)
                 self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
-    def _do_install_version(self, version, server_name, loader, title):
+    def _do_install_version(self, version, server_name, loader, title, batch: dict = None):
         self._set_status(f"Installing {title}…", busy=True)
 
         def _install():
@@ -873,17 +895,21 @@ class ModrinthBrowser(ctk.CTkFrame):
                     fname = os.path.basename(path)
                     self.after(0, lambda: self._set_status(f"✓ Installed {fname}"))
                     logger.info("Installed %s to %s", title, path)
+                    self.after(0, lambda: self._note_batch_result(batch, ok=True))
                 else:
                     self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
+                    self.after(0, lambda: self._note_batch_result(batch, ok=False))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Install failed: {e}"))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_install, daemon=True).start()
 
-    def _on_install_modpack(self, hit: dict):
+    def _on_install_modpack(self, hit: dict, batch: dict = None):
         ctx = self._resolve_server_context()
         if not ctx:
             self._set_status("⚠ Select a server first.")
+            self._note_batch_result(batch, ok=False)
             return
         server_name, mc_version, loader = ctx
 
@@ -896,21 +922,23 @@ class ModrinthBrowser(ctk.CTkFrame):
                 versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
                     self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
                 if len(versions) == 1:
-                    self._do_install_modpack_version(versions[0], server_name, title)
+                    self._do_install_modpack_version(versions[0], server_name, title, batch=batch)
                 else:
                     self.after(0, lambda: self._show_version_picker(
                         versions, title,
-                        on_confirm=lambda v: self._do_install_modpack_version(v, server_name, title),
+                        on_confirm=lambda v: self._do_install_modpack_version(v, server_name, title, batch=batch),
                     ))
             except Exception as exc:
                 logger.debug("Modpack version fetch error: %s", exc)
                 self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
-    def _do_install_modpack_version(self, version, server_name, title):
+    def _do_install_modpack_version(self, version, server_name, title, batch: dict = None):
         self._set_status(f"Installing modpack {title}…", busy=True)
 
         def _install():
@@ -924,6 +952,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 )
                 if not downloaded:
                     self.after(0, lambda: self._set_status(f"✗ Download failed for {title}."))
+                    self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
 
                 install_mrpack(
@@ -932,8 +961,10 @@ class ModrinthBrowser(ctk.CTkFrame):
                 )
                 self.after(0, lambda: self._set_status(f"✓ Modpack {title} installed."))
                 logger.info("Installed modpack %s to server %s", title, server_name)
+                self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Modpack install failed: {e}"))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 

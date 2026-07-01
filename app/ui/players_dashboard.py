@@ -6,6 +6,7 @@ from app.core.app_config import AppConfig
 from app.core.server_events import ServerEvent
 from app.core.constants import SERVERS_DIR
 from app.services.server_properties import load_server_properties, save_server_properties
+from app.ui.ui_components import center_on_parent
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         super().__init__(master, **kwargs)
         self.title("Player Management Dashboard")
         self.geometry("600x600")
+        center_on_parent(self, master, 600, 600)
         self.minsize(500, 500)
         self.event_bus = event_bus
         self.zbb_manager = zbb_manager

@@ -176,6 +176,14 @@ class MCTunnelApp(ctk.CTk):
         )
         self.btn_config.pack(side="left", padx=5)
 
+        self.btn_open_folder = ctk.CTkButton(
+            self.status_frame, text="📂", width=36, height=36,
+            corner_radius=12, fg_color="transparent", hover_color="#334155",
+            font=("Roboto", 16), command=self.open_server_folder,
+            state="disabled"
+        )
+        self.btn_open_folder.pack(side="left", padx=5)
+
         self.btn_start = ctk.CTkButton(self.status_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
         self.btn_start.pack(side="left", padx=2)
         self.btn_stop = ctk.CTkButton(self.status_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
@@ -377,8 +385,7 @@ class MCTunnelApp(ctk.CTk):
 
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
-        server_path = os.path.join(SERVERS_DIR, server_name)
-        
+
         meta = logic.get_server_meta(server_name)
         server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
@@ -390,9 +397,11 @@ class MCTunnelApp(ctk.CTk):
         self.btn_stop.configure(state="normal" if is_running else "disabled")
 
         self.btn_config.configure(state="normal")
+        self.btn_open_folder.configure(state="normal")
         self.entry_console.configure(state="normal", placeholder_text="Type command here...")
         self.btn_send.configure(state="normal")
         self.server_console.log(f"[UI] Selected server: {server_name}")
+
     def _open_in_file_manager(self, path) -> None:
         try:
             if sys.platform == "win32":
@@ -441,13 +450,6 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log("[Error] Stop the server before editing properties.")
             return
         ServerPropertiesEditor(self, self.zbb_manager.current_server, logic, self.zbb_manager)
-
-    def open_mods_folder_action(self):
-        if not self.zbb_manager.current_server: return
-        server_path = SERVERS_DIR / self.zbb_manager.current_server
-        if not server_path.exists(): return
-        self._open_in_file_manager(server_path)
-        self.server_console.log(f"[System] Opened server folder for '{self.zbb_manager.current_server}'")
 
     def update_console(self, text):
         if isinstance(text, str):

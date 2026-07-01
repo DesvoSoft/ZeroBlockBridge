@@ -91,8 +91,11 @@ class ToastNotification:
         offset_y = len(self._active_toasts) * (th + 10)
         x = parent.winfo_rootx() + pw - tw - 20
         y = parent.winfo_rooty() + ph - th - 20 - offset_y
+        y = max(y, parent.winfo_rooty() + 10)
         toast.geometry(f"{tw}x{th}+{x}+{y}")
 
+        toast._zbb_parent = parent
+        toast._zbb_height = th
         self._active_toasts.append(toast)
 
         # Fade-in
@@ -136,6 +139,28 @@ class ToastNotification:
             toast.destroy()
         except Exception as e:
             logger.debug("Toast hide error: %s", e)
+        self._reflow_toasts()
+
+    def _reflow_toasts(self):
+        """Recompute vertical position of remaining active toasts to close gaps."""
+        for i, toast in enumerate(self._active_toasts):
+            if not toast.winfo_exists():
+                continue
+            parent = getattr(toast, "_zbb_parent", None)
+            th = getattr(toast, "_zbb_height", None)
+            if parent is None or th is None:
+                continue
+            try:
+                tw = toast.winfo_width()
+                pw = parent.winfo_width()
+                ph = parent.winfo_height()
+                offset_y = i * (th + 10)
+                x = parent.winfo_rootx() + pw - tw - 20
+                y = parent.winfo_rooty() + ph - th - 20 - offset_y
+                y = max(y, parent.winfo_rooty() + 10)
+                toast.geometry(f"{tw}x{th}+{x}+{y}")
+            except Exception as e:
+                logger.debug("Toast reflow error: %s", e)
 
     def dismiss(self) -> None:
         """Clear all active toasts immediately."""
