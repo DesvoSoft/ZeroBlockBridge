@@ -78,14 +78,15 @@ TAB_LAYOUTS = {
 }
 
 class ServerPropertiesEditor(ctk.CTkToplevel):
-    def __init__(self, parent, server_name, logic_module):
+    def __init__(self, parent, server_name, logic_module, zbb_manager=None):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")
         self.geometry("700x600")
         self.resizable(True, True)
-        
+
         self.server_name = server_name
         self.logic = logic_module
+        self.zbb_manager = zbb_manager
         self.properties = load_server_properties(server_name)
         
         # Shared Fonts
@@ -245,26 +246,56 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             rb.pack(side="left", padx=10, pady=5)
 
     def create_backup(self):
-        self.backup_manager.create_backup()
+        def worker():
+            path, error = self.backup_manager.create_backup()
+            if self.winfo_exists():
+                self.after(0, lambda: self._on_backup_created(path, error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_backup_created(self, path, error):
+        if error and not path:
+            messagebox.showerror("Error", f"Failed to create backup.\n\n{error}")
+        elif error:
+            messagebox.showwarning("Backup Created", error)
         self.refresh_backups()
+
+    def _server_is_running(self) -> bool:
+        runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
+        return bool(runner and runner.running)
 
     def restore_backup(self):
         path = self.backup_var.get()
         if not path:
             return
-        
+
+        if self._server_is_running():
+            messagebox.showerror(
+                "Server Running",
+                "Stop the server before restoring a backup."
+            )
+            return
+
         confirm = messagebox.askyesno(
-            "Confirm Restore", 
+            "Confirm Restore",
             f"Are you sure you want to restore this backup?\n\n{os.path.basename(path)}\n\nCurrent world data will be overwritten."
         )
-        
-        if confirm:
+        if not confirm:
+            return
+
+        def worker():
             success = self.backup_manager.restore_backup(path)
-            if success:
-                messagebox.showinfo("Success", "Server restored successfully.")
-                self.refresh_backups()
-            else:
-                messagebox.showerror("Error", "Failed to restore backup.")
+            if self.winfo_exists():
+                self.after(0, lambda: self._on_backup_restored(success))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_backup_restored(self, success):
+        if success:
+            messagebox.showinfo("Success", "Server restored successfully.")
+            self.refresh_backups()
+        else:
+            messagebox.showerror("Error", "Failed to restore backup.")
 
     def _refresh_backup_countdown(self):
         if not self.winfo_exists():

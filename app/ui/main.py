@@ -440,7 +440,7 @@ class MCTunnelApp(ctk.CTk):
         if self.zbb_manager.is_running():
             self.server_console.log("[Error] Stop the server before editing properties.")
             return
-        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic)
+        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic, self.zbb_manager)
 
     def open_mods_folder_action(self):
         if not self.zbb_manager.current_server: return
