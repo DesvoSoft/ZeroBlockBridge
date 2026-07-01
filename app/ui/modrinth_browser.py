@@ -33,10 +33,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _MODRINTH_GREEN = "#1bd96a"
 _MODRINTH_GREEN_HOVER = "#15b858"
-_BADGE_BG_LIGHT = "#dbeafe"   # blue-100
-_BADGE_BG_DARK = "#1e3a5f"
-_BADGE_TEXT_LIGHT = "#1e40af"  # blue-800
-_BADGE_TEXT_DARK = "#93c5fd"   # blue-300
+_BADGE_BG_LIGHT, _BADGE_BG_DARK = AppConfig.COLOR_BADGE_BG
+_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK = AppConfig.COLOR_BADGE_TEXT
 _DOWNLOADS_COLOR = "#94a3b8"   # slate-400
 
 _ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
@@ -709,10 +707,20 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         if not files:
             ctk.CTkLabel(
+                self.results_frame, text="📦", font=("Roboto", 28),
+            ).grid(row=1, column=0, pady=(24, 4))
+            ctk.CTkLabel(
                 self.results_frame,
                 text="No mods or plugins installed.",
                 font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_NOTE,
-            ).grid(row=1, column=0, pady=20)
+            ).grid(row=2, column=0, pady=(0, 10))
+            ctk.CTkButton(
+                self.results_frame, text="Browse Popular Mods",
+                command=self._toggle_installed_view,
+                fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                corner_radius=12, height=32,
+            ).grid(row=3, column=0, pady=(0, 24))
             return
 
         self._installed_checkboxes = {}

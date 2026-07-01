@@ -64,7 +64,8 @@ class MCTunnelApp(ctk.CTk):
 
     def _init_state_variables(self):
         self.claim_url = None
-        
+        self.server_items = {}
+
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
@@ -191,25 +192,43 @@ class MCTunnelApp(ctk.CTk):
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)
-        
-        self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_java_ver.pack(side="right", padx=(5, 10))
 
-        self.btn_players = ctk.CTkButton(
-            self.status_right_frame, 
-            text="Players: 0", 
-            command=self.open_players_dashboard,
-            fg_color="transparent", 
-            text_color=AppConfig.COLOR_TEXT_GRAY, 
-            hover_color="#334155", 
-            font=AppConfig.FONT_BODY_SMALL,
-            height=28,
-            width=80
+        badge_java = ctk.CTkFrame(
+            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=12
         )
-        self.btn_players.pack(side="right", padx=(5, 5))
-        
-        self.lbl_server_info = ctk.CTkLabel(self.status_right_frame, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_server_info.pack(side="right", padx=(5, 10))
+        badge_java.pack(side="right", padx=(5, 10))
+        self.lbl_java_ver = ctk.CTkLabel(
+            badge_java, text="Checking...", text_color=AppConfig.COLOR_BADGE_TEXT,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_java_ver.pack(padx=8, pady=2)
+
+        badge_players = ctk.CTkFrame(
+            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=12
+        )
+        badge_players.pack(side="right", padx=(5, 5))
+        self.btn_players = ctk.CTkButton(
+            badge_players,
+            text="👤 0",
+            command=self.open_players_dashboard,
+            fg_color="transparent",
+            text_color=AppConfig.COLOR_BADGE_TEXT,
+            hover_color="#334155",
+            font=AppConfig.FONT_BODY_SMALL,
+            height=24,
+            width=60
+        )
+        self.btn_players.pack(padx=2, pady=2)
+
+        badge_server_info = ctk.CTkFrame(
+            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=12
+        )
+        badge_server_info.pack(side="right", padx=(5, 10))
+        self.lbl_server_info = ctk.CTkLabel(
+            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_server_info.pack(padx=8, pady=2)
 
 
 
@@ -359,11 +378,16 @@ class MCTunnelApp(ctk.CTk):
     def _render_server_list(self, servers):
         for widget in self.server_list_frame.winfo_children():
             widget.destroy()
+        self.server_items = {}
         if not servers:
+            ctk.CTkLabel(
+                self.server_list_frame, text="📦",
+                font=("Roboto", 32)
+            ).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.server_list_frame, text="No servers yet.",
                 text_color=AppConfig.COLOR_TEXT_MUTED, font=("Roboto", 13)
-            ).pack(pady=(20, 6))
+            ).pack(pady=(0, 6))
             ctk.CTkButton(
                 self.server_list_frame, text="→ Create your first server",
                 command=self.create_server_dialog,
@@ -375,6 +399,7 @@ class MCTunnelApp(ctk.CTk):
             for s in servers:
                 item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select)
                 item.pack(fill="x", padx=5, pady=5)
+                self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
 
     def on_server_select(self, server_name):
@@ -395,6 +420,10 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_start.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
+
+        item = self.server_items.get(server_name)
+        if item:
+            item.set_status("online" if is_running else "offline")
 
         self.btn_config.configure(state="normal")
         self.btn_open_folder.configure(state="normal")
@@ -470,10 +499,16 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.start_server()
         self.executor.submit(_start)
 
+    def _set_current_server_pill(self, status: str):
+        item = self.server_items.get(self.zbb_manager.current_server)
+        if item:
+            item.set_status(status)
+
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self.btn_start.configure(state="disabled"))
         self.after(0, lambda: self.btn_stop.configure(state="normal"))
+        self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
             java_ver = data.get("required_java", "?")
@@ -483,9 +518,10 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
-        self.after(0, lambda: self.btn_players.configure(text=f"Players: {count}"))
+        self.after(0, lambda: self.btn_players.configure(text=f"👤 {count}"))
 
     def open_players_dashboard(self):
         if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
@@ -497,6 +533,7 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
+        self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):
         self.zbb_manager.stop_server()

@@ -236,7 +236,18 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             loading_lbl.destroy()
             
         if not backups:
-            ctk.CTkLabel(self.backup_list_frame, text="No backups found.").pack(pady=20)
+            ctk.CTkLabel(self.backup_list_frame, text="🗄️", font=("Roboto", 28)).pack(pady=(24, 4))
+            ctk.CTkLabel(
+                self.backup_list_frame, text="No backups found.",
+                text_color=AppConfig.COLOR_TEXT_MUTED
+            ).pack(pady=(0, 10))
+            ctk.CTkButton(
+                self.backup_list_frame, text="Create Backup",
+                command=self.create_backup,
+                fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                corner_radius=12, height=32
+            ).pack(pady=(0, 20))
             return
             
         for backup in backups:

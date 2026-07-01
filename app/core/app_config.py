@@ -39,6 +39,10 @@ class AppConfig:
     COLOR_TEXT_NOTE = "#64748b"       # slate-500  (más sutil que antes)
     COLOR_TEXT_MUTED = "#475569"      # slate-600  (muy sutil)
 
+    # Colors - Badges/pills (shared across status bar, mods browser)
+    COLOR_BADGE_BG = ("#dbeafe", "#1e3a5f")        # blue-100 / dark blue
+    COLOR_BADGE_TEXT = ("#1e40af", "#93c5fd")      # blue-800 / blue-300
+
     # Colors - Buttons (3 roles: Primary, Danger, Ghost)
     COLOR_BTN_PRIMARY = "#3b82f6"         # blue-500
     COLOR_BTN_PRIMARY_HOVER = "#2563eb"   # blue-600

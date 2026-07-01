@@ -164,7 +164,8 @@ class ServerListItem(ctk.CTkFrame):
         
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
-        
+        self.grid_columnconfigure(2, weight=0)
+
         icon_path = os.path.join(SERVERS_DIR, server_name, "server-icon.png")
         self.icon_image = None
         
@@ -193,6 +194,12 @@ class ServerListItem(ctk.CTkFrame):
         )
         self.lbl_name.grid(row=0, column=1, padx=(5, 10), pady=5, sticky="ew")
 
+        self.status_dot = ctk.CTkLabel(
+            self, text="", width=10, height=10, corner_radius=5,
+            fg_color=AppConfig.COLOR_STATUS_OFFLINE
+        )
+        self.status_dot.grid(row=0, column=2, padx=(0, 12), pady=5)
+
         self.bind_events(self)
         self.bind_events(self.lbl_name)
         self.bind_events(self.lbl_icon)
@@ -201,6 +208,14 @@ class ServerListItem(ctk.CTkFrame):
         # Add ToolTip if truncated
         if len(self.full_name) > 22:
             self.tooltip_ref = ToolTip(self, self.full_name)
+
+    def set_status(self, status: str):
+        color = {
+            "online": AppConfig.COLOR_STATUS_ONLINE,
+            "starting": AppConfig.COLOR_STATUS_STARTING,
+            "offline": AppConfig.COLOR_STATUS_OFFLINE,
+        }.get(status, AppConfig.COLOR_STATUS_OFFLINE)
+        self.status_dot.configure(fg_color=color)
 
     def bind_events(self, widget):
         widget.bind("<Button-1>", lambda e: self._on_select())
