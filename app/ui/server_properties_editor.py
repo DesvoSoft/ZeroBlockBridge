@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
-from app.core.logic import BackupScheduler
+from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
 
 
 SETTINGS_METADATA = {
@@ -731,13 +731,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             
         options = list(self._java_label_to_path.keys())
         
-        meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
-        meta = {}
-        if os.path.exists(meta_path):
-            import json
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-        
+        meta = get_server_meta(self.server_name)
+
         saved_path = meta.get("java_path", "auto")
         self.var_java_path = ctk.StringVar(value=self._java_path_to_label.get(saved_path, "Auto-Detect"))
         
@@ -751,7 +746,16 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
         self.chk_aikars = ctk.CTkSwitch(card, text="", variable=self.var_use_aikars)
         self.chk_aikars.grid(row=2, column=2, columnspan=2, sticky="e", padx=12, pady=5)
-        
+
+        # Custom JVM Flags
+        ctk.CTkLabel(card, text="Custom JVM Flags:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=(8, 0))
+        self.entry_jvm_flags = ctk.CTkEntry(card, height=28)
+        self.entry_jvm_flags.insert(0, meta.get("jvm_custom_flags", ""))
+        self.entry_jvm_flags.grid(row=3, column=2, columnspan=2, sticky="e", padx=12, pady=(8, 0))
+        ctk.CTkLabel(card, text="e.g. -XX:+UseG1GC -Dfoo=bar", font=self.font_small,
+                     text_color=AppConfig.COLOR_TEXT_MUTED,
+                     anchor="e").grid(row=4, column=2, columnspan=2, sticky="e", padx=12, pady=(0, 8))
+
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
         ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder,
@@ -771,15 +775,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
     def save_launch_settings(self):
         meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
         if not os.path.exists(meta_path): return
-        
-        import json
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-            
+
         label = self.var_java_path.get()
         path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-        meta["java_path"] = path
-        meta["use_aikars"] = self.var_use_aikars.get()
-        
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
+        update_server_meta(self.server_name, {
+            "java_path": path,
+            "use_aikars": self.var_use_aikars.get(),
+            "jvm_custom_flags": self.entry_jvm_flags.get().strip(),
+        })

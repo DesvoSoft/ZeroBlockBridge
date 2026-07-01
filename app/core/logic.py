@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shlex
 import subprocess
 import shutil
 import requests
@@ -463,15 +464,23 @@ class ServerRunner:
         from app.services.aikars_flags import calculate_flags
         aikars = calculate_flags(ram_mb, java_major=java_major) if self.use_aikars else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"]
 
+        custom_flags = []
+        raw_flags = get_server_meta(self.server_name).get("jvm_custom_flags", "")
+        if raw_flags:
+            try:
+                custom_flags = shlex.split(raw_flags)
+            except ValueError as e:
+                logger.warning("Invalid jvm_custom_flags for %s: %s", self.server_name, e)
+
         if is_forge_modern and forge_args_file:
-            cmd = [self.java_bin] + aikars + [
+            cmd = [self.java_bin] + aikars + custom_flags + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 f"@{forge_args_file}",
                 "nogui",
             ]
         else:
-            cmd = [self.java_bin] + aikars + [
+            cmd = [self.java_bin] + aikars + custom_flags + [
                 "-jar",
                 jar_file,
                 "nogui",

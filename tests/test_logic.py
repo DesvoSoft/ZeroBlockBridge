@@ -16,6 +16,7 @@ from app.core.logic import (
     update_server_meta,
     _run_installer,
     download_server,
+    ServerRunner,
 )
 
 
@@ -362,3 +363,64 @@ class TestDownloadServer:
         # Verify SHA1 was passed to download_with_verification
         _, kwargs = mock_dl_verify.call_args
         assert kwargs.get("expected_sha1") == "abc123def456"
+
+
+class TestServerRunnerJvmCustomFlags:
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+        from app.core.logic import _meta_cache
+        _meta_cache.clear()
+
+    def _make_server(self, tmpdir, jvm_custom_flags=None):
+        server_dir = os.path.join(tmpdir, "test_server")
+        os.makedirs(server_dir)
+        with open(os.path.join(server_dir, "server.jar"), "w", encoding="utf-8") as f:
+            f.write("")
+        meta = {"ram": 1024}
+        if jvm_custom_flags is not None:
+            meta["jvm_custom_flags"] = jvm_custom_flags
+        with open(os.path.join(server_dir, "metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f)
+        return server_dir
+
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_custom_flags_appended_to_cmd(self, mock_eula, mock_probe, mock_popen):
+        self._make_server(self.tmpdir, jvm_custom_flags="-XX:+UseG1GC -Dfoo=bar")
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        cmd = mock_popen.call_args.args[0]
+        assert "-XX:+UseG1GC" in cmd
+        assert "-Dfoo=bar" in cmd
+
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_empty_custom_flags_no_op(self, mock_eula, mock_probe, mock_popen):
+        self._make_server(self.tmpdir)
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        cmd = mock_popen.call_args.args[0]
+        assert cmd.count("-jar") == 1
+        assert "server.jar" in cmd
+
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_malformed_custom_flags_caught(self, mock_eula, mock_probe, mock_popen):
+        self._make_server(self.tmpdir, jvm_custom_flags='-Dfoo="unterminated')
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        assert mock_popen.called
+        cmd = mock_popen.call_args.args[0]
+        assert "server.jar" in cmd
