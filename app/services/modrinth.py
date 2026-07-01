@@ -256,6 +256,30 @@ class ModrinthClient:
             primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
         )
 
+    def download_version_to(
+        self,
+        version: dict,
+        dest_dir: str,
+        progress_callback=None,
+    ) -> Optional[str]:
+        """
+        Download a version's primary file to an arbitrary directory, without
+        assuming a mods/plugins layout. Used for archive-type downloads
+        (e.g. modpack .mrpack files) that don't belong under SERVERS_DIR/<name>/mods.
+
+        Returns path to the downloaded file, or None on failure.
+        """
+        primary_file = self._resolve_version_file(version)
+        if not primary_file:
+            logger.error("Version %s has no downloadable files", version.get("id"))
+            return None
+
+        os.makedirs(dest_dir, exist_ok=True)
+        return self._download_file(
+            primary_file["url"], primary_file["filename"],
+            primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
+        )
+
     # ------------------------------------------------------------------
     # Public API — Update checking
     # ------------------------------------------------------------------
@@ -327,6 +351,32 @@ class ModrinthClient:
                     "latest_version": new_version.get("version_number"),
                     "update_url": primary.get("url"),
                     "update_filename": primary.get("filename"),
+                    "update_sha1": primary.get("hashes", {}).get("sha1"),
                 })
 
         return updates
+
+    def apply_update(self, update: Dict, server_name: str, loader: str) -> bool:
+        """
+        Download an update's replacement file and remove the old one.
+
+        `update` is one entry from check_updates(). Returns True on success.
+        """
+        target_dir = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
+        dir_path = os.path.join(SERVERS_DIR, server_name, target_dir)
+        old_path = os.path.join(dir_path, update["filename"])
+
+        downloaded = self._download_file(
+            update["update_url"], update["update_filename"],
+            update.get("update_sha1"), dir_path,
+        )
+        if not downloaded:
+            return False
+
+        if os.path.exists(old_path) and os.path.abspath(old_path) != os.path.abspath(downloaded):
+            try:
+                os.remove(old_path)
+            except OSError as exc:
+                logger.warning("Could not remove old file %s: %s", old_path, exc)
+
+        return True

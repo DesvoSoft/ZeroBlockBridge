@@ -173,6 +173,81 @@ class TestModrinthDownloadVersion:
             assert result == "/servers/test_server/plugins/plugin.jar"
 
 
+class TestModrinthDownloadVersionTo:
+    @patch("app.services.modrinth.ModrinthClient._resolve_version_file")
+    def test_no_file_returns_none(self, mock_resolve):
+        mock_resolve.return_value = None
+        client = ModrinthClient()
+        result = client.download_version_to({"id": "v1"}, "/tmp/somewhere")
+        assert result is None
+
+    @patch("app.services.modrinth.os.makedirs")
+    @patch("app.services.modrinth.ModrinthClient._resolve_version_file")
+    def test_downloads_to_given_dir(self, mock_resolve, mock_makedirs):
+        mock_resolve.return_value = {
+            "url": "https://cdn.modrinth.com/pack.mrpack",
+            "filename": "pack.mrpack",
+            "hashes": {"sha1": "abc123"},
+        }
+        with patch("app.services.modrinth.ModrinthClient._download_file") as mock_dl:
+            mock_dl.return_value = "/tmp/somewhere/pack.mrpack"
+            client = ModrinthClient()
+            result = client.download_version_to({"id": "v1"}, "/tmp/somewhere")
+            assert result == "/tmp/somewhere/pack.mrpack"
+            mock_dl.assert_called_once_with(
+                "https://cdn.modrinth.com/pack.mrpack", "pack.mrpack",
+                "abc123", "/tmp/somewhere", None,
+            )
+            mock_makedirs.assert_called_once_with("/tmp/somewhere", exist_ok=True)
+
+
+class TestModrinthApplyUpdate:
+    @patch("app.services.modrinth.os.remove")
+    @patch("app.services.modrinth.os.path.exists", return_value=True)
+    @patch("app.services.modrinth.ModrinthClient._download_file")
+    def test_apply_update_downloads_and_removes_old(self, mock_dl, mock_exists, mock_remove):
+        mock_dl.return_value = "/servers/test_server/mods/new-mod-2.0.jar"
+        client = ModrinthClient()
+        update = {
+            "filename": "old-mod-1.0.jar",
+            "update_url": "https://cdn.modrinth.com/new-mod-2.0.jar",
+            "update_filename": "new-mod-2.0.jar",
+            "update_sha1": "def456",
+        }
+        result = client.apply_update(update, "test_server", "fabric")
+        assert result is True
+        mock_remove.assert_called_once()
+        assert "old-mod-1.0.jar" in mock_remove.call_args[0][0]
+
+    @patch("app.services.modrinth.ModrinthClient._download_file")
+    def test_apply_update_download_fails_returns_false(self, mock_dl):
+        mock_dl.return_value = None
+        client = ModrinthClient()
+        update = {
+            "filename": "old-mod-1.0.jar",
+            "update_url": "https://cdn.modrinth.com/new-mod-2.0.jar",
+            "update_filename": "new-mod-2.0.jar",
+            "update_sha1": "def456",
+        }
+        result = client.apply_update(update, "test_server", "fabric")
+        assert result is False
+
+    @patch("app.services.modrinth.os.path.exists", return_value=True)
+    @patch("app.services.modrinth.ModrinthClient._download_file")
+    def test_apply_update_plugins_dir_for_paper(self, mock_dl, mock_exists):
+        mock_dl.return_value = "/servers/test_server/plugins/new-plugin-2.0.jar"
+        client = ModrinthClient()
+        update = {
+            "filename": "old-plugin-1.0.jar",
+            "update_url": "https://cdn.modrinth.com/new-plugin-2.0.jar",
+            "update_filename": "new-plugin-2.0.jar",
+            "update_sha1": "def456",
+        }
+        with patch("app.services.modrinth.os.remove") as mock_remove:
+            client.apply_update(update, "test_server", "paper")
+            assert "plugins" in mock_remove.call_args[0][0]
+
+
 class TestModrinthCheckUpdates:
     @patch("app.services.modrinth.os.path.isdir", return_value=False)
     def test_no_mods_dir_returns_empty(self, mock_isdir):

@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-06-24 (rev 4)
+> **Última actualización:** 2026-07-01 (rev 5)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 410 tests, 100% pass, 0 flaky
+> **Test count:** 426 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
@@ -11,7 +11,9 @@
 > **Sesión 2026-06-24 (4):** P0.4 ✅ (pyproject.toml creado, pip install -e . ok) P0.5 ✅ (ya estaba resuelto — ServerState en constants.py) P0.7 ✅ (flake8 F401=0) HA-05/HA-06 ✅ (ServerRunner.running property con lock, clear players en start) F6 ✅ (Discord Webhook — 10 tests) — 409 tests pass
 > **Sesión 2026-06-24 (5):** BUG-AUDIT completo — MA-02/03/LA-01/03 verificados ya resueltos; MA-05 ✅ (missed window warning + NOTIFICATION); LA-02 ✅ (_jar_ready_events dead code eliminado); LA-04 ✅ (warning log en fallback meta); LA-05 ✅ (tick guard warning); 5 tests nuevos TestSchedulerGetStatus — 410 tests pass
 > **Sesión 2026-06-24 (6):** MODS-B ✅ (paginación clásica Prev/Next, sort dropdown, _resolve_server_context, installed inline, hover fix, NR-10 palette) CA-M04 ✅ (.mrpack import — mrpack_installer.py) — 410 tests pass
-> **Siguiente prioridad:** F8 (Bulk Mod Operations) o CA-H01/H02 (JVM args UI, player mgmt unificado)
+> **Sesión 2026-06-24/07-01 (fuera de roadmap):** fix(playit) tunnel startup auth-error handling; fix(ui) backup create/restore off UI thread; refactor(scaffolder) dict-driven config mapping (complejidad 28→~6) — 417 tests pass
+> **Sesión 2026-07-01 (7):** F8 ✅ (multi-select checkboxes en Installed view + búsqueda, Select All/Delete Selected/Update Selected, `ModrinthClient.apply_update()`) + modpack one-click install ✅ (search con project_type=modpack ahora descarga y extrae vía `download_version_to()` + `install_mrpack()` reutilizado — cubre F7.5 sin el resto de F7) — 426 tests pass
+> **Siguiente prioridad:** CA-H01 (JVM args UI) o CA-H02 (player mgmt unificado)
 
 ---
 
@@ -28,7 +30,7 @@
 | Threads potenciales | ~38 (todos daemon) |
 | Dependencias externas | 4 (customtkinter, requests, psutil, Pillow) |
 
-### Orden de desarrollo recomendado (2026-06-24)
+### Orden de desarrollo recomendado (2026-07-01)
 
 | Prioridad | ID | Qué | Estado |
 |-----------|-----|-----|--------|
@@ -40,10 +42,11 @@
 | ✅ | **F6** | Discord Webhook | ✅ Implementado (10 tests) |
 | ✅ | **MODS-B** | Modrinth Browser Mejoras | ✅ Implementado (commit 11b02f6) |
 | ✅ | **CA-M04** | .mrpack import | ✅ mrpack_installer.py |
-| 1 | **F8** | Bulk Mod Operations | Multi-select, batch delete/update — depende de MODS-B ✅ |
-| 2 | **CA-H01** | JVM args UI por servidor | `-Xmx/-Xms` + flags custom — scope acotado |
-| 3 | **CA-H02** | Player management unificado | operators + bans + whitelist en una página |
-| 4 | **F7** | Server Templates + Modpacks | Reusa F8 bulk download infra |
+| ✅ | **F8** | Bulk Mod Operations | ✅ Implementado — multi-select + batch delete/update (Installed + búsqueda), `apply_update()` |
+| ✅ | **F7.5** | Modpack one-click install | ✅ Implementado junto con F8 — búsqueda project_type=modpack → `download_version_to()` + `install_mrpack()` |
+| 1 | **CA-H01** | JVM args UI por servidor | `-Xmx/-Xms` + flags custom — scope acotado |
+| 2 | **CA-H02** | Player management unificado | operators + bans + whitelist en una página |
+| 3 | **F7 (resto)** | Templates propios | TemplateManager, save-as-template, defaults (Lite SMP etc) — sin dependencias pendientes, pero fuera de scope de F8 |
 | ⏸️ | **REFACT-1** | JavaResolver + launch steps | YAGNI para pre-alpha con 1 developer. |
 
 > Regla: features UI → player/server management → templates/migration.
@@ -79,8 +82,8 @@
 11. [✅ F5: Crash Report Collector](#f5-crash-report-collector)
 12. [✅ F6: Discord Webhook](#f6-discord-webhook)
 13. [✅ MODS-B: Modrinth Browser Mejoras](#mods-b-modrinth-browser-mejoras)
-14. [▶️ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
-15. [▶️ F7: Server Templates + Modpacks](#f7-server-templates--modpacks)
+14. [✅ F8: Bulk Mod Operations](#f8-bulk-mod-operations)
+15. [⬜ F7: Server Templates + Modpacks (7.5 ✅, resto pendiente)](#f7-server-templates--modpacks)
 16. [▶️ CA-H01/H02: JVM args + Player management](#ca-high-alta-prioridad-scope-acotado)
 17. [⏸️ F9-F11: Migration, Linux, UI 2.0](#f9-f11-migration-linux-ui-20)
 
@@ -636,36 +639,42 @@ server_version = meta.get("version", "")
 
 ---
 
-## F8: Bulk Mod Operations
+## F8: Bulk Mod Operations ✅
 
 **Objetivo:** Operaciones masivas sobre mods instalados.
 
 **Dependencia:** MODS-B (para tener la UI de mods estable).
 
-| # | Tarea | LOC | Esfuerzo |
-|---|-------|-----|----------|
-| 8.1 | Multi-select checkboxes en installed mods list | ~40 | 1 hr |
-| 8.2 | Botón "Update Selected" — batch download | ~50 | 1.5 hrs |
-| 8.3 | Botón "Delete Selected" — batch delete con confirm | ~30 | 45 min |
-| 8.4 | Botón "Install Multiple" desde search results | ~40 | 1 hr |
-| 8.5 | Progress bar batch ("Installing 3/5 mods...") | ~30 | 45 min |
-| 8.6 | Tests | ~100 | 1 hr |
+**Implementado 2026-07-01 (sesión 7):**
+
+| # | Tarea | Estado |
+|---|-------|--------|
+| 8.1 | Multi-select checkboxes en installed mods list | ✅ |
+| 8.2 | Botón "Update Selected" — batch download | ✅ `ModrinthClient.apply_update()` |
+| 8.3 | Botón "Delete Selected" — batch delete con confirm | ✅ |
+| 8.4 | Botón "Install Selected" desde search results | ✅ |
+| 8.5 | Progress bar batch ("Installing 3/5 mods...") | ⏸️ No implementado — instalaciones concurrentes fire-and-forget, sin contador secuencial |
+| 8.6 | Tests | ✅ `test_modrinth.py` (apply_update/download_version_to), `test_modrinth_browser.py` (_filter_updates_for_selection) |
+
+**Bonus (fuera del alcance original de F8):** modpack one-click install desde búsqueda — ver F7.5 abajo.
 
 ---
 
 ## F7: Server Templates + Modpacks
 
-**Dependencia:** F8 (bulk mod ops) — reutiliza batch download infra.
+**Dependencia:** F8 (bulk mod ops) — reutiliza batch download infra. ✅ F8 completo.
 
-| # | Tarea | LOC | Esfuerzo |
-|---|-------|-----|----------|
-| 7.1 | Definir formato JSON template | doc | 30 min |
-| 7.2 | TemplateManager — save/load/list/delete | ~100 | 2 hrs |
-| 7.3 | Template selector en ServerWizard Step 2 | ~50 | 1 hr |
-| 7.4 | Save as template desde Properties Editor | ~30 | 45 min |
-| 7.5 | Modpack support — auto-descargar mods de Modrinth | ~60 | 1.5 hrs |
-| 7.6 | Templates por defecto (Lite SMP, Modded Fabric, Vanilla+, Paper Performance) | ~20 | 30 min |
-| 7.7 | Tests | ~80 | 1 hr |
+| # | Tarea | LOC | Esfuerzo | Estado |
+|---|-------|-----|----------|--------|
+| 7.1 | Definir formato JSON template | doc | 30 min | ⬜ |
+| 7.2 | TemplateManager — save/load/list/delete | ~100 | 2 hrs | ⬜ |
+| 7.3 | Template selector en ServerWizard Step 2 | ~50 | 1 hr | ⬜ |
+| 7.4 | Save as template desde Properties Editor | ~30 | 45 min | ⬜ |
+| 7.5 | Modpack support — auto-descargar mods de Modrinth | ~60 | 1.5 hrs | ✅ Implementado 2026-07-01 — búsqueda project_type=modpack en `modrinth_browser.py` ahora usa `ModrinthClient.download_version_to()` + `install_mrpack()` (reutilizado de CA-M04) en vez de tratar el .mrpack como jar de mod |
+| 7.6 | Templates por defecto (Lite SMP, Modded Fabric, Vanilla+, Paper Performance) | ~20 | 30 min | ⬜ |
+| 7.7 | Tests | ~80 | 1 hr | ⬜ (7.5 cubierto, resto pendiente) |
+
+**Pendiente real de F7:** solo el sistema de templates propios (7.1-7.4, 7.6-7.7). El soporte de modpacks (7.5) ya está resuelto.
 
 ---
 

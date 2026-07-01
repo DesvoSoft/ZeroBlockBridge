@@ -11,6 +11,8 @@ import hashlib
 import io
 import logging
 import os
+import shutil
+import tempfile
 import threading
 import tkinter.filedialog
 import tkinter.messagebox
@@ -22,6 +24,7 @@ from PIL import Image
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 from app.services.modrinth import ModrinthClient, ModrinthException
+from app.services.mrpack_installer import install_mrpack
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,11 @@ _ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
 
 _PAGE_SIZE = 20
+
+
+def _filter_updates_for_selection(updates: list, selected_filenames: set) -> list:
+    """Return the subset of check_updates() results matching selected filenames."""
+    return [u for u in updates if u.get("filename") in selected_filenames]
 
 
 class ModrinthBrowser(ctk.CTkFrame):
@@ -91,6 +99,10 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # View state: "search" or "installed"
         self._view = "search"
+
+        # Bulk-selection state (F8)
+        self._selected_files: set = set()      # installed view — absolute file paths
+        self._selected_hits: dict = {}          # search view — slug/project_id -> hit dict
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -281,6 +293,15 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         self.btn_next.pack(side="left", padx=(4, 0), pady=4)
 
+        self.btn_install_selected = ctk.CTkButton(
+            self.pagination_bar, text="Install Selected (0)", width=150, height=28,
+            corner_radius=8,
+            fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+            font=("Roboto Medium", 12), state="disabled",
+            command=self._on_install_selected,
+        )
+        self.btn_install_selected.pack(side="right", padx=(4, 12), pady=4)
+
         self.pagination_bar.grid_remove()  # hidden until first search
 
     # ------------------------------------------------------------------
@@ -343,6 +364,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._current_hits = hits
         self._search_total = total
         self._total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        self._selected_hits.clear()
+        self._update_install_selected_bar()
         self._render_results()
         self._update_pagination()
 
@@ -435,6 +458,38 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _set_status(self, text: str, busy: bool = False):
         self.lbl_status.configure(text=text)
 
+    def _on_toggle_hit_selection(self, key: str, hit: dict, var):
+        if var.get():
+            self._selected_hits[key] = hit
+        else:
+            self._selected_hits.pop(key, None)
+        self._update_install_selected_bar()
+
+    def _update_install_selected_bar(self):
+        n = len(self._selected_hits)
+        if hasattr(self, "btn_install_selected"):
+            self.btn_install_selected.configure(
+                text=f"Install Selected ({n})", state="normal" if n else "disabled")
+
+    def _on_install_selected(self):
+        hits = list(self._selected_hits.values())
+        if not hits:
+            return
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self._set_status("⚠ Select a server first.")
+            return
+
+        self._selected_hits.clear()
+        self._update_install_selected_bar()
+        self._set_status(f"Queuing {len(hits)} install(s)…")
+
+        for hit in hits:
+            if hit.get("project_type") == "modpack":
+                self._on_install_modpack(hit)
+            else:
+                self._on_install(hit)
+
     # ------------------------------------------------------------------
     # Render results
     # ------------------------------------------------------------------
@@ -464,8 +519,16 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         card.grid_columnconfigure(1, weight=1)
 
+        hit_key = hit.get("slug") or hit.get("project_id", "")
+        select_var = ctk.BooleanVar(value=hit_key in self._selected_hits)
+        chk = ctk.CTkCheckBox(
+            card, text="", width=20, variable=select_var,
+            command=lambda h=hit, k=hit_key, v=select_var: self._on_toggle_hit_selection(k, h, v),
+        )
+        chk.grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=12, sticky="n")
+
         icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=12, fg_color=color)
-        icon_frame.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12, sticky="n")
+        icon_frame.grid(row=0, column=0, rowspan=2, padx=(38, 8), pady=12, sticky="n")
         icon_frame.grid_propagate(False)
         lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=("Roboto Medium", 20),
                                    text_color="white")
@@ -523,12 +586,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             badge.pack(side="left", padx=(0, 4))
 
+        is_modpack = hit.get("project_type") == "modpack"
+        install_cmd = self._on_install_modpack if is_modpack else self._on_install
         btn_install = ctk.CTkButton(
             card, text="Install", width=80, height=32,
             corner_radius=12,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
             text_color="white", font=("Roboto Medium", 12),
-            command=lambda h=hit: self._on_install(h),
+            command=lambda h=hit, fn=install_cmd: fn(h),
         )
         btn_install.grid(row=0, column=2, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
@@ -567,6 +632,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _render_installed(self):
         for w in self.results_frame.winfo_children():
             w.destroy()
+        self._selected_files.clear()
 
         ctx = self._resolve_server_context()
         if not ctx:
@@ -583,14 +649,44 @@ class ModrinthBrowser(ctk.CTkFrame):
                     if fname.endswith(".jar"):
                         files.append(os.path.join(d, fname))
 
+        action_bar = ctk.CTkFrame(self.results_frame, fg_color="transparent")
+        action_bar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+
         header = ctk.CTkLabel(
-            self.results_frame,
+            action_bar,
             text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
             font=("Roboto Medium", 13),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             anchor="w",
         )
-        header.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+        header.pack(side="left")
+
+        if files:
+            self._btn_delete_selected = ctk.CTkButton(
+                action_bar, text="Delete Selected (0)", width=140, height=28,
+                corner_radius=8,
+                fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+                font=("Roboto Medium", 11), state="disabled",
+                command=self._on_delete_selected,
+            )
+            self._btn_delete_selected.pack(side="right", padx=(6, 0))
+
+            self._btn_update_selected = ctk.CTkButton(
+                action_bar, text="Update Selected (0)", width=140, height=28,
+                corner_radius=8,
+                fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                font=("Roboto Medium", 11), state="disabled",
+                command=self._on_update_selected,
+            )
+            self._btn_update_selected.pack(side="right", padx=(6, 0))
+
+            ctk.CTkButton(
+                action_bar, text="Select All", width=90, height=28,
+                corner_radius=8,
+                fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                font=("Roboto Medium", 11),
+                command=lambda: self._select_all_installed(files),
+            ).pack(side="right", padx=(6, 0))
 
         if not files:
             ctk.CTkLabel(
@@ -600,15 +696,24 @@ class ModrinthBrowser(ctk.CTkFrame):
             ).grid(row=1, column=0, pady=20)
             return
 
+        self._installed_checkboxes = {}
         for i, fpath in enumerate(files):
             fname = os.path.basename(fpath)
             row_frame = ctk.CTkFrame(self.results_frame, corner_radius=8,
                                      fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
             row_frame.grid(row=i + 1, column=0, sticky="ew", padx=6, pady=2)
-            row_frame.grid_columnconfigure(0, weight=1)
+            row_frame.grid_columnconfigure(1, weight=1)
+
+            var = ctk.BooleanVar(value=fpath in self._selected_files)
+            chk = ctk.CTkCheckBox(
+                row_frame, text="", width=20, variable=var,
+                command=lambda fp=fpath, v=var: self._on_toggle_installed_selection(fp, v),
+            )
+            chk.grid(row=0, column=0, padx=(10, 4), pady=6)
+            self._installed_checkboxes[fpath] = var
 
             ctk.CTkLabel(row_frame, text=fname, font=("Roboto", 12), anchor="w").grid(
-                row=0, column=0, sticky="w", padx=10, pady=6)
+                row=0, column=1, sticky="w", padx=4, pady=6)
 
             btn_del = ctk.CTkButton(
                 row_frame, text="Delete", width=64, height=28,
@@ -617,7 +722,35 @@ class ModrinthBrowser(ctk.CTkFrame):
                 font=("Roboto Medium", 11),
                 command=lambda fp=fpath: self._confirm_delete_mod(fp),
             )
-            btn_del.grid(row=0, column=1, padx=(0, 6), pady=4)
+            btn_del.grid(row=0, column=2, padx=(0, 6), pady=4)
+
+    def _on_toggle_installed_selection(self, filepath: str, var):
+        if var.get():
+            self._selected_files.add(filepath)
+        else:
+            self._selected_files.discard(filepath)
+        self._update_installed_action_bar()
+
+    def _select_all_installed(self, files: list):
+        all_selected = len(self._selected_files) == len(files)
+        for fpath in files:
+            if all_selected:
+                self._selected_files.discard(fpath)
+            else:
+                self._selected_files.add(fpath)
+            var = self._installed_checkboxes.get(fpath)
+            if var is not None:
+                var.set(fpath in self._selected_files)
+        self._update_installed_action_bar()
+
+    def _update_installed_action_bar(self):
+        n = len(self._selected_files)
+        if hasattr(self, "_btn_delete_selected"):
+            self._btn_delete_selected.configure(
+                text=f"Delete Selected ({n})", state="normal" if n else "disabled")
+        if hasattr(self, "_btn_update_selected"):
+            self._btn_update_selected.configure(
+                text=f"Update Selected ({n})", state="normal" if n else "disabled")
 
     def _confirm_delete_mod(self, filepath: str):
         fname = os.path.basename(filepath)
@@ -629,6 +762,68 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._render_installed()  # refresh inline
         except OSError as exc:
             self._set_status(f"✗ Failed to delete {fname}: {exc}")
+
+    def _on_delete_selected(self):
+        selected = list(self._selected_files)
+        if not selected:
+            return
+        if not tkinter.messagebox.askyesno(
+            "Delete Selected Mods", f"Delete {len(selected)} selected file(s)?"
+        ):
+            return
+
+        deleted, failed = 0, 0
+        for fpath in selected:
+            try:
+                os.remove(fpath)
+                deleted += 1
+            except OSError as exc:
+                logger.warning("Failed to delete %s: %s", fpath, exc)
+                failed += 1
+
+        self._set_status(f"✓ Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""))
+        self._render_installed()
+
+    def _on_update_selected(self):
+        ctx = self._resolve_server_context()
+        if not ctx:
+            return
+        server_name, mc_version, loader = ctx
+        selected_filenames = {os.path.basename(fp) for fp in self._selected_files}
+        if not selected_filenames:
+            return
+
+        self._set_status("Checking for updates…", busy=True)
+
+        def _worker():
+            try:
+                updates = self.client.check_updates(server_name, mc_version, loader)
+            except Exception as exc:
+                self.after(0, lambda e=exc: self._set_status(f"✗ Update check failed: {e}"))
+                return
+
+            matched = _filter_updates_for_selection(updates, selected_filenames)
+            if not matched:
+                self.after(0, lambda: self._set_status("No updates available for the selected mods."))
+                return
+
+            updated, failed = 0, 0
+            for update in matched:
+                self.after(0, lambda u=update: self._set_status(f"Updating {u['filename']}…"))
+                try:
+                    if self.client.apply_update(update, server_name, loader):
+                        updated += 1
+                    else:
+                        failed += 1
+                except Exception as exc:
+                    logger.warning("Update failed for %s: %s", update.get("filename"), exc)
+                    failed += 1
+
+            self.after(0, lambda: self._set_status(
+                f"✓ Updated {updated} mod(s)" + (f", {failed} failed" if failed else "")))
+            self.after(0, self._render_installed)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Install action
@@ -653,7 +848,10 @@ class ModrinthBrowser(ctk.CTkFrame):
                 if len(versions) == 1:
                     self._do_install_version(versions[0], server_name, loader, title)
                 else:
-                    self.after(0, lambda: self._show_version_picker(versions, server_name, loader, title))
+                    self.after(0, lambda: self._show_version_picker(
+                        versions, title,
+                        on_confirm=lambda v: self._do_install_version(v, server_name, loader, title),
+                    ))
             except Exception as exc:
                 logger.debug("Project fetch error: %s", exc)
                 self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
@@ -682,7 +880,66 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         threading.Thread(target=_install, daemon=True).start()
 
-    def _show_version_picker(self, versions, server_name, loader, title):
+    def _on_install_modpack(self, hit: dict):
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self._set_status("⚠ Select a server first.")
+            return
+        server_name, mc_version, loader = ctx
+
+        slug = hit.get("slug", hit.get("project_id", ""))
+        title = hit.get("title", slug)
+        self._set_status(f"Loading versions for {title}…", busy=True)
+
+        def _fetch_versions():
+            try:
+                versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
+                if not versions:
+                    self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    return
+                if len(versions) == 1:
+                    self._do_install_modpack_version(versions[0], server_name, title)
+                else:
+                    self.after(0, lambda: self._show_version_picker(
+                        versions, title,
+                        on_confirm=lambda v: self._do_install_modpack_version(v, server_name, title),
+                    ))
+            except Exception as exc:
+                logger.debug("Modpack version fetch error: %s", exc)
+                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+
+        threading.Thread(target=_fetch_versions, daemon=True).start()
+
+    def _do_install_modpack_version(self, version, server_name, title):
+        self._set_status(f"Installing modpack {title}…", busy=True)
+
+        def _install():
+            tmp_dir = tempfile.mkdtemp(prefix="zbb_modpack_")
+            try:
+                downloaded = self.client.download_version_to(
+                    version, tmp_dir,
+                    progress_callback=lambda p: self.after(
+                        0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
+                    ),
+                )
+                if not downloaded:
+                    self.after(0, lambda: self._set_status(f"✗ Download failed for {title}."))
+                    return
+
+                install_mrpack(
+                    downloaded, server_name,
+                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
+                )
+                self.after(0, lambda: self._set_status(f"✓ Modpack {title} installed."))
+                logger.info("Installed modpack %s to server %s", title, server_name)
+            except Exception as exc:
+                self.after(0, lambda e=exc: self._set_status(f"✗ Modpack install failed: {e}"))
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        threading.Thread(target=_install, daemon=True).start()
+
+    def _show_version_picker(self, versions, title, on_confirm):
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Choose Version — {title}")
         dialog.geometry("460x320")
@@ -714,7 +971,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             for v in versions:
                 if v.get("id") == selected_id:
                     dialog.destroy()
-                    self._do_install_version(v, server_name, loader, title)
+                    on_confirm(v)
                     break
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
