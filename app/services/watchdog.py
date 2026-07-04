@@ -60,7 +60,6 @@ class Watchdog:
 
     def _reset_retry_if_stable(self):
         if self._stable_since and (time.time() - self._stable_since) >= self._stability_window:
-            old = self.retry_count
             self.retry_count = 0
             logger.info("Watchdog: retry counter reset (stable for %ds)", self._stability_window)
 

@@ -683,6 +683,15 @@ class Scheduler:
                     if (now - last_run).total_seconds() < 300: return False
             time_diff = (now - target_time_today).total_seconds()
             if 0 <= time_diff < 120: return True
+            if time_diff >= 120 and (not last_run_str or last_run.date() != now.date()):
+                # MA-05: tick arrived after the 120s window — restart is skipped
+                # for today, leave a trace instead of failing silently (once per day)
+                if getattr(self, "_missed_warned_date", None) != now.date():
+                    self._missed_warned_date = now.date()
+                    logger.warning(
+                        "Scheduler [%s]: restart window %s missed by %.0fs — skipping until tomorrow",
+                        self.server_name, restart_time_str, time_diff - 120
+                    )
         return False
 
     def update_last_run(self):

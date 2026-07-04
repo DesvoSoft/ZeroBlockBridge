@@ -61,7 +61,6 @@ class CrashReporter:
         console_tail = self._get_console_buffer().read_last_n(_CONSOLE_TAIL)
         stderr_tail = self._get_stderr_tail()
 
-        runner = self._get_server_runner()
         watchdog_retries = payload.get("retry")
         config = self._get_config()
 
