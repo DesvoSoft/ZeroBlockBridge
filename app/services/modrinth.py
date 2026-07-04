@@ -51,7 +51,7 @@ class ModrinthClient:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _request(self, method: str, path: str, params: dict = None) -> dict | list:
+    def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict | list:
         """
         Execute an HTTP request against the Modrinth API.
 
@@ -60,7 +60,7 @@ class ModrinthClient:
         """
         url = f"{MODRINTH_API}/{path.lstrip('/')}"
         try:
-            resp = self.session.request(method, url, params=params, timeout=REQUEST_TIMEOUT)
+            resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
             raise ModrinthException(f"Network error: {exc}") from exc
 
@@ -70,7 +70,7 @@ class ModrinthClient:
             logger.warning("Modrinth rate-limited. Waiting %ds…", wait)
             time.sleep(min(wait, 30))
             try:
-                resp = self.session.request(method, url, params=params, timeout=REQUEST_TIMEOUT)
+                resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
             except requests.RequestException as exc:
                 raise ModrinthException(f"Network error on retry: {exc}") from exc
 
@@ -319,22 +319,17 @@ class ModrinthClient:
 
         # Batch lookup via version-files endpoint
         try:
-            # The batch endpoint requires a POST body, so use session directly
-            resp = self.session.post(
-                f"{MODRINTH_API}/version_files/update",
-                json={
+            results = self._request(
+                "POST",
+                "version_files/update",
+                json_body={
                     "hashes": list(hashes.keys()),
                     "algorithm": "sha1",
                     "loaders": [loader],
                     "game_versions": [mc_version],
                 },
-                timeout=REQUEST_TIMEOUT,
             )
-            if resp.status_code >= 400:
-                logger.warning("Batch update check failed: HTTP %d", resp.status_code)
-                return []
-            results = resp.json()
-        except Exception as exc:
+        except ModrinthException as exc:
             logger.error("Update check failed: %s", exc)
             return []
 

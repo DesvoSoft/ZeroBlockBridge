@@ -290,7 +290,7 @@ class TestModrinthCheckUpdates:
 
         client = ModrinthClient()
         with patch.object(client, "session") as mock_session:
-            mock_session.post.return_value = mock_resp
+            mock_session.request.return_value = mock_resp
             with patch("builtins.open", mock_open(read_data=b"jarcontent")):
                 results = client.check_updates("test_server", "1.20.1", "fabric")
 
@@ -312,7 +312,7 @@ class TestModrinthCheckUpdates:
 
         client = ModrinthClient()
         with patch.object(client, "session") as mock_session:
-            mock_session.post.return_value = mock_resp
+            mock_session.request.return_value = mock_resp
             with patch("builtins.open", mock_open(read_data=b"jarcontent")):
                 results = client.check_updates("test_server", "1.20.1", "fabric")
 
