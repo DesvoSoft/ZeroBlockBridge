@@ -24,6 +24,9 @@ class PlayitApiClient:
         self.is_read_only = False
         self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
         self.client_id = str(uuid.uuid4())
+        # Consecutive 401/403 responses — reset on any success or new key.
+        # Consumers (PlayitManager) use this to detect a dead secret and stop retrying.
+        self.consecutive_auth_failures = 0
 
     def load_secret_key(self) -> bool:
         """Loads secret key from playit.toml. Returns True if successful."""
@@ -46,6 +49,7 @@ class PlayitApiClient:
                 # Reset identity so it fetches again
                 self._agent_id = None
                 self._proto_key = None
+                self.consecutive_auth_failures = 0
                 return True
         except Exception as e:
             logger.error("Failed to read playit.toml: %s", e)
@@ -73,6 +77,8 @@ class PlayitApiClient:
             raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {response.status_code})")
 
         if response.status_code >= 400:
+            if response.status_code in (401, 403):
+                self.consecutive_auth_failures += 1
             if "AgentDisabledOverLimit" in response.text:
                 raise PlayitApiException("AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard")
             if "NotAllowedWithReadOnly" in response.text:
@@ -81,6 +87,7 @@ class PlayitApiClient:
             error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
             raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
 
+        self.consecutive_auth_failures = 0
         return data
 
     def verify_secret_key(self) -> bool:
@@ -99,6 +106,24 @@ class PlayitApiClient:
             return resp.status_code == 200
         except Exception as e:
             logger.debug("Failed checking agent status: %s", e)
+            return False
+
+    def secret_rejected(self) -> bool:
+        """True only when the API definitively rejects the stored secret (401/403).
+        Network errors are inconclusive and return False so offline launches aren't blocked."""
+        if not self._secret_key:
+            self.load_secret_key()
+        if not self._secret_key:
+            return False
+        try:
+            resp = self.session.get(
+                f"{self.api_base}/agents/rundata",
+                headers={"Authorization": f"agent-key {self._secret_key}"},
+                timeout=5,
+            )
+            return resp.status_code in (401, 403)
+        except requests.RequestException as e:
+            logger.debug("Secret validity check inconclusive: %s", e)
             return False
 
     def _get_platform_variant(self) -> str:
@@ -175,6 +200,7 @@ class PlayitApiClient:
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
+        self.consecutive_auth_failures = 0
         logger.info("Successfully linked playit account (Agent ID: %s)", agent_id)
         return True
 

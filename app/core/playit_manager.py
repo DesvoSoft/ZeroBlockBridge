@@ -245,6 +245,13 @@ class PlayitManager:
             self.console_callback("[Playit] No playit.toml found. Link account first.")
             return
 
+        # Validate the stored secret before launching — a dead key otherwise
+        # sends the agent into an invalid-secret loop the user can't escape.
+        self.api_client.load_secret_key()
+        if self.api_client.secret_rejected():
+            self._handle_auth_failure("Stored agent secret rejected by API (401)")
+            return
+
         self.api_client.is_read_only = False
         self.console_callback("[Playit] Launching tunnel agent...")
 
@@ -345,6 +352,11 @@ class PlayitManager:
 
     def reset(self, mode: str = "full") -> None:
         try:
+            if mode != "full" and self._auth_failed:
+                # Soft reset keeps playit.toml, so a rejected secret would just
+                # relaunch into the same auth loop — force a full re-link instead.
+                self.console_callback("[Playit] Stored secret is invalid. Escalating to full reset to force re-link.")
+                mode = "full"
             if mode == "full":
                 self.console_callback("[Playit] Starting full reset...")
             else:
@@ -394,6 +406,8 @@ class PlayitManager:
                 self.api_client.is_read_only = False
                 self.api_client._secret_key = None
                 self.api_client._agent_id = None
+                self.api_client.consecutive_auth_failures = 0
+                self._auth_failed = False
                 self.current_address = None
                 self._api_dns = None
                 self.console_callback("[Playit] Account unlinked and reset complete.")
@@ -437,6 +451,18 @@ class PlayitManager:
             if self.notification_callback:
                 self.notification_callback(f"Link failed: {e}", "error")
         return False
+
+    def _handle_auth_failure(self, reason: str) -> None:
+        """Mark the agent secret as dead and tell the user to re-link.
+        Idempotent — only the first caller emits the error output."""
+        with self._lock:
+            if self._auth_failed:
+                return
+            self._auth_failed = True
+        self.status_callback("Error", None)
+        self.console_callback(f"[Playit] ERROR: {reason}. Use 'Reset Tunnel' to re-link.")
+        if self.notification_callback:
+            self.notification_callback("Playit secret invalid. Use 'Reset Tunnel' to re-link.", "error")
 
     def _fix_permissions(self) -> None:
         if platform.system() != "Windows" and os.path.exists(self.toml_path):
@@ -482,6 +508,12 @@ class PlayitManager:
                     return
             except Exception as e:
                 logger.warning("[Playit] DNS polling error: %s", e)
+            # get_tunnels() swallows API exceptions, so a dead secret surfaces
+            # here only as the client's consecutive 401 count — stop polling
+            # instead of hammering the API every 5s forever.
+            if self.api_client.consecutive_auth_failures >= 3:
+                self._handle_auth_failure("API rejected the agent secret repeatedly")
+                return
 
     def _heartbeat_loop(self) -> None:
         max_attempts = 10
@@ -586,12 +618,12 @@ class PlayitManager:
                         self.console_callback("[Playit] ERROR: Account limit reached!")
                         self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
                         self._auth_failed = True
-                    elif "Invalid secret" in clean_line or "invalid secret" in clean_line:
-                        # Corrupted/expired secret key — user must re-link
-                        self._auth_failed = True
-                        self.status_callback("Error", None)
-                        self.console_callback("[Playit] ERROR: Agent secret invalid. Use 'Reset Tunnel' to re-link.")
-                    elif "InvalidAgentKey" in clean_line or "agent has 0 tunnels" in clean_line:
+                    elif ("Invalid secret" in clean_line or "invalid secret" in clean_line
+                          or "InvalidAgentKey" in clean_line):
+                        # Corrupted/expired secret key — auth error, user must re-link.
+                        # InvalidAgentKey is a 401, NOT a missing-tunnel condition.
+                        self._handle_auth_failure("Agent secret invalid")
+                    elif "agent has 0 tunnels" in clean_line:
                         # Agent has no tunnels configured. The agent repeats this line
                         # on reconnect attempts — inflight flag ensures only one
                         # create runs at a time (get_or_create_tunnel is list-then-create,

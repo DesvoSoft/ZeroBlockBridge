@@ -23,6 +23,8 @@ def manager(callbacks):
     with patch("app.core.playit_manager.PlayitApiClient") as mock_api_cls:
         mock_api = MagicMock()
         mock_api.load_secret_key.return_value = False
+        mock_api.secret_rejected.return_value = False
+        mock_api.consecutive_auth_failures = 0
         mock_api_cls.return_value = mock_api
         m = PlayitManager(
             console_callback=callbacks["console"],
@@ -253,6 +255,66 @@ class TestStart:
                             assert m.running is False
 
 
+class TestAuthFailure:
+    def test_start_blocked_when_secret_rejected(self, manager):
+        m, mock_api, _ = manager
+        mock_api.secret_rejected.return_value = True
+        with patch.object(m, "ensure_binary", return_value=True):
+            with patch("os.path.exists", return_value=True):
+                with patch("subprocess.Popen") as mock_popen:
+                    m.start(25565)
+                    mock_popen.assert_not_called()
+        assert m._auth_failed is True
+        assert m.running is False
+        m.status_callback.assert_any_call("Error", None)
+        m.notification_callback.assert_called_once()
+
+    def test_start_proceeds_when_check_inconclusive(self, manager):
+        m, mock_api, _ = manager
+        mock_api.secret_rejected.return_value = False
+        with patch.object(m, "ensure_binary", return_value=True):
+            with patch("os.path.exists", return_value=True):
+                with patch("subprocess.Popen") as mock_popen:
+                    mock_popen.return_value = FakeProcess()
+                    with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
+                        m.start(25565)
+        assert m.running is True
+        assert m._auth_failed is False
+
+    def test_handle_auth_failure_idempotent(self, manager):
+        m, _, _ = manager
+        m._handle_auth_failure("Agent secret invalid")
+        m._handle_auth_failure("Agent secret invalid")
+        assert m._auth_failed is True
+        m.notification_callback.assert_called_once()
+
+    def test_dns_polling_stops_after_repeated_401(self, manager):
+        m, mock_api, _ = manager
+        m.running = True
+        m._api_dns = None
+        m._stdout_dns = None
+        mock_api.get_tunnels.return_value = []
+        mock_api.consecutive_auth_failures = 3
+        with patch("time.sleep"):
+            m._dns_polling_loop()
+        assert m._auth_failed is True
+        m.status_callback.assert_any_call("Error", None)
+
+    def test_invalid_agent_key_stdout_marks_auth_failed(self, manager):
+        m, _, _ = manager
+        m.running = True
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"error: InvalidAgentKey\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        assert m._auth_failed is True
+        assert m._tunnel_create_inflight is False
+        m.status_callback.assert_any_call("Error", None)
+
+
 class TestStop:
     def test_stop_no_process(self, manager):
         m, _, _ = manager
@@ -323,6 +385,23 @@ class TestReset:
                 assert m.current_address is None
                 assert m._api_dns is None
                 assert mock_api._secret_key is None
+
+    def test_soft_reset_escalates_to_full_when_auth_failed(self, manager, tmp_path):
+        m, mock_api, _ = manager
+        m.is_linked = True
+        m._auth_failed = True
+        toml = tmp_path / "playit.toml"
+        toml.touch()
+        with patch.object(m, "toml_path", toml):
+            with patch.object(m, "stop"):
+                mock_api.load_secret_key.return_value = True
+                mock_api.list_tunnels.return_value = []
+                mock_api.delete_agent.return_value = True
+                m.reset(mode="soft")
+                assert toml.exists() is False
+                assert m.is_linked is False
+                assert m._auth_failed is False
+                assert mock_api.consecutive_auth_failures == 0
 
     def test_full_reset_api_delete_fails(self, manager, tmp_path):
         m, mock_api, _ = manager
