@@ -231,7 +231,9 @@ class ServerWizard(ctk.CTkToplevel):
         self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
-        self.btn_refresh = ctk.CTkButton(search_row, text="↻ Refresh", width=100, height=36, corner_radius=12, command=self._force_refresh_versions)
+        self.btn_refresh = ctk.CTkButton(search_row, text="↻ Refresh", width=100, height=36, corner_radius=12,
+                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                         command=self._force_refresh_versions)
         self.btn_refresh.pack(side="right")
 
         # Versions List
@@ -273,7 +275,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_ram_util.pack(side="right")
 
-        self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color="red", font=ctk.CTkFont(size=12))
+        self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color=AppConfig.COLOR_STATUS_ERROR, font=ctk.CTkFont(size=12))
         self.lbl_ram_error.pack(anchor="w")
 
         # --- Pre-flight Java Check ---
@@ -305,23 +307,38 @@ class ServerWizard(ctk.CTkToplevel):
         if not version:
             self.lbl_java_status.configure(text="Select a version to check Java compatibility.", text_color=AppConfig.COLOR_TEXT_GRAY)
             return
-        detector = JavaDetector()
-        installations = detector.detect_all()
-        required = get_required_java(version)
-        if not installations:
-            self.lbl_java_status.configure(
-                text=f"⚠ No Java found. MC {version} requires Java {required}. Enable Auto-install JDK in Step 3.",
-                text_color="orange"
-            )
-            return
-        best = installations[0]
-        compatible = best.major == required
-        compat_text = "✅" if compatible else "⚠"
-        best_label = f"Java {best.major} ({best.source})"
-        self.lbl_java_status.configure(
-            text=f"{compat_text} {best_label} — MC {version} requires Java {required}",
-            text_color=AppConfig.COLOR_BTN_SUCCESS if compatible else AppConfig.COLOR_ACCENT_AMBER
-        )
+        # detect_all() scans the Windows registry + filesystem — run off the UI
+        # thread (NR-04). Sequence counter discards stale results from rapid
+        # engine/version switches.
+        self._java_check_seq = getattr(self, "_java_check_seq", 0) + 1
+        seq = self._java_check_seq
+        self.lbl_java_status.configure(text="Detecting Java...", text_color=AppConfig.COLOR_TEXT_GRAY)
+
+        def _detect():
+            installations = JavaDetector().detect_all()
+            required = get_required_java(version)
+
+            def _apply():
+                if seq != self._java_check_seq or not self.lbl_java_status.winfo_exists():
+                    return
+                if not installations:
+                    self.lbl_java_status.configure(
+                        text=f"⚠ No Java found. MC {version} requires Java {required}. Enable Auto-install JDK in Step 3.",
+                        text_color=AppConfig.COLOR_STATUS_STARTING
+                    )
+                    return
+                best = installations[0]
+                compatible = best.major == required
+                compat_text = "✅" if compatible else "⚠"
+                best_label = f"Java {best.major} ({best.source})"
+                self.lbl_java_status.configure(
+                    text=f"{compat_text} {best_label} — MC {version} requires Java {required}",
+                    text_color=AppConfig.COLOR_BTN_SUCCESS if compatible else AppConfig.COLOR_ACCENT_AMBER
+                )
+
+            self.after(0, _apply)
+
+        threading.Thread(target=_detect, daemon=True).start()
 
     def update_ram_from_entry(self, event=None):
         try:

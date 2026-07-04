@@ -197,9 +197,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         toolbar = ctk.CTkFrame(self.frame_backups)
         toolbar.pack(fill="x", pady=5)
         
-        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, fg_color="green", width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, fg_color="orange", width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, width=80).pack(side="right", padx=5)
+        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, corner_radius=12,
+                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
+                      width=120).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, corner_radius=12,
+                      fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
+                      width=120).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=12,
+                      fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                      width=80).pack(side="right", padx=5)
         
         # List
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
@@ -574,9 +580,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         card_identity = self.create_section_frame(self.frame_general, "Identity & Appearance")
         
         ctk.CTkLabel(card_identity, text="Server Icon", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
-        btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon, 
+        btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
                             width=100, height=28, fg_color="transparent", border_width=1,
                             border_color=AppConfig.COLOR_BORDER_DARK,
+                            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
                             text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY))
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
@@ -733,23 +740,43 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # Java Path
         ctk.CTkLabel(card, text="Java Version:", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
         
-        detector = JavaDetector()
-        javas = detector.detect_all()
         self._java_label_to_path = {"Auto-Detect": "auto"}
         self._java_path_to_label = {"auto": "Auto-Detect"}
-        for j in javas:
-            self._java_label_to_path[j.label] = j.path
-            self._java_path_to_label[j.path] = j.label
-            
-        options = list(self._java_label_to_path.keys())
-        
+
         meta = get_server_meta(self.server_name)
 
         saved_path = meta.get("java_path", "auto")
+        # Placeholder mapping so a previously saved path stays selectable
+        # (and saveable) while detection runs in the background
+        if saved_path != "auto":
+            self._java_label_to_path[saved_path] = saved_path
+            self._java_path_to_label[saved_path] = saved_path
         self.var_java_path = ctk.StringVar(value=self._java_path_to_label.get(saved_path, "Auto-Detect"))
-        
-        self.combo_java = ctk.CTkOptionMenu(card, values=options, variable=self.var_java_path, height=28)
+
+        self.combo_java = ctk.CTkOptionMenu(card, values=list(self._java_label_to_path.keys()),
+                                            variable=self.var_java_path, height=28)
         self.combo_java.grid(row=0, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+
+        # detect_all() scans registry + filesystem — keep it off the UI thread
+        def _load_javas():
+            javas = JavaDetector().detect_all()
+
+            def _apply():
+                if not self.combo_java.winfo_exists():
+                    return
+                for j in javas:
+                    self._java_label_to_path[j.label] = j.path
+                    self._java_path_to_label[j.path] = j.label
+                if saved_path != "auto" and self._java_path_to_label.get(saved_path) != saved_path:
+                    # Real label now known — replace the raw-path placeholder
+                    self._java_label_to_path.pop(saved_path, None)
+                    if self.var_java_path.get() == saved_path:
+                        self.var_java_path.set(self._java_path_to_label[saved_path])
+                self.combo_java.configure(values=list(self._java_label_to_path.keys()))
+
+            self.after(0, _apply)
+
+        threading.Thread(target=_load_javas, daemon=True).start()
 
         # Aikar's Flags
         ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)

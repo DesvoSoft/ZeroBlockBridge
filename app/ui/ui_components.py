@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import logging
+import threading
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 import os
@@ -135,6 +136,14 @@ class ConsoleWidget(ctk.CTkTextbox):
             self.delete("1.0", str(delete_to))
 
     def log(self, message):
+        # Callable from worker threads: marshal to the Tk main loop first
+        if threading.current_thread() is not threading.main_thread():
+            try:
+                self.after(0, lambda: self.log(message))
+            except Exception as e:
+                logger.debug("Console log dropped (widget gone): %s", e)
+            return
+
         if self._is_paused:
             self._buffer.append(message)
             # Cap the memory buffer as well
@@ -278,6 +287,13 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         self.close()
         
     def update_progress(self, val, status_text=None):
+        # Callable from worker threads: marshal to the Tk main loop first
+        if threading.current_thread() is not threading.main_thread():
+            try:
+                self.after(0, lambda: self.update_progress(val, status_text))
+            except Exception as e:
+                logger.debug("Progress update dropped (dialog gone): %s", e)
+            return
         if self.cancelled or not self.winfo_exists():
             return
         try:
