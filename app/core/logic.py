@@ -233,11 +233,30 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
     cmd = [java_bin, "-jar", installer_name] + installer_args
     try:
         if progress_callback: progress_callback(0.5)
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
+        # Retry on transient WinError 5/32: OneDrive/AV can briefly lock a
+        # jar right after it's written to a synced folder before it's
+        # executable.
+        last_error = None
+        for attempt in range(3):
+            try:
+                subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
+                last_error = None
+                break
+            except OSError as e:
+                last_error = e
+                if getattr(e, "winerror", None) not in (5, 32):
+                    raise
+                logger.warning("Installer spawn blocked (attempt %d/3): %s", attempt + 1, e)
+                time.sleep(1.5)
+        if last_error:
+            raise last_error
         if progress_callback: progress_callback(0.9)
         normalize_server_jar(server_path)
         return server_path
     except subprocess.CalledProcessError:
+        return None
+    except OSError as e:
+        logger.error("Installer failed to spawn after retries: %s", e)
         return None
 
 
