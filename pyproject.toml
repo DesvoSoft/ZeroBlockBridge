@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zeroblockbridge"
 version = "1.4.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "customtkinter>=5.2.2",
     "requests>=2.33.1",

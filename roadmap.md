@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-07-01 (rev 5)
+> **Última actualización:** 2026-07-04 (rev 6)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 426 tests, 100% pass, 0 flaky
+> **Test count:** 445 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
@@ -13,7 +13,8 @@
 > **Sesión 2026-06-24 (6):** MODS-B ✅ (paginación clásica Prev/Next, sort dropdown, _resolve_server_context, installed inline, hover fix, NR-10 palette) CA-M04 ✅ (.mrpack import — mrpack_installer.py) — 410 tests pass
 > **Sesión 2026-06-24/07-01 (fuera de roadmap):** fix(playit) tunnel startup auth-error handling; fix(ui) backup create/restore off UI thread; refactor(scaffolder) dict-driven config mapping (complejidad 28→~6) — 417 tests pass
 > **Sesión 2026-07-01 (7):** F8 ✅ (multi-select checkboxes en Installed view + búsqueda, Select All/Delete Selected/Update Selected, `ModrinthClient.apply_update()`) + modpack one-click install ✅ (search con project_type=modpack ahora descarga y extrae vía `download_version_to()` + `install_mrpack()` reutilizado — cubre F7.5 sin el resto de F7) — 426 tests pass
-> **Siguiente prioridad:** CA-H01 (JVM args UI) o CA-H02 (player mgmt unificado)
+> **Sesión 2026-07-01/04 (8, fuera de roadmap):** CA-H01 ✅ (JVM flags custom por servidor en launch pipeline) + mods security hardening (mrpack compat gate contra engine del server, zip-slip guard en extracción, compat badges en browser) + fix PermissionError en write paths de creación de server + fix pin action bar de installed-mods fuera del frame scrolleable — 445 tests pass
+> **Siguiente prioridad:** CA-H02 (player mgmt unificado) o F7 resto (templates propios)
 
 ---
 
@@ -23,9 +24,9 @@
 | Métrica | Valor |
 |---------|-------|
 | Archivos Python | 41 app + 22 tests |
-| LOC totales (app) | ~8,200 |
-| LOC totales (tests) | ~3,200 |
-| Tests | 410 pasando, 0 fallos, 0 skipped |
+| LOC totales (app) | ~10,600 |
+| LOC totales (tests) | ~3,400 |
+| Tests | 445 pasando, 0 fallos, 0 skipped |
 | Type hint coverage | ~28.5% |
 | Threads potenciales | ~38 (todos daemon) |
 | Dependencias externas | 4 (customtkinter, requests, psutil, Pillow) |
@@ -44,9 +45,10 @@
 | ✅ | **CA-M04** | .mrpack import | ✅ mrpack_installer.py |
 | ✅ | **F8** | Bulk Mod Operations | ✅ Implementado — multi-select + batch delete/update (Installed + búsqueda), `apply_update()` |
 | ✅ | **F7.5** | Modpack one-click install | ✅ Implementado junto con F8 — búsqueda project_type=modpack → `download_version_to()` + `install_mrpack()` |
-| 1 | **CA-H01** | JVM args UI por servidor | `-Xmx/-Xms` + flags custom — scope acotado |
-| 2 | **CA-H02** | Player management unificado | operators + bans + whitelist en una página |
-| 3 | **F7 (resto)** | Templates propios | TemplateManager, save-as-template, defaults (Lite SMP etc) — sin dependencias pendientes, pero fuera de scope de F8 |
+| ✅ | **CA-H01** | JVM args UI por servidor | ✅ Implementado — flags custom por servidor en launch pipeline |
+| ✅ | **MODS-SEC** | Mods security hardening | ✅ mrpack compat gate (bloquea instalar modpack incompatible con engine del server) + zip-slip guard en extracción + compat badges en browser |
+| 1 | **CA-H02** | Player management unificado | operators + bans + whitelist en una página |
+| 2 | **F7 (resto)** | Templates propios | TemplateManager, save-as-template, defaults (Lite SMP etc) — sin dependencias pendientes, pero fuera de scope de F8 |
 | ⏸️ | **REFACT-1** | JavaResolver + launch steps | YAGNI para pre-alpha con 1 developer. |
 
 > Regla: features UI → player/server management → templates/migration.
@@ -232,7 +234,7 @@
 
 ---
 
-## F4: Auto-Backup Scheduler ⚠️ PARCIAL
+## F4: Auto-Backup Scheduler ✅
 
 **Objetivo:** Backups automáticos programables por servidor, con gestión de retención.
 
@@ -264,13 +266,13 @@
 - "Next backup: ~Xh Ym" (update cada 30s vía `after()`)
 - Botón "Run Backup Now" que dispara backup manual
 
-**Criterio de aceptación:**
-- [ ] Usuario puede activar/desactivar auto-backup por servidor
-- [ ] Usuario puede configurar intervalo (horas) y retención
-- [ ] La UI muestra countdown al próximo backup
-- [ ] Countdown se actualiza en vivo (sin recargar diálogo)
-- [ ] Todos los cambios persisten a metadata.json
-- [ ] Tests existentes (12) siguen pasando
+**Criterio de aceptación (verificado 2026-07-04):**
+- [x] Usuario puede activar/desactivar auto-backup por servidor — switch en Automation tab
+- [x] Usuario puede configurar intervalo (horas) y retención — spinboxes wired a `set_config`
+- [x] La UI muestra countdown al próximo backup — `_refresh_backup_countdown()`
+- [x] Countdown se actualiza en vivo (sin recargar diálogo) — `self.after(60_000, ...)` recursivo
+- [x] Todos los cambios persisten a metadata.json — `BackupScheduler.set_config()`
+- [x] Tests existentes siguen pasando — 11 tests en `test_backup_scheduler.py`, 100% pass
 
 ---
 
@@ -382,11 +384,11 @@ dependencies = [
 - [x] Crash se registra en metadata.json
 - [x] Tests existentes de watchdog no se rompen
 
-### P0.7: Clean Up Dead Imports ✅ PARCIAL
+### P0.7: Clean Up Dead Imports ✅
 
 | Campo | Detalle |
 |-------|---------|
-| **Estado** | Eliminados en 9 archivos en sesión 2026-06-24 (3). Pendiente verificación con flake8. |
+| **Estado** | Eliminados en 9 archivos en sesión 2026-06-24 (3). `flake8 --select=F401` verificado en 0 (2026-07-04). |
 
 **Resueltos:**
 | Archivo | Import eliminado |
@@ -401,9 +403,9 @@ dependencies = [
 | `ui/modrinth_browser.py` | `Optional` de typing |
 | `ui/server_wizard.py` | `import os` |
 
-**Pendiente:**
-- [ ] `flake8 app/ --select=F401` para verificar 0 restantes
-- [ ] `_CARD_BG_DARK` y constantes locales en `modrinth_browser.py` → migrar a `AppConfig` (ver NR-10)
+**Resuelto:**
+- [x] `flake8 app/ --select=F401` → 0 restantes (verificado 2026-07-04)
+- [x] Constantes locales en `modrinth_browser.py` migradas a `AppConfig` (NR-10, sesión 2026-06-24 (6)). Restantes (`_MODRINTH_GREEN`, `_DOWNLOADS_COLOR`, `_ICON_COLORS`) son deliberadamente locales — brand color de Modrinth, no tokens de ZBB (ver comentario "non-duplicates of AppConfig" en el archivo)
 
 ---
 
@@ -792,6 +794,21 @@ COLOR_STATUS_STARTING = "#f59e0b" # amber-400
 
 ---
 
+## F12: Feature Gaps (vs. competencia)
+
+**Origen:** Tabla comparativa vs. auto-mcs/otros managers (sección "Comparativa"). Brechas identificadas 2026-07-04, sin trabajo iniciado.
+
+| # | Feature | Prioridad | Notas |
+|---|---------|-----------|-------|
+| 12.1 | **Multi-server dashboard** | 🔴 Alta | Brecha crítica — competencia lo tiene, ZBB gestiona 1 server visible a la vez en dashboard principal |
+| 12.2 | **World switching** | 🟡 Media | Cambiar entre mundos/saves sin recrear server |
+| 12.3 | **Console filter/search** | 🟡 Media | Buscar/filtrar líneas en consola — oportunidad, nadie en la comparativa lo tiene |
+| 12.4 | **Performance dashboard visual** | 🟡 Media | TPS graph + RAM usage — overlap con F11.D4, consolidar ahí |
+
+**Nota:** 12.4 ya cubierto como F11.D4 — no duplicar trabajo, solo trackear aquí como gap de mercado.
+
+---
+
 ## Resumen de Fases
 
 | Fase | Descripción | LOC cambio | Prioridad | Estado |
@@ -1077,9 +1094,9 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 
 | ID | Archivo | Sev | Problema | Fix |
 |----|---------|-----|---------|-----|
-| **A2-A01** | `core/logic.py` | 🟡 | Import en medio del módulo (`from app.services.server_properties import ...` ~línea 594) — viola PEP8, enmascara circular imports | Mover al top |
+| ~~**A2-A01**~~ | ~~`core/logic.py`~~ | 🟡 | ~~Import en medio del módulo~~ | ✅ Resuelto — import de `server_properties` ya no existe en `logic.py` (eliminado en P0.7 dead-imports pass, verificado 2026-07-04) |
 | **A2-A02** | `core/logic.py` | 🔵 | Import de función privada `_probe_java` desde `java_detector` — acoplamiento frágil a internals | Exponer como función pública `probe_java` |
-| **A2-A03** | `core/statemanager.py` | 🟡 | Globals mutables `_last_status`, `_last_time` a nivel de módulo — no tiene ciclo de vida, no reseteable entre tests, solo sirve de debounce para tunnel status | Convertir en clase o inlinar en `PlayitManager` |
+| ~~**A2-A03**~~ | ~~`core/statemanager.py`~~ | 🟡 | ~~Globals mutables a nivel de módulo~~ | ✅ Resuelto (2026-07-04) — `TunnelStatusDebouncer` clase con estado encapsulado + lock por instancia. API pública (`schedule_update`, `current_status`) intacta vía wrapper de instancia default, sin romper caller en `main.py:730`. 445 tests pass |
 | **A2-A04** | `core/protocols.py` | 🔵 | `BackupOrchestratorProtocol` expone métodos privados (`_check_auto_backup`, `_run_auto_backup`) en contrato público — viola encapsulación | Renombrar a públicos o eliminar del Protocol |
 
 ---
@@ -1088,7 +1105,7 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 
 | ID | Archivo | Sev | Problema | Fix |
 |----|---------|-----|---------|-----|
-| **A2-D01** | `services/modrinth.py` | 🟡 | `check_updates` llama `self.session.post()` directamente — bypassa `_request()` que tiene rate-limit handling y error normalization | Refactorizar para usar `_request` con POST |
+| ~~**A2-D01**~~ | ~~`services/modrinth.py`~~ | 🟡 | ~~`check_updates` bypassaba `_request()`~~ | ✅ Resuelto (2026-07-04) — `_request()` extendido con param `json_body` para soportar POST; `check_updates` ahora reusa rate-limit retry + error normalization. Bare `except Exception` estrechado a `ModrinthException`. 2 tests de mock actualizados (`session.post` → `session.request`). 445 tests pass |
 | **A2-D02** | `core/logic.py` | 🔵 | `import re` dentro de `_parse_player_count` — import en hot path (llamado por cada línea de output del servidor) | Mover al top del módulo |
 | **A2-D03** | `services/backup_manager.py` | 🔵 | `_zip_worker` crea `threading.Thread` interno aunque ya se ejecuta en un executor thread — double-threading innecesario | Hacer síncrono; el caller ya está en background |
 
@@ -1098,11 +1115,11 @@ NR-DASH (2 min) → NR-01/02/09 (palette, 15 min) → NR-03 (os.startfile, 10 mi
 
 | Dependencia | Estado | Riesgo | Acción |
 |-------------|--------|--------|--------|
-| `customtkinter` | Sin pinnear | 🟡 | Pinnear a `>=5.2,<6` |
-| `requests` | Sin pinnear | 🟡 | Pinnear; `httpx` es alternativa async si se necesita en el futuro (no cambiar ahora) |
-| `Pillow` | Sin pinnear | 🟡 | CVEs frecuentes — pinnear a versión específica y monitorear |
+| ~~`customtkinter`~~ | ~~Sin pinnear~~ | 🟡 | ✅ Resuelto — `>=5.2.2` en `requirements.txt`/`pyproject.toml`. Sin upper bound: decisión deliberada (2026-07-04), libs maduras, se prefiere recibir parches |
+| ~~`requests`~~ | ~~Sin pinnear~~ | 🟡 | ✅ Resuelto — `>=2.33.1` pinneado. `httpx` sigue como alternativa futura si se necesita async, sin cambio ahora |
+| ~~`Pillow`~~ | ~~Sin pinnear~~ | 🟡 | ✅ Resuelto — `>=12.2.0` pinneado. Sin upper bound (misma decisión que arriba) — monitorear CVEs sigue siendo válido |
 | `psutil` | Sin pinnear | 🔵 | API estable; OK |
-| **Python 3.14** | En uso | 🔴 | **Muy nuevo** — 3.14 es beta/pre-release. Dependencias pueden no tener wheels para 3.14. Para distribución de EXE a usuarios considerar bajar a **Python 3.12 LTS** |
+| ~~**Python 3.14**~~ | ~~En uso~~ | 🔴 | ✅ Resuelto (2026-07-04) — bajado a **Python 3.12 LTS** (`requires-python = ">=3.12,<3.13"` en `pyproject.toml`). Validado en venv limpio: deps instalan con wheels normales (customtkinter 6.0.0, Pillow 12.3.0, requests 2.34.2, psutil 7.2.2), 445 tests pass, flake8 crítico limpio. Instalador de sistema vía `winget install Python.Python.3.12`. Venv de dev debe recrearse con `py -3.12 -m venv .venv` |
 | Playit agent `0.17.1` | Hardcodeado | 🟡 | Si Playit saca 0.18 hay que hacer release manual de ZBB. Considerar versión configurable o auto-detect |
 
 **Pin deps task** → ya era P0.4 en roadmap — confirmar que incluye todos los anteriores.
