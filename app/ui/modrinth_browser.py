@@ -1017,7 +1017,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_frame.pack(fill="x", padx=12, pady=10)
 
         ctk.CTkButton(btn_frame, text="Cancel", width=90, height=32,
-                       corner_radius=12, command=dialog.destroy).pack(side="right", padx=4)
+                       corner_radius=12, fg_color=AppConfig.COLOR_BTN_GHOST,
+                       hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                       command=dialog.destroy).pack(side="right", padx=4)
         ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
                        corner_radius=12, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
                        text_color="white", command=_on_confirm).pack(side="right", padx=4)
@@ -1099,7 +1101,9 @@ class ModrinthBrowser(ctk.CTkFrame):
                 row=1, column=0, sticky="w", padx=10, pady=(0, 8))
 
         ctk.CTkButton(dialog, text="Close", width=100, height=32,
-                       corner_radius=12, command=dialog.destroy).pack(pady=8)
+                       corner_radius=12, fg_color=AppConfig.COLOR_BTN_GHOST,
+                       hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                       command=dialog.destroy).pack(pady=8)
 
     # ------------------------------------------------------------------
     # .mrpack modpack import (CA-M04)

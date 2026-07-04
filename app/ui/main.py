@@ -116,16 +116,18 @@ class MCTunnelApp(ctk.CTk):
         self.actions_frame.grid_columnconfigure(0, weight=1)
 
         self.btn_create_server = ctk.CTkButton(
-            self.actions_frame, text="+ Create New Server", 
+            self.actions_frame, text="+ Create New Server",
             command=self.create_server_dialog, corner_radius=12, height=36,
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             font=("Roboto Medium", 13)
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
 
         self.btn_load_server = ctk.CTkButton(
             self.actions_frame, text="📁 Load Existing Folder", 
-            command=self.load_existing_server_action, corner_radius=12, height=32, 
+            command=self.load_existing_server_action, corner_radius=12, height=32,
             fg_color="transparent", border_width=1, border_color=AppConfig.COLOR_BORDER_DARK,
+            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=("Roboto", 12)
         )
         self.btn_load_server.pack(fill="x", pady=(0, 10))
@@ -276,7 +278,7 @@ class MCTunnelApp(ctk.CTk):
         )
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
         self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
 
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel,
@@ -359,7 +361,7 @@ class MCTunnelApp(ctk.CTk):
                 self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=AppConfig.COLOR_BTN_SUCCESS))
                 self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
-                self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
+                self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color=AppConfig.COLOR_STATUS_ERROR))
                 self.after(0, lambda: self.server_console.log("[System] No Java detected on this system. ZeroBlockBridge will auto-install the required JDK when the server starts."))
         self.executor.submit(_check)
 

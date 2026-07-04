@@ -118,7 +118,9 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.entry_whitelist_add = ctk.CTkEntry(add_frame, placeholder_text="Player name...")
         self.entry_whitelist_add.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
-        btn_add = ctk.CTkButton(add_frame, text="Add", width=60, command=self._add_to_whitelist)
+        btn_add = ctk.CTkButton(add_frame, text="Add", width=60, corner_radius=12,
+                                fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                                command=self._add_to_whitelist)
         btn_add.grid(row=0, column=1)
         
         # Whitelist player list
