@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import re
 import os
+import sys
 import logging
 from enum import Enum, auto
 from pathlib import Path
@@ -36,11 +37,23 @@ def subprocess_flags() -> dict:
 
 # Application Main Paths
 # Using Path for robust and modern path handling
-BASE_DIR = Path(__file__).resolve().parent.parent
+#
+# In a PyInstaller onefile build, __file__ resolves inside the temp
+# _MEIPASS extraction dir (wiped on exit, heavily AV-scanned). Anchor
+# to the real .exe's directory instead so servers/config persist and
+# aren't executed straight out of a hot temp folder (WinError 5/32).
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+    # Read-only bundled data (PyInstaller `datas`) lives under the onefile
+    # temp extraction dir, not next to the .exe.
+    _RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    _RESOURCE_DIR = BASE_DIR
 SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
-ASSETS_DIR = BASE_DIR / "assets"
+ASSETS_DIR = _RESOURCE_DIR / "assets"
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Path to main config.json
 
 # Versions and URLs for server downloads
