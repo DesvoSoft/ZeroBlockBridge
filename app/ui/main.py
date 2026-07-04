@@ -423,6 +423,9 @@ class MCTunnelApp(ctk.CTk):
         self.btn_start.configure(state="disabled" if is_running else "normal")
         self.btn_stop.configure(state="normal" if is_running else "disabled")
 
+        if hasattr(self, "modrinth_browser"):
+            self.modrinth_browser.refresh_server_context()
+
         item = self.server_items.get(server_name)
         if item:
             item.set_status("online" if is_running else "offline")

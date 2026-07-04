@@ -24,7 +24,8 @@ from PIL import Image
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 from app.services.modrinth import ModrinthClient, ModrinthException
-from app.services.mrpack_installer import install_mrpack
+from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
+from app.core.logic import get_server_meta
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +58,10 @@ class ModrinthBrowser(ctk.CTkFrame):
     """
 
     OPTIMIZERS = [
-        {"slug": "sodium", "name": "Sodium", "description": "High performance rendering engine."},
         {"slug": "lithium", "name": "Lithium", "description": "General-purpose game code optimizer."},
         {"slug": "ferrite-core", "name": "FerriteCore", "description": "Memory usage optimization."},
-        {"slug": "starlight", "name": "Starlight", "description": "Rewrite of light engine for performance."},
-        {"slug": "iris", "name": "Iris Shaders", "description": "Modern shader support for Sodium."},
+        {"slug": "krypton", "name": "Krypton", "description": "Optimizes networking stack."},
+        {"slug": "spark", "name": "Spark", "description": "Performance profiler for diagnosing lag."},
     ]
 
     _SORT_OPTIONS = {
@@ -128,6 +128,58 @@ class ModrinthBrowser(ctk.CTkFrame):
         except Exception as exc:
             logger.debug("get_server_info failed: %s", exc)
         return None
+
+    def _resolve_install_context(self) -> Optional[tuple[str, str, str]]:
+        """Server context for install actions — blocks engines that can't load content."""
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self._set_status("⚠ Select a server first.")
+            return None
+        _, _, loader = ctx
+        if loader is None:
+            msg = ("Vanilla servers can't load mods or plugins.\n\n"
+                   "Create a Fabric or Forge server for mods, "
+                   "or Paper/Purpur for plugins.")
+            self._set_status("✗ Vanilla servers can't load mods or plugins.")
+            tkinter.messagebox.showinfo("Vanilla Server", msg, parent=self.winfo_toplevel())
+            return None
+        return ctx
+
+    def refresh_server_context(self):
+        """Update the context banner + type filter for the selected server."""
+        ctx = self._resolve_server_context()
+        if not ctx:
+            self.lbl_context.configure(
+                text="No server selected — select a server to install content.",
+                text_color=AppConfig.COLOR_TEXT_NOTE,
+            )
+            self._apply_type_options(None)
+            return
+        server_name, mc_version, loader = ctx
+        engine = (loader or "vanilla").title()
+        if loader is None:
+            self.lbl_context.configure(
+                text=f"⚠ {server_name} · Vanilla {mc_version} — vanilla can't load mods or plugins",
+                text_color=AppConfig.COLOR_STATUS_STARTING,
+            )
+        else:
+            self.lbl_context.configure(
+                text=f"Installing to: {server_name} · {engine} {mc_version}",
+                text_color=AppConfig.COLOR_TEXT_GRAY,
+            )
+        self._apply_type_options(loader)
+
+    def _apply_type_options(self, loader: Optional[str]):
+        """Restrict the project-type filter to what the engine can actually load."""
+        if loader in ("fabric", "forge"):
+            values, default = ["mod", "modpack"], "mod"
+        elif loader in ("paper", "purpur", "spigot"):
+            values, default = ["plugin"], "plugin"
+        else:
+            values, default = ["mod", "plugin", "modpack", "resourcepack", "shader"], "mod"
+        self.combo_type.configure(values=values)
+        if self.combo_type.get() not in values:
+            self.combo_type.set(default)
 
     # ------------------------------------------------------------------
     # Layout: Search Bar
@@ -224,6 +276,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             command=self._on_import_mrpack,
         )
         self.btn_mrpack.grid(row=0, column=8, padx=(4, 12), pady=8)
+
+        # Server context banner — which server/engine installs will target
+        self.lbl_context = ctk.CTkLabel(
+            bar, text="No server selected — select a server to install content.",
+            font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_NOTE,
+            anchor="w",
+        )
+        self.lbl_context.grid(row=1, column=0, columnspan=9, sticky="ew", padx=14, pady=(0, 6))
 
     # ------------------------------------------------------------------
     # Layout: Results Area (scrollable)
@@ -418,6 +478,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
 
     def _on_first_shown(self, event=None):
+        self.refresh_server_context()
         if not self._popular_loaded:
             self._popular_loaded = True
             self.after(50, self._load_popular_mods)
@@ -473,9 +534,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         hits = list(self._selected_hits.values())
         if not hits:
             return
-        ctx = self._resolve_server_context()
+        ctx = self._resolve_install_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
             return
 
         if len(hits) > 1 and not tkinter.messagebox.askyesno(
@@ -537,9 +597,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         card.grid_columnconfigure(1, weight=1)
 
         hit_key = hit.get("slug") or hit.get("project_id", "")
+        client_only = hit.get("server_side") == "unsupported" and hit.get("project_type") != "modpack"
         select_var = ctk.BooleanVar(value=hit_key in self._selected_hits)
         chk = ctk.CTkCheckBox(
             card, text="", width=20, variable=select_var,
+            state="disabled" if client_only else "normal",
             command=lambda h=hit, k=hit_key, v=select_var: self._on_toggle_hit_selection(k, h, v),
         )
         chk.grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=12, sticky="n")
@@ -603,14 +665,35 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             badge.pack(side="left", padx=(0, 4))
 
+        server_side = hit.get("server_side", "unknown")
+        if client_only:
+            side_badge = ctk.CTkLabel(
+                badge_frame, text="Client-only",
+                font=("Roboto", 10), text_color="white",
+                fg_color=AppConfig.COLOR_STATUS_ERROR,
+                corner_radius=12, padx=8, pady=2,
+            )
+            side_badge.pack(side="left", padx=(0, 4))
+        elif server_side == "required":
+            side_badge = ctk.CTkLabel(
+                badge_frame, text="Server",
+                font=("Roboto", 10), text_color="white",
+                fg_color=AppConfig.COLOR_BTN_SUCCESS,
+                corner_radius=12, padx=8, pady=2,
+            )
+            side_badge.pack(side="left", padx=(0, 4))
+
         is_modpack = hit.get("project_type") == "modpack"
         install_cmd = self._on_install_modpack if is_modpack else self._on_install
+        unsupported = server_side == "unsupported" and not is_modpack
         btn_install = ctk.CTkButton(
-            card, text="Install", width=80, height=32,
+            card, text="Client-only" if unsupported else "Install", width=90, height=32,
             corner_radius=12,
-            fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+            fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
             text_color="white", font=("Roboto Medium", 12),
-            command=lambda h=hit, fn=install_cmd: fn(h),
+            state="disabled" if unsupported else "normal",
+            command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
         )
         btn_install.grid(row=0, column=2, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
@@ -856,9 +939,8 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Install action
     # ------------------------------------------------------------------
     def _on_install(self, hit: dict, batch: dict = None):
-        ctx = self._resolve_server_context()
+        ctx = self._resolve_install_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
             self._note_batch_result(batch, ok=False)
             return
         server_name, mc_version, loader = ctx
@@ -914,9 +996,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         threading.Thread(target=_install, daemon=True).start()
 
     def _on_install_modpack(self, hit: dict, batch: dict = None):
-        ctx = self._resolve_server_context()
+        ctx = self._resolve_install_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
             self._note_batch_result(batch, ok=False)
             return
         server_name, mc_version, loader = ctx
@@ -963,13 +1044,22 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
 
-                install_mrpack(
+                meta = get_server_meta(server_name)
+                summary = install_mrpack(
                     downloaded, server_name,
                     progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
+                    server_type=meta.get("type"),
+                    mc_version=meta.get("version"),
                 )
-                self.after(0, lambda: self._set_status(f"✓ Modpack {title} installed."))
+                self.after(0, lambda: self._set_status(
+                    f"✓ Modpack {title}: {self._format_mrpack_summary(summary)}"))
                 logger.info("Installed modpack %s to server %s", title, server_name)
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
+            except MrpackCompatibilityError as exc:
+                self.after(0, lambda e=exc: self._set_status(f"✗ Incompatible: {e}"))
+                self.after(0, lambda e=exc: tkinter.messagebox.showwarning(
+                    "Incompatible Modpack", str(e), parent=self.winfo_toplevel()))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Modpack install failed: {e}"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
@@ -1028,22 +1118,42 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Optimizer bundle
     # ------------------------------------------------------------------
     def _on_install_optimizers(self):
-        ctx = self._resolve_server_context()
+        ctx = self._resolve_install_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
             return
         server_name, mc_version, loader = ctx
+
+        if loader != "fabric":
+            tkinter.messagebox.showinfo(
+                "Fabric Required",
+                "The Optimizer Bundle (Lithium, FerriteCore, Krypton, Spark) "
+                "only supports Fabric servers.",
+                parent=self.winfo_toplevel(),
+            )
+            return
 
         self._set_status("Installing Optimizer Bundle...", busy=True)
 
         def _run_opt():
+            failed = []
             for mod in self.OPTIMIZERS:
                 self.after(0, lambda m=mod: self._set_status(f"Installing {m['name']}..."))
                 try:
-                    self.client.download_mod(mod["slug"], server_name, mc_version, loader)
+                    path = self.client.download_mod(mod["slug"], server_name, mc_version, loader)
+                    if not path:
+                        failed.append(mod["name"])
                 except Exception as exc:
                     logger.error("Failed to install %s: %s", mod["name"], exc)
-            self.after(0, lambda: self._set_status("Ready"))
+                    failed.append(mod["name"])
+
+            if failed:
+                msg = f"Installed {len(self.OPTIMIZERS) - len(failed)}/{len(self.OPTIMIZERS)}. Failed: {', '.join(failed)}"
+                self.after(0, lambda: self._set_status(f"⚠ {msg}"))
+                self.after(0, lambda: tkinter.messagebox.showwarning(
+                    "Optimizer Bundle", msg, parent=self.winfo_toplevel()
+                ))
+            else:
+                self.after(0, lambda: self._set_status("✓ Optimizer Bundle installed."))
 
         threading.Thread(target=_run_opt, daemon=True).start()
 
@@ -1109,9 +1219,8 @@ class ModrinthBrowser(ctk.CTkFrame):
     # .mrpack modpack import (CA-M04)
     # ------------------------------------------------------------------
     def _on_import_mrpack(self):
-        ctx = self._resolve_server_context()
+        ctx = self._resolve_install_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
             return
         server_name, mc_version, loader = ctx
 
@@ -1127,13 +1236,20 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _import():
             try:
-                from app.services.mrpack_installer import install_mrpack
-                count = install_mrpack(
+                meta = get_server_meta(server_name)
+                summary = install_mrpack(
                     mrpack_path=mrpack_path,
                     server_name=server_name,
                     progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
+                    server_type=meta.get("type"),
+                    mc_version=meta.get("version"),
                 )
-                self.after(0, lambda: self._set_status(f"✓ Modpack installed — {count} mods"))
+                self.after(0, lambda: self._set_status(
+                    f"✓ Modpack installed — {self._format_mrpack_summary(summary)}"))
+            except MrpackCompatibilityError as exc:
+                self.after(0, lambda e=exc: self._set_status(f"✗ Incompatible: {e}"))
+                self.after(0, lambda e=exc: tkinter.messagebox.showwarning(
+                    "Incompatible Modpack", str(e), parent=self.winfo_toplevel()))
             except Exception as exc:
                 logger.error("mrpack import failed: %s", exc)
                 self.after(0, lambda e=exc: self._set_status(f"✗ Import failed: {e}"))
@@ -1166,6 +1282,15 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
+    @staticmethod
+    def _format_mrpack_summary(summary: dict) -> str:
+        parts = [f"{summary['installed']} mods installed"]
+        if summary.get("skipped_client"):
+            parts.append(f"{summary['skipped_client']} client-only skipped")
+        if summary.get("failed"):
+            parts.append(f"{summary['failed']} failed")
+        return ", ".join(parts)
+
     @staticmethod
     def _format_downloads(count: int) -> str:
         if count >= 1_000_000:
