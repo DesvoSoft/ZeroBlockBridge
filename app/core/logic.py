@@ -146,7 +146,13 @@ def create_server_directory(server_name: str, server_type: str = "Vanilla", vers
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
-        os.makedirs(path)
+        try:
+            os.makedirs(path)
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot create server directory {path}: permission denied. "
+                f"Check that ZeroBlockBridge has write access to this location."
+            ) from e
     if not os.path.exists(os.path.join(path, "metadata.json")):
         update_server_meta(server_name, {"name": server_name, "ram": 2048, "type": server_type, "version": version})
     return path
@@ -217,6 +223,9 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
+    except PermissionError as e:
+        logger.error("Installer download permission denied at %s: %s", installer_path, e)
+        return None
     except Exception as e:
         logger.error("Installer failed: %s", e)
         return None

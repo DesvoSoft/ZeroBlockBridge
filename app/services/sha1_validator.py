@@ -52,14 +52,22 @@ def download_with_verification(
             downloaded = 0
             sha1 = hashlib.sha1()
 
-            with open(dest_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        sha1.update(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback and total > 0:
-                            progress_callback(downloaded / total)
+            try:
+                with open(dest_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            sha1.update(chunk)
+                            downloaded += len(chunk)
+                            if progress_callback and total > 0:
+                                progress_callback(downloaded / total)
+            except PermissionError as exc:
+                return False, None, (
+                    f"Permission denied writing to {dest_path}. Close any program "
+                    f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
+                )
+            except OSError as exc:
+                return False, None, f"Failed to write {dest_path}: {exc}"
 
             if progress_callback:
                 progress_callback(1.0)

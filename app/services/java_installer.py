@@ -234,6 +234,8 @@ class JdkManager:
             raise JdkDownloadError("JDK download timed out")
         except requests.RequestException as exc:
             raise JdkDownloadError(f"JDK download failed: {exc}")
+        except PermissionError as exc:
+            raise JdkDownloadError(f"Cannot write {dest}: permission denied ({exc})")
 
     def _extract_zip(self, zip_path: Path, dest_dir: Path):
         dest_dir.mkdir(parents=True, exist_ok=True)
