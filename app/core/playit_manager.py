@@ -45,8 +45,9 @@ class PlayitManager:
 
         # Set when agent exits due to auth failure — suppresses heartbeat restart
         self._auth_failed = False
-        # Set when agent reports InvalidAgentKey (0 tunnels) — dns loop creates tunnel
-        self._needs_tunnel_create = False
+        # Guards against concurrent tunnel creation when the agent repeats
+        # its "0 tunnels" line across reconnect attempts
+        self._tunnel_create_inflight = False
 
         self._shutdown_done = False
         import atexit
@@ -183,6 +184,29 @@ class PlayitManager:
                 self.console_callback(f"[Playit] API Error: {e}")
             return None
 
+    def _create_tunnel_from_stdout(self, port: int) -> None:
+        # Runs off the stdout reader thread: agent reported 0 tunnels but its
+        # control connection stays alive, so the heartbeat's dead-process branch
+        # never fires — create the tunnel via API immediately instead.
+        try:
+            if self.api_client.initialize():
+                address = self.get_or_create_tunnel(port)
+                if address:
+                    with self._lock:
+                        self._api_dns = address
+                        self.current_address = address
+                    self.console_callback(f"[Playit] Tunnel created: {address}")
+                    self.status_callback("Online", address)
+            else:
+                self.console_callback(
+                    "[Playit] No tunnels configured. Create one at https://playit.gg/dashboard"
+                )
+        except Exception as e:
+            logger.warning("[Playit] Tunnel create failed: %s", e)
+        finally:
+            with self._lock:
+                self._tunnel_create_inflight = False
+
     def start(self, port: int = 25565) -> None:
         with self._lock:
             if self.running:
@@ -205,7 +229,7 @@ class PlayitManager:
             self.current_address = None
             self._current_port = port
             self._auth_failed = False
-            self._needs_tunnel_create = False
+            self._tunnel_create_inflight = False
 
         self.status_callback("Starting...", None)
 
@@ -481,28 +505,6 @@ class PlayitManager:
                     logger.warning("[Playit] Heartbeat: agent exited due to auth failure — not restarting.")
                     break
 
-                # Agent had 0 tunnels — try create via API before restarting (best-effort)
-                if self._needs_tunnel_create:
-                    self._needs_tunnel_create = False
-                    port = getattr(self, '_current_port', 25565)
-                    try:
-                        if self.api_client.initialize():
-                            address = self.get_or_create_tunnel(port)
-                            if address:
-                                self._api_dns = address
-                                self.current_address = address
-                                self.console_callback(f"[Playit] Tunnel created: {address}")
-                        else:
-                            self.console_callback(
-                                "[Playit] No tunnels configured. Create one at https://playit.gg/dashboard"
-                            )
-                    except Exception as e:
-                        logger.warning("[Playit] Tunnel create failed: %s", e)
-                        self.console_callback(
-                            "[Playit] Could not create tunnel automatically. "
-                            "Create one manually at https://playit.gg/dashboard"
-                        )
-
                 attempt_count += 1
                 logger.warning("[Playit] Heartbeat #%d: process not running.", attempt_count)
                 if attempt_count >= max_attempts:
@@ -589,10 +591,21 @@ class PlayitManager:
                         self._auth_failed = True
                         self.status_callback("Error", None)
                         self.console_callback("[Playit] ERROR: Agent secret invalid. Use 'Reset Tunnel' to re-link.")
-                    elif "InvalidAgentKey" in clean_line:
-                        # Agent has no tunnels configured — signal DNS loop to create one
-                        self._needs_tunnel_create = True
-                        self.console_callback("[Playit] No tunnel found. Creating tunnel via API...")
+                    elif "InvalidAgentKey" in clean_line or "agent has 0 tunnels" in clean_line:
+                        # Agent has no tunnels configured. The agent repeats this line
+                        # on reconnect attempts — inflight flag ensures only one
+                        # create runs at a time (get_or_create_tunnel is list-then-create,
+                        # so two concurrent calls could create duplicate tunnels).
+                        with self._lock:
+                            already_running = self._tunnel_create_inflight or self._api_dns
+                            if not already_running:
+                                self._tunnel_create_inflight = True
+                        if not already_running:
+                            self.console_callback("[Playit] No tunnel found. Creating tunnel via API...")
+                            threading.Thread(
+                                target=self._create_tunnel_from_stdout,
+                                args=(self._current_port,), daemon=True,
+                            ).start()
                     # --- CRITICAL DNS: must call _parse_line on every line ---
                     self._parse_line(clean_line)
         except Exception as e:
