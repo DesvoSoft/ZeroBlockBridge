@@ -289,12 +289,22 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Layout: Results Area (scrollable)
     # ------------------------------------------------------------------
     def _build_results_area(self):
+        results_container = ctk.CTkFrame(self, fg_color="transparent")
+        results_container.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        results_container.grid_columnconfigure(0, weight=1)
+        results_container.grid_rowconfigure(1, weight=1)
+
+        # Pinned action bar for the "Installed" view — sibling of the scrollable
+        # frame so bulk-action buttons stay visible while the list scrolls.
+        self.installed_action_bar = ctk.CTkFrame(results_container, fg_color="transparent")
+        self.installed_action_bar.grid(row=0, column=0, sticky="ew", padx=8, pady=(0, 4))
+        self.installed_action_bar.grid_remove()
+
         self.results_frame = ctk.CTkScrollableFrame(
-            self, corner_radius=12,
+            results_container, corner_radius=12,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            label_text="",
         )
         self.results_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         self.results_frame.grid_columnconfigure(0, weight=1)
@@ -723,6 +733,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                 text="Installed",
             )
+            self.installed_action_bar.grid_remove()
             if self._current_hits:
                 self._render_results()
                 self._update_pagination()
@@ -732,6 +743,9 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _render_installed(self):
         for w in self.results_frame.winfo_children():
             w.destroy()
+        for w in self.installed_action_bar.winfo_children():
+            w.destroy()
+        self.installed_action_bar.grid_remove()
         self._selected_files.clear()
 
         ctx = self._resolve_server_context()
@@ -749,8 +763,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                     if fname.endswith(".jar"):
                         files.append(os.path.join(d, fname))
 
-        action_bar = ctk.CTkFrame(self.results_frame, fg_color="transparent")
-        action_bar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+        action_bar = self.installed_action_bar
+        action_bar.grid()
 
         header = ctk.CTkLabel(
             action_bar,
