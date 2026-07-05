@@ -68,7 +68,10 @@ FORGE_PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forg
 JDK_CACHE_DIR = BASE_DIR / ".zbb_cache" / "jdks"
 
 # Playit Configuration
-PLAYIT_VERSION = "0.17.1"
+# v1.0+ release assets ship the playitd daemon binary (the old playit-cli
+# standalone agent was retired; 0.17.x agents can no longer register
+# tunnels — allocation stays "pending" forever).
+PLAYIT_VERSION = "1.0.10"
 PLAYIT_URL_WINDOWS = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-windows-x86_64-signed.exe"
 PLAYIT_URL_LINUX = f"https://github.com/playit-cloud/playit-agent/releases/download/v{PLAYIT_VERSION}/playit-linux-amd64"
 

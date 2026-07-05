@@ -112,24 +112,29 @@ class TestEnsureBinary:
                 return fake_bin
 
     def test_binary_exists_and_version_matches(self, manager, tmp_path):
-        m, _, _ = manager
-        fake_bin = self.make_binary(m, tmp_path)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "0.17.1"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
-            assert m.ensure_binary() is True
-
-    def test_binary_exists_version_mismatch_replaces(self, manager, tmp_path):
+        from app.core.constants import PLAYIT_VERSION
         m, _, _ = manager
         fake_bin = tmp_path / "playit.exe"
         fake_bin.touch()
+        marker = tmp_path / "playit.version"
+        marker.write_text(PLAYIT_VERSION, encoding="utf-8")
         with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
-             patch.object(m, "binary_path", fake_bin):
-            old = MagicMock(stdout="0.16.0", stderr="")
-            new = MagicMock(stdout="0.17.1", stderr="")
-            with patch("subprocess.run", side_effect=[old, new]):
+             patch.object(m, "binary_path", fake_bin), \
+             patch.object(m, "version_marker_path", marker):
+            assert m.ensure_binary() is True
+
+    def test_binary_exists_version_mismatch_replaces(self, manager, tmp_path):
+        from app.core.constants import PLAYIT_VERSION
+        m, _, _ = manager
+        fake_bin = tmp_path / "playit.exe"
+        fake_bin.touch()
+        marker = tmp_path / "playit.version"
+        marker.write_text("0.17.1", encoding="utf-8")
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin), \
+             patch.object(m, "version_marker_path", marker):
+            smoke = MagicMock(returncode=0, stdout="Usage: playitd", stderr="")
+            with patch("subprocess.run", return_value=smoke):
                 with patch("requests.get") as mock_get:
                     mock_response = MagicMock()
                     mock_response.iter_content.return_value = [b"x" * 1_000_000]
@@ -137,6 +142,7 @@ class TestEnsureBinary:
                     mock_get.return_value = mock_response
                     assert m.ensure_binary() is True
                     assert fake_bin.stat().st_size >= 1_000_000
+                    assert marker.read_text(encoding="utf-8") == PLAYIT_VERSION
 
     def test_download_truncated_rejected(self, manager, tmp_path):
         m, _, _ = manager

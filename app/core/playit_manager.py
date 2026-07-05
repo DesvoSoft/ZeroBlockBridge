@@ -25,6 +25,9 @@ class PlayitManager:
         self.process = None
         self.running = False
         self.binary_path = self._get_binary_path()
+        # playitd has no "version" subcommand — installed version is tracked
+        # in a marker file written after a validated download.
+        self.version_marker_path = BIN_DIR / "playit.version"
         self.current_address = None
         self.is_linked = False
         self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
@@ -86,7 +89,9 @@ class PlayitManager:
             return
         for f in BIN_DIR.iterdir():
             if f.is_file() and f.name.startswith("playit"):
-                if f.samefile(self.binary_path):
+                if f.name == self.version_marker_path.name:
+                    continue
+                if self.binary_path.exists() and f.samefile(self.binary_path):
                     continue
                 try:
                     f.unlink()
@@ -101,38 +106,25 @@ class PlayitManager:
         self._clean_stale_binaries()
 
         if self.binary_path.exists():
+            installed = ""
+            if self.version_marker_path.exists():
+                try:
+                    installed = self.version_marker_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    installed = ""
+            if installed == PLAYIT_VERSION:
+                return True
+            self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
             try:
-                result = subprocess.run(
-                    [str(self.binary_path), "version"],
-                    capture_output=True, text=True, check=False,
-                    **subprocess_flags(),
-                )
-                if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
-                    self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
-                    try:
-                        os.remove(self.binary_path)
-                    except OSError:
-                        self.stop(force=True)
-                        time.sleep(0.5)
-                        try:
-                            os.remove(self.binary_path)
-                        except Exception as e2:
-                            self.console_callback(f"[Playit] Could not remove old binary: {e2}")
-                            return False
-                else:
-                    return True
-            except OSError as e:
-                self.console_callback(f"[Playit] Version check failed ({e}). Redownloading...")
+                os.remove(self.binary_path)
+            except OSError:
+                self.stop(force=True)
+                time.sleep(0.5)
                 try:
                     os.remove(self.binary_path)
-                except OSError:
-                    self.stop(force=True)
-                    time.sleep(0.5)
-                    try:
-                        os.remove(self.binary_path)
-                    except Exception as e2:
-                        self.console_callback(f"[Playit] Could not remove bad binary: {e2}")
-                        return False
+                except Exception as e2:
+                    self.console_callback(f"[Playit] Could not remove old binary: {e2}")
+                    return False
 
         url = PLAYIT_URL_WINDOWS if platform.system() == "Windows" else PLAYIT_URL_LINUX
         self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
@@ -158,9 +150,11 @@ class PlayitManager:
             if platform.system() != "Windows":
                 tmp_path.chmod(0o755)
 
+            # playitd has no "version" subcommand; "--help" exits 0 and proves
+            # the binary executes on this machine.
             try:
                 result = subprocess.run(
-                    [str(tmp_path), "version"],
+                    [str(tmp_path), "--help"],
                     capture_output=True, text=True, check=False, timeout=15,
                     **subprocess_flags(),
                 )
@@ -174,11 +168,12 @@ class PlayitManager:
                     self.console_callback(f"[Playit] Downloaded agent failed to run ({e}). Not installing it.")
                 return False
 
-            if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
-                self.console_callback("[Playit] Downloaded agent failed version check. Not installing it.")
+            if result.returncode != 0 or not (result.stdout + result.stderr).strip():
+                self.console_callback("[Playit] Downloaded agent failed smoke test. Not installing it.")
                 return False
 
             os.replace(tmp_path, self.binary_path)
+            self.version_marker_path.write_text(PLAYIT_VERSION, encoding="utf-8")
             self.console_callback("[Playit] Download complete.")
             return True
         except Exception as e:
@@ -335,10 +330,14 @@ class PlayitManager:
             self.api_client.load_secret_key()
             env["PLAYIT_SECRET_KEY"] = self.api_client._secret_key or ""
 
+            # playitd (v1.0+): no --stdout flag, logs go to stderr (merged into
+            # the stdout pipe below). Custom IPC socket avoids clashing with an
+            # officially installed playitd service. Must be the namespaced
+            # "@name" form — the daemon rejects raw \\.\pipe\ paths at bind.
             cmd = [
                 str(self.binary_path),
-                "--stdout",
-                "--secret_path", str(self.toml_path),
+                "--secret-path", str(self.toml_path),
+                "--socket-path", "@zbb-playitd",
             ]
 
             kwargs = subprocess_flags()
@@ -560,16 +559,33 @@ class PlayitManager:
     # 2. _dns_polling_loop() (infinite API poll - THIS METHOD)
     # 3. _parse_line() (stdout regex from agent)
     def _dns_polling_loop(self) -> None:
+        polls = 0
         while True:
             with self._lock:
                 if not self.running:
                     return
             time.sleep(5)
+            polls += 1
             with self._lock:
                 if not self.running:
                     return
                 if self._api_dns or self._stdout_dns:
                     return
+            # playitd (v1.0+) never prints "agent has 0 tunnels" like the old
+            # CLI did, so the stdout create-trigger no longer fires. If the
+            # agent has been up for a few polls with no tunnel, ensure one
+            # exists via the API (inflight guard prevents duplicate creates).
+            if polls == 3:
+                with self._lock:
+                    already_running = self._tunnel_create_inflight or self._api_dns
+                    if not already_running:
+                        self._tunnel_create_inflight = True
+                if not already_running:
+                    self.console_callback("[Playit] No public address yet. Ensuring tunnel exists via API...")
+                    threading.Thread(
+                        target=self._create_tunnel_from_stdout,
+                        args=(self._current_port,), daemon=True,
+                    ).start()
             try:
                 addresses = self.api_client.get_tunnels()
                 if addresses:
@@ -693,13 +709,15 @@ class PlayitManager:
                     is_spam = any(s in clean_line for s in self.SPAM_LOGS)
                     if not is_spam:
                         self.console_callback(f"[Playit] {clean_line}")
-                    if "AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line:
+                    if ("AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line
+                            or "account agent limit" in clean_line):
                         self.status_callback("Error", None)
                         self.console_callback("[Playit] ERROR: Account limit reached!")
                         self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
                         self._auth_failed = True
                     elif ("Invalid secret" in clean_line or "invalid secret" in clean_line
-                          or "InvalidAgentKey" in clean_line):
+                          or "InvalidAgentKey" in clean_line
+                          or "secret is no longer valid" in clean_line):
                         # Corrupted/expired secret key — auth error, user must re-link.
                         # InvalidAgentKey is a 401, NOT a missing-tunnel condition.
                         self._handle_auth_failure("Agent secret invalid")

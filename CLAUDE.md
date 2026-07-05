@@ -84,7 +84,7 @@ Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `C
 
 ### Playit.gg integration
 
-- Agent v0.17.1. Secret arg: `--secret_path` (underscore). Always include `--stdout`.
+- Agent v1.0.10 (`playitd` daemon binary — the Windows release asset IS playitd.exe). Args: `--secret-path` + `--socket-path` (HYPHENS — v0.17's underscore flags are gone). Socket uses namespaced form `@zbb-playitd` (raw `\\.\pipe\` paths are rejected at bind) to avoid clashing with an official playitd install. No `--stdout` flag — playitd logs to stderr (merged into the stdout pipe). No `version` subcommand — installed version tracked in `bin/playit.version` marker file.
 - `playit_manager.py` manages agent lifecycle; `playit_api.py` is REST v2 client.
 
 ### Version fetching
