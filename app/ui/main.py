@@ -584,8 +584,11 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):
-        self.zbb_manager.stop_server()
-        self.on_server_stopped()
+        # Off the Tk thread: stop() blocks up to ~15s (graceful wait + kill).
+        def _stop():
+            self.zbb_manager.stop_server()
+            self.on_server_stopped()
+        self.executor.submit(_stop)
 
     def create_server_dialog(self):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)

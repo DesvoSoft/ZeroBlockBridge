@@ -53,6 +53,9 @@ class VersionManager:
         if getattr(self, '_initialized', False):
             return
         self.cache_lock = threading.RLock()
+        # Serializes the lazy first load (may hit the network) without
+        # holding cache_lock across slow I/O.
+        self._load_lock = threading.Lock()
         self.fallback_cache = self._get_default_cache()
         # Start with in-memory defaults — no disk I/O in __init__.
         # _load_cache() runs lazily on first get_versions() call.
@@ -117,7 +120,9 @@ class VersionManager:
                             if fetched:
                                 data.update(fetched)
                                 data["last_updated"] = datetime.datetime.now().isoformat()
-                                self._save_cache()
+                                with self.cache_lock:
+                                    self.cache = data
+                                    self._save_cache()
                             return data
                     except ValueError:
                         pass
@@ -137,8 +142,9 @@ class VersionManager:
             if data:
                 new_cache.update(data)
                 new_cache["last_updated"] = datetime.datetime.now().isoformat()
-                self.cache = new_cache
-                self._save_cache()
+                with self.cache_lock:
+                    self.cache = new_cache
+                    self._save_cache()
                 logger.info("Synchronous version refresh completed.")
                 return new_cache
         except Exception as e:
@@ -285,11 +291,15 @@ class VersionManager:
 
     def get_versions(self, server_type):
         # Lazy-load cache from disk on first call (deferred from __init__).
+        # _load_cache may do a synchronous network fetch (stale cache) —
+        # keep it off cache_lock so other threads don't stall behind it.
         if not self._cache_loaded:
-            with self.cache_lock:
+            with self._load_lock:
                 if not self._cache_loaded:
-                    self.cache = self._load_cache()
-                    self._cache_loaded = True
+                    loaded = self._load_cache()
+                    with self.cache_lock:
+                        self.cache = loaded
+                        self._cache_loaded = True
         # Fire background refresh if stale — do NOT block; wizard uses
         # add_callback(on_versions_refreshed) to repopulate when ready.
         self._check_and_refresh()
@@ -316,9 +326,11 @@ class VersionManager:
 
     def refresh_versions(self):
         logger.info("Refreshing server versions...")
+        # Fetch outside cache_lock: HTTP to 5 APIs (10s timeout each) must not
+        # block get_versions() callers (UI thread) waiting on the lock.
+        results = self._fetch_all_versions(timeout=10)
         with self.cache_lock:
             new_cache = self.cache.copy()
-            results = self._fetch_all_versions(timeout=10)
             for key, versions in results.items():
                 new_cache[key] = versions
             new_cache["last_updated"] = datetime.datetime.now().isoformat()

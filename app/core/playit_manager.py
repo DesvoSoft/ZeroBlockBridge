@@ -277,13 +277,17 @@ class PlayitManager:
                 self._tunnel_create_inflight = False
 
     def start(self, port: int = 25565) -> None:
+        # Read state under the lock; run callbacks outside it.
         with self._lock:
-            if self.running:
-                self.console_callback("[Playit] Agent already running.")
-                if self._api_dns:
-                    self.current_address = self._api_dns
-                    self.status_callback("Online", self._api_dns)
-                return
+            already_running = self.running
+            api_dns = self._api_dns
+            if already_running and api_dns:
+                self.current_address = api_dns
+        if already_running:
+            self.console_callback("[Playit] Agent already running.")
+            if api_dns:
+                self.status_callback("Online", api_dns)
+            return
 
         try:
             self._start_internal(port)
@@ -394,60 +398,63 @@ class PlayitManager:
                 pass
 
     def stop(self, force: bool = False) -> None:
+        # Swap state under the lock; kill (slow syscalls, up to ~3s wait)
+        # and callbacks run outside it so other threads don't stall.
         with self._lock:
             proc = self.process
             self.process = None
-            if proc:
-                self.console_callback("[Playit] Stopping agent...")
-                pid = proc.pid
-                killed = False
-                try:
-                    import psutil
-                    parent = psutil.Process(pid)
-                    for child in parent.children(recursive=True):
-                        try:
-                            child.kill()
-                        except Exception:
-                            pass
-                    parent.kill()
-                    killed = True
-                except Exception as e:
-                    logger.debug("psutil stop error: %s", e)
-
-                if not killed:
-                    if platform.system() == "Windows":
-                        subprocess.run(
-                            ["taskkill", "/F", "/T", "/PID", str(pid)],
-                            capture_output=True, check=False,
-                            **subprocess_flags(),
-                        )
-                    else:
-                        try:
-                            proc.terminate()
-                        except Exception as te:
-                            logger.debug("subprocess terminate error: %s", te)
-
-                # Block until OS confirms the process is gone (max 3s).
-                # This prevents sys.exit() from racing ahead of kill completion.
-                try:
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass  # Already dead or timed out — either is acceptable.
-
-            if force and platform.system() == "Windows":
-                # Nuclear option: kill any stray playit process by image name.
-                # Uses CREATE_NO_WINDOW — no flash, silent noop if nothing running.
-                for proc_name in ["playit.exe", "playit-cli.exe"]:
-                    subprocess.run(
-                        ["taskkill", "/F", "/IM", proc_name],
-                        capture_output=True, check=False,
-                        **subprocess_flags(),
-                    )
-
             self.running = False
             self.current_address = None
             self._api_dns = None
-            self.status_callback("Offline", None)
+
+        if proc:
+            self.console_callback("[Playit] Stopping agent...")
+            pid = proc.pid
+            killed = False
+            try:
+                import psutil
+                parent = psutil.Process(pid)
+                for child in parent.children(recursive=True):
+                    try:
+                        child.kill()
+                    except Exception:
+                        pass
+                parent.kill()
+                killed = True
+            except Exception as e:
+                logger.debug("psutil stop error: %s", e)
+
+            if not killed:
+                if platform.system() == "Windows":
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        capture_output=True, check=False,
+                        **subprocess_flags(),
+                    )
+                else:
+                    try:
+                        proc.terminate()
+                    except Exception as te:
+                        logger.debug("subprocess terminate error: %s", te)
+
+            # Block until OS confirms the process is gone (max 3s).
+            # This prevents sys.exit() from racing ahead of kill completion.
+            try:
+                proc.wait(timeout=3)
+            except Exception:
+                pass  # Already dead or timed out — either is acceptable.
+
+        if force and platform.system() == "Windows":
+            # Nuclear option: kill any stray playit process by image name.
+            # Uses CREATE_NO_WINDOW — no flash, silent noop if nothing running.
+            for proc_name in ["playit.exe", "playit-cli.exe"]:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", proc_name],
+                    capture_output=True, check=False,
+                    **subprocess_flags(),
+                )
+
+        self.status_callback("Offline", None)
 
     def reset(self, mode: str = "full") -> None:
         try:
