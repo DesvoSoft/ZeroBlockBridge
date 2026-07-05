@@ -56,6 +56,7 @@ class PlayitManager:
         self._tunnel_create_inflight = False
 
         self._shutdown_done = False
+        self._job_handle = None
         import atexit
         atexit.register(self._atexit_stop)
 
@@ -321,6 +322,7 @@ class PlayitManager:
             return
 
         self.api_client.is_read_only = False
+        self._kill_stale_agents()
         self.console_callback("[Playit] Launching tunnel agent...")
 
         try:
@@ -353,6 +355,7 @@ class PlayitManager:
                 env=env,
                 **kwargs,
             )
+            self._assign_to_job(self.process.pid)
             self.running = True
             if not self.current_address:
                 self.status_callback("Starting...", None)
@@ -365,6 +368,103 @@ class PlayitManager:
             self.console_callback(f"[Playit] Failed to start: {e}")
             self.running = False
             self.status_callback("Error", None)
+
+    def _kill_stale_agents(self) -> None:
+        """Kill orphaned playit agents left over from a previous app run.
+
+        A hard kill of the app (Ctrl+C on the console, taskkill, crash)
+        skips atexit, leaving playitd alive holding a control session.
+        That stale session then fights the new agent over tunnel
+        assignment (tunnel_count flapping 1->0->1 every ~6s).
+        Only processes running OUR binary path are touched.
+        """
+        try:
+            import psutil
+        except ImportError:
+            return
+        target = os.path.normcase(str(self.binary_path))
+        for proc in psutil.process_iter(["pid", "exe"]):
+            try:
+                exe = proc.info.get("exe")
+                if exe and os.path.normcase(exe) == target:
+                    proc.kill()
+                    logger.info("[Playit] Killed stale agent process pid=%d", proc.info["pid"])
+                    self.console_callback("[Playit] Killed stale agent from a previous session.")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+    def _assign_to_job(self, pid: int) -> None:
+        """Bind the agent to a Windows Job Object with KILL_ON_JOB_CLOSE.
+
+        The OS then reaps playitd even when this process dies without
+        running atexit (console closed, taskkill, interpreter crash).
+        No-op on non-Windows (setsid + stop() covers POSIX).
+        """
+        if platform.system() != "Windows":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.windll.kernel32
+            job = kernel32.CreateJobObjectW(None, None)
+            if not job:
+                return
+
+            class _BasicLimits(ctypes.Structure):
+                _fields_ = [
+                    ("PerProcessUserTimeLimit", ctypes.c_int64),
+                    ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD),
+                ]
+
+            class _IoCounters(ctypes.Structure):
+                _fields_ = [
+                    ("ReadOperationCount", ctypes.c_uint64),
+                    ("WriteOperationCount", ctypes.c_uint64),
+                    ("OtherOperationCount", ctypes.c_uint64),
+                    ("ReadTransferCount", ctypes.c_uint64),
+                    ("WriteTransferCount", ctypes.c_uint64),
+                    ("OtherTransferCount", ctypes.c_uint64),
+                ]
+
+            class _ExtendedLimits(ctypes.Structure):
+                _fields_ = [
+                    ("BasicLimitInformation", _BasicLimits),
+                    ("IoInfo", _IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t),
+                ]
+
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+            JobObjectExtendedLimitInformation = 9
+            info = _ExtendedLimits()
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            kernel32.SetInformationJobObject(
+                job, JobObjectExtendedLimitInformation,
+                ctypes.byref(info), ctypes.sizeof(info),
+            )
+
+            PROCESS_SET_QUOTA = 0x0100
+            PROCESS_TERMINATE = 0x0001
+            handle = kernel32.OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, False, pid)
+            if handle:
+                if not kernel32.AssignProcessToJobObject(job, handle):
+                    logger.debug("[Playit] AssignProcessToJobObject failed: %d", kernel32.GetLastError())
+                kernel32.CloseHandle(handle)
+            # Keep the job handle alive for the app's lifetime — closing it
+            # (including at process death) is what kills the agent.
+            self._job_handle = job
+        except Exception as e:
+            logger.debug("[Playit] Job object assignment failed: %s", e)
 
     def stop(self, force: bool = False) -> None:
         with self._lock:
@@ -654,6 +754,8 @@ class PlayitManager:
         "tunnel running", "udp channel requires auth", "udp session details received",
         "send KeepAlive", "agent registered details", "authenticate control last_pong",
         "session expired reason=SessionNotSetup",
+        "reconnecting reason=SessionNotSetup",
+        "playit tunnel state updated",
         "failed to send initial ping error=Os { code: 10051",
         "failed to send initial ping error=Os { code: 101", "failed to ping tunnel server",
         "failed to parse json", "ReqProtoRegister",
