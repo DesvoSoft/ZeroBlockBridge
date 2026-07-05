@@ -424,3 +424,27 @@ class TestServerRunnerJvmCustomFlags:
         assert mock_popen.called
         cmd = mock_popen.call_args.args[0]
         assert "server.jar" in cmd
+
+
+class TestDeleteServer:
+    def test_deletes_real_directory(self, tmp_path):
+        from app.core.logic import delete_server
+        server = tmp_path / "myserver"
+        (server / "world").mkdir(parents=True)
+        (server / "server.jar").write_text("x")
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("myserver")
+        assert not server.exists()
+
+    def test_missing_server_is_noop(self, tmp_path):
+        from app.core.logic import delete_server
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("ghost")  # must not raise
+
+    def test_empty_directory_deleted(self, tmp_path):
+        from app.core.logic import delete_server
+        server = tmp_path / "empty"
+        server.mkdir()
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("empty")
+        assert not server.exists()

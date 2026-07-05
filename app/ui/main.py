@@ -399,10 +399,39 @@ class MCTunnelApp(ctk.CTk):
             ).pack(padx=16)
         else:
             for s in servers:
-                item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select)
+                item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select,
+                                      on_delete=self.on_server_delete)
                 item.pack(fill="x", padx=5, pady=5)
                 self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
+
+    def on_server_delete(self, server_name):
+        if self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name:
+            Toast.show(self, "Stop the server before deleting it", toast_type="warning")
+            return
+        confirmed = tkinter.messagebox.askyesno(
+            "Delete Server",
+            f"Delete '{server_name}' permanently?\n\n"
+            "The world, configs and everything inside the server folder "
+            "will be removed. This cannot be undone.\n\n"
+            "(Imported servers: only the link is removed, the original "
+            "folder is kept.)",
+        )
+        if not confirmed:
+            return
+        try:
+            logic.delete_server(server_name)
+        except OSError as e:
+            Toast.show(self, f"Delete failed: {e}", toast_type="error")
+            return
+        if self.zbb_manager.current_server == server_name:
+            self.zbb_manager.current_server = None
+            self.lbl_dash_title.configure(text="Select a server")
+            self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
+            self.btn_start.configure(state="disabled")
+            self.btn_stop.configure(state="disabled")
+        Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
+        self.load_servers()
 
     def on_server_select(self, server_name):
         # UI Locking: Block switching if current server is active
@@ -940,6 +969,21 @@ def main():
     app = MCTunnelApp()
     app._instance_lock = instance_lock
     app.protocol("WM_DELETE_WINDOW", app.on_close)
+
+    # First-run Minecraft EULA consent (shown once; ZBB auto-writes
+    # eula=true on created servers, so explicit consent is required).
+    from app.services.settings_manager import SettingsManager
+    _settings = SettingsManager()
+    if not _settings.get("eula_accepted", False):
+        from app.ui.ui_components import EulaDialog
+        eula_dialog = EulaDialog(app)
+        app.wait_window(eula_dialog)
+        if not eula_dialog.accepted:
+            logger.info("EULA declined - exiting.")
+            instance_lock.release()
+            app.destroy()
+            sys.exit(0)
+        _settings.set("eula_accepted", True)
 
     import signal
     signal.signal(signal.SIGTERM, lambda sig, frame: app.after(0, app.on_close))

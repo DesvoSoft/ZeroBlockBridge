@@ -158,10 +158,11 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.configure(state="disabled")
 
 class ServerListItem(ctk.CTkFrame):
-    def __init__(self, master, server_name, on_click, **kwargs):
+    def __init__(self, master, server_name, on_click, on_delete=None, **kwargs):
         super().__init__(master, **kwargs)
         self.server_name = server_name
         self.on_click = on_click
+        self.on_delete = on_delete
         self.full_name = server_name
         
         self.configure(
@@ -228,8 +229,30 @@ class ServerListItem(ctk.CTkFrame):
 
     def bind_events(self, widget):
         widget.bind("<Button-1>", lambda e: self._on_select())
+        widget.bind("<Button-3>", self._on_right_click)
         widget.bind("<Enter>", self._on_enter)
         widget.bind("<Leave>", self._on_leave)
+
+    def _on_right_click(self, event):
+        if not self.on_delete:
+            return
+        import tkinter as tk
+        menu = tk.Menu(
+            self, tearoff=0,
+            bg=AppConfig.COLOR_BG_CARD_DARK,
+            fg=AppConfig.COLOR_TEXT_PRIMARY,
+            activebackground="#334155",
+            activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
+            borderwidth=0,
+        )
+        menu.add_command(
+            label=f"Delete '{self.full_name}'",
+            command=lambda: self.on_delete(self.server_name),
+        )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
 
     def set_cursor(self, cursor_type):
         self.configure(cursor=cursor_type)
@@ -310,3 +333,90 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             self.destroy()
         except Exception as e:
             logger.debug("Dialog close ignored: %s", e)
+
+
+class EulaDialog(ctk.CTkToplevel):
+    """First-run modal: Minecraft EULA consent.
+
+    ZBB auto-writes eula=true on servers it creates, so the user must
+    consent once. Caller checks .accepted after wait_window().
+    """
+
+    EULA_URL = "https://aka.ms/MinecraftEULA"
+
+    def __init__(self, master):
+        super().__init__(master)
+        self.accepted = False
+        self.title("Minecraft EULA")
+        self.resizable(False, False)
+        self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.protocol("WM_DELETE_WINDOW", self._decline)
+
+        frame = ctk.CTkFrame(self, fg_color="transparent")
+        frame.pack(padx=30, pady=25, fill="both", expand=True)
+
+        ctk.CTkLabel(
+            frame, text="Minecraft End User License Agreement",
+            font=AppConfig.FONT_HEADING,
+        ).pack(anchor="w", pady=(0, 12))
+
+        ctk.CTkLabel(
+            frame,
+            text=(
+                "Zero Block Bridge downloads and runs Minecraft server software.\n\n"
+                "Running a Minecraft server requires accepting Mojang's End User\n"
+                "License Agreement (EULA). If you accept, ZBB will automatically\n"
+                "set eula=true for the servers you create.\n\n"
+                "If you decline, the application will close."
+            ),
+            font=AppConfig.FONT_BODY, justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+
+        link = ctk.CTkLabel(
+            frame, text="Read the Minecraft EULA (aka.ms/MinecraftEULA)",
+            font=AppConfig.FONT_BODY, text_color="#60a5fa", cursor="hand2",
+        )
+        link.pack(anchor="w", pady=(0, 18))
+        link.bind("<Button-1>", self._open_eula)
+
+        buttons = ctk.CTkFrame(frame, fg_color="transparent")
+        buttons.pack(fill="x")
+        ctk.CTkButton(
+            buttons, text="Decline", corner_radius=12, width=120,
+            fg_color="transparent", border_width=1,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=(AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_PRIMARY),
+            hover_color="#334155", command=self._decline,
+        ).pack(side="left")
+        ctk.CTkButton(
+            buttons, text="I Accept the EULA", corner_radius=12, width=180,
+            hover_color="#1d4ed8", command=self._accept,
+        ).pack(side="right")
+
+        self.update_idletasks()
+        self._center_over(master)
+        self.grab_set()
+        self.focus_force()
+
+    def _center_over(self, master):
+        try:
+            w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+            x = master.winfo_rootx() + (master.winfo_width() - w) // 2
+            y = master.winfo_rooty() + (master.winfo_height() - h) // 2
+            self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        except Exception as e:
+            logger.debug("EULA dialog centering failed: %s", e)
+
+    def _open_eula(self, event=None):
+        import webbrowser
+        webbrowser.open(self.EULA_URL)
+
+    def _accept(self):
+        self.accepted = True
+        self.grab_release()
+        self.destroy()
+
+    def _decline(self):
+        self.accepted = False
+        self.grab_release()
+        self.destroy()

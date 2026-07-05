@@ -199,6 +199,29 @@ def download_server(server_name: str, server_type: str, version: str, progress_c
     normalize_server_jar(server_path)
     return jar_path
 
+def delete_server(server_name: str) -> None:
+    """Deletes a server permanently.
+
+    Imported servers are junctions (Windows) or symlinks (POSIX) into the
+    servers directory — for those only the link is removed, never the
+    original folder. os.rmdir on a Windows junction removes the reparse
+    point without touching its target; a real non-empty directory raises
+    OSError and falls through to rmtree.
+    """
+    path = os.path.join(SERVERS_DIR, server_name)
+    if not os.path.exists(path):
+        return
+    if os.path.islink(path):
+        os.unlink(path)
+    else:
+        try:
+            os.rmdir(path)
+        except OSError:
+            shutil.rmtree(path)
+    invalidate_meta_cache(server_name)
+    logger.info("Deleted server '%s'", server_name)
+
+
 def accept_eula(server_name: str) -> None:
     """Writes eula.txt=true by delegating to scaffolder."""
     from app.services.scaffolder import _generate_eula
