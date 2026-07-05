@@ -144,4 +144,4 @@ feature/<name>
 
 ### Test helpers (conftest.py)
 
-`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 426 tests in 23 files.
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 461 tests in 24 files.

@@ -5,11 +5,10 @@ description: Development guide for ZeroBlockBridge (ZBB). Use for all implementa
 
 # ZeroBlockBridge — Development Guide
 
-## Project State (2026-06-24)
+## Project State (2026-07-05)
 
-- **410 tests**, 100% pass, 0 flaky, 0 skipped.
-- **Test files**: 22 files, ~4,299 LOC.
-- **App files**: ~40 Python files, ~9,494 LOC.
+- **461 tests**, 100% pass, 0 flaky, 0 skipped.
+- **Test files**: 24 files.
 - **Phases complete**: F0–F6, FA–FB, FIX-P1/P2/P3, F4 (full), P0 (all 7 tasks), EXE-PERF, BUG-AUDIT (18/19).
 - **Next targets**: MODS-B (Modrinth browser improvements) → CA-HIGH (JVM args UI, unified player mgmt, console filter).
 
@@ -57,6 +56,8 @@ All communication between UI and core flows through `EventBus`. Rules:
 8. **`ServerState` enum in `constants.py`** (not `core.py`) — prevents circular import.
 9. **Fabric/Forge installers** always receive resolved `java_bin` from ZBBManager. Never assume `"java"` from PATH.
 10. **Scheduler missed window**: daily-time target passed >120s → `get_status()["missed"] = True` → orchestrator warns user via log + NOTIFICATION.
+11. **Every spawned child process** (Minecraft server, playit agent) → `assign_to_job(pid)` from `app/core/process_job.py` (Windows Job Object, `KILL_ON_JOB_CLOSE`). Reaps children even on hard parent death (crash, taskkill, closed console) that skips `atexit`. No-op on non-Windows.
+12. **Port preflight before spawning the server** — check the configured port isn't already bound (`_port_in_use` in `logic.py`); fail with a clear NOTIFICATION instead of a Minecraft bind-crash.
 
 ---
 
@@ -110,9 +111,8 @@ All communication between UI and core flows through `EventBus`. Rules:
 
 ## Playit.gg Integration
 
-- Agent v0.17.1. Secret arg: `--secret_path` (underscore — **never** `--secret-path`).
-- Always include `--stdout` in agent invocation.
-- DNS recovery: 3 independent mechanisms — `create_tunnel()` polls 15s, `_dns_polling_loop()` polls 60s more, `_parse_line()` extracts domain from stdout regex.
+- Agent v1.0.10 (`playitd` daemon binary — the Windows release asset IS playitd.exe, a full rewrite of the retired v0.17.x CLI agent). Args: `--secret-path` + `--socket-path` (hyphens — v0.17's underscore flags are gone). Socket uses namespaced form `@zbb-playitd` (raw `\\.\pipe\` paths are rejected at bind). No `--stdout` flag — playitd logs to stderr, merged into the same pipe. No `version` subcommand — installed version tracked in `bin/playit.version` marker file; `--help` used as the install smoke test.
+- DNS recovery: 3 independent mechanisms — `create_tunnel()` polls 15s, `_dns_polling_loop()` polls 60s more (tunnel-ensure now triggers on its 3rd iteration, since the old "agent has 0 tunnels" stdout line no longer appears), `_parse_line()` extracts domain from stdout regex.
 - **Do NOT modify the DNS recovery chain** — breaking any of the 3 mechanisms causes tunnel status to stay "Starting..." indefinitely.
 - `statemanager.py`: module-level vars + `threading.Lock` for tunnel status debounce (200ms).
 

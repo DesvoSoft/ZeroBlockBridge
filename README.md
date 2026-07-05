@@ -20,7 +20,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ## Features
 
-- **Server Management**: 3-step wizard, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), smart caching, RAM allocation, properties editor, integrated console, player management dashboard with whitelist controls.
+- **Server Management**: 3-step wizard, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), smart caching, RAM allocation, properties editor, integrated console, player management dashboard with whitelist controls, right-click server deletion.
 - **Automation & Backups**: One-click ZIP backups, scheduled restarts (interval or daily time), multi-stage warnings with countdown, auto-backup scheduler.
 - **Performance Monitoring**: Lag spike detection, server heartbeat monitoring.
 - **Modrinth Mod Browser**: Search, filter, one-click install, manage installed mods, check updates against Modrinth API.
@@ -35,7 +35,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 ### Prerequisites
 
 - **Python 3.10+** ([Download](https://www.python.org/downloads/))
-- **Java**: Not required manually. The app automatically detects, downloads, and caches the correct JDK (Adoptium, range 17-21) based on the selected Minecraft version.
+- **Java**: Not required manually. The app automatically detects, downloads, and caches the correct JDK (Adoptium, range 8-21) based on the selected Minecraft version.
 
 ### Installation
 

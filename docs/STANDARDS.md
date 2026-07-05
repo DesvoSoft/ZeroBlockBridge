@@ -3,7 +3,7 @@
 This document defines the coding standards, architectural philosophy, and quality criteria for ZeroBlockBridge.
 All contributors (human or AI) must adhere to these rules.
 
-> **Last updated:** 2026-06-24 — 410 tests, 100% pass.
+> **Last updated:** 2026-07-05 — 461 tests, 100% pass.
 
 ---
 
@@ -179,7 +179,7 @@ main        ← Production releases only
 | MODS-B + CA-HIGH | `v1.1.0` | After mod browser improvements |
 | F11 UI 2.0 | `v2.0.0` | Full UI redesign |
 
-**Current dev state:** v1.0.0-rc equivalent. F0–F6 + P0 complete. 410 tests.
+**Current dev state:** v1.0.0-rc equivalent. F0–F6 + P0 complete. 461 tests.
 
 ---
 
@@ -274,4 +274,4 @@ grep -rn "corner_radius" app/ui/ | grep -v "12\|= 0"
 pytest tests/ -q
 ```
 
-**Current score (2026-06-24): 97/100** — known deductions: LA-06 (get/set_server_ram thin wrappers still used by SPE; scheduled for future inline).
+**Current score (2026-07-05): 97/100** — known deductions: LA-06 (get/set_server_ram thin wrappers still used by SPE; scheduled for future inline).

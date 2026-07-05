@@ -386,10 +386,11 @@ class TestServerRunnerJvmCustomFlags:
             json.dump(meta, f)
         return server_dir
 
+    @patch("app.core.logic._port_in_use", return_value=False)
     @patch("app.core.logic.subprocess.Popen")
     @patch("app.core.logic.probe_java", return_value=None)
     @patch("app.core.logic.check_eula", return_value=True)
-    def test_custom_flags_appended_to_cmd(self, mock_eula, mock_probe, mock_popen):
+    def test_custom_flags_appended_to_cmd(self, mock_eula, mock_probe, mock_popen, mock_port):
         self._make_server(self.tmpdir, jvm_custom_flags="-XX:+UseG1GC -Dfoo=bar")
         mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
         with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
@@ -399,10 +400,11 @@ class TestServerRunnerJvmCustomFlags:
         assert "-XX:+UseG1GC" in cmd
         assert "-Dfoo=bar" in cmd
 
+    @patch("app.core.logic._port_in_use", return_value=False)
     @patch("app.core.logic.subprocess.Popen")
     @patch("app.core.logic.probe_java", return_value=None)
     @patch("app.core.logic.check_eula", return_value=True)
-    def test_empty_custom_flags_no_op(self, mock_eula, mock_probe, mock_popen):
+    def test_empty_custom_flags_no_op(self, mock_eula, mock_probe, mock_popen, mock_port):
         self._make_server(self.tmpdir)
         mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
         with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
@@ -412,10 +414,11 @@ class TestServerRunnerJvmCustomFlags:
         assert cmd.count("-jar") == 1
         assert "server.jar" in cmd
 
+    @patch("app.core.logic._port_in_use", return_value=False)
     @patch("app.core.logic.subprocess.Popen")
     @patch("app.core.logic.probe_java", return_value=None)
     @patch("app.core.logic.check_eula", return_value=True)
-    def test_malformed_custom_flags_caught(self, mock_eula, mock_probe, mock_popen):
+    def test_malformed_custom_flags_caught(self, mock_eula, mock_probe, mock_popen, mock_port):
         self._make_server(self.tmpdir, jvm_custom_flags='-Dfoo="unterminated')
         mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
         with patch("app.core.logic.SERVERS_DIR", self.tmpdir):

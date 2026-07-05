@@ -2,7 +2,7 @@
 
 This document covers the internal architecture, auto-healing system, technical details, and design decisions of ZeroBlockBridge.
 
-> **Last updated:** 2026-06-24 — 410 tests, 100% pass. P0 complete, F5 (CrashReporter) + F6 (Discord Webhook) done.
+> **Last updated:** 2026-07-05 — 461 tests, 100% pass. P0 complete, F5 (CrashReporter) + F6 (Discord Webhook) done. Playit agent migrated to v1.0.10 (playitd daemon); Paper API migrated to Fill v3.
 
 ---
 
@@ -254,6 +254,8 @@ These rules must never be violated:
 6. **Atomic file ops** → before reading a file written by another thread, verify `os.path.exists` + `os.path.getsize > 0` with timeout (OS may not flush immediately).
 7. **`ServerState` enum lives in `constants.py`** — not in `core.py`, preventing circular imports.
 8. **Scheduler missed window** → if daily-time restart target passed >120s ago and `check_due()` returns False, `get_status()["missed"]` is True. Orchestrator logs WARNING + notifies user.
+9. **Every spawned child process (Minecraft server, playit agent) is assigned to a Windows Job Object** (`app/core/process_job.py`, `KILL_ON_JOB_CLOSE`) so the OS reaps it even on a hard parent death (crash, taskkill, closed console) that skips `atexit`. Children spawned by a job member inherit the job automatically — Fabric/Forge's inner java is covered too.
+10. **Port preflight before server start** → `ServerRunner.start()` checks the configured port isn't already bound before spawning, failing with a clear toast instead of a Minecraft bind-crash.
 
 ---
 
@@ -265,21 +267,22 @@ ZeroBlockBridge/
 │   ├── launcher.py                    # Entry point (9 LOC)
 │   │
 │   ├── ui/                            # Presentation Layer — no business logic
-│   │   ├── main.py                    # MCTunnelApp: main window, layout, subscriptions (~907 LOC)
+│   │   ├── main.py                    # MCTunnelApp: main window, layout, subscriptions (~1009 LOC)
 │   │   ├── server_wizard.py           # 3-step creation wizard (~630 LOC)
 │   │   ├── server_properties_editor.py# 7-tab properties editor (~754 LOC)
 │   │   ├── modrinth_browser.py        # Modrinth mod browser (~730 LOC)
 │   │   ├── players_dashboard.py       # Player management: online list + whitelist (~222 LOC)
 │   │   ├── toast.py                   # Non-blocking notification overlay (~159 LOC)
-│   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, Dialog (~272 LOC)
+│   │   └── ui_components.py           # ConsoleWidget, ServerListItem (right-click delete menu), ToolTip, Dialog, EulaDialog (~422 LOC)
 │   │
 │   ├── core/                          # Orchestration & Business Logic
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~527 LOC)
-│   │   ├── logic.py                   # ServerRunner, Scheduler, downloads, metadata (~779 LOC)
+│   │   ├── logic.py                   # ServerRunner, Scheduler, downloads, metadata, delete_server, port preflight (~876 LOC)
 │   │   ├── orchestrators.py           # ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator (~224 LOC)
 │   │   ├── protocols.py               # Protocol classes for structural typing (~36 LOC)
-│   │   ├── playit_manager.py          # Playit.gg agent lifecycle, DNS recovery (~580 LOC)
-│   │   ├── version_manager.py         # Dynamic version fetch, 24h cache (~420 LOC)
+│   │   ├── process_job.py             # Windows Job Object helper — reaps children on hard parent death (~83 LOC)
+│   │   ├── playit_manager.py          # Playit.gg agent (v1.0.10 playitd daemon) lifecycle, DNS recovery (~790 LOC)
+│   │   ├── version_manager.py         # Dynamic version fetch (Fill API v3 for Paper), 24h cache (~420 LOC)
 │   │   ├── server_events.py           # EventBus + ServerEvent enum (~53 LOC)
 │   │   ├── statemanager.py            # Tunnel status debounce (module-level vars, Lock)
 │   │   ├── app_config.py              # UI tokens: colors, fonts, timeouts (~57 LOC)
@@ -300,13 +303,13 @@ ZeroBlockBridge/
 │       ├── aikars_flags.py            # Optimal JVM flags by RAM tier (~103 LOC)
 │       ├── scaffolder.py              # Server directory + eula + server.properties scaffold (~152 LOC)
 │       ├── server_properties.py       # server.properties read/write (~59 LOC)
-│       ├── playit_api.py              # Playit.gg REST API v2 client (~432 LOC)
+│       ├── playit_api.py              # Playit.gg REST API v2 client (~466 LOC)
 │       ├── modrinth.py                # Modrinth API client + mod tracker (~329 LOC)
 │       ├── sha1_validator.py          # SHA1-verified download with retry (~117 LOC)
 │       ├── console_buffer.py          # Thread-safe console buffer (collections.deque)
 │       └── settings_manager.py        # App config singleton read/write, debounced flush
 │
-├── tests/                             # 22 test files, 410 tests, 100% pass
+├── tests/                             # 24 test files, 461 tests, 100% pass
 │   ├── conftest.py                    # FakeEmitter (EventBus stub), FakeRunner
 │   ├── test_orchestrators.py          # 26 tests — all 4 orchestrators
 │   ├── test_logic.py                  # ServerRunner, Scheduler, normalize, meta (~24 tests)
