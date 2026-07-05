@@ -357,12 +357,17 @@ class TestVersionManagerPaperURL:
     def test_get_paper_url_success(self, mock_exists, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
-            "builds": [1, 2, 3],
+            "downloads": {
+                "server:default": {
+                    "name": "paper-1.20.1-196.jar",
+                    "url": "https://fill-data.papermc.io/v1/objects/abc123/paper-1.20.1-196.jar",
+                }
+            }
         }
         mock_get.return_value = mock_resp
         vm = VersionManager()
         url = vm._get_paper_url("1.20.1")
-        assert "paper-1.20.1-3.jar" in url
+        assert url == "https://fill-data.papermc.io/v1/objects/abc123/paper-1.20.1-196.jar"
 
     @patch("app.core.version_manager.requests.get", side_effect=Exception("Network error"))
     @patch("app.core.version_manager.os.path.exists", return_value=False)

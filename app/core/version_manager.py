@@ -230,10 +230,20 @@ class VersionManager:
 
     @staticmethod
     def _fetch_paper(timeout=10):
-        resp = requests.get("https://api.papermc.io/v2/projects/paper", timeout=timeout)
+        # Fill API v3 (api.papermc.io/v2 returns 410 Gone). Response is
+        # newest-first: {"versions": [{"version": {"id": "1.21.8", ...}}]}.
+        # Fill asks for a descriptive User-Agent.
+        resp = requests.get(
+            "https://fill.papermc.io/v3/projects/paper/versions",
+            headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+            timeout=timeout,
+        )
         resp.raise_for_status()
-        versions = resp.json().get("versions", [])
-        versions.reverse()
+        versions = [
+            entry["version"]["id"]
+            for entry in resp.json().get("versions", [])
+            if entry.get("version", {}).get("id")
+        ]
         return versions[:100]
 
     @staticmethod
@@ -395,13 +405,16 @@ class VersionManager:
 
     def _get_paper_url(self, version):
         try:
-            url = f"https://api.papermc.io/v2/projects/paper/versions/{version}"
-            resp = requests.get(url, timeout=10)
-            data = resp.json()
-            builds = data.get("builds", [])
-            if builds:
-                latest_build = builds[-1]
-                return f"{url}/builds/{latest_build}/downloads/paper-{version}-{latest_build}.jar"
+            resp = requests.get(
+                f"https://fill.papermc.io/v3/projects/paper/versions/{version}/builds/latest",
+                headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            downloads = resp.json().get("downloads", {})
+            entry = downloads.get("server:default") or next(iter(downloads.values()), None)
+            if entry and entry.get("url"):
+                return entry["url"]
         except Exception as e:
             logger.error("Failed to resolve Paper URL for %s: %s", version, e)
         return None
