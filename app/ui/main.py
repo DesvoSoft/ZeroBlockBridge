@@ -327,6 +327,7 @@ class MCTunnelApp(ctk.CTk):
             get_server_info=self._get_current_server_info,
         )
         self.modrinth_browser.pack(fill="both", expand=True)
+        self._update_mods_tab_state()
 
     def _init_background_services(self):
         self.check_java_startup()
@@ -405,6 +406,17 @@ class MCTunnelApp(ctk.CTk):
                 self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
 
+    def _update_mods_tab_state(self):
+        """Mods tab is only usable with a server selected."""
+        enabled = bool(self.zbb_manager.current_server)
+        try:
+            btn = self.console_tabs._segmented_button._buttons_dict["Mods"]
+            btn.configure(state="normal" if enabled else "disabled")
+        except (AttributeError, KeyError) as e:
+            logger.debug("Mods tab state update failed: %s", e)
+        if not enabled and self.console_tabs.get() == "Mods":
+            self.console_tabs.set("Console")
+
     def on_server_delete(self, server_name):
         if self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name:
             Toast.show(self, "Stop the server before deleting it", toast_type="warning")
@@ -430,6 +442,7 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
             self.btn_start.configure(state="disabled")
             self.btn_stop.configure(state="disabled")
+            self._update_mods_tab_state()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
         self.load_servers()
 
@@ -454,6 +467,7 @@ class MCTunnelApp(ctk.CTk):
 
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
+        self._update_mods_tab_state()
 
         item = self.server_items.get(server_name)
         if item:

@@ -199,6 +199,17 @@ def download_server(server_name: str, server_type: str, version: str, progress_c
     normalize_server_jar(server_path)
     return jar_path
 
+def _port_in_use(port: int) -> bool:
+    """True if a TCP listener already holds the port (any interface)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("0.0.0.0", port))
+        return False
+    except OSError:
+        return True
+
+
 def delete_server(server_name: str) -> None:
     """Deletes a server permanently.
 
@@ -537,6 +548,21 @@ class ServerRunner:
                 "nogui",
             ]
         
+        # Preflight: a leftover process (e.g. an orphaned java from a
+        # previous session) holding the port produces a cryptic
+        # "FAILED TO BIND TO PORT" crash 30s into startup — fail fast
+        # with a clear message instead.
+        try:
+            from app.services.server_properties import load_server_properties
+            port = int(load_server_properties(self.server_name).get("server-port", 25565))
+        except Exception:
+            port = 25565
+        if _port_in_use(port):
+            msg = f"Port {port} is already in use by another process. Close it and try again."
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+            return
+
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
         self.events.emit(ServerEvent.STARTING)
         
@@ -555,6 +581,8 @@ class ServerRunner:
                 bufsize=1,
                 **subprocess_flags(),
             )
+            from app.core.process_job import assign_to_job
+            assign_to_job(self.process.pid)
             self.running = True
             threading.Thread(target=self._read_output, daemon=True).start()
             self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
