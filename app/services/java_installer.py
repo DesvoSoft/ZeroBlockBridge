@@ -168,13 +168,15 @@ class JdkManager:
         logger.info("JDK %d not in cache — downloading", version)
         path = self._download_and_install(version)
 
-        binary = _find_java_binary(Path(path).parent.parent)
-        if binary:
-            if sys.platform != "win32":
-                _chmod_plusx(binary)
+        binary = _find_java_binary(Path(path))
+        if binary is None:
+            shutil.rmtree(path, ignore_errors=True)
+            raise JdkError(f"JDK {version} extracted but no java binary found in {path}")
+        if sys.platform != "win32":
+            _chmod_plusx(binary)
 
-        logger.info("JDK %d installed at %s", version, path)
-        return path
+        logger.info("JDK %d installed at %s", version, binary)
+        return str(binary)
 
     def _download_and_install(self, version: int) -> str:
         info = _fetch_asset_info(version)
