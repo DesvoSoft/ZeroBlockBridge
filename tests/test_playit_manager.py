@@ -25,6 +25,7 @@ def manager(callbacks):
         mock_api.load_secret_key.return_value = False
         mock_api.secret_rejected.return_value = False
         mock_api.consecutive_auth_failures = 0
+        mock_api.list_account_tunnels.return_value = []
         mock_api_cls.return_value = mock_api
         m = PlayitManager(
             console_callback=callbacks["console"],
@@ -175,6 +176,35 @@ class TestGetOrCreateTunnel:
         assert result == "new.ply.gg:19132"
         mock_api.create_tunnel.assert_called_once_with(19132)
 
+    def test_pending_tunnel_warns_about_port_quota(self, manager):
+        m, mock_api, _ = manager
+        mock_api.load_secret_key.return_value = True
+        mock_api.list_tunnels.return_value = []
+        mock_api.create_tunnel.return_value = {"id": "pending-tunnel"}
+        mock_api.get_tunnel_address.return_value = None
+        result = m.get_or_create_tunnel(25565)
+        assert result is None
+        m.notification_callback.assert_called_once()
+        assert "warning" in m.notification_callback.call_args[0]
+
+    def test_cleanup_deletes_stale_zbb_tunnels_only(self, manager):
+        m, mock_api, _ = manager
+        mock_api.get_agent_id.return_value = "current-agent"
+        mock_api.list_account_tunnels.return_value = [
+            # stale ZBB tunnel from a dead agent — must be deleted
+            {"id": "t1", "name": "minecraft-java_ab12",
+             "origin": {"data": {"agent_id": "dead-agent"}}},
+            # same-name tunnel owned by current agent — keep
+            {"id": "t2", "name": "minecraft-java_cd34",
+             "origin": {"data": {"agent_id": "current-agent"}}},
+            # user-made tunnel on another agent — keep
+            {"id": "t3", "name": "my-custom-tunnel",
+             "origin": {"data": {"agent_id": "dead-agent"}}},
+        ]
+        mock_api.delete_tunnel.return_value = True
+        m._cleanup_stale_tunnels()
+        mock_api.delete_tunnel.assert_called_once_with("t1")
+
     def test_read_only_guest_mode(self, manager):
         m, mock_api, _ = manager
         from app.services.playit_api import PlayitApiException
@@ -299,6 +329,39 @@ class TestAuthFailure:
             m._dns_polling_loop()
         assert m._auth_failed is True
         m.status_callback.assert_any_call("Error", None)
+
+    def test_got_error_without_dns_sets_error_status(self, manager):
+        m, _, _ = manager
+        m.running = True
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"2026-07-05T00:10:42Z  INFO playit_cli::ui: Got Error\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        m.status_callback.assert_any_call("Error", None)
+
+    def test_got_error_with_dns_is_ignored(self, manager):
+        m, _, _ = manager
+        m.running = True
+        m._api_dns = "abc.ply.gg:25565"
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"2026-07-05T00:10:42Z  INFO playit_cli::ui: Got Error\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        for call in m.status_callback.call_args_list:
+            assert call[0][0] != "Error"
+
+    def test_auth_failure_soon_after_link_mentions_account_limit(self, manager):
+        m, _, _ = manager
+        m._linked_at = time.time() - 60
+        m._handle_auth_failure("Agent secret invalid")
+        joined = " ".join(str(c) for c in m.console_callback.call_args_list)
+        assert "over its agent/port limit" in joined
 
     def test_invalid_agent_key_stdout_marks_auth_failed(self, manager):
         m, _, _ = manager

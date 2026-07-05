@@ -284,6 +284,14 @@ class PlayitApiClient:
             return False
 
     # --- Tunnel Management ---
+    def list_account_tunnels(self) -> List[Dict]:
+        """Returns all tunnels on the account, including ones owned by other
+        (possibly dead) agents. agent_id=None makes the API return the full list."""
+        data = self._request("tunnels/list", json_data={"agent_id": None})
+        if data.get("status") == "success":
+            return data.get("data", {}).get("tunnels", [])
+        return []
+
     def list_tunnels(self) -> List[Dict]:
         """Returns a list of all tunnels for the agent."""
         agent_id = self.get_agent_id()

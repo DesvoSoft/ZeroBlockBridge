@@ -45,6 +45,9 @@ class PlayitManager:
 
         # Set when agent exits due to auth failure — suppresses heartbeat restart
         self._auth_failed = False
+        # Timestamp of the last successful link — a secret revoked shortly
+        # after linking points to an account over its agent/port limit
+        self._linked_at = 0.0
         # Guards against concurrent tunnel creation when the agent repeats
         # its "0 tunnels" line across reconnect attempts
         self._tunnel_create_inflight = False
@@ -165,6 +168,14 @@ class PlayitManager:
                         self._api_dns = address
                         return address
 
+            # Free tier allows only 4 port allocations account-wide. Tunnels
+            # left behind by previous agents (failed re-links) hold ports and
+            # make new tunnels stay pending forever — purge ours first.
+            try:
+                self._cleanup_stale_tunnels()
+            except PlayitApiException as e:
+                logger.warning("[Playit] Stale tunnel cleanup failed: %s", e)
+
             self.console_callback(f"[Playit] No tunnel for port {port}. Creating via API...")
             tunnel = self.api_client.create_tunnel(port)
             if tunnel:
@@ -172,6 +183,10 @@ class PlayitManager:
                 if address:
                     self._api_dns = address
                     return address
+                self.console_callback("[Playit] Tunnel created but no public address was allocated after 15s.")
+                self.console_callback("[Playit] Port quota may be exhausted (free tier: 4 ports). Delete unused tunnels/agents at https://playit.gg/dashboard")
+                if self.notification_callback:
+                    self.notification_callback("Tunnel pending: no ports available. Check playit.gg dashboard.", "warning")
             return None
 
         except PlayitApiException as e:
@@ -183,6 +198,26 @@ class PlayitManager:
             else:
                 self.console_callback(f"[Playit] API Error: {e}")
             return None
+
+    def _cleanup_stale_tunnels(self) -> None:
+        """Delete minecraft-java_* tunnels owned by other agents on the account.
+        Only touches tunnels matching our own generated name pattern — user-made
+        tunnels and other machines' tunnels are left alone."""
+        agent_id = self.api_client.get_agent_id()
+        if not agent_id:
+            return
+        for t in self.api_client.list_account_tunnels():
+            name = t.get("name") or ""
+            owner = t.get("origin", {}).get("data", {}).get("agent_id")
+            tid = t.get("id")
+            if not tid or owner == agent_id:
+                continue
+            if re.fullmatch(r"minecraft-java_[a-z0-9]{4}", name):
+                try:
+                    if self.api_client.delete_tunnel(tid):
+                        self.console_callback(f"[Playit] Freed port: deleted stale tunnel {name} from a previous agent.")
+                except PlayitApiException as e:
+                    logger.warning("[Playit] Could not delete stale tunnel %s: %s", tid, e)
 
     def _create_tunnel_from_stdout(self, port: int) -> None:
         # Runs off the stdout reader thread: agent reported 0 tunnels but its
@@ -439,6 +474,7 @@ class PlayitManager:
             if self.api_client.link_account(clean_code):
                 self.console_callback("[Playit] Account linked successfully! Starting agent...")
                 self.is_linked = True
+                self._linked_at = time.time()
                 self.api_client.is_read_only = False
 
                 if self.running:
@@ -461,6 +497,12 @@ class PlayitManager:
             self._auth_failed = True
         self.status_callback("Error", None)
         self.console_callback(f"[Playit] ERROR: {reason}. Use 'Reset Tunnel' to re-link.")
+        # A secret revoked minutes after a successful link means playit killed
+        # the agent server-side — almost always an account over its agent/port
+        # limit, and re-linking will just create more dead agents.
+        if time.time() - getattr(self, "_linked_at", 0) < 300:
+            self.console_callback("[Playit] Secret was revoked right after linking. Your account is likely over its agent/port limit.")
+            self.console_callback("[Playit] Delete old agents and tunnels at https://playit.gg/dashboard/agents BEFORE re-linking.")
         if self.notification_callback:
             self.notification_callback("Playit secret invalid. Use 'Reset Tunnel' to re-link.", "error")
 
@@ -638,6 +680,16 @@ class PlayitManager:
                                 target=self._create_tunnel_from_stdout,
                                 args=(self._current_port,), daemon=True,
                             ).start()
+                    elif "Got Error" in clean_line:
+                        # Generic agent-side failure (e.g. tunnel registration never
+                        # completed because no port could be allocated). Without this
+                        # the UI sits on "Starting..." forever.
+                        with self._lock:
+                            has_dns = self._api_dns or self._stdout_dns
+                        if not has_dns:
+                            self.status_callback("Error", None)
+                            self.console_callback("[Playit] Agent reported an error before getting an address.")
+                            self.console_callback("[Playit] Check tunnels and port quota at https://playit.gg/dashboard")
                     # --- CRITICAL DNS: must call _parse_line on every line ---
                     self._parse_line(clean_line)
         except Exception as e:
