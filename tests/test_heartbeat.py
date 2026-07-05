@@ -102,6 +102,47 @@ class TestHeartbeatMonitor:
         hb = self._make(check_interval=0.01)
         self.runner.running = False
         hb._running = True
-        
+
         hb.tick(100.0)
         self.runner.send_command.assert_not_called()
+
+    def test_probe_does_not_deadlock_on_console_echo(self):
+        # Regression: ServerRunner.send_command emits CONSOLE_LINE ("> list"),
+        # which synchronously re-enters observe_line. Old tick() held the
+        # non-reentrant lock across send_command -> self-deadlock.
+        hb = self._make(suspect_after=10, probe_timeout=1, check_interval=60)
+        hb._last_output = 0.0
+        hb._last_check = 0.0
+        hb._running = True
+
+        self.runner.send_command = MagicMock(
+            side_effect=lambda cmd: hb.observe_line(f"> {cmd}")
+        )
+
+        t = threading.Thread(target=hb.tick, args=(100.0,), daemon=True)
+        t.start()
+        t.join(timeout=5)
+        assert not t.is_alive(), "tick() deadlocked when send_command echoed CONSOLE_LINE"
+        self.runner.send_command.assert_called_with("list")
+
+    def test_zombie_emit_does_not_deadlock_on_reentrant_subscriber(self):
+        # Same hazard for ZOMBIE_DETECTED: a subscriber that emits CONSOLE_LINE
+        # (or otherwise re-enters observe_line) must not deadlock tick().
+        hb = self._make(suspect_after=10, probe_timeout=0.05, check_interval=60)
+        hb._last_output = 0.0
+        hb._last_check = 0.0
+        hb._running = True
+
+        self.emitter.subscribe(
+            ServerEvent.ZOMBIE_DETECTED,
+            lambda data: hb.observe_line("subscriber side effect line"),
+        )
+
+        hb.tick(100.0)  # sends probe
+
+        t = threading.Thread(target=hb.tick, args=(100.1,), daemon=True)
+        t.start()
+        t.join(timeout=5)
+        assert not t.is_alive(), "tick() deadlocked emitting ZOMBIE_DETECTED under lock"
+        zombie_events = [e for e in self.emitter.events if e[0] == ServerEvent.ZOMBIE_DETECTED]
+        assert len(zombie_events) == 1

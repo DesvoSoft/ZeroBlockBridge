@@ -59,6 +59,13 @@ class HeartbeatMonitor:
                 self._waiting_for_probe = False
 
     def tick(self, now: float) -> None:
+        # Decide under the lock; emit/send_command outside it. send_command echoes
+        # the command as CONSOLE_LINE, which re-enters observe_line -> self._lock
+        # (non-reentrant) and deadlocks the tick thread, then freezes any thread
+        # that later emits CONSOLE_LINE (e.g. UI stop button).
+        probe_silence = None
+        zombie_silence = None
+        runner = None
         with self._lock:
             if not self._running:
                 return
@@ -70,17 +77,19 @@ class HeartbeatMonitor:
             if self._waiting_for_probe:
                 if now - self._last_probe >= self._probe_timeout:
                     if self._last_response < self._last_probe:
-                        logger.warning("Heartbeat: zombie detected (no response to probe)")
-                        silence = now - self._last_output
-                        self._events.emit(ServerEvent.ZOMBIE_DETECTED, {"silence_seconds": silence})
+                        zombie_silence = now - self._last_output
                     self._waiting_for_probe = False
-                return
-
-            if now - self._last_check >= self._check_interval:
+            elif now - self._last_check >= self._check_interval:
                 self._last_check = now
                 silence = now - self._last_output
                 if silence >= self._suspect_after:
-                    logger.info("Heartbeat: server silent for %.0fs, sending probe", silence)
-                    runner.send_command("list")
+                    probe_silence = silence
                     self._last_probe = now
                     self._waiting_for_probe = True
+
+        if zombie_silence is not None:
+            logger.warning("Heartbeat: zombie detected (no response to probe)")
+            self._events.emit(ServerEvent.ZOMBIE_DETECTED, {"silence_seconds": zombie_silence})
+        if probe_silence is not None:
+            logger.info("Heartbeat: server silent for %.0fs, sending probe", probe_silence)
+            runner.send_command("list")
