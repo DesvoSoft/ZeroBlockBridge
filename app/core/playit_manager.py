@@ -137,21 +137,59 @@ class PlayitManager:
         url = PLAYIT_URL_WINDOWS if platform.system() == "Windows" else PLAYIT_URL_LINUX
         self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
 
+        # Download to a temp name (must NOT start with "playit" or
+        # _clean_stale_binaries will touch it), verify size + smoke-test
+        # the binary, then atomically replace. Prevents a truncated or
+        # arch-mismatched download from being installed and triggering
+        # an infinite version-check-fail -> redownload loop (WinError 216).
+        tmp_path = BIN_DIR / "agent_download.tmp"
         try:
             response = requests.get(url, stream=True, timeout=30)
             response.raise_for_status()
-            with open(self.binary_path, "wb") as f:
+            with open(tmp_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-            if platform.system() != "Windows":
-                self.binary_path.chmod(0o755)
+            size = tmp_path.stat().st_size
+            if size < 1_000_000:
+                self.console_callback(f"[Playit] Download truncated ({size} bytes). Aborting install.")
+                return False
 
+            if platform.system() != "Windows":
+                tmp_path.chmod(0o755)
+
+            try:
+                result = subprocess.run(
+                    [str(tmp_path), "version"],
+                    capture_output=True, text=True, check=False, timeout=15,
+                    **subprocess_flags(),
+                )
+            except OSError as e:
+                if getattr(e, "winerror", None) == 216:
+                    self.console_callback(
+                        "[Playit] Downloaded agent is not compatible with this Windows "
+                        "(CPU architecture mismatch?). Not installing it."
+                    )
+                else:
+                    self.console_callback(f"[Playit] Downloaded agent failed to run ({e}). Not installing it.")
+                return False
+
+            if PLAYIT_VERSION not in result.stdout and PLAYIT_VERSION not in result.stderr:
+                self.console_callback("[Playit] Downloaded agent failed version check. Not installing it.")
+                return False
+
+            os.replace(tmp_path, self.binary_path)
             self.console_callback("[Playit] Download complete.")
             return True
         except Exception as e:
             self.console_callback(f"[Playit] Download failed: {e}")
             return False
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
 
     def get_or_create_tunnel(self, port: int) -> Optional[str]:
         if not self.api_client.load_secret_key():

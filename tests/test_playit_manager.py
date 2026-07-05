@@ -123,18 +123,50 @@ class TestEnsureBinary:
 
     def test_binary_exists_version_mismatch_replaces(self, manager, tmp_path):
         m, _, _ = manager
-        fake_bin = self.make_binary(m, tmp_path)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "0.16.0"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+        fake_bin = tmp_path / "playit.exe"
+        fake_bin.touch()
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin):
+            old = MagicMock(stdout="0.16.0", stderr="")
+            new = MagicMock(stdout="0.17.1", stderr="")
+            with patch("subprocess.run", side_effect=[old, new]):
+                with patch("requests.get") as mock_get:
+                    mock_response = MagicMock()
+                    mock_response.iter_content.return_value = [b"x" * 1_000_000]
+                    mock_response.raise_for_status = MagicMock()
+                    mock_get.return_value = mock_response
+                    assert m.ensure_binary() is True
+                    assert fake_bin.stat().st_size >= 1_000_000
+
+    def test_download_truncated_rejected(self, manager, tmp_path):
+        m, _, _ = manager
+        fake_bin = tmp_path / "playit.exe"
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin):
             with patch("requests.get") as mock_get:
                 mock_response = MagicMock()
                 mock_response.iter_content.return_value = [b"data"]
                 mock_response.raise_for_status = MagicMock()
                 mock_get.return_value = mock_response
-                assert m.ensure_binary() is True
+                assert m.ensure_binary() is False
+                assert not fake_bin.exists()
+                assert not (tmp_path / "agent_download.tmp").exists()
+
+    def test_download_incompatible_binary_rejected(self, manager, tmp_path):
+        m, _, _ = manager
+        fake_bin = tmp_path / "playit.exe"
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin):
+            err = OSError("not compatible")
+            err.winerror = 216
+            with patch("subprocess.run", side_effect=err):
+                with patch("requests.get") as mock_get:
+                    mock_response = MagicMock()
+                    mock_response.iter_content.return_value = [b"x" * 1_000_000]
+                    mock_response.raise_for_status = MagicMock()
+                    mock_get.return_value = mock_response
+                    assert m.ensure_binary() is False
+                    assert not fake_bin.exists()
 
     def test_download_failure(self, manager, tmp_path):
         m, _, _ = manager
