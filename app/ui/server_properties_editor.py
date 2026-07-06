@@ -55,13 +55,13 @@ SETTINGS_METADATA = {
 # Define the layout for the complex tabs
 TAB_LAYOUTS = {
     "World": {
-        "🌿 Environment & Generation": [
+        "Environment & Generation": [
             "level-seed", "level-name", "level-type", "generate-structures"
         ],
-        "🐾 Entities & Spawning": [
+        "Entities & Spawning": [
             "spawn-npcs", "spawn-animals", "spawn-monsters"
         ],
-        "⚙️ Performance": [
+        "Performance": [
             "view-distance", "simulation-distance"
         ]
     },
@@ -72,8 +72,8 @@ TAB_LAYOUTS = {
         "Remote Access": ["enable-rcon", "rcon.password", "rcon.port"]
     },
     "Advanced": {
-        "🚀 System Performance": ["sync-chunk-writes"],
-        "🛡️ Security & Permissions": [
+        "System Performance": ["sync-chunk-writes"],
+        "Security & Permissions": [
             "op-permission-level", "prevent-proxy-connections", "enforce-secure-profile"
         ]
     }
@@ -102,9 +102,29 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.grid_rowconfigure(0, weight=1) # Content
         self.grid_rowconfigure(1, weight=0) # Buttons
         
+        self._running_locked = bool(self.zbb_manager and self.zbb_manager.is_running()
+                                     and self.zbb_manager.current_server == server_name)
+
+        if self._running_locked:
+            banner = ctk.CTkLabel(
+                self, text="Server is running — settings that require a restart are locked. "
+                           "Backups and Automation can still be changed live.",
+                font=self.font_small, text_color=AppConfig.COLOR_STATUS_STARTING,
+                anchor="w", wraplength=660,
+            )
+            banner.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 0))
+            self.grid_rowconfigure(0, weight=0)
+            self.grid_rowconfigure(1, weight=1)
+            self.grid_rowconfigure(2, weight=0)
+            tabview_row = 1
+            self.btn_frame_row = 2
+        else:
+            tabview_row = 0
+            self.btn_frame_row = 1
+
         # Tabview
         self.tabview = ctk.CTkTabview(self)
-        self.tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.tabview.grid(row=tabview_row, column=0, sticky="nsew", padx=10, pady=10)
         
         self.tab_general = self.tabview.add("General")
         self.tab_world = self.tabview.add("World")
@@ -113,6 +133,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.tab_backups = self.tabview.add("Backups")
         self.tab_automation = self.tabview.add("Automation")
         self.tab_launch = self.tabview.add("Launch")
+
+        self._locked_tab_names = ("General", "World", "Network", "Advanced", "Launch")
+        if self._running_locked:
+            for name in self._locked_tab_names:
+                btn = self.tabview._segmented_button._buttons_dict.get(name)
+                if btn is not None:
+                    btn.configure(state="disabled")
+                    ToolTip(btn, "Stop the server to edit this — it only takes effect on next start.")
+            self.tabview.set("Automation")
         
         # Set tab change command for optimization
         self.tabview.configure(command=self._on_tab_changed)
@@ -153,7 +182,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # Footer Buttons
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.btn_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=10)
         
         self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
                                          fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
@@ -451,14 +480,14 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             self.chk_backup_restart.configure(state="normal")
             if self.var_schedule_mode.get() == "Interval":
                 self.entry_interval.configure(state="normal")
-                self.lbl_interval.configure(text_color=("black", "white"))
+                self.lbl_interval.configure(text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_PRIMARY))
                 self.entry_time.configure(state="disabled")
                 self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             else:
                 self.entry_interval.configure(state="disabled")
                 self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
                 self.entry_time.configure(state="normal")
-                self.lbl_time.configure(text_color=("black", "white"))
+                self.lbl_time.configure(text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_PRIMARY))
         else:
             self.combo_mode.configure(state="disabled")
             self.chk_backup_restart.configure(state="disabled")
@@ -530,7 +559,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         """Creates a modern 'Card' container for a group of settings."""
         if title:
             lbl = ctk.CTkLabel(parent, text=title, font=self.font_header, 
-                               text_color="royalblue", anchor="w")
+                               text_color=AppConfig.COLOR_LINK, anchor="w")
             lbl.pack(fill="x", padx=15, pady=(15, 5))
 
         card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=AppConfig.RADIUS_CARD)
@@ -775,7 +804,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._build_tab_from_config(self.frame_advanced, "Advanced")
         
         # Dynamic "Other Properties"
-        card_other = self.create_section_frame(self.frame_advanced, "🔧 Other Properties")
+        card_other = self.create_section_frame(self.frame_advanced, "Other Properties")
         
         used_keys = set(self.widgets.keys())
         used_keys.update(["motd", "server-ip", "server-port", "white-list", "enforce-whitelist"]) 
@@ -819,7 +848,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 self.tabview.set("General")
                 ZBBDialog.info(self, "Invalid Input", "RAM Allocation must be a whole number (MB).", kind="error")
                 return
-            self.entry_ram.configure(border_color=["#979da2", "#565b5e"]) # Reset color
+            self.entry_ram.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
             
             try:
                 ram = int(ram_input)
@@ -835,7 +864,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 self.tabview.set("Automation")
                 ZBBDialog.info(self, "Invalid Input", "Restart Interval must be a whole number (Hours).", kind="error")
                 return
-            self.entry_interval.configure(border_color=["#979da2", "#565b5e"])
+            self.entry_interval.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
 
         self.save_automation()
 

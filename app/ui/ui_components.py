@@ -336,18 +336,26 @@ class ServerListItem(ctk.CTkFrame):
             self, tearoff=0,
             bg=AppConfig.COLOR_BG_CARD_DARK,
             fg=AppConfig.COLOR_TEXT_PRIMARY,
-            activebackground=AppConfig.COLOR_BTN_GHOST_HOVER,
+            activebackground=AppConfig.COLOR_ACCENT_GREEN,
             activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
-            borderwidth=0,
+            activeborderwidth=0,
+            borderwidth=1,
+            relief="flat",
+            font=(AppConfig.FONT_FAMILY, 11),
         )
         if self.on_export:
             menu.add_command(
-                label="Export as .zbbpack",
+                label="  Export as .zbbpack",
                 command=lambda: self.on_export(self.server_name),
             )
         if self.on_delete:
+            if self.on_export:
+                menu.add_separator()
             menu.add_command(
-                label=f"Delete '{self.full_name}'",
+                label=f"  Delete '{self.full_name}'",
+                foreground=AppConfig.COLOR_BTN_DANGER,
+                activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
+                activebackground=AppConfig.COLOR_BTN_DANGER,
                 command=lambda: self.on_delete(self.server_name),
             )
         try:
