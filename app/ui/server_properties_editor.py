@@ -13,6 +13,7 @@ from app.ui.ui_components import ToolTip, center_on_parent
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
 from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
+from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 
 
 SETTINGS_METADATA = {
@@ -643,6 +644,77 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.add_field_to_section(card_game, "difficulty", "Difficulty", "dropdown", ["peaceful", "easy", "normal", "hard"])
         self.add_field_to_section(card_game, "hardcore", "Hardcore Mode", "checkbox")
         self.add_field_to_section(card_game, "enable-command-block", "Command Blocks", "checkbox")
+
+        # 4. Modpack Import Section
+        card_mrpack = self.create_section_frame(self.frame_general, "Modpack Import")
+        ctk.CTkLabel(
+            card_mrpack, text="Import from .mrpack", font=self.font_bold, anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+
+        self.btn_mrpack = ctk.CTkButton(
+            card_mrpack, text="📦 Import .mrpack", width=150, height=28,
+            corner_radius=10,
+            fg_color="#7c3aed", hover_color="#6d28d9",
+            text_color="white", font=("Roboto Medium", 11),
+            command=self._on_import_mrpack,
+        )
+        self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)
+
+        self.lbl_mrpack_status = ctk.CTkLabel(
+            card_mrpack, text="", font=self.font_small, anchor="w",
+            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY),
+        )
+        self.lbl_mrpack_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 8))
+
+    def _on_import_mrpack(self):
+        meta = get_server_meta(self.server_name)
+        loader = meta.get("type", "vanilla")
+        if loader in (None, "vanilla"):
+            messagebox.showinfo(
+                "Vanilla Server",
+                "Vanilla servers can't load mods or plugins.\n\n"
+                "Create a Fabric or Forge server for mods, or Paper/Purpur for plugins.",
+                parent=self,
+            )
+            return
+
+        mrpack_path = filedialog.askopenfilename(
+            title="Select Modpack File",
+            filetypes=[("Modrinth Modpack", "*.mrpack"), ("All files", "*.*")],
+        )
+        if not mrpack_path:
+            return
+
+        self.lbl_mrpack_status.configure(text="Importing modpack…")
+        self.btn_mrpack.configure(state="disabled")
+
+        def _import():
+            try:
+                summary = install_mrpack(
+                    mrpack_path=mrpack_path,
+                    server_name=self.server_name,
+                    progress_callback=lambda msg: self.after(0, lambda m=msg: self.lbl_mrpack_status.configure(text=m)),
+                    server_type=meta.get("type"),
+                    mc_version=meta.get("version"),
+                )
+                parts = [f"{summary['installed']} mods installed"]
+                if summary.get("skipped_client"):
+                    parts.append(f"{summary['skipped_client']} client-only skipped")
+                if summary.get("failed"):
+                    parts.append(f"{summary['failed']} failed")
+                text = f"✓ {', '.join(parts)}"
+                self.after(0, lambda: self.lbl_mrpack_status.configure(text=text))
+            except MrpackCompatibilityError as exc:
+                self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Incompatible: {e}"))
+                self.after(0, lambda e=exc: messagebox.showwarning(
+                    "Incompatible Modpack", str(e), parent=self))
+            except Exception as exc:
+                logger.error("mrpack import failed: %s", exc)
+                self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Import failed: {e}"))
+            finally:
+                self.after(0, lambda: self.btn_mrpack.configure(state="normal"))
+
+        threading.Thread(target=_import, daemon=True).start()
 
     def setup_world_tab(self):
         self._build_tab_from_config(self.frame_world, "World")
