@@ -81,3 +81,78 @@ def test_import_invalid_zip_raises(tmp_path, monkeypatch):
     bad_file.write_text("not a zip")
     with pytest.raises(migration.MigrationError):
         migration.import_server(str(bad_file), "newserver")
+
+
+def test_export_strips_machine_specific_metadata(tmp_path, monkeypatch):
+    monkeypatch.setattr(migration, "SERVERS_DIR", str(tmp_path))
+    monkeypatch.setattr(migration, "get_server_meta", lambda name: {
+        "type": "Paper", "version": "1.21.1",
+        "crash_history": [{"time": "now"}], "required_java": 21,
+        "jdk_source": "adoptium", "port": 25565,
+    })
+    _make_server(tmp_path, "myserver")
+
+    dest = str(tmp_path / "myserver.zbbpack")
+    migration.export_server("myserver", dest)
+
+    import zipfile
+    with zipfile.ZipFile(dest) as zf:
+        meta = json.loads(zf.read("metadata.json").decode("utf-8"))
+        assert "crash_history" not in meta
+        assert "required_java" not in meta
+        assert "jdk_source" not in meta
+        assert "port" not in meta
+        assert meta["type"] == "Paper"
+
+
+def test_export_progress_callback_invoked(tmp_path, monkeypatch):
+    monkeypatch.setattr(migration, "SERVERS_DIR", str(tmp_path))
+    monkeypatch.setattr(migration, "get_server_meta", lambda name: {"type": "Paper"})
+    _make_server(tmp_path, "myserver")
+
+    messages = []
+    dest = str(tmp_path / "myserver.zbbpack")
+    migration.export_server("myserver", dest, progress_callback=messages.append)
+
+    assert len(messages) > 0
+
+
+def test_import_cleans_up_on_partial_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(migration, "SERVERS_DIR", str(tmp_path))
+    monkeypatch.setattr(migration, "get_server_meta", lambda name: {"type": "Paper"})
+    _make_server(tmp_path, "myserver")
+
+    dest = str(tmp_path / "myserver.zbbpack")
+    migration.export_server("myserver", dest)
+
+    import zipfile
+    original_extract = zipfile.ZipFile.extract
+    call_count = {"n": 0}
+
+    def flaky_extract(self, member, path):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise OSError("simulated disk failure")
+        return original_extract(self, member, path)
+
+    monkeypatch.setattr(zipfile.ZipFile, "extract", flaky_extract)
+
+    with pytest.raises(OSError):
+        migration.import_server(dest, "imported-server")
+
+    assert not os.path.exists(os.path.join(tmp_path, "imported-server"))
+
+
+def test_import_insufficient_disk_space_raises(tmp_path, monkeypatch):
+    monkeypatch.setattr(migration, "SERVERS_DIR", str(tmp_path))
+    monkeypatch.setattr(migration, "get_server_meta", lambda name: {"type": "Paper"})
+    monkeypatch.setattr(migration, "check_disk_space", lambda min_gb, target_dir: False)
+    _make_server(tmp_path, "myserver")
+
+    dest = str(tmp_path / "myserver.zbbpack")
+    migration.export_server("myserver", dest)
+
+    with pytest.raises(migration.MigrationError):
+        migration.import_server(dest, "imported-server")
+
+    assert not os.path.exists(os.path.join(tmp_path, "imported-server"))
