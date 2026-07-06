@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
-from app.services.server_properties import load_server_properties, save_server_properties
+from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
 from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
 from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 
@@ -208,7 +208,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
                       fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                       width=80).pack(side="right", padx=5)
-        
+        ctk.CTkButton(toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
+                      fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                      width=150).pack(side="right", padx=5)
+
         # List
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
         self.backup_list_frame.pack(fill="both", expand=True, pady=5)
@@ -279,6 +282,23 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         elif error:
             ZBBDialog.info(self, "Backup Created", error, kind="warning")
         self.refresh_backups()
+
+    def export_zbbpack(self):
+        from app.services.migration import export_server, MigrationError
+
+        dest_path = filedialog.asksaveasfilename(
+            defaultextension=".zbbpack",
+            initialfile=f"{self.server_name}.zbbpack",
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not dest_path:
+            return
+        try:
+            export_server(self.server_name, dest_path)
+        except (MigrationError, OSError) as e:
+            ZBBDialog.info(self, "Export Failed", str(e), kind="error")
+            return
+        ZBBDialog.info(self, "Export Complete", f"Server '{self.server_name}' exported to:\n\n{dest_path}")
 
     def _server_is_running(self) -> bool:
         runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
@@ -575,7 +595,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                     elif key == "difficulty": options = ["peaceful", "easy", "normal", "hard"]
                     elif key == "level-type": options = ["minecraft:normal", "minecraft:flat", "minecraft:large_biomes"]
                     elif key == "op-permission-level": options = ["1", "2", "3", "4"]
-                
+                elif key == "level-name":
+                    worlds = list_worlds(self.server_name)
+                    current = self.properties.get("level-name", "world")
+                    if worlds:
+                        widget_type = "dropdown"
+                        options = worlds if current in worlds else worlds + [current]
+                    else:
+                        widget_type = "entry"
+
                 self.add_field_to_section(card, key, label, widget_type, options)
 
     def setup_general_tab(self):
@@ -718,6 +746,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         threading.Thread(target=_import, daemon=True).start()
 
     def setup_world_tab(self):
+        ctk.CTkLabel(
+            self.frame_world,
+            text="Changing the active world requires the server to be stopped for the change to take effect.",
+            font=self.font_small, text_color=AppConfig.COLOR_TEXT_MUTED, anchor="w", wraplength=600,
+        ).pack(fill="x", padx=12, pady=(4, 8))
         self._build_tab_from_config(self.frame_world, "World")
 
     def setup_network_tab(self):
