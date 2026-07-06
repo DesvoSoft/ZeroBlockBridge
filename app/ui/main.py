@@ -145,10 +145,10 @@ class MCTunnelApp(ctk.CTk):
 
         # --- List Group ---
         self.lbl_servers = ctk.CTkLabel(
-            self.sidebar_frame, text="YOUR SERVERS",
-            anchor="w", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), text_color=AppConfig.COLOR_TEXT_GRAY
+            self.sidebar_frame, text="SERVERS",
+            anchor="center", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), text_color=AppConfig.COLOR_TEXT_GRAY
         )
-        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="w")
+        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="ew")
 
         self.server_list_frame = ctk.CTkScrollableFrame(
             self.sidebar_frame, label_text="", corner_radius=AppConfig.RADIUS_CARD,
@@ -667,9 +667,6 @@ class MCTunnelApp(ctk.CTk):
 
     def edit_server_properties(self):
         if not self.zbb_manager.current_server: return
-        if self.zbb_manager.is_running():
-            self.server_console.log("[Error] Stop the server before editing properties.")
-            return
         ServerPropertiesEditor(self, self.zbb_manager.current_server, logic, self.zbb_manager)
 
     def update_console(self, text):
@@ -682,6 +679,23 @@ class MCTunnelApp(ctk.CTk):
             toast_type = Toast.resolve_type(data)
             duration = 6000 if toast_type == "error" else 4000
             self.after(0, lambda: Toast.show(self, msg, toast_type=toast_type, duration=duration))
+            if data.get("action") == "mod_dependency_fix":
+                missing_mod_ids = data.get("missing_mod_ids") or []
+                self.after(0, lambda: self._offer_mod_auto_install(missing_mod_ids))
+
+    def _offer_mod_auto_install(self, missing_mod_ids):
+        if not missing_mod_ids or not self.zbb_manager.current_server:
+            return
+        preview = ", ".join(missing_mod_ids[:5]) + ("..." if len(missing_mod_ids) > 5 else "")
+        msg = (
+            f"The server crashed due to missing mod dependencies:\n\n{preview}\n\n"
+            "Attempt to auto-install these from Modrinth into the mods/ folder?"
+        )
+        if ZBBDialog.confirm(self, "Missing Mod Dependencies", msg, confirm_text="Install"):
+            self.events.emit(ServerEvent.REQUEST_MOD_INSTALL, {
+                "missing_mod_ids": missing_mod_ids,
+                "server_name": self.zbb_manager.current_server,
+            })
 
     def update_tunnel_console(self, text):
         self.after(0, lambda: self.tunnel_console.log(text))

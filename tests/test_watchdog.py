@@ -80,6 +80,64 @@ class TestWatchdogCrashClassification:
         w._on_stopped({"exit_code": 64, "uptime": 10, "stderr": ""})
         assert w._crash_reason == "exit_64"
 
+    def test_mod_dependency_error_populates_missing_mod_ids(self):
+        w, emitter = self._make_watchdog()
+        console = (
+            "[main/INFO]: Fix: add [add:fabric-api-base 1 ([(-inf,inf)]), "
+            "add:fabric-command-api-v2 1 ([(-inf,inf)]), "
+            "add:fabric-lifecycle-events-v1 1 ([(-inf,inf)])], remove [], replace []\n"
+            "[main/ERROR]: Incompatible mods found!"
+        )
+        payloads = []
+        emitter.subscribe(ServerEvent.CRASHED, lambda d: payloads.append(d))
+        w._on_stopped({"exit_code": 1, "uptime": 0.7, "stderr": "", "console": console})
+        assert w._crash_reason == "mod_dependency_error"
+        assert w._crash_missing_mod_ids == [
+            "fabric-api-base", "fabric-command-api-v2", "fabric-lifecycle-events-v1",
+        ]
+        assert payloads[-1]["missing_mod_ids"] == [
+            "fabric-api-base", "fabric-command-api-v2", "fabric-lifecycle-events-v1",
+        ]
+
+    def test_missing_mod_ids_reset_on_non_mod_crash(self):
+        w, emitter = self._make_watchdog()
+        console = "[main/INFO]: Fix: add [add:fabric-api-base 1 (...)], remove [], replace []\nIncompatible mods found!"
+        w._on_stopped({"exit_code": 1, "uptime": 0.5, "stderr": "", "console": console})
+        assert w._crash_missing_mod_ids == ["fabric-api-base"]
+        w._on_stopped({"exit_code": 1, "uptime": 2, "stderr": "", "console": ""})
+        assert w._crash_reason == "boot_crash"
+        assert w._crash_missing_mod_ids == []
+
+
+class TestExtractMissingModIds:
+    def test_single_id(self):
+        console = "[main/INFO]: Fix: add [add:fabric-api-base 1 ([(-inf,inf)])], remove [], replace []"
+        assert Watchdog._extract_missing_mod_ids(console) == ["fabric-api-base"]
+
+    def test_multiple_ids(self):
+        console = (
+            "[main/INFO]: Fix: add [add:fabric-api-base 1 (...), add:fabric-command-api-v2 1 (...)], "
+            "remove [], replace []"
+        )
+        assert Watchdog._extract_missing_mod_ids(console) == [
+            "fabric-api-base", "fabric-command-api-v2",
+        ]
+
+    def test_no_fix_line(self):
+        console = "Incompatible mods found!\nSome unrelated log line"
+        assert Watchdog._extract_missing_mod_ids(console) == []
+
+    def test_empty_add_bracket(self):
+        console = "[main/INFO]: Fix: add [], remove [], replace []"
+        assert Watchdog._extract_missing_mod_ids(console) == []
+
+    def test_empty_console(self):
+        assert Watchdog._extract_missing_mod_ids("") == []
+
+    def test_dedup(self):
+        console = "[main/INFO]: Fix: add [add:fabric-api-base 1 (...), add:fabric-api-base 1 (...)], remove [], replace []"
+        assert Watchdog._extract_missing_mod_ids(console) == ["fabric-api-base"]
+
 
 class TestWatchdogRetryLogic:
     def _make_watchdog(self, max_retries=3):

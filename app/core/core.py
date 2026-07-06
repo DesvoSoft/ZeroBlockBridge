@@ -50,6 +50,7 @@ class ZBBManager:
         # Start lock -- prevents concurrent start_server calls and protects _jdk_source
         self._start_lock = threading.Lock()
         self._restart_lock = threading.Lock()
+        self._mod_install_lock = threading.Lock()
         self._jdk_source: str = "unknown"
         self.restart_warnings_sent: set = set()
         self._restart_warnings_lock = threading.Lock()
@@ -70,6 +71,7 @@ class ZBBManager:
         
         # Internal Subscriptions
         self.events.subscribe(ServerEvent.REQUEST_RESTART, self._handle_restart_request)
+        self.events.subscribe(ServerEvent.REQUEST_MOD_INSTALL, self._handle_mod_install_request)
         self.events.subscribe(ServerEvent.CONSOLE_LINE, lambda line: self.console_buffer.append(line))
         self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, lambda line: self.tunnel_buffer.append(line))
 
@@ -351,11 +353,19 @@ class ZBBManager:
             payload = {}
         reason = payload.get("reason", "unknown")
         retry = payload.get("retry")
-        logger.error("[ZBBManager] Server crashed: reason=%s retry=%s", reason, retry)
+        detail = payload.get("detail")
+        logger.error("[ZBBManager] Server crashed: reason=%s retry=%s detail=%s", reason, retry, detail)
         msg = f"Server crashed: {reason}"
         if retry is not None:
             msg += f" (attempt {retry})"
-        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+        if detail:
+            msg += f"\n{detail}"
+        notification = {"msg": msg, "type": "error"}
+        missing_mod_ids = payload.get("missing_mod_ids") or []
+        if reason == "mod_dependency_error" and missing_mod_ids:
+            notification["action"] = "mod_dependency_fix"
+            notification["missing_mod_ids"] = missing_mod_ids
+        self.events.emit(ServerEvent.NOTIFICATION, notification)
         if self.current_server:
             try:
                 from app.core.logic import get_server_meta, update_server_meta
@@ -464,6 +474,54 @@ class ZBBManager:
                 self._restart_lock.release()
 
         self.executor.submit(_restart)
+
+    def _handle_mod_install_request(self, data: Optional[dict] = None) -> None:
+        """Handles requests to auto-install missing mod dependencies from Modrinth."""
+        def _install():
+            if not self._mod_install_lock.acquire(blocking=False):
+                logger.warning("[ZBBManager] Mod install already in progress, ignoring duplicate request.")
+                return
+            try:
+                missing_ids = (data or {}).get("missing_mod_ids", [])
+                server_name = (data or {}).get("server_name") or self.current_server
+                if not missing_ids or not server_name:
+                    return
+
+                from app.core.logic import get_server_meta
+                from app.services.modrinth import ModrinthClient, install_missing_mods
+
+                meta = get_server_meta(server_name) or {}
+                mc_version = meta.get("version", "1.20.1")
+                stype = meta.get("type", "Vanilla").lower()
+                loader = stype if stype in ("fabric", "forge") else None
+                if not loader:
+                    self.events.emit(ServerEvent.NOTIFICATION, {
+                        "msg": "Cannot auto-install mods: server is not Fabric or Forge.", "type": "error"
+                    })
+                    return
+
+                self.events.emit(ServerEvent.CONSOLE_LINE,
+                                  f"[ModInstall] Resolving {len(missing_ids)} missing mod(s) via Modrinth...")
+                result = install_missing_mods(ModrinthClient(), missing_ids, server_name, mc_version, loader)
+
+                installed, failed, unresolved = result["installed"], result["failed"], result["unresolved"]
+                if installed:
+                    self.events.emit(ServerEvent.CONSOLE_LINE, f"[ModInstall] Installed: {', '.join(installed)}")
+
+                parts = []
+                if installed: parts.append(f"{len(installed)} installed")
+                if failed: parts.append(f"{len(failed)} failed")
+                if unresolved: parts.append(f"{len(unresolved)} not found on Modrinth")
+                msg = "Mod auto-install: " + ", ".join(parts) if parts else "No mods were installed."
+                toast_type = "success" if installed and not failed and not unresolved else ("warning" if installed else "error")
+                self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": toast_type})
+
+                if installed:
+                    self.events.emit(ServerEvent.CONSOLE_LINE, "[ModInstall] Restart the server to load newly installed mods.")
+            finally:
+                self._mod_install_lock.release()
+
+        self.executor.submit(_install)
 
     def shutdown(self) -> None:
         """Cleanly stops all services on app exit.

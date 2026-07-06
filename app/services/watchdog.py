@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -26,8 +27,15 @@ JVM_ERROR_PATTERNS = [
     "java.lang.NoClassDefFoundError",
 ]
 
+MOD_ERROR_PATTERNS = [
+    "Incompatible mods found!",
+    "net.fabricmc.loader.impl.FormattedException",
+    "missing a mandatory dependency",
+]
 
-def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence_seconds=None, context=None):
+
+def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence_seconds=None, context=None,
+                         detail=None, missing_mod_ids=None):
     return {
         "reason": reason,
         "exit_code": exit_code,
@@ -35,6 +43,8 @@ def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence
         "retry": retry,
         "silence_seconds": silence_seconds,
         "context": context,
+        "detail": detail,
+        "missing_mod_ids": missing_mod_ids or [],
     }
 
 
@@ -52,6 +62,8 @@ class Watchdog:
         self._stable_since = 0.0
         self._listening = False
         self._crash_reason = None
+        self._crash_detail = None
+        self._crash_missing_mod_ids = []
         self._restart_thread = None
 
     @property
@@ -85,21 +97,26 @@ class Watchdog:
         exit_code = data.get("exit_code", -1)
         uptime = data.get("uptime", 0)
         stderr = data.get("stderr", "")
+        console = data.get("console", "")
 
         if exit_code == 0:
             self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Server stopped normally (exit code 0).")
             self.retry_count = 0
             return
 
-        self._classify_crash(exit_code, uptime, stderr)
+        self._classify_crash(exit_code, uptime, stderr, console)
         next_retry = self.retry_count + 1
-        self._events.emit(ServerEvent.CONSOLE_LINE, 
+        msg = (
             f"[Watchdog] Server crashed (exit {exit_code}, {self._crash_reason}). "
             f"Retry {next_retry}/{self.max_retries}"
         )
+        if self._crash_detail:
+            msg += f" -- {self._crash_detail}"
+        self._events.emit(ServerEvent.CONSOLE_LINE, msg)
         self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
             reason=self._crash_reason, exit_code=exit_code,
-            uptime=uptime, retry=next_retry,
+            uptime=uptime, retry=next_retry, detail=self._crash_detail,
+            missing_mod_ids=self._crash_missing_mod_ids,
         ))
 
         self._trigger_restart("crash")
@@ -136,9 +153,15 @@ class Watchdog:
         self._runner.start()
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
 
-    def _classify_crash(self, exit_code, uptime, stderr=""):
+    def _classify_crash(self, exit_code, uptime, stderr="", console=""):
+        self._crash_detail = None
+        self._crash_missing_mod_ids = []
         if self._match_stderr(stderr, JVM_ERROR_PATTERNS):
             self._crash_reason = "jvm_config_error"
+        elif self._match_stderr(console, MOD_ERROR_PATTERNS):
+            self._crash_reason = "mod_dependency_error"
+            self._crash_detail = self._extract_mod_error_detail(console)
+            self._crash_missing_mod_ids = self._extract_missing_mod_ids(console)
         elif self._match_stderr(stderr, OOM_PATTERNS):
             self._crash_reason = "out_of_memory"
         elif exit_code == 137 or exit_code == -9:
@@ -151,6 +174,35 @@ class Watchdog:
             self._crash_reason = f"signal_{abs(exit_code)}"
         else:
             self._crash_reason = f"exit_{exit_code}"
+
+    @staticmethod
+    def _extract_mod_error_detail(console):
+        lines = console.splitlines()
+        missing = [
+            ln.split("] main/INFO]: ", 1)[-1].strip() if "] main/INFO]: " in ln else ln.strip()
+            for ln in lines if "requires any version of" in ln
+        ]
+        if missing:
+            return "; ".join(missing[:4])
+        for ln in lines:
+            if ln.strip().startswith("- Install "):
+                return ln.strip()
+        return None
+
+    _FIX_ADD_LINE_RE = re.compile(r"Fix:\s*add\s*\[(.*?)\]\s*,\s*remove")
+    _FIX_ADD_TOKEN_RE = re.compile(r"add:([A-Za-z0-9_\-\.]+)\s+")
+
+    @staticmethod
+    def _extract_missing_mod_ids(console):
+        ids = []
+        for line in console.splitlines():
+            m = Watchdog._FIX_ADD_LINE_RE.search(line)
+            if not m:
+                continue
+            for tok in Watchdog._FIX_ADD_TOKEN_RE.findall(m.group(1)):
+                if tok not in ids:
+                    ids.append(tok)
+        return ids
 
     @staticmethod
     def _match_stderr(stderr, patterns):

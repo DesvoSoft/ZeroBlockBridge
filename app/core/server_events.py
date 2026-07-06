@@ -19,6 +19,7 @@ class ServerEvent:
     TUNNEL_CONSOLE_LINE = "tunnel_console_line"
     NOTIFICATION = "notification"
     REQUEST_RESTART = "request_restart"
+    REQUEST_MOD_INSTALL = "request_mod_install"
     TUNNEL_STATUS = "tunnel_status"
     BACKUP_COMPLETED = "backup_completed"  # emitted by BackupOrchestrator; available for future UI subscribers
     BACKUP_FAILED = "backup_failed"        # emitted by BackupOrchestrator; available for future UI subscribers

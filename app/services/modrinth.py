@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 import requests
 
 from app.core.constants import SERVERS_DIR
+from app.services import mod_id_resolver, mod_install_tracker
 from app.services.sha1_validator import download_with_verification
 
 logger = logging.getLogger(__name__)
@@ -379,3 +380,54 @@ class ModrinthClient:
                 logger.warning("Could not remove old file %s: %s", old_path, exc)
 
         return True
+
+
+def install_missing_mods(
+    client: "ModrinthClient",
+    missing_mod_ids: List[str],
+    server_name: str,
+    mc_version: str,
+    loader: str,
+) -> Dict[str, List[str]]:
+    """
+    Resolve Fabric/Forge internal mod-ids (as extracted from a crash log) to
+    real Modrinth projects and install them. Ids not covered by the static
+    mod_id_resolver map are looked up via search() as a fallback.
+    """
+    result = {"installed": [], "failed": [], "unresolved": []}
+    seen_slugs = set()
+
+    for mod_id in missing_mod_ids:
+        slug = mod_id_resolver.resolve_slug(mod_id)
+        if not slug:
+            try:
+                hits = client.search(mod_id, mc_version=mc_version, loader=loader, limit=1).get("hits", [])
+            except ModrinthException as exc:
+                logger.warning("Search fallback failed for %s: %s", mod_id, exc)
+                hits = []
+            slug = hits[0]["slug"] if hits else None
+
+        if not slug:
+            result["unresolved"].append(mod_id)
+            continue
+        if slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+
+        try:
+            versions = client.get_versions(slug, mc_version=mc_version, loader=loader)
+            if not versions:
+                result["failed"].append(mod_id)
+                continue
+            path = client.download_mod(slug, server_name, mc_version, loader)
+            if not path:
+                result["failed"].append(mod_id)
+                continue
+            filename = os.path.basename(path)
+            mod_install_tracker.record_install(server_name, slug, filename)
+            result["installed"].append(f"{mod_id} -> {filename}")
+        except ModrinthException as exc:
+            logger.error("Failed installing resolved mod %s (%s): %s", mod_id, slug, exc)
+            result["failed"].append(mod_id)
+
+    return result
