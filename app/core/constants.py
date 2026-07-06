@@ -48,18 +48,17 @@ if getattr(sys, "frozen", False):
     # temp extraction dir, not next to the .exe.
     _RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
 else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
+    # Anchor to the repo root (parent of app/), matching the frozen build's
+    # exe-dir anchoring and the documented project layout (README "Project
+    # Structure") -- generated dirs (servers/, config/, bin/, .zbb_cache/)
+    # must not land inside app/, which is source-only and gets wiped/copied
+    # as a unit during packaging and cleanup.
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
     _RESOURCE_DIR = BASE_DIR
 SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
 ASSETS_DIR = _RESOURCE_DIR / "assets"
-# Dev mode: BASE_DIR is app/, but bundled resources (logo, theme) live in
-# the repo-root assets/ directory. Fall back there if app/assets is absent.
-if not ASSETS_DIR.exists() and not getattr(sys, "frozen", False):
-    _repo_assets = BASE_DIR.parent / "assets"
-    if _repo_assets.exists():
-        ASSETS_DIR = _repo_assets
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Path to main config.json
 
 # Versions and URLs for server downloads
@@ -86,6 +85,12 @@ ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 META_CACHE_TTL = 5.0
 STDERR_BUFFER_MAX = 100
 STDERR_SNAPSHOT_SIZE = 50
+
+# Minecraft server player-management JSON files (vanilla schema)
+OPS_FILE = "ops.json"
+BANNED_PLAYERS_FILE = "banned-players.json"
+BANNED_IPS_FILE = "banned-ips.json"
+WHITELIST_FILE = "whitelist.json"
 
 def check_disk_space(min_gb=1, target_dir=None):
     """Check if there is at least min_gb of free disk space on the drive containing target_dir."""

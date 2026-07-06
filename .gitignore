@@ -37,9 +37,9 @@ env/
 
 # Project Specific
 /servers/
-app/servers/
-app/config/
-app/bin/
+/config/
+/bin/
+/backups/
 config.json
 
 # Logs

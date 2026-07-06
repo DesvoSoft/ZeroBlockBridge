@@ -4,6 +4,8 @@ import threading
 import logging
 from typing import Any
 
+from app.core.constants import CONFIG_DIR
+
 logger = logging.getLogger(__name__)
 
 class SettingsManager:
@@ -19,7 +21,7 @@ class SettingsManager:
 
     def _init(self):
         self._settings_file = "zbb_settings.json"
-        self._settings_path = self._settings_file
+        self._settings_path = str(CONFIG_DIR / self._settings_file)
         self._settings = None
         self._dirty = False
         self._timer = None
