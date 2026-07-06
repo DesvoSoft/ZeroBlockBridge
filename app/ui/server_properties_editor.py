@@ -208,9 +208,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
                       fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                       width=80).pack(side="right", padx=5)
-        ctk.CTkButton(toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
-                      fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                      width=150).pack(side="right", padx=5)
+        self.btn_export_pack = ctk.CTkButton(
+            toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            width=150)
+        self.btn_export_pack.pack(side="right", padx=5)
 
         # List
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
@@ -293,12 +295,25 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         )
         if not dest_path:
             return
-        try:
-            export_server(self.server_name, dest_path)
-        except (MigrationError, OSError) as e:
-            ZBBDialog.info(self, "Export Failed", str(e), kind="error")
-            return
-        ZBBDialog.info(self, "Export Complete", f"Server '{self.server_name}' exported to:\n\n{dest_path}")
+
+        self.btn_export_pack.configure(state="disabled", text="Exporting…")
+
+        def _export():
+            try:
+                export_server(
+                    self.server_name, dest_path,
+                    progress_callback=lambda msg: self.after(
+                        0, lambda m=msg: self.btn_export_pack.configure(text=m[:28])),
+                )
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: ZBBDialog.info(self, "Export Failed", str(e), kind="error"))
+                return
+            finally:
+                self.after(0, lambda: self.btn_export_pack.configure(state="normal", text="Export as .zbbpack"))
+            self.after(0, lambda: ZBBDialog.info(
+                self, "Export Complete", f"Server '{self.server_name}' exported to:\n\n{dest_path}"))
+
+        threading.Thread(target=_export, daemon=True).start()
 
     def _server_is_running(self) -> bool:
         runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
