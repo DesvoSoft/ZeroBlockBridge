@@ -103,11 +103,28 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.max_lines = max_lines
         self._buffer = []
         self._is_paused = False
-        
+
+        self.tag_config("line_error", foreground=AppConfig.COLOR_STATUS_OFFLINE)
+        self.tag_config("line_warn", foreground=AppConfig.COLOR_ACCENT_AMBER)
+        self.tag_config("line_join", foreground=AppConfig.COLOR_STATUS_ONLINE)
+        self.tag_config("line_leave", foreground=AppConfig.COLOR_TEXT_MUTED)
+
         # Bind visibility events for lazy rendering (ARCH-04)
         top = self.winfo_toplevel()
         top.bind("<Unmap>", self._on_unmap, add="+")
         top.bind("<Map>", self._on_map, add="+")
+
+    @staticmethod
+    def _line_tag(message):
+        if "ERROR" in message:
+            return "line_error"
+        if "WARN" in message:
+            return "line_warn"
+        if "joined the game" in message:
+            return "line_join"
+        if "left the game" in message:
+            return "line_leave"
+        return None
 
     def _on_unmap(self, event):
         if event.widget == self.winfo_toplevel():
@@ -124,8 +141,9 @@ class ConsoleWidget(ctk.CTkTextbox):
         
         # Batch insert up to the last 100 lines to avoid UI freeze if huge backlog
         lines_to_render = self._buffer[-100:]
-        text_chunk = "".join("> " + line + "\n" for line in lines_to_render)
-        self.insert("end", text_chunk)
+        for line in lines_to_render:
+            tag = self._line_tag(line)
+            self.insert("end", "> " + line + "\n", tag if tag else ())
         self._buffer.clear()
         
         self._enforce_limit()
@@ -156,17 +174,59 @@ class ConsoleWidget(ctk.CTkTextbox):
             return
 
         self.configure(state="normal")
-        self.insert("end", "> " + message + "\n")
+        tag = self._line_tag(message)
+        self.insert("end", "> " + message + "\n", tag if tag else ())
         self._enforce_limit()
         self.see("end")
         self.configure(state="disabled")
 
+    def highlight(self, pattern):
+        self.tag_remove("search_hit", "1.0", "end")
+        self.tag_remove("search_hit_current", "1.0", "end")
+        self._search_matches = []
+        self._match_index = -1
+        self._match_len = len(pattern)
+        self._last_pattern = pattern
+        if not pattern:
+            return
+        self.tag_config("search_hit", background=AppConfig.COLOR_ACCENT_AMBER, foreground="#1e293b")
+        self.tag_config("search_hit_current", background=AppConfig.COLOR_STATUS_ONLINE, foreground="#1e293b")
+        start = "1.0"
+        while True:
+            pos = self.search(pattern, start, stopindex="end", nocase=True)
+            if not pos:
+                break
+            end = f"{pos}+{len(pattern)}c"
+            self.tag_add("search_hit", pos, end)
+            self._search_matches.append(pos)
+            start = end
+        if self._search_matches:
+            self.jump_to_next_match()
+
+    def jump_to_next_match(self):
+        matches = getattr(self, "_search_matches", [])
+        if not matches:
+            return
+        prev_index = getattr(self, "_match_index", -1)
+        if prev_index >= 0:
+            prev_pos = matches[prev_index]
+            self.tag_remove("search_hit_current", prev_pos, f"{prev_pos}+{self._match_len}c")
+            self.tag_add("search_hit", prev_pos, f"{prev_pos}+{self._match_len}c")
+
+        self._match_index = (prev_index + 1) % len(matches)
+        cur_pos = matches[self._match_index]
+        self.tag_remove("search_hit", cur_pos, f"{cur_pos}+{self._match_len}c")
+        self.tag_add("search_hit_current", cur_pos, f"{cur_pos}+{self._match_len}c")
+        self.see(cur_pos)
+
+
 class ServerListItem(ctk.CTkFrame):
-    def __init__(self, master, server_name, on_click, on_delete=None, **kwargs):
+    def __init__(self, master, server_name, on_click, on_delete=None, on_export=None, **kwargs):
         super().__init__(master, **kwargs)
         self.server_name = server_name
         self.on_click = on_click
         self.on_delete = on_delete
+        self.on_export = on_export
         self.full_name = server_name
         self._selected = False
         # Border color matches fg (invisible) until selected/hovered —
@@ -231,18 +291,6 @@ class ServerListItem(ctk.CTkFrame):
         )
         self.status_dot.grid(row=0, column=2, padx=(0, 8), pady=5)
 
-        if self.on_delete:
-            self.btn_delete = ctk.CTkButton(
-                self, text="", width=26, height=26,
-                corner_radius=AppConfig.RADIUS_BADGE,
-                image=icon("trash", 14, (AppConfig.COLOR_TEXT_NOTE, AppConfig.COLOR_TEXT_GRAY)),
-                fg_color="transparent",
-                hover_color=("#fecaca", "#7f1d1d"),
-                command=lambda: self.on_delete(self.server_name),
-            )
-            self.btn_delete.grid(row=0, column=3, padx=(0, 8), pady=5)
-            ToolTip(self.btn_delete, "Delete server")
-
         self.bind_events(self)
         self.bind_events(self.lbl_name)
         self.bind_events(self.lbl_icon)
@@ -281,7 +329,7 @@ class ServerListItem(ctk.CTkFrame):
         widget.bind("<Leave>", self._on_leave)
 
     def _on_right_click(self, event):
-        if not self.on_delete:
+        if not self.on_delete and not self.on_export:
             return
         import tkinter as tk
         menu = tk.Menu(
@@ -292,10 +340,16 @@ class ServerListItem(ctk.CTkFrame):
             activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
             borderwidth=0,
         )
-        menu.add_command(
-            label=f"Delete '{self.full_name}'",
-            command=lambda: self.on_delete(self.server_name),
-        )
+        if self.on_export:
+            menu.add_command(
+                label="Export as .zbbpack",
+                command=lambda: self.on_export(self.server_name),
+            )
+        if self.on_delete:
+            menu.add_command(
+                label=f"Delete '{self.full_name}'",
+                command=lambda: self.on_delete(self.server_name),
+            )
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:

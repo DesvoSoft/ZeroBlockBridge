@@ -126,17 +126,17 @@ class MCTunnelApp(ctk.CTk):
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
 
-        self.btn_load_server = ctk.CTkButton(
-            self.actions_frame, text="Load Existing Folder",
+        self.btn_add_server = ctk.CTkButton(
+            self.actions_frame, text="Add Server",
             image=icon("folder", 14),
-            command=self.load_existing_server_action, corner_radius=AppConfig.RADIUS_BTN, height=32,
+            command=self.show_add_server_menu, corner_radius=AppConfig.RADIUS_BTN, height=32,
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
             hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=(AppConfig.FONT_FAMILY, 12)
         )
-        self.btn_load_server.pack(fill="x", pady=(0, 10))
+        self.btn_add_server.pack(fill="x", pady=(0, 10))
 
         # --- Separator ---
         self.sep = ctk.CTkFrame(self.sidebar_frame, height=2,
@@ -329,10 +329,11 @@ class MCTunnelApp(ctk.CTk):
         
         self.console_tabs.add("Console")
         self.console_tabs.add("Tunnel Log")
-        
+
+        self._build_console_search_bar(self.console_tabs.tab("Console"), "server_console")
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
         self.server_console.pack(fill="both", expand=True)
-        
+
         self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
 
@@ -342,7 +343,8 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
         self.btn_send.pack(side="right", padx=10, pady=5)
-        
+
+        self._build_console_search_bar(self.console_tabs.tab("Tunnel Log"), "tunnel_console")
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
         self.tunnel_console.pack(fill="both", expand=True)
 
@@ -360,6 +362,31 @@ class MCTunnelApp(ctk.CTk):
         self.load_servers()
         self.zbb_manager.bootstrap()
         # Pre-warm now handled by ZBBManager.bootstrap() → core.py
+
+    def _build_console_search_bar(self, parent, console_attr):
+        bar = ctk.CTkFrame(parent, fg_color="transparent")
+        bar.pack(fill="x", pady=(0, 5))
+
+        entry = ctk.CTkEntry(bar, placeholder_text="Search console...", corner_radius=AppConfig.RADIUS_INPUT, height=30)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        def do_search(event=None):
+            console = getattr(self, console_attr)
+            console.highlight(entry.get())
+
+        def do_next(event=None):
+            console = getattr(self, console_attr)
+            pattern = entry.get()
+            if pattern != getattr(console, "_last_pattern", None) or not getattr(console, "_search_matches", None):
+                console.highlight(pattern)
+            else:
+                console.jump_to_next_match()
+
+        entry.bind("<Return>", do_search)
+
+        btn_next = ctk.CTkButton(bar, text="Next", width=60, height=30, corner_radius=AppConfig.RADIUS_BTN,
+                                  command=do_next)
+        btn_next.pack(side="right")
 
     def send_server_command(self, event=None):
         if not self.zbb_manager.is_running():
@@ -427,7 +454,7 @@ class MCTunnelApp(ctk.CTk):
         else:
             for s in servers:
                 item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select,
-                                      on_delete=self.on_server_delete)
+                                      on_delete=self.on_server_delete, on_export=self.on_server_export)
                 item.pack(fill="x", padx=5, pady=5)
                 self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
@@ -471,6 +498,62 @@ class MCTunnelApp(ctk.CTk):
             self.btn_stop.configure(state="disabled")
             self._update_mods_tab_state()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
+        self.load_servers()
+
+    def on_server_export(self, server_name):
+        from tkinter import filedialog
+        from app.services.migration import export_server, MigrationError
+
+        dest_path = filedialog.asksaveasfilename(
+            defaultextension=".zbbpack",
+            initialfile=f"{server_name}.zbbpack",
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not dest_path:
+            return
+        try:
+            export_server(server_name, dest_path)
+        except (MigrationError, OSError) as e:
+            Toast.show(self, f"Export failed: {e}", toast_type="error")
+            return
+        Toast.show(self, f"Server '{server_name}' exported", toast_type="info")
+
+    def show_add_server_menu(self):
+        import tkinter as tk
+        menu = tk.Menu(
+            self, tearoff=0,
+            bg=AppConfig.COLOR_BG_CARD_DARK,
+            fg=AppConfig.COLOR_TEXT_PRIMARY,
+            activebackground=AppConfig.COLOR_BTN_GHOST_HOVER,
+            activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
+            borderwidth=0,
+        )
+        menu.add_command(label="From Folder (existing server)", command=self.load_existing_server_action)
+        menu.add_command(label="From .zbbpack (import)", command=self.on_import_zbbpack)
+        btn = self.btn_add_server
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def on_import_zbbpack(self):
+        from tkinter import filedialog
+        from app.services.migration import import_server, MigrationError
+
+        src_path = filedialog.askopenfilename(
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not src_path:
+            return
+        new_name = os.path.splitext(os.path.basename(src_path))[0]
+        try:
+            import_server(src_path, new_name)
+        except (MigrationError, OSError) as e:
+            Toast.show(self, f"Import failed: {e}", toast_type="error")
+            return
+        Toast.show(self, f"Server '{new_name}' imported. Reinstall the server jar via Properties before starting.", toast_type="info")
         self.load_servers()
 
     def on_server_select(self, server_name):
