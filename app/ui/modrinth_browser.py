@@ -1320,6 +1320,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             for mod in bundle:
                 self.after(0, lambda m=mod: self._set_status(f"Installing {m['name']}..."))
                 try:
+                    versions = self.client.get_versions(mod["slug"], mc_version=mc_version, loader=loader)
+                    if not versions:
+                        failed.append(f"{mod['name']} (no build for MC {mc_version} yet)")
+                        continue
                     path = self.client.download_mod(mod["slug"], server_name, mc_version, loader)
                     if not path:
                         failed.append(mod["name"])
