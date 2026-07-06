@@ -102,13 +102,14 @@ class _Painters:
 
     @staticmethod
     def reset(d, s, c, w):
-        # Ouroboros: one open ring with a visible gap, single arrowhead
-        # biting toward the tail end — clearly not a closed loop.
-        d.arc([0.14 * s, 0.14 * s, 0.86 * s, 0.86 * s], start=15, end=300, fill=c, width=w)
-        # Arrowhead at the head end (start=15deg, upper-right)
-        d.polygon([(0.86 * s, 0.42 * s), (0.78 * s, 0.20 * s), (0.62 * s, 0.34 * s)], fill=c)
-        # Tapered tail at the other end (end=300deg, lower-right) so the
-        # ring visibly doesn't close — the head just falls short of it.
+        # Ouroboros: one open ring with a visible gap, single big
+        # arrowhead at the head end — clearly not a closed loop.
+        d.arc([0.14 * s, 0.14 * s, 0.86 * s, 0.86 * s], start=25, end=300, fill=c, width=w)
+        # Large arrowhead, tip pointing clockwise along the ring, planted
+        # right at the ring's head end so it reads at small sizes too.
+        d.polygon([(0.95 * s, 0.30 * s), (0.68 * s, 0.06 * s), (0.60 * s, 0.38 * s)], fill=c)
+        # Tapered tail at the other end (end=300deg) so the ring visibly
+        # doesn't close — the head just falls short of it.
         d.ellipse([0.55 * s, 0.76 * s, 0.65 * s, 0.86 * s], fill=c)
 
     @staticmethod
