@@ -487,7 +487,7 @@ class MCTunnelApp(ctk.CTk):
         meta = logic.get_server_meta(server_name)
         server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 

@@ -286,7 +286,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Search", width=80, height=28,
             corner_radius=10,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            text_color="#0f172a", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_search,
         )
         self.btn_search.grid(row=0, column=4, padx=(4, 8), pady=6)
@@ -296,7 +296,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Installed", width=90, height=28,
             corner_radius=10,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY), font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._toggle_installed_view,
         )
         self.btn_installed.grid(row=0, column=5, padx=(4, 16), pady=6)
@@ -443,7 +443,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.pagination_bar, text="Install Selected (0)", width=150, height=26,
             corner_radius=8,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), state="disabled",
+            text_color="#0f172a", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), state="disabled",
             command=self._on_install_selected,
         )
         self.btn_install_selected.pack(side="right", padx=(4, 8), pady=4)
@@ -654,7 +654,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hasattr(self, "btn_install_selected"):
             self.btn_install_selected.configure(
                 text=f"Install Selected ({n})", state="normal" if n else "disabled",
-                fg_color=_MODRINTH_GREEN if n else (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST))
+                fg_color=_MODRINTH_GREEN if n else (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                text_color="#0f172a" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
 
     def _on_install_selected(self):
         hits = list(self._selected_hits.values())
@@ -771,7 +772,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         chk.grid(row=0, column=0, rowspan=2, padx=(12, 4), pady=12, sticky="ns")
 
         icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=AppConfig.RADIUS_CARD, fg_color=color)
-        icon_frame.grid(row=0, column=1, rowspan=2, padx=(0, 8), pady=12, sticky="n")
+        icon_frame.grid(row=0, column=1, rowspan=2, padx=(0, 8), pady=12)
         icon_frame.grid_propagate(False)
         lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=(AppConfig.FONT_FAMILY_DISPLAY, 20, "bold"),
                                    text_color="white")
@@ -862,7 +863,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hit_key in self._installed_slugs_cache:
             installed_badge = ctk.CTkLabel(
                 badge_frame, text="✓ Installed",
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"), text_color="white",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"), text_color="#0f172a",
                 fg_color=_MODRINTH_GREEN,
                 corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
@@ -876,7 +877,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
-            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY) if unsupported else "#0f172a",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             state="disabled" if unsupported else "normal",
             command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
         )
@@ -892,7 +894,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._view = "installed"
             self.btn_installed.configure(
                 fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-                text="Explore",
+                text="Explore", text_color="#0f172a",
             )
             self.pagination_bar.grid_remove()
             self._render_installed()
@@ -900,7 +902,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._view = "search"
             self.btn_installed.configure(
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                text="Installed",
+                text="Installed", text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
             )
             self.installed_action_bar.grid_remove()
             self.pagination_bar.grid()
@@ -940,7 +942,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             action_bar,
             text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
             font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
-            text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
             anchor="w",
         )
         header.pack(side="left")
@@ -951,6 +953,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 corner_radius=8,
                 fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
                 hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_delete_selected,
             )
@@ -1058,11 +1061,13 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hasattr(self, "_btn_delete_selected"):
             self._btn_delete_selected.configure(
                 text=f"Delete Selected ({n})", state="normal" if n else "disabled",
-                fg_color=AppConfig.COLOR_BTN_DANGER if n else _ghost)
+                fg_color=AppConfig.COLOR_BTN_DANGER if n else _ghost,
+                text_color="white" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
         if hasattr(self, "_btn_update_selected"):
             self._btn_update_selected.configure(
                 text=f"Update Selected ({n})", state="normal" if n else "disabled",
-                fg_color=_MODRINTH_GREEN if n else _ghost)
+                fg_color=_MODRINTH_GREEN if n else _ghost,
+                text_color="#0f172a" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
 
     def _confirm_delete_mod(self, filepath: str):
         fname = os.path.basename(filepath)
@@ -1317,7 +1322,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                        command=dialog.destroy).pack(side="right", padx=4)
         ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
                        corner_radius=AppConfig.RADIUS_BTN, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-                       text_color="white", command=_on_confirm).pack(side="right", padx=4)
+                       text_color="#0f172a", command=_on_confirm).pack(side="right", padx=4)
 
     # ------------------------------------------------------------------
     # Optimizer bundle

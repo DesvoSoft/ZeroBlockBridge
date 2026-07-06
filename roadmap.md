@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-07-04 (rev 6)
+> **Última actualización:** 2026-07-05 (rev 7)
 > **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 445 tests, 100% pass, 0 flaky
+> **Test count:** 463 tests, 100% pass, 0 flaky
 > **Audit:** 2026-06-19 — 2🔴 6🟡HIGH 5🟡MED 6🔵LOW — 8 resueltos, 11 pendientes
 > **Audit-3:** 2026-06-24 — validación externa. 2🔴→1🔴 confirmados (ver AUDIT-3). Nuevos: WINAPI fix, encoding VM, TPS guard, PLAYER_COUNT rate-limit, Protocol IS-A.
 > **EXE-PERF:** ✅ Todos los 6 fixes aplicados (commits 026d13e → e683436)
@@ -14,6 +14,8 @@
 > **Sesión 2026-06-24/07-01 (fuera de roadmap):** fix(playit) tunnel startup auth-error handling; fix(ui) backup create/restore off UI thread; refactor(scaffolder) dict-driven config mapping (complejidad 28→~6) — 417 tests pass
 > **Sesión 2026-07-01 (7):** F8 ✅ (multi-select checkboxes en Installed view + búsqueda, Select All/Delete Selected/Update Selected, `ModrinthClient.apply_update()`) + modpack one-click install ✅ (search con project_type=modpack ahora descarga y extrae vía `download_version_to()` + `install_mrpack()` reutilizado — cubre F7.5 sin el resto de F7) — 426 tests pass
 > **Sesión 2026-07-01/04 (8, fuera de roadmap):** CA-H01 ✅ (JVM flags custom por servidor en launch pipeline) + mods security hardening (mrpack compat gate contra engine del server, zip-slip guard en extracción, compat badges en browser) + fix PermissionError en write paths de creación de server + fix pin action bar de installed-mods fuera del frame scrolleable — 445 tests pass
+> **Sesión 2026-07-05 (9, fuera de roadmap):** fix(core) job-object reaping para proceso del servidor + port preflight + mods tab gating; feat(ui) server delete via right-click menu + first-run EULA consent; fix(versions) migración de Paper a Fill API v3 (api.papermc.io v2 devuelve 410 Gone); fix(tunnel) reap de agentes playitd huérfanos + silenciar ruido de duel-session; fix(threading) I/O lento y callbacks fuera de locks, stop server fuera del hilo Tk; fix(heartbeat) eventos emitidos fuera del lock (previene deadlock EventBus) — 463 tests pass
+> **Sesión 2026-07-05 (10, fuera de roadmap):** fix(ui) icono de mod card centrado verticalmente (`icon_frame.grid` sin `sticky="n"` → centrado en ambos ejes de la card); fix(ui) contraste texto/fondo en Modrinth Browser — botones/badges sobre `_MODRINTH_GREEN` (#1bd96a, brand Modrinth) usaban texto blanco (~1.7:1 contraste, casi ilegible), texto fijado a `#0f172a`; `COLOR_TEXT_PRIMARY` usado sin tupla light/dark en 3 sitios (invisible en light mode sobre card blanca) corregido a `("#0f172a", COLOR_TEXT_PRIMARY)` — 463 tests pass
 > **Siguiente prioridad:** CA-H02 (player mgmt unificado) o F7 resto (templates propios)
 
 ---
@@ -26,7 +28,7 @@
 | Archivos Python | 41 app + 22 tests |
 | LOC totales (app) | ~10,600 |
 | LOC totales (tests) | ~3,400 |
-| Tests | 445 pasando, 0 fallos, 0 skipped |
+| Tests | 463 pasando, 0 fallos, 0 skipped |
 | Type hint coverage | ~28.5% |
 | Threads potenciales | ~38 (todos daemon) |
 | Dependencias externas | 4 (customtkinter, requests, psutil, Pillow) |
@@ -306,45 +308,21 @@ Ver [detalle en F4.5](#detalle-45). Es la prioridad #2 porque el backend ya est�
 
 Ver [detalle en F4.6](#detalle-46).
 
-### P0.4: Pin Dependencies + pyproject.toml ⚠️ PARCIAL
+### P0.4: Pin Dependencies + pyproject.toml ✅
 
 | Campo | Detalle |
 |-------|---------|
-| **Archivos** | `requirements.txt` ✅, `pyproject.toml` ⬜ pendiente |
-| **Estado** | `requirements.txt` pinneado con versiones mínimas reales. `pyproject.toml` no creado aún. |
-
-**Hecho:**
-```txt
-customtkinter>=5.2.2
-requests>=2.33.1
-Pillow>=12.2.0
-psutil>=7.2.2
-packaging>=26.0
-```
-
-**Pendiente — crear `pyproject.toml`:**
-```toml
-[project]
-name = "zeroblockbridge"
-version = "1.4.0"
-requires-python = ">=3.10"
-dependencies = [
-    "customtkinter>=5.2.2",
-    "requests>=2.33.1",
-    "psutil>=7.2.2",
-    "Pillow>=12.2.0",
-    "packaging>=26.0",
-]
-```
+| **Archivos** | `requirements.txt` ✅, `pyproject.toml` ✅ |
+| **Estado** | `pyproject.toml` ya existía con metadata completa. Único bug: `requires-python = ">=3.12,<3.13"` rechazaba 3.14 (python activo del sistema). Ampliado a `>=3.12,<3.15` (2026-07-05). |
 
 **Criterio de aceptación:**
 - [x] Todas las dependencias tienen versión mínima en requirements.txt
-- [ ] `pyproject.toml` creado con metadata del proyecto
-- [ ] `pip install -e .` funciona
-- [ ] Python mínimo especificado (3.10)
-- [ ] Tests pasan después del cambio
+- [x] `pyproject.toml` creado con metadata del proyecto
+- [x] `pip install -e .` funciona (verificado con Python 3.14.3)
+- [x] Python mínimo especificado (3.12)
+- [x] Tests pasan después del cambio (463 pass)
 
-### P0.5: Fix Circular Dependency core↔orchestrators
+### P0.5: Fix Circular Dependency core↔orchestrators ✅
 
 | Campo | Detalle |
 |-------|---------|
@@ -352,6 +330,7 @@ dependencies = [
 | **LOC estimado** | ~10 (mover enum) + ~20 (eliminar lazy imports) |
 | **Esfuerzo** | 30 min |
 | **Riesgo** | 🟡 Medio (cambiar imports puede romper si no se actualizan referencias) |
+| **Estado** | Re-verificado 2026-07-05: `ServerState` vive en `constants.py`, ambos módulos importan de ahí, sin imports inline ni ciclo. Solo `ui/main.py` importa `core.core`. |
 
 **Qué hacer:**
 1. Mover `class ServerState(enum.Enum)` de `core.py` a `constants.py` o `protocols.py`
@@ -655,7 +634,7 @@ server_version = meta.get("version", "")
 | 8.2 | Botón "Update Selected" — batch download | ✅ `ModrinthClient.apply_update()` |
 | 8.3 | Botón "Delete Selected" — batch delete con confirm | ✅ |
 | 8.4 | Botón "Install Selected" desde search results | ✅ |
-| 8.5 | Progress bar batch ("Installing 3/5 mods...") | ⏸️ No implementado — instalaciones concurrentes fire-and-forget, sin contador secuencial |
+| 8.5 | Progress bar batch ("Installing 3/5 mods...") | ✅ `_note_batch_result()` ahora emite `_set_status(f"Installing… {done}/{total}")` en cada callback intermedio, no solo al final (2026-07-05) |
 | 8.6 | Tests | ✅ `test_modrinth.py` (apply_update/download_version_to), `test_modrinth_browser.py` (_filter_updates_for_selection) |
 
 **Bonus (fuera del alcance original de F8):** modpack one-click install desde búsqueda — ver F7.5 abajo.
