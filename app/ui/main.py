@@ -511,12 +511,18 @@ class MCTunnelApp(ctk.CTk):
         )
         if not dest_path:
             return
-        try:
-            export_server(server_name, dest_path)
-        except (MigrationError, OSError) as e:
-            Toast.show(self, f"Export failed: {e}", toast_type="error")
-            return
-        Toast.show(self, f"Server '{server_name}' exported", toast_type="info")
+
+        Toast.show(self, f"Exporting '{server_name}'...", toast_type="info")
+
+        def _export():
+            try:
+                export_server(server_name, dest_path)
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: Toast.show(self, f"Export failed: {e}", toast_type="error"))
+                return
+            self.after(0, lambda: Toast.show(self, f"Server '{server_name}' exported", toast_type="info"))
+
+        threading.Thread(target=_export, daemon=True).start()
 
     def show_add_server_menu(self):
         import tkinter as tk
@@ -547,14 +553,39 @@ class MCTunnelApp(ctk.CTk):
         )
         if not src_path:
             return
-        new_name = os.path.splitext(os.path.basename(src_path))[0]
-        try:
-            import_server(src_path, new_name)
-        except (MigrationError, OSError) as e:
-            Toast.show(self, f"Import failed: {e}", toast_type="error")
-            return
-        Toast.show(self, f"Server '{new_name}' imported. Reinstall the server jar via Properties before starting.", toast_type="info")
-        self.load_servers()
+
+        suggested_name = os.path.splitext(os.path.basename(src_path))[0]
+        prompt_text = f"Server name (suggested: {suggested_name}):"
+        new_name = None
+        while True:
+            dialog = ctk.CTkInputDialog(text=prompt_text, title="Import .zbbpack")
+            entered = dialog.get_input()
+            if not entered:
+                return
+            entered = entered.strip()
+            if not entered:
+                entered = suggested_name
+            if os.path.isdir(os.path.join(SERVERS_DIR, entered)):
+                Toast.show(self, f"A server named '{entered}' already exists", toast_type="error")
+                prompt_text = f"Server name (suggested: {suggested_name}):"
+                continue
+            new_name = entered
+            break
+
+        Toast.show(self, f"Importing '{new_name}'...", toast_type="info")
+
+        def _import():
+            try:
+                import_server(src_path, new_name)
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: Toast.show(self, f"Import failed: {e}", toast_type="error"))
+                return
+            self.after(0, lambda: Toast.show(
+                self, f"Server '{new_name}' imported. Reinstall the server jar via Properties before starting.",
+                toast_type="info"))
+            self.after(0, self.load_servers)
+
+        threading.Thread(target=_import, daemon=True).start()
 
     def on_server_select(self, server_name):
         # UI Locking: Block switching if current server is active
