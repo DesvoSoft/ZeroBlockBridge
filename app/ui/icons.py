@@ -101,6 +101,15 @@ class _Painters:
         d.polygon([(0.90 * s, 0.10 * s), (0.94 * s, 0.42 * s), (0.64 * s, 0.26 * s)], fill=c)
 
     @staticmethod
+    def reset(d, s, c, w):
+        # Two mirrored arcs forming a full loop, each capped with an
+        # arrowhead — reads as "reset/restart" rather than a partial spin.
+        d.arc([0.16 * s, 0.16 * s, 0.84 * s, 0.84 * s], start=-50, end=130, fill=c, width=w)
+        d.arc([0.16 * s, 0.16 * s, 0.84 * s, 0.84 * s], start=130, end=310, fill=c, width=w)
+        d.polygon([(0.88 * s, 0.14 * s), (0.92 * s, 0.44 * s), (0.62 * s, 0.30 * s)], fill=c)
+        d.polygon([(0.12 * s, 0.86 * s), (0.08 * s, 0.56 * s), (0.38 * s, 0.70 * s)], fill=c)
+
+    @staticmethod
     def copy(d, s, c, w):
         d.rounded_rectangle([0.32 * s, 0.32 * s, 0.86 * s, 0.86 * s], radius=0.08 * s,
                             outline=c, width=w)
