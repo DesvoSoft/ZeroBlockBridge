@@ -119,6 +119,10 @@ class ModrinthClient:
             facets.append(f'["versions:{mc_version}"]')
         if loader:
             facets.append(f'["categories:{loader}"]')
+        if project_type in ("mod", "plugin"):
+            # Exclude client-only projects — mods that are also server-side
+            # (server_side "optional" or "required") are unaffected.
+            facets.append('["server_side!=unsupported"]')
 
         params = {
             "query": query,
