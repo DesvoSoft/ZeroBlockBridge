@@ -64,6 +64,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     """
 
     OPTIMIZERS_FABRIC = [
+        {"slug": "fabric-api", "name": "Fabric API", "description": "Required by Spark and most Fabric mods."},
         {"slug": "lithium", "name": "Lithium", "description": "General-purpose game code optimizer."},
         {"slug": "ferrite-core", "name": "FerriteCore", "description": "Memory usage optimization."},
         {"slug": "krypton", "name": "Krypton", "description": "Optimizes networking stack."},
@@ -174,7 +175,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._apply_type_options(None)
             self._type_tooltip.text = "Select a server to enable all content types."
             self._opt_tooltip.text = (
-                "Fabric: Lithium, FerriteCore, Krypton, Spark\n"
+                "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark\n"
                 "Forge: ModernFix, FerriteCore, Clumps, Spark"
             )
             return
@@ -197,7 +198,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             self._type_tooltip.text = f"Content types filtered for {engine}."
             if loader == "fabric":
-                self._opt_tooltip.text = "Fabric: Lithium, FerriteCore, Krypton, Spark"
+                self._opt_tooltip.text = "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark"
             elif loader == "forge":
                 self._opt_tooltip.text = "Forge: ModernFix, FerriteCore, Clumps, Spark"
             else:
@@ -330,7 +331,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.btn_opt.pack(side="right", padx=(0, 4))
         self._opt_tooltip = ToolTip(
             self.btn_opt,
-            "Fabric: Lithium, FerriteCore, Krypton, Spark\n"
+            "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark\n"
             "Forge: ModernFix, FerriteCore, Clumps, Spark",
         )
 

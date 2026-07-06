@@ -436,6 +436,7 @@ class ServerRunner:
         self._state_lock = threading.Lock()
         self.exit_code = None
         self._stderr_buffer = []
+        self._console_buffer = []
         self._stderr_thread = None
         self.java_bin = java_bin
         self.use_aikars = use_aikars
@@ -568,6 +569,7 @@ class ServerRunner:
         
         try:
             self._stderr_buffer = []
+            self._console_buffer = []
             with self._players_lock:
                 self.connected_players.clear()
                 self.player_count = 0
@@ -634,6 +636,10 @@ class ServerRunner:
         start_time = time.time()
         for line in self.process.stdout:
             clean_line = ANSI_ESCAPE_RE.sub('', line).strip()
+            if clean_line:
+                self._console_buffer.append(clean_line)
+                if len(self._console_buffer) > 200:
+                    self._console_buffer.pop(0)
             self.events.emit(ServerEvent.CONSOLE_LINE, clean_line)
             self._parse_player_count(clean_line)
             if "Done (" in clean_line and "For help, type" in clean_line:
@@ -642,12 +648,14 @@ class ServerRunner:
         self._stderr_done.wait(timeout=2)
         self.exit_code = self.process.returncode
         stderr_snapshot = self.get_stderr_snapshot()
+        console_snapshot = self.get_console_snapshot()
         uptime = time.time() - start_time
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
         self.events.emit(ServerEvent.STOPPED, {
             "exit_code": self.exit_code,
             "uptime": uptime,
             "stderr": stderr_snapshot,
+            "console": console_snapshot,
         })
         self.running = False
         self.process = None
@@ -668,6 +676,9 @@ class ServerRunner:
 
     def get_stderr_snapshot(self):
         return "\n".join(self._stderr_buffer[-50:])
+
+    def get_console_snapshot(self):
+        return "\n".join(self._console_buffer[-100:])
 
     def _parse_player_count(self, line):
         join_match = re.search(r': (\w+) joined the game', line)

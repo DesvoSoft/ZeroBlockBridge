@@ -74,6 +74,7 @@ class CrashReporter:
                 "retry_attempt": watchdog_retries,
                 "uptime_seconds": payload.get("uptime"),
                 "context": payload.get("context"),
+                "detail": payload.get("detail"),
             },
             "stderr_tail": stderr_tail,
             "console_tail": console_tail,
