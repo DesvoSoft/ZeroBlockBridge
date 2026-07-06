@@ -202,9 +202,20 @@ class ServerListItem(ctk.CTkFrame):
         self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image, width=40, height=40)
         self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5) 
         
+        # Truncate by rendered pixel width, not char count (proportional font)
         display_name = server_name
-        if len(display_name) > 22:
-            display_name = display_name[:20] + "..."
+        try:
+            import tkinter.font as tkfont
+            f = tkfont.Font(family=AppConfig.FONT_FAMILY_DISPLAY, size=14, weight="bold")
+            max_px = 165
+            if f.measure(display_name) > max_px:
+                while display_name and f.measure(display_name + "…") > max_px:
+                    display_name = display_name[:-1]
+                display_name += "…"
+        except Exception as e:
+            logger.debug("Font measure failed, char fallback: %s", e)
+            if len(display_name) > 22:
+                display_name = display_name[:20] + "…"
 
         self.lbl_name = ctk.CTkLabel(
             self, 
@@ -238,7 +249,7 @@ class ServerListItem(ctk.CTkFrame):
         self.set_cursor("hand2")
 
         # Add ToolTip if truncated
-        if len(self.full_name) > 22:
+        if display_name != self.full_name:
             self.tooltip_ref = ToolTip(self, self.full_name)
 
     def set_selected(self, selected: bool):

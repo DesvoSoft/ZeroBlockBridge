@@ -223,8 +223,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         bar = ctk.CTkFrame(self, corner_radius=AppConfig.RADIUS_CARD,
                            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         bar.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
-        bar.grid_columnconfigure(1, weight=0)
-        bar.grid_columnconfigure(7, weight=1)  # trailing spacer soaks up leftover width
+        bar.grid_columnconfigure(1, weight=1)  # search entry soaks up leftover width
 
         lbl_icon = ctk.CTkLabel(bar, text="", image=icon("search", 15))
         lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=6)
@@ -239,7 +238,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             border_width=0,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
         )
-        self.entry_search.grid(row=0, column=1, sticky="w", padx=4, pady=6)
+        self.entry_search.grid(row=0, column=1, sticky="ew", padx=4, pady=6)
         self.entry_search.bind("<Return>", self._on_search)
 
         _combo_style = dict(
@@ -300,27 +299,17 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color=AppConfig.COLOR_TEXT_PRIMARY, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._toggle_installed_view,
         )
-        self.btn_installed.grid(row=0, column=5, padx=4, pady=6)
-
-        # Check updates button
-        self.btn_updates = ctk.CTkButton(
-            bar, text="Updates", width=80, height=28,
-            corner_radius=10,
-            fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
-            command=self._on_check_updates,
-        )
-        self.btn_updates.grid(row=0, column=6, padx=(4, 16), pady=6)
+        self.btn_installed.grid(row=0, column=5, padx=(4, 16), pady=6)
 
         # Thin separator between search row and context/actions row
         separator = ctk.CTkFrame(
             bar, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
         )
-        separator.grid(row=1, column=0, columnspan=8, sticky="ew", padx=12, pady=(0, 0))
+        separator.grid(row=1, column=0, columnspan=6, sticky="ew", padx=12, pady=(0, 0))
 
         # Row 2: server context + secondary action
         actions_row = ctk.CTkFrame(bar, fg_color="transparent")
-        actions_row.grid(row=2, column=0, columnspan=8, sticky="ew", padx=12, pady=(1, 3))
+        actions_row.grid(row=2, column=0, columnspan=6, sticky="ew", padx=12, pady=(1, 3))
 
         # Server context banner — which server/engine installs will target
         self.lbl_context = ctk.CTkLabel(
@@ -596,8 +585,13 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._pagination_controls.pack(side="left", padx=(12, 0), pady=2)
         page_num = self._current_page + 1
         self.lbl_page.configure(text=f"Page {page_num} of {self._total_pages}")
-        self.btn_prev.configure(state="normal" if self._current_page > 0 else "disabled")
-        self.btn_next.configure(state="normal" if self._current_page < self._total_pages - 1 else "disabled")
+        _ghost = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST)
+        prev_ok = self._current_page > 0
+        next_ok = self._current_page < self._total_pages - 1
+        self.btn_prev.configure(state="normal" if prev_ok else "disabled",
+                                fg_color=AppConfig.COLOR_BTN_PRIMARY if prev_ok else _ghost)
+        self.btn_next.configure(state="normal" if next_ok else "disabled",
+                                fg_color=AppConfig.COLOR_BTN_PRIMARY if next_ok else _ghost)
         self.lbl_count.configure(
             text=f"{len(self._current_hits)} of {self._search_total} results"
         )
@@ -659,7 +653,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         n = len(self._selected_hits)
         if hasattr(self, "btn_install_selected"):
             self.btn_install_selected.configure(
-                text=f"Install Selected ({n})", state="normal" if n else "disabled")
+                text=f"Install Selected ({n})", state="normal" if n else "disabled",
+                fg_color=_MODRINTH_GREEN if n else (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST))
 
     def _on_install_selected(self):
         hits = list(self._selected_hits.values())
@@ -706,6 +701,10 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Render results
     # ------------------------------------------------------------------
     def _render_results(self):
+        if self._view != "search":
+            # Async search response landed while the Installed view is open —
+            # keep the hits (restored on toggle back) but don't clobber the UI.
+            return
         self._stop_spinner()
         for w in self.results_frame.winfo_children():
             w.destroy()
@@ -796,12 +795,19 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         lbl_title.grid(row=0, column=0, sticky="ew")
 
-        desc = hit.get("description", "")[:120]
+        desc = hit.get("description", "")
+        if len(desc) > 160:
+            desc = desc[:160].rsplit(" ", 1)[0] + "…"
         lbl_desc = ctk.CTkLabel(info_frame, text=desc,
                                 text_color=(AppConfig.COLOR_TEXT_GRAY, "#cbd5e1"),
                                 font=AppConfig.FONT_BODY_SMALL,
                                 anchor="w", wraplength=500, justify="left")
         lbl_desc.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        # Wrap follows the actual column width instead of a fixed 500px
+        info_frame.bind(
+            "<Configure>",
+            lambda e, lbl=lbl_desc: lbl.configure(wraplength=max(280, e.width - 16)),
+        )
 
         # Badges row
         badge_frame = ctk.CTkFrame(card, fg_color="transparent")
@@ -809,7 +815,9 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         downloads = hit.get("downloads", 0)
         dl_text = self._format_downloads(downloads)
-        lbl_dl = ctk.CTkLabel(badge_frame, text=f"⬇ {dl_text}",
+        lbl_dl = ctk.CTkLabel(badge_frame, text=dl_text,
+                              image=icon("download", 11, _DOWNLOADS_COLOR),
+                              compound="left", padx=3,
                               text_color=_DOWNLOADS_COLOR,
                               font=AppConfig.FONT_BODY_SMALL)
         lbl_dl.pack(side="left", padx=(0, 10))
@@ -886,7 +894,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
                 text="Explore",
             )
-            self._pagination_controls.pack_forget()
+            self.pagination_bar.grid_remove()
             self._render_installed()
         else:
             self._view = "search"
@@ -895,6 +903,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 text="Installed",
             )
             self.installed_action_bar.grid_remove()
+            self.pagination_bar.grid()
             if self._current_hits:
                 self._render_results()
                 self._update_pagination()
@@ -940,7 +949,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._btn_delete_selected = ctk.CTkButton(
                 action_bar, text="Delete Selected (0)", width=140, height=28,
                 corner_radius=8,
-                fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+                fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_delete_selected,
             )
@@ -949,11 +959,20 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._btn_update_selected = ctk.CTkButton(
                 action_bar, text="Update Selected (0)", width=140, height=28,
                 corner_radius=8,
-                fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                hover_color=_MODRINTH_GREEN_HOVER,
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_update_selected,
             )
             self._btn_update_selected.pack(side="right", padx=(6, 0))
+
+            ctk.CTkButton(
+                action_bar, text="Check Updates", width=120, height=28,
+                corner_radius=8,
+                fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
+                text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+                command=self._on_check_updates,
+            ).pack(side="right", padx=(6, 0))
 
             ctk.CTkButton(
                 action_bar, text="Select All", width=90, height=28,
@@ -1035,12 +1054,15 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _update_installed_action_bar(self):
         n = len(self._selected_files)
+        _ghost = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST)
         if hasattr(self, "_btn_delete_selected"):
             self._btn_delete_selected.configure(
-                text=f"Delete Selected ({n})", state="normal" if n else "disabled")
+                text=f"Delete Selected ({n})", state="normal" if n else "disabled",
+                fg_color=AppConfig.COLOR_BTN_DANGER if n else _ghost)
         if hasattr(self, "_btn_update_selected"):
             self._btn_update_selected.configure(
-                text=f"Update Selected ({n})", state="normal" if n else "disabled")
+                text=f"Update Selected ({n})", state="normal" if n else "disabled",
+                fg_color=_MODRINTH_GREEN if n else _ghost)
 
     def _confirm_delete_mod(self, filepath: str):
         fname = os.path.basename(filepath)

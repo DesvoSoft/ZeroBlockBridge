@@ -219,6 +219,16 @@ class MCTunnelApp(ctk.CTk):
         )
         self.lbl_java_ver.pack(padx=8, pady=2)
 
+        badge_server_info = ctk.CTkFrame(
+            self.status_right_frame, fg_color="transparent"
+        )
+        badge_server_info.pack(side="right", padx=(5, 10))
+        self.lbl_server_info = ctk.CTkLabel(
+            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_server_info.pack(padx=8, pady=2)
+
         badge_players = ctk.CTkFrame(
             self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE
         )
@@ -237,16 +247,6 @@ class MCTunnelApp(ctk.CTk):
         )
         self.btn_players.pack(padx=2, pady=2)
         ToolTip(self.btn_players, "Players online")
-
-        badge_server_info = ctk.CTkFrame(
-            self.status_right_frame, fg_color="transparent"
-        )
-        badge_server_info.pack(side="right", padx=(5, 10))
-        self.lbl_server_info = ctk.CTkLabel(
-            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY,
-            font=AppConfig.FONT_BODY_SMALL
-        )
-        self.lbl_server_info.pack(padx=8, pady=2)
 
 
 
