@@ -12,11 +12,14 @@ import customtkinter as ctk
 import logging
 from typing import Any
 
+from app.core.app_config import AppConfig
+from app.ui.win_effects import apply_rounded_corners
+
 logger = logging.getLogger(__name__)
 
 # Toast type -> (bg_color, border_color, icon)
 _TOAST_STYLES = {
-    "info":    ("#1e293b", "#3b82f6", "i"),       # Slate-800 + Blue-500
+    "info":    ("#1e293b", "#84cc16", "i"),        # Slate-800 + Lime-400
     "success": ("#1e293b", "#22c55e", "\u2713"),   # Slate-800 + Green-500
     "warning": ("#1e293b", "#f97316", "!"),        # Slate-800 + Orange-500
     "error":   ("#1e293b", "#ef4444", "x"),        # Slate-800 + Red-500
@@ -69,14 +72,14 @@ class ToastNotification:
         # Icon badge
         ctk.CTkLabel(
             inner, text=icon_char, width=24, height=24,
-            font=("Roboto Medium", 13), text_color="white",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color="white",
             fg_color=border_color, corner_radius=12,
         ).pack(side="left", padx=(0, 10))
 
         # Message
         ctk.CTkLabel(
             inner, text=message, text_color="#e2e8f0",
-            font=("Roboto", 12), wraplength=320, justify="left",
+            font=(AppConfig.FONT_FAMILY, 12), wraplength=320, justify="left",
         ).pack(side="left", fill="x", expand=True)
 
         # Position: bottom-right, stacked vertically
@@ -93,6 +96,7 @@ class ToastNotification:
         y = parent.winfo_rooty() + ph - th - 20 - offset_y
         y = max(y, parent.winfo_rooty() + 10)
         toast.geometry(f"{tw}x{th}+{x}+{y}")
+        apply_rounded_corners(toast, small=True)
 
         toast._zbb_parent = parent
         toast._zbb_height = th

@@ -75,7 +75,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.lbl_player_count = ctk.CTkLabel(
             header_frame, 
             text="Players Online: 0", 
-            font=ctk.CTkFont(family="Roboto", size=24, weight="bold")
+            font=ctk.CTkFont(family=AppConfig.FONT_FAMILY_DISPLAY, size=24, weight="bold")
         )
         self.lbl_player_count.pack(side="left")
 
@@ -118,7 +118,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.entry_whitelist_add = ctk.CTkEntry(add_frame, placeholder_text="Player name...")
         self.entry_whitelist_add.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
-        btn_add = ctk.CTkButton(add_frame, text="Add", width=60, corner_radius=12,
+        btn_add = ctk.CTkButton(add_frame, text="Add", width=60, corner_radius=AppConfig.RADIUS_BTN,
                                 fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
                                 command=self._add_to_whitelist)
         btn_add.grid(row=0, column=1)

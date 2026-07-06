@@ -15,7 +15,6 @@ import shutil
 import tempfile
 import threading
 import tkinter.filedialog
-import tkinter.messagebox
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Optional
 
@@ -27,7 +26,8 @@ from app.services.modrinth import ModrinthClient, ModrinthException
 from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
-from app.ui.ui_components import ToolTip
+from app.ui.ui_components import ToolTip, ZBBDialog
+from app.ui.icons import icon
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ _BADGE_BG_LIGHT, _BADGE_BG_DARK = AppConfig.COLOR_BADGE_BG
 _BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK = AppConfig.COLOR_BADGE_TEXT
 _DOWNLOADS_COLOR = "#94a3b8"   # slate-400
 
-_ICON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#ec4899"]
+_ICON_COLORS = ["#65a30d", "#d97706", "#16a34a", "#92400e", "#0d9488", "#ca8a04"]
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
 _ICONS_IN_FLIGHT: set[str] = set()
 _ICONS_LOCK = threading.Lock()
@@ -159,7 +159,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                    "Create a Fabric or Forge server for mods, "
                    "or Paper/Purpur for plugins.")
             self._set_status("✗ Vanilla servers can't load mods or plugins.")
-            tkinter.messagebox.showinfo("Vanilla Server", msg, parent=self.winfo_toplevel())
+            ZBBDialog.info(self.winfo_toplevel(), "Vanilla Server", msg)
             return None
         return ctx
 
@@ -220,13 +220,13 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Layout: Search Bar
     # ------------------------------------------------------------------
     def _build_search_bar(self):
-        bar = ctk.CTkFrame(self, corner_radius=12,
+        bar = ctk.CTkFrame(self, corner_radius=AppConfig.RADIUS_CARD,
                            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         bar.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
         bar.grid_columnconfigure(1, weight=0)
         bar.grid_columnconfigure(7, weight=1)  # trailing spacer soaks up leftover width
 
-        lbl_icon = ctk.CTkLabel(bar, text="🔍", font=("Roboto", 14))
+        lbl_icon = ctk.CTkLabel(bar, text="", image=icon("search", 15))
         lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=6)
 
         self.entry_search = ctk.CTkEntry(
@@ -243,7 +243,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.entry_search.bind("<Return>", self._on_search)
 
         _combo_style = dict(
-            corner_radius=12, border_width=1,
+            corner_radius=AppConfig.RADIUS_BTN, border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
             text_color=(AppConfig.COLOR_BTN_GHOST, AppConfig.COLOR_TEXT_PRIMARY),
@@ -287,7 +287,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Search", width=80, height=28,
             corner_radius=10,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-            text_color="white", font=("Roboto Medium", 12),
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_search,
         )
         self.btn_search.grid(row=0, column=4, padx=(4, 8), pady=6)
@@ -297,7 +297,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Installed", width=90, height=28,
             corner_radius=10,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=("Roboto Medium", 11),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._toggle_installed_view,
         )
         self.btn_installed.grid(row=0, column=5, padx=4, pady=6)
@@ -307,7 +307,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Updates", width=80, height=28,
             corner_radius=10,
             fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-            text_color="white", font=("Roboto Medium", 11),
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._on_check_updates,
         )
         self.btn_updates.grid(row=0, column=6, padx=(4, 16), pady=6)
@@ -332,10 +332,10 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Optimizer bundle button
         self.btn_opt = ctk.CTkButton(
-            actions_row, text="⚡ Optimizers", width=80, height=26,
-            corner_radius=12,
+            actions_row, text="Optimizers", image=icon("bolt", 12, "#ffffff"), width=90, height=26,
+            corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            text_color="white", font=("Roboto Medium", 12),
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_install_optimizers,
         )
         self.btn_opt.pack(side="right", padx=(0, 4))
@@ -361,7 +361,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.installed_action_bar.grid_remove()
 
         self.results_frame = ctk.CTkScrollableFrame(
-            results_container, corner_radius=12,
+            results_container, corner_radius=AppConfig.RADIUS_CARD,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
@@ -407,7 +407,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _build_pagination_bar(self):
         # Single persistent footer: status/count always visible, pagination
         # controls show/hide inline as an inner group (no separate status row).
-        self.pagination_bar = ctk.CTkFrame(self, height=30, corner_radius=12,
+        self.pagination_bar = ctk.CTkFrame(self, height=30, corner_radius=AppConfig.RADIUS_CARD,
                                             fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.pagination_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(4, 0))
 
@@ -415,11 +415,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._pagination_controls.pack(side="left", padx=(12, 0), pady=2)
 
         self.btn_prev = ctk.CTkButton(
-            self._pagination_controls, text="◀ Prev", width=84, height=28,
+            self._pagination_controls, text="Prev", image=icon("chevron_left", 12), width=84, height=28,
             corner_radius=8,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color="white",
-            font=("Roboto Medium", 12),
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_prev_page,
             state="disabled",
         )
@@ -427,17 +427,17 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         self.lbl_page = ctk.CTkLabel(
             self._pagination_controls, text="",
-            font=("Roboto Medium", 13),
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
             text_color=(AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_GRAY),
         )
         self.lbl_page.pack(side="left", padx=8)
 
         self.btn_next = ctk.CTkButton(
-            self._pagination_controls, text="Next ▶", width=84, height=28,
+            self._pagination_controls, text="Next", image=icon("chevron_right", 12), compound="right", width=84, height=28,
             corner_radius=8,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color="white",
-            font=("Roboto Medium", 12),
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_next_page,
             state="disabled",
         )
@@ -454,7 +454,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.pagination_bar, text="Install Selected (0)", width=150, height=26,
             corner_radius=8,
             fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-            font=("Roboto Medium", 12), state="disabled",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), state="disabled",
             command=self._on_install_selected,
         )
         self.btn_install_selected.pack(side="right", padx=(4, 8), pady=4)
@@ -669,8 +669,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         if not ctx:
             return
 
-        if len(hits) > 1 and not tkinter.messagebox.askyesno(
-            "Confirm Install", f"Install {len(hits)} mods/modpacks?"
+        if len(hits) > 1 and not ZBBDialog.confirm(
+            self.winfo_toplevel(), "Confirm Install",
+            f"Install {len(hits)} mods/modpacks?", confirm_text="Install"
         ):
             return
 
@@ -747,7 +748,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         card = ctk.CTkFrame(
             self.results_frame,
-            corner_radius=12,
+            corner_radius=AppConfig.RADIUS_CARD,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
             border_width=2 if is_selected else 0,
             border_color=_MODRINTH_GREEN,
@@ -770,10 +771,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         chk.grid(row=0, column=0, rowspan=2, padx=(12, 4), pady=12, sticky="ns")
 
-        icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=12, fg_color=color)
+        icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=AppConfig.RADIUS_CARD, fg_color=color)
         icon_frame.grid(row=0, column=1, rowspan=2, padx=(0, 8), pady=12, sticky="n")
         icon_frame.grid_propagate(False)
-        lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=("Roboto Medium", 20),
+        lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=(AppConfig.FONT_FAMILY_DISPLAY, 20, "bold"),
                                    text_color="white")
         lbl_initial.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -791,7 +792,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         author = hit.get("author", "Unknown")
         lbl_title = ctk.CTkLabel(
             info_frame, text=f"{title}  ·  by {author}",
-            font=("Roboto Medium", 14), anchor="w",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 14, "bold"), anchor="w",
         )
         lbl_title.grid(row=0, column=0, sticky="ew")
 
@@ -817,10 +818,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         for cat in categories:
             badge = ctk.CTkLabel(
                 badge_frame, text=cat,
-                font=("Roboto", 10),
+                font=(AppConfig.FONT_FAMILY, 10),
                 text_color=(_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK),
                 fg_color=(_BADGE_BG_LIGHT, _BADGE_BG_DARK),
-                corner_radius=12, padx=8, pady=2,
+                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             badge.pack(side="left", padx=(0, 4))
 
@@ -828,34 +829,34 @@ class ModrinthBrowser(ctk.CTkFrame):
         if client_only:
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Client-only",
-                font=("Roboto", 10), text_color="white",
+                font=(AppConfig.FONT_FAMILY, 10), text_color="white",
                 fg_color=AppConfig.COLOR_STATUS_ERROR,
-                corner_radius=12, padx=8, pady=2,
+                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
         elif server_side == "required":
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Server",
-                font=("Roboto", 10), text_color="white",
+                font=(AppConfig.FONT_FAMILY, 10), text_color="white",
                 fg_color=AppConfig.COLOR_BTN_SUCCESS,
-                corner_radius=12, padx=8, pady=2,
+                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
         elif server_side == "optional":
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Client + Server",
-                font=("Roboto", 10), text_color="white",
+                font=(AppConfig.FONT_FAMILY, 10), text_color="white",
                 fg_color="#0891b2",
-                corner_radius=12, padx=8, pady=2,
+                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
 
         if hit_key in self._installed_slugs_cache:
             installed_badge = ctk.CTkLabel(
                 badge_frame, text="✓ Installed",
-                font=("Roboto Medium", 10), text_color="white",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"), text_color="white",
                 fg_color=_MODRINTH_GREEN,
-                corner_radius=12, padx=8, pady=2,
+                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             installed_badge.pack(side="left", padx=(0, 4))
 
@@ -864,10 +865,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         unsupported = server_side == "unsupported" and not is_modpack
         btn_install = ctk.CTkButton(
             card, text="Client-only" if unsupported else "Install", width=90, height=32,
-            corner_radius=12,
+            corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
-            text_color="white", font=("Roboto Medium", 12),
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             state="disabled" if unsupported else "normal",
             command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
         )
@@ -929,7 +930,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         header = ctk.CTkLabel(
             action_bar,
             text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
-            font=("Roboto Medium", 13),
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             anchor="w",
         )
@@ -940,7 +941,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Delete Selected (0)", width=140, height=28,
                 corner_radius=8,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                font=("Roboto Medium", 11), state="disabled",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_delete_selected,
             )
             self._btn_delete_selected.pack(side="right", padx=(6, 0))
@@ -949,7 +950,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Update Selected (0)", width=140, height=28,
                 corner_radius=8,
                 fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-                font=("Roboto Medium", 11), state="disabled",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_update_selected,
             )
             self._btn_update_selected.pack(side="right", padx=(6, 0))
@@ -958,13 +959,13 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Select All", width=90, height=28,
                 corner_radius=8,
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                font=("Roboto Medium", 11),
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
                 command=lambda: self._select_all_installed(files),
             ).pack(side="right", padx=(6, 0))
 
         if not files:
             ctk.CTkLabel(
-                self.results_frame, text="📦", font=("Roboto", 28),
+                self.results_frame, text="", image=icon("package", 36, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED)),
             ).grid(row=1, column=0, pady=(24, 4))
             ctk.CTkLabel(
                 self.results_frame,
@@ -976,7 +977,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 command=self._toggle_installed_view,
                 fg_color=AppConfig.COLOR_BTN_PRIMARY,
                 hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-                corner_radius=12, height=32,
+                corner_radius=AppConfig.RADIUS_BTN, height=32,
             ).grid(row=3, column=0, pady=(0, 24))
             return
 
@@ -1001,14 +1002,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             chk.grid(row=0, column=0, padx=(10, 4), pady=6)
             self._installed_checkboxes[fpath] = var
 
-            ctk.CTkLabel(row_frame, text=fname, font=("Roboto", 12), anchor="w").grid(
+            ctk.CTkLabel(row_frame, text=fname, font=(AppConfig.FONT_FAMILY, 12), anchor="w").grid(
                 row=0, column=1, sticky="w", padx=4, pady=6)
 
             btn_del = ctk.CTkButton(
                 row_frame, text="Delete", width=64, height=28,
                 corner_radius=8,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                font=("Roboto Medium", 11),
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
                 command=lambda fp=fpath: self._confirm_delete_mod(fp),
             )
             btn_del.grid(row=0, column=2, padx=(0, 6), pady=4)
@@ -1043,7 +1044,8 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _confirm_delete_mod(self, filepath: str):
         fname = os.path.basename(filepath)
-        if not tkinter.messagebox.askyesno("Delete Mod", f"Delete '{fname}'?"):
+        if not ZBBDialog.confirm(self.winfo_toplevel(), "Delete Mod",
+                                 f"Delete '{fname}'?", confirm_text="Delete", danger=True):
             return
         try:
             os.remove(filepath)
@@ -1056,8 +1058,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         selected = list(self._selected_files)
         if not selected:
             return
-        if not tkinter.messagebox.askyesno(
-            "Delete Selected Mods", f"Delete {len(selected)} selected file(s)?"
+        if not ZBBDialog.confirm(
+            self.winfo_toplevel(), "Delete Selected Mods",
+            f"Delete {len(selected)} selected file(s)?", confirm_text="Delete", danger=True
         ):
             return
 
@@ -1237,8 +1240,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except MrpackCompatibilityError as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Incompatible: {e}"))
-                self.after(0, lambda e=exc: tkinter.messagebox.showwarning(
-                    "Incompatible Modpack", str(e), parent=self.winfo_toplevel()))
+                self.after(0, lambda e=exc: ZBBDialog.info(
+                    self.winfo_toplevel(), "Incompatible Modpack", str(e), kind="warning"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Modpack install failed: {e}"))
@@ -1255,12 +1258,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
 
-        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
+        frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
         frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
 
         ctk.CTkLabel(
             frame, text="Select a version to install:",
-            font=("Roboto Medium", 14), anchor="w",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 14, "bold"), anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         var = ctk.StringVar(value=versions[0].get("id", ""))
@@ -1271,7 +1274,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             rb = ctk.CTkRadioButton(
                 frame, text=f"{vnum}  (MC: {mc_v})",
                 variable=var, value=v.get("id", ""),
-                font=("Roboto", 12),
+                font=(AppConfig.FONT_FAMILY, 12),
             )
             rb.grid(row=i + 1, column=0, sticky="w", padx=8, pady=2)
 
@@ -1287,11 +1290,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_frame.pack(fill="x", padx=12, pady=10)
 
         ctk.CTkButton(btn_frame, text="Cancel", width=90, height=32,
-                       corner_radius=12, fg_color=AppConfig.COLOR_BTN_GHOST,
+                       corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_GHOST,
                        hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                        command=dialog.destroy).pack(side="right", padx=4)
         ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
-                       corner_radius=12, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                       corner_radius=AppConfig.RADIUS_BTN, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
                        text_color="white", command=_on_confirm).pack(side="right", padx=4)
 
     # ------------------------------------------------------------------
@@ -1304,10 +1307,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         server_name, mc_version, loader = ctx
 
         if loader not in ("fabric", "forge"):
-            tkinter.messagebox.showinfo(
-                "Fabric or Forge Required",
+            ZBBDialog.info(
+                self.winfo_toplevel(), "Fabric or Forge Required",
                 "The Optimizer Bundle only supports Fabric or Forge servers.",
-                parent=self.winfo_toplevel(),
             )
             return
 
@@ -1336,8 +1338,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             if failed:
                 msg = f"Installed {len(bundle) - len(failed)}/{len(bundle)}. Failed: {', '.join(failed)}"
                 self.after(0, lambda: self._set_status(f"⚠ {msg}"))
-                self.after(0, lambda: tkinter.messagebox.showwarning(
-                    "Optimizer Bundle", msg, parent=self.winfo_toplevel()
+                self.after(0, lambda: ZBBDialog.info(
+                    self.winfo_toplevel(), "Optimizer Bundle", msg, kind="warning"
                 ))
             else:
                 self.after(0, lambda: self._set_status("✓ Optimizer Bundle installed."))
@@ -1378,12 +1380,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
 
-        frame = ctk.CTkScrollableFrame(dialog, corner_radius=12)
+        frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
         frame.pack(fill="both", expand=True, padx=12, pady=12)
 
         ctk.CTkLabel(
             frame, text=f"{len(updates)} update(s) available",
-            font=("Roboto Medium", 16), anchor="w",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 16, "bold"), anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         for i, u in enumerate(updates):
@@ -1391,14 +1393,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             card.grid(row=i + 1, column=0, sticky="ew", pady=3)
             card.grid_columnconfigure(0, weight=1)
 
-            ctk.CTkLabel(card, text=u["filename"], font=("Roboto Medium", 13), anchor="w").grid(
+            ctk.CTkLabel(card, text=u["filename"], font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), anchor="w").grid(
                 row=0, column=0, sticky="w", padx=10, pady=(8, 0))
             ctk.CTkLabel(card, text=f"→ {u.get('latest_version', 'newer version')} available",
                          font=AppConfig.FONT_BODY_SMALL, anchor="w").grid(
                 row=1, column=0, sticky="w", padx=10, pady=(0, 8))
 
         ctk.CTkButton(dialog, text="Close", width=100, height=32,
-                       corner_radius=12, fg_color=AppConfig.COLOR_BTN_GHOST,
+                       corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_GHOST,
                        hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                        command=dialog.destroy).pack(pady=8)
 

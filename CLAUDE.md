@@ -114,10 +114,15 @@ logger = logging.getLogger(__name__)  # every module
 
 ### UI components
 
-- Framework: `customtkinter`. Tokens in `app/core/app_config.py`.
-- `corner_radius=12` all widgets (Toasts/alerts: `corner_radius=0`).
-- Slate-based palette. Roboto (body) / Roboto Medium (headings).
-- All buttons need `hover_color`.
+- Framework: `customtkinter` + custom theme `assets/zbb_theme.json` (keep widget colors in sync with `app_config.py` tokens).
+- Tokens in `app/core/app_config.py`. Palette: "Dirt Block" — lime green primary (`COLOR_BTN_PRIMARY` lime-600), brown secondary, slate backgrounds. No blue accents.
+- Radius scale: `RADIUS_CARD=10` (frames/cards), `RADIUS_BTN=8` (buttons/inputs), `RADIUS_BADGE=6` (pills). Never hardcode `corner_radius=12`. Toasts/alerts: `corner_radius=0`.
+- Fonts: Segoe UI Variable Text (body) / Segoe UI Variable Display + "bold" (headings) / Cascadia Mono (console). Roboto is NOT installed on Windows — never use it. Use `AppConfig.FONT_*` tokens.
+- Icons: `app/ui/icons.py` (`icon(name, size, color)`) — PIL-drawn, antialiased, theme-tintable. NEVER use emoji as button/label icons (Tk renders them misaligned and untintable).
+- Dialogs: `ZBBDialog.confirm()/info()` from `ui_components.py`. NEVER `tkinter.messagebox` (native gray dialog clashes with dark theme). Exception: single-instance warning before the app window exists.
+- Toplevels: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (DWM, Win11 native corners+shadow; no-op elsewhere).
+- Elevation by background contrast, not borders — cards use `border_width=0`.
+- All buttons need `hover_color`. Icon-only buttons need a `ToolTip`.
 
 ### Do NOT do (ever)
 
@@ -144,4 +149,4 @@ feature/<name>
 
 ### Test helpers (conftest.py)
 
-`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 461 tests in 24 files.
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 463 tests in 24 files.

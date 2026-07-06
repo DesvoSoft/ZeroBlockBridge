@@ -7,6 +7,7 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.ui.ui_components import center_on_parent
+from app.ui.icons import icon
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,9 @@ class ServerWizard(ctk.CTkToplevel):
         self.title("Create New Server - Zero Block Bridge")
         self.geometry("650x650")
         center_on_parent(self, parent, 650, 650)
-        self.resizable(False, False)
-        
+        self.resizable(True, True)
+        self.minsize(650, 650)
+
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
         self.total_steps = 3
@@ -78,14 +80,14 @@ class ServerWizard(ctk.CTkToplevel):
 
         self.btn_back = ctk.CTkButton(
             self.footer_frame, text="← Back", command=self.go_back, state="disabled",
-            corner_radius=12, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
         )
         self.btn_back.pack(side="left", padx=20, pady=12)
 
         self.btn_next = ctk.CTkButton(
             self.footer_frame, text="Next →", command=self.go_next,
-            corner_radius=12, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
         )
         self.btn_next.pack(side="right", padx=20, pady=12)
@@ -113,11 +115,11 @@ class ServerWizard(ctk.CTkToplevel):
             self.btn_back.configure(state="normal")
             
         if self.current_step == self.total_steps:
-            self.btn_next.configure(text="✓ Create Server",
+            self.btn_next.configure(text="Create Server", image=icon("check", 13, "#ffffff"),
                                     fg_color=AppConfig.COLOR_BTN_SUCCESS,
                                     hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         else:
-            self.btn_next.configure(text="Next →",
+            self.btn_next.configure(text="Next →", image=None,
                                     fg_color=AppConfig.COLOR_BTN_PRIMARY,
                                     hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
 
@@ -130,14 +132,14 @@ class ServerWizard(ctk.CTkToplevel):
             self.after(0, self._render_versions)
 
     def _force_refresh_versions(self):
-        self.btn_refresh.configure(state="disabled", text="↻ ...")
+        self.btn_refresh.configure(state="disabled", text="...")
         threading.Thread(target=self._do_force_refresh, daemon=True).start()
 
     def _do_force_refresh(self):
         try:
             self.vm._refresh_versions()
         finally:
-            self.after(0, lambda: self.btn_refresh.configure(state="normal", text="↻ Refresh"))
+            self.after(0, lambda: self.btn_refresh.configure(state="normal", text="Refresh"))
 
     # --- Step 1: Identidad ---
     def show_step_1(self):
@@ -145,7 +147,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.update_header("Server Identity")
         
         ctk.CTkLabel(self.content_frame, text="Server Name:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server", corner_radius=12, height=36)
+        self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_name.pack(fill="x", pady=(0, 15))
         if self.wizard_data["name"]:
             self.entry_name.insert(0, self.wizard_data["name"])
@@ -154,26 +156,26 @@ class ServerWizard(ctk.CTkToplevel):
         loc_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         loc_frame.pack(fill="x", pady=(0, 15))
         
-        self.entry_location = ctk.CTkEntry(loc_frame, corner_radius=12, height=36)
+        self.entry_location = ctk.CTkEntry(loc_frame, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_location.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.entry_location.insert(0, self.wizard_data["location"])
         
         btn_browse_loc = ctk.CTkButton(loc_frame, text="Browse...", command=self.browse_location,
-                                        corner_radius=12, width=90, height=36,
+                                        corner_radius=AppConfig.RADIUS_BTN, width=90, height=36,
                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse_loc.pack(side="right")
             
         ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
         
         self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon", width=100, height=100,
-                                          fg_color=AppConfig.COLOR_BTN_GHOST, corner_radius=12)
+                                          fg_color=AppConfig.COLOR_BTN_GHOST, corner_radius=AppConfig.RADIUS_CARD)
         self.icon_preview.pack(pady=10)
 
         if self.wizard_data["icon_path"]:
             self._update_icon_preview(self.wizard_data["icon_path"])
 
         btn_browse = ctk.CTkButton(self.content_frame, text="Select Image...", command=self.browse_icon,
-                                    corner_radius=12, height=32,
+                                    corner_radius=AppConfig.RADIUS_BTN, height=32,
                                     fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse.pack(pady=10)
 
@@ -228,16 +230,16 @@ class ServerWizard(ctk.CTkToplevel):
         ctk.CTkLabel(engine_res_frame, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         search_row = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
         search_row.pack(fill="x", pady=(0, 10))
-        self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=12, height=36)
+        self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
-        self.btn_refresh = ctk.CTkButton(search_row, text="↻ Refresh", width=100, height=36, corner_radius=12,
+        self.btn_refresh = ctk.CTkButton(search_row, text="Refresh", image=icon("refresh", 13), width=100, height=36, corner_radius=AppConfig.RADIUS_BTN,
                                          fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                                          command=self._force_refresh_versions)
         self.btn_refresh.pack(side="right")
 
         # Versions List
-        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=12,
+        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=AppConfig.RADIUS_CARD,
                                                        fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
                                                        height=120)
         self.scroll_versions.pack(fill="x", pady=(0, 15))
@@ -260,7 +262,7 @@ class ServerWizard(ctk.CTkToplevel):
         ram_input_frame = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
         ram_input_frame.pack(fill="x", pady=(0, 2))
 
-        self.entry_ram = ctk.CTkEntry(ram_input_frame, width=90, corner_radius=12, height=32)
+        self.entry_ram = ctk.CTkEntry(ram_input_frame, width=90, corner_radius=AppConfig.RADIUS_BTN, height=32)
         self.entry_ram.pack(side="left", padx=(0, 10))
         self.entry_ram.insert(0, str(self.wizard_data['ram']))
         self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
@@ -442,13 +444,13 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Game Mode
         ctk.CTkLabel(p, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_gamemode = ctk.CTkOptionMenu(p, values=["survival", "creative", "adventure", "spectator"], corner_radius=12, height=36)
+        self.combo_gamemode = ctk.CTkOptionMenu(p, values=["survival", "creative", "adventure", "spectator"], corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.combo_gamemode.pack(fill="x", pady=(0, 10))
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         
         # Difficulty
         ctk.CTkLabel(p, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.combo_difficulty = ctk.CTkOptionMenu(p, values=["peaceful", "easy", "normal", "hard"], corner_radius=12, height=36)
+        self.combo_difficulty = ctk.CTkOptionMenu(p, values=["peaceful", "easy", "normal", "hard"], corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         
@@ -504,12 +506,12 @@ class ServerWizard(ctk.CTkToplevel):
         sec_row2.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(sec_row2, text="Max Players:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
-        self.entry_max_players = ctk.CTkEntry(sec_row2, width=60, corner_radius=12, height=32)
+        self.entry_max_players = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
         self.entry_max_players.pack(side="left", padx=(0, 20))
         self.entry_max_players.insert(0, str(self.wizard_data["max_players"]))
 
         ctk.CTkLabel(sec_row2, text="Spawn Protection:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
-        self.entry_spawn_protection = ctk.CTkEntry(sec_row2, width=60, corner_radius=12, height=32)
+        self.entry_spawn_protection = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
         self.entry_spawn_protection.pack(side="left", padx=(0, 20))
         self.entry_spawn_protection.insert(0, str(self.wizard_data["spawn_protection"]))
 
@@ -519,14 +521,14 @@ class ServerWizard(ctk.CTkToplevel):
         
         # Seed
         ctk.CTkLabel(p, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=12, height=36)
+        self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_seed.pack(fill="x", pady=(0, 10))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
             
         # Playit.gg Port
         ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        self.entry_port = ctk.CTkEntry(p, placeholder_text="25565", corner_radius=12, height=36)
+        self.entry_port = ctk.CTkEntry(p, placeholder_text="25565", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_port.pack(fill="x", pady=(0, 10))
         if self.wizard_data.get("playit_port"):
             self.entry_port.insert(0, str(self.wizard_data["playit_port"]))

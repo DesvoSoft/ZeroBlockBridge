@@ -3,6 +3,8 @@ import logging
 import threading
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
+from app.ui.icons import icon
+from app.ui.win_effects import apply_rounded_corners
 import os
 from PIL import Image
 
@@ -62,13 +64,15 @@ class ToolTip:
         self.tooltip.wm_overrideredirect(True)
         self.tooltip.wm_geometry(f"+{tip_x}+{tip_y}")
         self.tooltip.attributes("-topmost", True)
-        self.tooltip.configure(fg_color=("#ebebeb", "#2b2b2b"))
-        
+        self.tooltip.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER))
+
         # Ensure it doesn't steal focus
         self.tooltip.bind("<Enter>", lambda e: self.hide())
-        
-        label = ctk.CTkLabel(self.tooltip, text=self.text, fg_color=("#ebebeb", "#2b2b2b"), 
-                             text_color=("black", "white"), corner_radius=12, padx=10, pady=5,
+
+        label = ctk.CTkLabel(self.tooltip, text=self.text,
+                             fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+                             text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                             corner_radius=AppConfig.RADIUS_BADGE, padx=10, pady=5,
                              font=ctk.CTkFont(size=12))
         label.pack()
         
@@ -89,11 +93,11 @@ class ConsoleWidget(ctk.CTkTextbox):
     def __init__(self, master, max_lines=1000, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(
-            state="disabled", 
+            state="disabled",
             font=AppConfig.FONT_MONO,
             fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK),
-            border_width=2,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            border_width=0,
+            corner_radius=AppConfig.RADIUS_CARD,
             wrap="word"
         )
         self.max_lines = max_lines
@@ -164,17 +168,23 @@ class ServerListItem(ctk.CTkFrame):
         self.on_click = on_click
         self.on_delete = on_delete
         self.full_name = server_name
-        
+        self._selected = False
+        # Border color matches fg (invisible) until selected/hovered —
+        # per-side borders don't exist in CTk, this fakes an accent ring.
+        self._fg_idle = (AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
+        self._fg_hover = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
+
         self.configure(
-            corner_radius=12,
-            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
+            corner_radius=AppConfig.RADIUS_CARD,
+            fg_color=self._fg_idle,
             border_width=1,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)
+            border_color=self._fg_idle
         )
-        
+
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=0)
+        self.grid_columnconfigure(3, weight=0)
 
         icon_path = os.path.join(SERVERS_DIR, server_name, "server-icon.png")
         self.icon_image = None
@@ -205,10 +215,22 @@ class ServerListItem(ctk.CTkFrame):
         self.lbl_name.grid(row=0, column=1, padx=(5, 10), pady=5, sticky="ew")
 
         self.status_dot = ctk.CTkLabel(
-            self, text="", width=10, height=10, corner_radius=5,
-            fg_color=AppConfig.COLOR_STATUS_OFFLINE
+            self, text="", width=12, height=12,
+            image=icon("dot", 12, AppConfig.COLOR_STATUS_OFFLINE),
         )
-        self.status_dot.grid(row=0, column=2, padx=(0, 12), pady=5)
+        self.status_dot.grid(row=0, column=2, padx=(0, 8), pady=5)
+
+        if self.on_delete:
+            self.btn_delete = ctk.CTkButton(
+                self, text="", width=26, height=26,
+                corner_radius=AppConfig.RADIUS_BADGE,
+                image=icon("trash", 14, (AppConfig.COLOR_TEXT_NOTE, AppConfig.COLOR_TEXT_GRAY)),
+                fg_color="transparent",
+                hover_color=("#fecaca", "#7f1d1d"),
+                command=lambda: self.on_delete(self.server_name),
+            )
+            self.btn_delete.grid(row=0, column=3, padx=(0, 8), pady=5)
+            ToolTip(self.btn_delete, "Delete server")
 
         self.bind_events(self)
         self.bind_events(self.lbl_name)
@@ -219,13 +241,27 @@ class ServerListItem(ctk.CTkFrame):
         if len(self.full_name) > 22:
             self.tooltip_ref = ToolTip(self, self.full_name)
 
+    def set_selected(self, selected: bool):
+        self._selected = selected
+        self._apply_style(hovering=False)
+
+    def _apply_style(self, hovering: bool):
+        if self._selected:
+            self.configure(fg_color=self._fg_hover if hovering else self._fg_idle,
+                           border_color=AppConfig.COLOR_BTN_PRIMARY)
+        elif hovering:
+            self.configure(fg_color=self._fg_hover,
+                           border_color=(AppConfig.COLOR_ACCENT_GREEN, AppConfig.COLOR_ACCENT_GREEN))
+        else:
+            self.configure(fg_color=self._fg_idle, border_color=self._fg_idle)
+
     def set_status(self, status: str):
         color = {
             "online": AppConfig.COLOR_STATUS_ONLINE,
             "starting": AppConfig.COLOR_STATUS_STARTING,
             "offline": AppConfig.COLOR_STATUS_OFFLINE,
         }.get(status, AppConfig.COLOR_STATUS_OFFLINE)
-        self.status_dot.configure(fg_color=color)
+        self.status_dot.configure(image=icon("dot", 12, color))
 
     def bind_events(self, widget):
         widget.bind("<Button-1>", lambda e: self._on_select())
@@ -241,7 +277,7 @@ class ServerListItem(ctk.CTkFrame):
             self, tearoff=0,
             bg=AppConfig.COLOR_BG_CARD_DARK,
             fg=AppConfig.COLOR_TEXT_PRIMARY,
-            activebackground="#334155",
+            activebackground=AppConfig.COLOR_BTN_GHOST_HOVER,
             activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
             borderwidth=0,
         )
@@ -260,12 +296,10 @@ class ServerListItem(ctk.CTkFrame):
         self.lbl_icon.configure(cursor=cursor_type)
 
     def _on_enter(self, event=None):
-        self.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, "#2d3f55"))
-        self.configure(border_color=(AppConfig.COLOR_ACCENT_GREEN, AppConfig.COLOR_ACCENT_GREEN))
+        self._apply_style(hovering=True)
 
     def _on_leave(self, event=None):
-        self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-        self.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
+        self._apply_style(hovering=False)
         
     def _on_select(self):
         if self.on_click:
@@ -282,24 +316,26 @@ class DownloadProgressDialog(ctk.CTkToplevel):
         
         self.label = ctk.CTkLabel(self, text="Starting download...", font=AppConfig.FONT_BODY)
         self.label.pack(pady=(20, 10))
-        
-        self.progress_bar = ctk.CTkProgressBar(self, width=280, height=12, corner_radius=12)
+
+        self.progress_bar = ctk.CTkProgressBar(self, width=280, height=10, corner_radius=AppConfig.RADIUS_BADGE)
         self.progress_bar.pack(pady=10)
         self.progress_bar.set(0)
-        
+
         self.btn_cancel = ctk.CTkButton(
             self,
             text="Cancel",
             width=100,
-            corner_radius=12,
+            corner_radius=AppConfig.RADIUS_BTN,
             fg_color="transparent",
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
             command=self._on_cancel
         )
         self.btn_cancel.pack(pady=(10, 20))
-        
+
+        apply_rounded_corners(self)
         self.transient(master)
         self.wait_visibility()
         self.grab_set()
@@ -374,7 +410,7 @@ class EulaDialog(ctk.CTkToplevel):
 
         link = ctk.CTkLabel(
             frame, text="Read the Minecraft EULA (aka.ms/MinecraftEULA)",
-            font=AppConfig.FONT_BODY, text_color="#60a5fa", cursor="hand2",
+            font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_LINK, cursor="hand2",
         )
         link.pack(anchor="w", pady=(0, 18))
         link.bind("<Button-1>", self._open_eula)
@@ -382,17 +418,20 @@ class EulaDialog(ctk.CTkToplevel):
         buttons = ctk.CTkFrame(frame, fg_color="transparent")
         buttons.pack(fill="x")
         ctk.CTkButton(
-            buttons, text="Decline", corner_radius=12, width=120,
+            buttons, text="Decline", corner_radius=AppConfig.RADIUS_BTN, width=120,
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=(AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_PRIMARY),
-            hover_color="#334155", command=self._decline,
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            command=self._decline,
         ).pack(side="left")
         ctk.CTkButton(
-            buttons, text="I Accept the EULA", corner_radius=12, width=180,
-            hover_color="#1d4ed8", command=self._accept,
+            buttons, text="I Accept the EULA", corner_radius=AppConfig.RADIUS_BTN, width=180,
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+            command=self._accept,
         ).pack(side="right")
 
+        apply_rounded_corners(self)
         self.update_idletasks()
         self._center_over(master)
         self.grab_set()
@@ -420,3 +459,111 @@ class EulaDialog(ctk.CTkToplevel):
         self.accepted = False
         self.grab_release()
         self.destroy()
+
+
+class ZBBDialog(ctk.CTkToplevel):
+    """Themed modal dialog replacing tkinter.messagebox (which renders as
+    a native gray Windows dialog and clashes with the dark UI).
+
+    Use the classmethods:
+        ZBBDialog.confirm(parent, title, message, danger=False) -> bool
+        ZBBDialog.info(parent, title, message, kind="info"|"warning"|"error")
+    """
+
+    _KIND_STYLE = {
+        "info":    ("dot", AppConfig.COLOR_BTN_PRIMARY),
+        "warning": ("dot", AppConfig.COLOR_ACCENT_AMBER),
+        "error":   ("close", AppConfig.COLOR_BTN_DANGER),
+        "question": ("dot", AppConfig.COLOR_BTN_PRIMARY),
+    }
+
+    def __init__(self, parent, title, message, *, confirm_text="OK",
+                 cancel_text=None, danger=False, kind="question"):
+        super().__init__(parent)
+        self.result = False
+        self.title(title)
+        self.resizable(False, False)
+        self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+        frame = ctk.CTkFrame(self, fg_color="transparent")
+        frame.pack(padx=25, pady=20, fill="both", expand=True)
+
+        header = ctk.CTkFrame(frame, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 8))
+        icon_name, accent = self._KIND_STYLE.get(kind, self._KIND_STYLE["question"])
+        if danger:
+            accent = AppConfig.COLOR_BTN_DANGER
+        ctk.CTkLabel(header, text="", image=icon(icon_name, 18, accent), width=18).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(header, text=title, font=AppConfig.FONT_HEADING_SMALL).pack(side="left")
+
+        ctk.CTkLabel(
+            frame, text=message, font=AppConfig.FONT_BODY,
+            justify="left", wraplength=380, anchor="w",
+        ).pack(anchor="w", fill="x", pady=(0, 16))
+
+        buttons = ctk.CTkFrame(frame, fg_color="transparent")
+        buttons.pack(fill="x")
+        if cancel_text:
+            ctk.CTkButton(
+                buttons, text=cancel_text, width=110, height=32,
+                corner_radius=AppConfig.RADIUS_BTN,
+                fg_color="transparent", border_width=1,
+                border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+                command=self._cancel,
+            ).pack(side="left")
+        confirm_fg = AppConfig.COLOR_BTN_DANGER if danger else AppConfig.COLOR_BTN_PRIMARY
+        confirm_hover = AppConfig.COLOR_BTN_DANGER_HOVER if danger else AppConfig.COLOR_BTN_PRIMARY_HOVER
+        btn_ok = ctk.CTkButton(
+            buttons, text=confirm_text, width=130, height=32,
+            corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=confirm_fg, hover_color=confirm_hover,
+            command=self._confirm,
+        )
+        btn_ok.pack(side="right")
+
+        self.bind("<Return>", lambda e: self._confirm())
+        self.bind("<Escape>", lambda e: self._cancel())
+
+        apply_rounded_corners(self)
+        self.update_idletasks()
+        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+        center_on_parent(self, parent, w, h)
+        self.transient(parent)
+        try:
+            self.wait_visibility()
+            self.grab_set()
+        except Exception as e:
+            logger.debug("ZBBDialog grab failed: %s", e)
+        btn_ok.focus_set()
+
+    def _confirm(self):
+        self.result = True
+        self._close()
+
+    def _cancel(self):
+        self.result = False
+        self._close()
+
+    def _close(self):
+        try:
+            self.grab_release()
+        except Exception as e:
+            logger.debug("ZBBDialog grab release failed: %s", e)
+        self.destroy()
+
+    @classmethod
+    def confirm(cls, parent, title, message, *, confirm_text="Yes",
+                cancel_text="Cancel", danger=False) -> bool:
+        dlg = cls(parent, title, message, confirm_text=confirm_text,
+                  cancel_text=cancel_text, danger=danger, kind="question")
+        parent.wait_window(dlg)
+        return dlg.result
+
+    @classmethod
+    def info(cls, parent, title, message, kind="info") -> None:
+        dlg = cls(parent, title, message, confirm_text="OK", kind=kind,
+                  danger=(kind == "error"))
+        parent.wait_window(dlg)

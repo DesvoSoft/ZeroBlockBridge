@@ -22,7 +22,8 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog
+from app.ui.icons import icon
 
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
@@ -37,7 +38,8 @@ from app.core.core import ZBBManager
 from app.ui.players_dashboard import PlayersDashboard
 
 ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+_theme_path = ASSETS_DIR / "zbb_theme.json"
+ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
@@ -116,36 +118,41 @@ class MCTunnelApp(ctk.CTk):
         self.actions_frame.grid_columnconfigure(0, weight=1)
 
         self.btn_create_server = ctk.CTkButton(
-            self.actions_frame, text="+ Create New Server",
-            command=self.create_server_dialog, corner_radius=12, height=36,
+            self.actions_frame, text="Create New Server",
+            image=icon("plus", 14, "#ffffff"),
+            command=self.create_server_dialog, corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            font=("Roboto Medium", 13)
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold")
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
 
         self.btn_load_server = ctk.CTkButton(
-            self.actions_frame, text="📁 Load Existing Folder", 
-            command=self.load_existing_server_action, corner_radius=12, height=32,
-            fg_color="transparent", border_width=1, border_color=AppConfig.COLOR_BORDER_DARK,
+            self.actions_frame, text="Load Existing Folder",
+            image=icon("folder", 14),
+            command=self.load_existing_server_action, corner_radius=AppConfig.RADIUS_BTN, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
             hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
-            font=("Roboto", 12)
+            font=(AppConfig.FONT_FAMILY, 12)
         )
         self.btn_load_server.pack(fill="x", pady=(0, 10))
 
         # --- Separator ---
-        self.sep = ctk.CTkFrame(self.sidebar_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
+        self.sep = ctk.CTkFrame(self.sidebar_frame, height=2,
+                                fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.sep.grid(row=2, column=0, padx=25, pady=5, sticky="ew")
 
         # --- List Group ---
         self.lbl_servers = ctk.CTkLabel(
-            self.sidebar_frame, text="YOUR SERVERS", 
-            anchor="w", font=("Roboto Medium", 11), text_color=AppConfig.COLOR_TEXT_GRAY
+            self.sidebar_frame, text="YOUR SERVERS",
+            anchor="w", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), text_color=AppConfig.COLOR_TEXT_GRAY
         )
         self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="w")
 
         self.server_list_frame = ctk.CTkScrollableFrame(
-            self.sidebar_frame, label_text="", corner_radius=12, 
-            border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            self.sidebar_frame, label_text="", corner_radius=AppConfig.RADIUS_CARD,
+            border_width=0,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
         )
         self.server_list_frame.grid(row=4, column=0, padx=20, pady=(5, 15), sticky="nsew")
@@ -162,35 +169,42 @@ class MCTunnelApp(ctk.CTk):
         self._build_console_tabs()
 
     def _build_status_bar(self):
-        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=12, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
-        
-        self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
+
+        self.lbl_status = ctk.CTkLabel(self.status_frame, text="● Offline",
+                                       font=(AppConfig.FONT_FAMILY_DISPLAY, 15, "bold"),
+                                       text_color=AppConfig.COLOR_STATUS_OFFLINE)
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
         self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
         self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
 
+        _ghost_hover = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
         self.btn_config = ctk.CTkButton(
-            self.status_frame, text="⚙", width=36, height=36, 
-            corner_radius=12, fg_color="transparent", hover_color="#334155",
-            font=("Roboto", 18), command=self.edit_server_properties,
+            self.status_frame, text="", image=icon("gear", 17), width=36, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
+            command=self.edit_server_properties,
             state="disabled"
         )
         self.btn_config.pack(side="left", padx=5)
+        ToolTip(self.btn_config, "Server settings")
 
         self.btn_open_folder = ctk.CTkButton(
-            self.status_frame, text="📂", width=36, height=36,
-            corner_radius=12, fg_color="transparent", hover_color="#334155",
-            font=("Roboto", 16), command=self.open_server_folder,
+            self.status_frame, text="", image=icon("folder", 16), width=36, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
+            command=self.open_server_folder,
             state="disabled"
         )
         self.btn_open_folder.pack(side="left", padx=5)
+        ToolTip(self.btn_open_folder, "Open server folder")
 
-        self.btn_start = ctk.CTkButton(self.status_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
+        self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_start.pack(side="left", padx=2)
-        self.btn_stop = ctk.CTkButton(self.status_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
+        ToolTip(self.btn_start, "Start server")
+        self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_stop.pack(side="left", padx=2)
+        ToolTip(self.btn_stop, "Stop server")
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)
@@ -206,21 +220,23 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_java_ver.pack(padx=8, pady=2)
 
         badge_players = ctk.CTkFrame(
-            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=12
+            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE
         )
         badge_players.pack(side="right", padx=(5, 5))
         self.btn_players = ctk.CTkButton(
             badge_players,
-            text="👤 0",
+            text="0",
+            image=icon("user", 13, AppConfig.COLOR_BADGE_TEXT),
             command=self.open_players_dashboard,
             fg_color="transparent",
             text_color=AppConfig.COLOR_BADGE_TEXT,
-            hover_color="#334155",
+            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
             font=AppConfig.FONT_BODY_SMALL,
             height=24,
             width=60
         )
         self.btn_players.pack(padx=2, pady=2)
+        ToolTip(self.btn_players, "Players online")
 
         badge_server_info = ctk.CTkFrame(
             self.status_right_frame, fg_color="transparent"
@@ -235,7 +251,7 @@ class MCTunnelApp(ctk.CTk):
 
 
     def _build_dashboard(self):
-        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
  
         # --- Tunnel ---
@@ -250,41 +266,50 @@ class MCTunnelApp(ctk.CTk):
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
 
-        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 13), text_color="#3b82f6")
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color=AppConfig.COLOR_LINK)
         self.lbl_dns_display.pack(side="left", padx=(5, 0))
 
         self.btn_copy_ip = ctk.CTkButton(
-            self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
-            fg_color="#1e293b", hover_color="#334155",
-            border_width=1, border_color="#3b82f6",
-            width=36, corner_radius=12, height=28,
-            font=("Roboto", 13), text_color="#3b82f6",
+            self.ip_frame, text="", image=icon("copy", 14, AppConfig.COLOR_LINK),
+            command=self._copy_ip_to_clipboard,
+            fg_color="transparent",
+            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            border_width=1, border_color=AppConfig.COLOR_LINK,
+            width=36, corner_radius=AppConfig.RADIUS_BTN, height=28,
         )
+        ToolTip(self.btn_copy_ip, "Copy address")
 
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
-        
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, "#ffffff"), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+        ToolTip(self.btn_tunnel_start, "Start tunnel")
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, "#ffffff"), command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        ToolTip(self.btn_tunnel_stop, "Stop tunnel")
+
         # --- Playit Account Linking (collapsible when unlinked) ---
         self._setup_expanded = False
         self.btn_toggle_setup = ctk.CTkButton(
-            self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
-            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            self.tunnel_toolbar, text="Link", image=icon("bolt", 14, AppConfig.COLOR_ACCENT_AMBER),
+            command=self._toggle_setup_section,
+            fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
             border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
-            width=70, corner_radius=12, height=36,
-            font=("Roboto Medium", 12), text_color=AppConfig.COLOR_ACCENT_AMBER,
+            width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
-        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
-        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
+        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=AppConfig.RADIUS_INPUT)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=AppConfig.RADIUS_BTN, height=36, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"))
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel,
-                                   fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                                   width=45, corner_radius=12, height=36)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("refresh", 15),
+                                   command=self.reset_tunnel,
+                                   fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                                   hover_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+                                   width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_reset.pack(side="left", padx=2)
+        ToolTip(self.btn_reset, "Reset tunnels")
 
         # Initial UI State Check
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
@@ -307,14 +332,14 @@ class MCTunnelApp(ctk.CTk):
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
         self.server_console.pack(fill="both", expand=True)
         
-        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=12, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
-        
-        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands...", corner_radius=12, height=36, state="disabled")
+
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands...", corner_radius=AppConfig.RADIUS_INPUT, height=36, state="disabled")
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
 
-        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
         self.btn_send.pack(side="right", padx=10, pady=5)
         
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
@@ -384,19 +409,19 @@ class MCTunnelApp(ctk.CTk):
         self.server_items = {}
         if not servers:
             ctk.CTkLabel(
-                self.server_list_frame, text="📦",
-                font=("Roboto", 32)
+                self.server_list_frame, text="",
+                image=icon("package", 40, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED))
             ).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.server_list_frame, text="No servers yet.",
-                text_color=AppConfig.COLOR_TEXT_MUTED, font=("Roboto", 13)
+                text_color=AppConfig.COLOR_TEXT_MUTED, font=(AppConfig.FONT_FAMILY, 13)
             ).pack(pady=(0, 6))
             ctk.CTkButton(
-                self.server_list_frame, text="→ Create your first server",
+                self.server_list_frame, text="Create your first server",
                 command=self.create_server_dialog,
                 fg_color=AppConfig.COLOR_BTN_PRIMARY,
                 hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-                corner_radius=12, height=32
+                corner_radius=AppConfig.RADIUS_BTN, height=32
             ).pack(padx=16)
         else:
             for s in servers:
@@ -421,13 +446,14 @@ class MCTunnelApp(ctk.CTk):
         if self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name:
             Toast.show(self, "Stop the server before deleting it", toast_type="warning")
             return
-        confirmed = tkinter.messagebox.askyesno(
-            "Delete Server",
+        confirmed = ZBBDialog.confirm(
+            self, "Delete Server",
             f"Delete '{server_name}' permanently?\n\n"
             "The world, configs and everything inside the server folder "
             "will be removed. This cannot be undone.\n\n"
             "(Imported servers: only the link is removed, the original "
             "folder is kept.)",
+            confirm_text="Delete", danger=True,
         )
         if not confirmed:
             return
@@ -455,10 +481,13 @@ class MCTunnelApp(ctk.CTk):
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
 
+        for name, it in self.server_items.items():
+            it.set_selected(name == server_name)
+
         meta = logic.get_server_meta(server_name)
         server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 
@@ -553,7 +582,7 @@ class MCTunnelApp(ctk.CTk):
             item.set_status(status)
 
     def on_server_starting(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self.btn_start.configure(state="disabled"))
         self.after(0, lambda: self.btn_stop.configure(state="normal"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
@@ -561,15 +590,15 @@ class MCTunnelApp(ctk.CTk):
             jdk_src = data.get("jdk_source", "unknown")
             java_ver = data.get("required_java", "?")
             label = f"Java {java_ver} ({jdk_src})"
-            color = "green" if jdk_src == "system" else "orange"
+            color = AppConfig.COLOR_STATUS_ONLINE if jdk_src == "system" else AppConfig.COLOR_STATUS_STARTING
             self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=color))
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
         self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
-        self.after(0, lambda: self.btn_players.configure(text=f"👤 {count}"))
+        self.after(0, lambda: self.btn_players.configure(text=f"{count}"))
 
     def open_players_dashboard(self):
         if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
@@ -578,7 +607,7 @@ class MCTunnelApp(ctk.CTk):
             self.players_dashboard_window = PlayersDashboard(self, self.events, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
         self.after(0, lambda: self.btn_stop.configure(state="disabled"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
@@ -731,10 +760,10 @@ class MCTunnelApp(ctk.CTk):
         self.server_console.log(f"[System] Setup complete for '{name}'.")
         self.on_server_select(name)
         dialog.close()
-        start_now = tkinter.messagebox.askyesno(
-            "Server Ready",
+        start_now = ZBBDialog.confirm(
+            self, "Server Ready",
             f"'{name}' has been created successfully.\n\nDo you want to start it now?",
-            icon="question"
+            confirm_text="Start now", cancel_text="Later",
         )
         if start_now:
             self.start_server_action()
@@ -755,7 +784,7 @@ class MCTunnelApp(ctk.CTk):
             "After reset, click ▶ to create a new tunnel.\n\n"
             "Are you sure?"
         )
-        if not tkinter.messagebox.askyesno("Reset Tunnels", msg): return
+        if not ZBBDialog.confirm(self, "Reset Tunnels", msg, confirm_text="Reset"): return
         
         Toast.show(self, "Clearing tunnels...", toast_type="info")
         self.tunnel_console.log("[System] Clearing tunnels...")
@@ -783,12 +812,11 @@ class MCTunnelApp(ctk.CTk):
         def _update():
             # 1. Update Status Label and Colors
             color = AppConfig.COLOR_STATUS_OFFLINE
-            icon = "●"
-            if status == "Online": color = "green"
-            elif status == "Error": color, icon = "red", "✖"
-            elif status == "Starting...": color, icon = "orange", "⏳"
-            
-            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
+            if status == "Online": color = AppConfig.COLOR_STATUS_ONLINE
+            elif status == "Error": color = AppConfig.COLOR_STATUS_ERROR
+            elif status == "Starting...": color = AppConfig.COLOR_STATUS_STARTING
+
+            self.lbl_tunnel_status.configure(text=f"Tunnel: ● {status}", text_color=color)
             
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
             # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
@@ -803,15 +831,15 @@ class MCTunnelApp(ctk.CTk):
             if status == "Online" and display_dns:
                 self._last_full_ip = display_dns
                 host = display_dns.split(":")[0] if ":" in display_dns else display_dns
-                self.lbl_dns_display.configure(text=host, text_color="#3b82f6")
+                self.lbl_dns_display.configure(text=host, text_color=AppConfig.COLOR_LINK)
                 self.lbl_dns_display.pack(side="left", padx=5)
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Starting...":
-                self.lbl_dns_display.configure(text="Waiting for domain...", text_color="#f97316")
+                self.lbl_dns_display.configure(text="Waiting for domain...", text_color=AppConfig.COLOR_STATUS_STARTING)
                 self.lbl_dns_display.pack(side="left", padx=5)
             elif status == "Error":
-                self.lbl_dns_display.configure(text="Error", text_color="#ef4444")
+                self.lbl_dns_display.configure(text="Error", text_color=AppConfig.COLOR_STATUS_ERROR)
                 self.lbl_dns_display.pack(side="left", padx=5)
             else: # Offline
                 self.lbl_dns_display.configure(text="")

@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import logging
 import os
 import subprocess
@@ -9,7 +9,8 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog
+from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties
 from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
@@ -156,12 +157,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
                                          fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                                         corner_radius=12, height=36)
+                                         corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_cancel.pack(side="right", padx=5)
 
         self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties,
                                       fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
-                                      corner_radius=12, height=36)
+                                      corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_save.pack(side="right", padx=5)
         
         # Make modal
@@ -198,13 +199,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         toolbar = ctk.CTkFrame(self.frame_backups)
         toolbar.pack(fill="x", pady=5)
         
-        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, corner_radius=12,
+        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, corner_radius=AppConfig.RADIUS_BTN,
                       fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
                       width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, corner_radius=12,
+        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, corner_radius=AppConfig.RADIUS_BTN,
                       fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
                       width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=12,
+        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
                       fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                       width=80).pack(side="right", padx=5)
         
@@ -217,7 +218,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._backup_scheduler_ui = BackupScheduler(self.server_name)
         self._next_backup_lbl = ctk.CTkLabel(
             self.frame_backups, text="", anchor="w",
-            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY), font=("Roboto", 12)
+            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY), font=(AppConfig.FONT_FAMILY, 12)
         )
         self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
         self._refresh_backup_countdown()
@@ -243,7 +244,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             loading_lbl.destroy()
             
         if not backups:
-            ctk.CTkLabel(self.backup_list_frame, text="🗄️", font=("Roboto", 28)).pack(pady=(24, 4))
+            ctk.CTkLabel(self.backup_list_frame, text="", image=icon("package", 36, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED))).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.backup_list_frame, text="No backups found.",
                 text_color=AppConfig.COLOR_TEXT_MUTED
@@ -253,7 +254,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 command=self.create_backup,
                 fg_color=AppConfig.COLOR_BTN_PRIMARY,
                 hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-                corner_radius=12, height=32
+                corner_radius=AppConfig.RADIUS_BTN, height=32
             ).pack(pady=(0, 20))
             return
             
@@ -274,9 +275,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
     def _on_backup_created(self, path, error):
         if error and not path:
-            messagebox.showerror("Error", f"Failed to create backup.\n\n{error}")
+            ZBBDialog.info(self, "Error", f"Failed to create backup.\n\n{error}", kind="error")
         elif error:
-            messagebox.showwarning("Backup Created", error)
+            ZBBDialog.info(self, "Backup Created", error, kind="warning")
         self.refresh_backups()
 
     def _server_is_running(self) -> bool:
@@ -289,15 +290,16 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             return
 
         if self._server_is_running():
-            messagebox.showerror(
-                "Server Running",
-                "Stop the server before restoring a backup."
+            ZBBDialog.info(
+                self, "Server Running",
+                "Stop the server before restoring a backup.", kind="error"
             )
             return
 
-        confirm = messagebox.askyesno(
-            "Confirm Restore",
-            f"Are you sure you want to restore this backup?\n\n{os.path.basename(path)}\n\nCurrent world data will be overwritten."
+        confirm = ZBBDialog.confirm(
+            self, "Confirm Restore",
+            f"Are you sure you want to restore this backup?\n\n{os.path.basename(path)}\n\nCurrent world data will be overwritten.",
+            confirm_text="Restore", danger=True,
         )
         if not confirm:
             return
@@ -311,10 +313,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
     def _on_backup_restored(self, success):
         if success:
-            messagebox.showinfo("Success", "Server restored successfully.")
+            ZBBDialog.info(self, "Success", "Server restored successfully.")
             self.refresh_backups()
         else:
-            messagebox.showerror("Error", "Failed to restore backup.")
+            ZBBDialog.info(self, "Error", "Failed to restore backup.", kind="error")
 
     def _refresh_backup_countdown(self):
         if not self.winfo_exists():
@@ -496,7 +498,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                                text_color="royalblue", anchor="w")
             lbl.pack(fill="x", padx=15, pady=(15, 5))
 
-        card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=12)
+        card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=AppConfig.RADIUS_CARD)
         card.pack(fill="x", padx=10, pady=(0, 5))
         
         card.grid_columnconfigure(0, weight=1) # Label
@@ -652,10 +654,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ).grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
 
         self.btn_mrpack = ctk.CTkButton(
-            card_mrpack, text="📦 Import .mrpack", width=150, height=28,
+            card_mrpack, text="Import .mrpack", image=icon("download", 13, "#ffffff"), width=150, height=28,
             corner_radius=10,
             fg_color="#7c3aed", hover_color="#6d28d9",
-            text_color="white", font=("Roboto Medium", 11),
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._on_import_mrpack,
         )
         self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)
@@ -670,11 +672,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         meta = get_server_meta(self.server_name)
         loader = meta.get("type", "vanilla")
         if loader in (None, "vanilla"):
-            messagebox.showinfo(
-                "Vanilla Server",
+            ZBBDialog.info(
+                self, "Vanilla Server",
                 "Vanilla servers can't load mods or plugins.\n\n"
                 "Create a Fabric or Forge server for mods, or Paper/Purpur for plugins.",
-                parent=self,
             )
             return
 
@@ -706,8 +707,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 self.after(0, lambda: self.lbl_mrpack_status.configure(text=text))
             except MrpackCompatibilityError as exc:
                 self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Incompatible: {e}"))
-                self.after(0, lambda e=exc: messagebox.showwarning(
-                    "Incompatible Modpack", str(e), parent=self))
+                self.after(0, lambda e=exc: ZBBDialog.info(
+                    self, "Incompatible Modpack", str(e), kind="warning"))
             except Exception as exc:
                 logger.error("mrpack import failed: %s", exc)
                 self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Import failed: {e}"))
@@ -768,7 +769,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             if not ram_input.isdigit():
                 self.entry_ram.configure(border_color="red")
                 self.tabview.set("General")
-                messagebox.showerror("Invalid Input", "RAM Allocation must be a whole number (MB).")
+                ZBBDialog.info(self, "Invalid Input", "RAM Allocation must be a whole number (MB).", kind="error")
                 return
             self.entry_ram.configure(border_color=["#979da2", "#565b5e"]) # Reset color
             
@@ -784,7 +785,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             if not interval_input.isdigit():
                 self.entry_interval.configure(border_color="red")
                 self.tabview.set("Automation")
-                messagebox.showerror("Invalid Input", "Restart Interval must be a whole number (Hours).")
+                ZBBDialog.info(self, "Invalid Input", "Restart Interval must be a whole number (Hours).", kind="error")
                 return
             self.entry_interval.configure(border_color=["#979da2", "#565b5e"])
 
@@ -869,9 +870,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
-        ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder,
+        ctk.CTkButton(card_tools, text="Open Server Folder", image=icon("folder", 14), command=self.open_folder,
                           fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                          corner_radius=12, height=36).pack(fill="x", padx=15, pady=10)
+                          corner_radius=AppConfig.RADIUS_BTN, height=36).pack(fill="x", padx=15, pady=10)
 
     def open_folder(self):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)

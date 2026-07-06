@@ -54,6 +54,12 @@ SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
 ASSETS_DIR = _RESOURCE_DIR / "assets"
+# Dev mode: BASE_DIR is app/, but bundled resources (logo, theme) live in
+# the repo-root assets/ directory. Fall back there if app/assets is absent.
+if not ASSETS_DIR.exists() and not getattr(sys, "frozen", False):
+    _repo_assets = BASE_DIR.parent / "assets"
+    if _repo_assets.exists():
+        ASSETS_DIR = _repo_assets
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Path to main config.json
 
 # Versions and URLs for server downloads
