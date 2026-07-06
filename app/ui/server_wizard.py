@@ -6,6 +6,7 @@ from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
+from app.services.template_manager import list_templates, load_template, save_template
 from app.ui.ui_components import center_on_parent
 from app.ui.icons import icon
 from PIL import Image
@@ -23,7 +24,7 @@ class ServerWizard(ctk.CTkToplevel):
 
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 3
+        self.total_steps = 5
         
         # Data storage
         self.wizard_data = {
@@ -49,6 +50,7 @@ class ServerWizard(ctk.CTkToplevel):
             "location": str(SERVERS_DIR),
             "icon_path": None,
             "auto_install_jdk": True,
+            "java_path": "auto",
             "playit_port": "25565",
         }
         
@@ -91,7 +93,14 @@ class ServerWizard(ctk.CTkToplevel):
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
         )
         self.btn_next.pack(side="right", padx=20, pady=12)
-        
+
+        self.btn_save_template = ctk.CTkButton(
+            self.footer_frame, text="Save as Template", command=self._save_as_template,
+            corner_radius=AppConfig.RADIUS_BTN, height=36,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+        )
+        # packed/unpacked per-step in _update_nav()
+
         self.vm = VersionManager()
         self.vm.add_callback(self.on_versions_refreshed)
         
@@ -123,6 +132,11 @@ class ServerWizard(ctk.CTkToplevel):
                                     fg_color=AppConfig.COLOR_BTN_PRIMARY,
                                     hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
 
+        if self.current_step == 5:
+            self.btn_save_template.pack(side="left", padx=(0, 10), pady=12)
+        else:
+            self.btn_save_template.pack_forget()
+
     def clear_content(self):
         for widget in self.content_frame.winfo_children():
             widget.destroy()
@@ -137,7 +151,7 @@ class ServerWizard(ctk.CTkToplevel):
 
     def _do_force_refresh(self):
         try:
-            self.vm._refresh_versions()
+            self.vm.refresh_versions()
         finally:
             self.after(0, lambda: self.btn_refresh.configure(state="normal", text="Refresh"))
 
@@ -202,33 +216,45 @@ class ServerWizard(ctk.CTkToplevel):
             logger.debug("Error loading image: %s", e)
             self.icon_preview.configure(text="Error")
 
-    # --- Step 2: Engine & Resources ---
+    # --- Step 2: Engine & Version ---
     def show_step_2(self):
         self.clear_content()
-        self.update_header("Engine & Resources")
+        self.update_header("Engine & Version")
 
-        engine_res_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        engine_res_frame.pack(fill="both", expand=True)
+        p = self.content_frame
+
+        # Start from template
+        templates = list_templates()
+        if templates:
+            ctk.CTkLabel(p, text="Start from template (optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+            template_row = ctk.CTkFrame(p, fg_color="transparent")
+            template_row.pack(fill="x", pady=(0, 15))
+            template_names = ["None"] + [t["name"] for t in templates]
+            self.template_var = ctk.StringVar(value="None")
+            template_menu = ctk.CTkOptionMenu(template_row, values=template_names, variable=self.template_var,
+                                               command=self._on_template_selected, width=200)
+            template_menu.pack(side="left")
 
         # Engine Selection
-        ctk.CTkLabel(engine_res_frame, text="Server Engine:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Server Engine:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
 
         self.engine_var = ctk.StringVar(value=self.wizard_data["type"])
         engines = [("Vanilla", "Vanilla"), ("Paper", "Paper"), ("Purpur", "Purpur"), ("Fabric", "Fabric"), ("Forge", "Forge")]
 
-        engine_row = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        engine_row = ctk.CTkFrame(p, fg_color="transparent")
         engine_row.pack(fill="x", pady=(0, 15))
 
         for val, name in engines:
             rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
             rb.pack(side="left", padx=(0, 12))
 
-        self.lbl_ram_hint = ctk.CTkLabel(engine_res_frame, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=ctk.CTkFont(size=12))
+        self.lbl_ram_hint = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=ctk.CTkFont(size=12))
         self.lbl_ram_hint.pack(anchor="w", pady=(0, 5))
+        self._update_ram_hint()
 
         # Version Search
-        ctk.CTkLabel(engine_res_frame, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
-        search_row = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        ctk.CTkLabel(p, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        search_row = ctk.CTkFrame(p, fg_color="transparent")
         search_row.pack(fill="x", pady=(0, 10))
         self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
@@ -239,27 +265,41 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_refresh.pack(side="right")
 
         # Versions List
-        self.scroll_versions = ctk.CTkScrollableFrame(engine_res_frame, corner_radius=AppConfig.RADIUS_CARD,
-                                                       fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
-                                                       height=120)
-        self.scroll_versions.pack(fill="x", pady=(0, 15))
+        self.scroll_versions = ctk.CTkScrollableFrame(p, corner_radius=AppConfig.RADIUS_CARD,
+                                                       fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.scroll_versions.pack(fill="both", expand=True, pady=(0, 5))
 
         self.version_var = ctk.StringVar(value=self.wizard_data["version"])
         self._render_versions()
+
+    def _on_engine_change(self):
+        self.wizard_data["type"] = self.engine_var.get()
+        self._render_versions()
+        if hasattr(self, "lbl_ram_hint") and self.lbl_ram_hint.winfo_exists():
+            self._update_ram_hint()
+        if hasattr(self, "java_options_frame") and self.java_options_frame.winfo_exists():
+            self._update_java_check()
+
+    # --- Step 3: Resources (RAM + Java) ---
+    def show_step_3(self):
+        self.clear_content()
+        self.update_header("Resources")
+
+        p = self.content_frame
 
         # RAM Memory
         total_ram = psutil.virtual_memory().total / (1024 * 1024)
         max_slider = min(16384, total_ram - 1024)
         min_ram = 512
 
-        ram_label_frame = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        ram_label_frame = ctk.CTkFrame(p, fg_color="transparent")
         ram_label_frame.pack(fill="x", pady=(0, 5))
 
         ctk.CTkLabel(ram_label_frame, text="RAM:", font=ctk.CTkFont(weight="bold")).pack(side="left")
         self.lbl_ram_value = ctk.CTkLabel(ram_label_frame, text=f"{self.wizard_data['ram']} MB ({self.wizard_data['ram']//1024} GB)", font=ctk.CTkFont(size=13))
         self.lbl_ram_value.pack(side="left", padx=(10, 0))
 
-        ram_input_frame = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        ram_input_frame = ctk.CTkFrame(p, fg_color="transparent")
         ram_input_frame.pack(fill="x", pady=(0, 2))
 
         self.entry_ram = ctk.CTkEntry(ram_input_frame, width=90, corner_radius=AppConfig.RADIUS_BTN, height=32)
@@ -267,36 +307,73 @@ class ServerWizard(ctk.CTkToplevel):
         self.entry_ram.insert(0, str(self.wizard_data['ram']))
         self.entry_ram.bind("<KeyRelease>", self.update_ram_from_entry)
 
-        self.slider_ram = ctk.CTkSlider(engine_res_frame, from_=min_ram, to=max_slider, number_of_steps=100, command=self.update_ram_label, height=16, border_width=1)
+        self.slider_ram = ctk.CTkSlider(p, from_=min_ram, to=max_slider, number_of_steps=100, command=self.update_ram_label, height=16, border_width=1)
         self.slider_ram.set(self.wizard_data["ram"])
         self.slider_ram.pack(fill="x", pady=(2, 2))
 
-        slider_range = ctk.CTkFrame(engine_res_frame, fg_color="transparent")
+        slider_range = ctk.CTkFrame(p, fg_color="transparent")
         slider_range.pack(fill="x")
         ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left")
         self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_ram_util.pack(side="right")
 
-        self.lbl_ram_error = ctk.CTkLabel(engine_res_frame, text="", text_color=AppConfig.COLOR_STATUS_ERROR, font=ctk.CTkFont(size=12))
+        self.lbl_ram_error = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_STATUS_ERROR, font=ctk.CTkFont(size=12))
         self.lbl_ram_error.pack(anchor="w")
+        self.update_ram_label(self.wizard_data["ram"])
 
-        # --- Pre-flight Java Check ---
-        ctk.CTkLabel(engine_res_frame, text="Java:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
-        self.java_frame = ctk.CTkFrame(engine_res_frame, corner_radius=8,
-                                        fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-        self.java_frame.pack(fill="x", pady=(0, 5))
+        # --- Java Selection ---
+        ctk.CTkLabel(p, text="Java:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(20, 5))
 
-        self.lbl_java_status = ctk.CTkLabel(self.java_frame, text="Detecting Java...", font=ctk.CTkFont(size=13), anchor="w")
-        self.lbl_java_status.pack(fill="x", padx=10, pady=6)
+        self.java_choice_var = ctk.StringVar(value="auto" if self.wizard_data.get("java_path", "auto") == "auto" else "detected")
+
+        self.java_options_frame = ctk.CTkFrame(p, corner_radius=8,
+                                                fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.java_options_frame.pack(fill="x", pady=(0, 5))
+
+        self._detected_java = []
+        self.rb_java_auto = ctk.CTkRadioButton(
+            self.java_options_frame, text="Auto-download recommended Java version", value="auto",
+            variable=self.java_choice_var, command=self._on_java_choice_change,
+        )
+        self.rb_java_auto.pack(anchor="w", padx=10, pady=(10, 4))
+
+        self.rb_java_detected = ctk.CTkRadioButton(
+            self.java_options_frame, text="Use a Java already installed on this system", value="detected",
+            variable=self.java_choice_var, command=self._on_java_choice_change,
+        )
+        self.rb_java_detected.pack(anchor="w", padx=10, pady=(0, 4))
+
+        self.java_detected_menu = ctk.CTkOptionMenu(self.java_options_frame, values=["Detecting..."], width=280)
+        self.java_detected_menu.pack(anchor="w", padx=(30, 10), pady=(0, 10))
+
+        self.lbl_java_status = ctk.CTkLabel(p, text="Detecting Java...", font=ctk.CTkFont(size=12),
+                                             text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w")
+        self.lbl_java_status.pack(fill="x", pady=(4, 0))
+
         self._update_java_check()
 
-        self._update_ram_hint()
-        
-    def _on_engine_change(self):
-        self.wizard_data["type"] = self.engine_var.get()
-        self._render_versions()
-        self._update_ram_hint()
-        self._update_java_check()
+    def _save_as_template(self):
+        self._collect_step5_fields()
+
+        dialog = ctk.CTkInputDialog(text="Template name:", title="Save as Template")
+        name = dialog.get_input()
+        if not name:
+            return
+        name = name.strip().lower().replace(" ", "-")
+        if not name:
+            return
+        save_template(name, self.wizard_data)
+
+    def _on_template_selected(self, template_name):
+        if template_name == "None":
+            return
+        template = load_template(template_name)
+        if not template:
+            return
+        self.wizard_data.update({k: v for k, v in template.items() if not k.startswith("_")})
+        self.engine_var.set(self.wizard_data["type"])
+        self.version_var.set(self.wizard_data.get("version", ""))
+        self._on_engine_change()
 
     def _update_ram_hint(self):
         engine = self.engine_var.get()
@@ -305,6 +382,8 @@ class ServerWizard(ctk.CTkToplevel):
         self.lbl_ram_hint.configure(text=f"Recommended: {hint}")
 
     def _update_java_check(self):
+        if not hasattr(self, "java_options_frame") or not self.java_options_frame.winfo_exists():
+            return
         version = self.version_var.get()
         if not version:
             self.lbl_java_status.configure(text="Select a version to check Java compatibility.", text_color=AppConfig.COLOR_TEXT_GRAY)
@@ -323,24 +402,51 @@ class ServerWizard(ctk.CTkToplevel):
             def _apply():
                 if seq != self._java_check_seq or not self.lbl_java_status.winfo_exists():
                     return
+                self._detected_java = installations
+                required_str = str(required)
+
                 if not installations:
+                    self.rb_java_detected.configure(state="disabled")
+                    self.java_detected_menu.configure(values=["No Java detected"], state="disabled")
+                    self.java_detected_menu.set("No Java detected")
+                    if self.java_choice_var.get() == "detected":
+                        self.java_choice_var.set("auto")
                     self.lbl_java_status.configure(
-                        text=f"⚠ No Java found. MC {version} requires Java {required}. Enable Auto-install JDK in Step 3.",
+                        text=f"No Java installations found on this system. MC {version} requires Java {required_str}.",
                         text_color=AppConfig.COLOR_STATUS_STARTING
                     )
                     return
-                best = installations[0]
+
+                self.rb_java_detected.configure(state="normal")
+                labels = [inst.label for inst in installations]
+                self.java_detected_menu.configure(values=labels, state="normal")
+
+                best_idx = next((i for i, inst in enumerate(installations) if inst.major == required), 0)
+                self.java_detected_menu.set(labels[best_idx])
+
+                best = installations[best_idx]
                 compatible = best.major == required
-                compat_text = "✅" if compatible else "⚠"
-                best_label = f"Java {best.major} ({best.source})"
+                compat_text = "OK" if compatible else "Mismatch"
+                color = AppConfig.COLOR_BTN_SUCCESS if compatible else AppConfig.COLOR_ACCENT_AMBER
                 self.lbl_java_status.configure(
-                    text=f"{compat_text} {best_label} — MC {version} requires Java {required}",
-                    text_color=AppConfig.COLOR_BTN_SUCCESS if compatible else AppConfig.COLOR_ACCENT_AMBER
+                    text=f"{compat_text}: MC {version} requires Java {required_str}. Detected {best.label}.",
+                    text_color=color
                 )
+                self._on_java_choice_change()
 
             self.after(0, _apply)
 
         threading.Thread(target=_detect, daemon=True).start()
+
+    def _on_java_choice_change(self):
+        use_detected = self.java_choice_var.get() == "detected"
+        self.java_detected_menu.configure(state="normal" if use_detected and self._detected_java else "disabled")
+        if not use_detected:
+            required = get_required_java(self.version_var.get())
+            self.lbl_java_status.configure(
+                text=f"Will auto-download Java {required} for this server.",
+                text_color=AppConfig.COLOR_TEXT_GRAY
+            )
 
     def update_ram_from_entry(self, event=None):
         try:
@@ -434,14 +540,14 @@ class ServerWizard(ctk.CTkToplevel):
         threading.Thread(target=fetch_and_render, daemon=True).start()
 
     # --- Step 3: Rules & World ---
-    def show_step_3(self):
+    def show_step_4(self):
         self.clear_content()
-        self.update_header("Rules & World")
-        
+        self.update_header("Rules & Security")
+
         scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
         p = scroll
-        
+
         # Game Mode
         ctk.CTkLabel(p, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.combo_gamemode = ctk.CTkOptionMenu(p, values=["survival", "creative", "adventure", "spectator"], corner_radius=AppConfig.RADIUS_BTN, height=36)
@@ -518,39 +624,48 @@ class ServerWizard(ctk.CTkToplevel):
         self.var_enable_command_block = ctk.BooleanVar(value=self.wizard_data["enable_command_block"])
         self.chk_enable_command_block = ctk.CTkSwitch(sec_row2, text="Command Blocks", variable=self.var_enable_command_block)
         self.chk_enable_command_block.pack(side="left")
-        
+
+    def show_step_5(self):
+        self.clear_content()
+        self.update_header("World & Network")
+
+        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+        p = scroll
+
         # Seed
         ctk.CTkLabel(p, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_seed.pack(fill="x", pady=(0, 10))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
-            
+
         # Playit.gg Port
         ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
         self.entry_port = ctk.CTkEntry(p, placeholder_text="25565", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_port.pack(fill="x", pady=(0, 10))
         if self.wizard_data.get("playit_port"):
             self.entry_port.insert(0, str(self.wizard_data["playit_port"]))
-            
+
         # Distances (Sliders)
         dist_frame = ctk.CTkFrame(p, fg_color="transparent")
         dist_frame.pack(fill="x", pady=(0, 10))
-        
+        dist_frame.grid_columnconfigure(0, weight=1)
+
         # View Distance
         ctk.CTkLabel(dist_frame, text="View Distance:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
         self.lbl_view_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["view_distance"]))
         self.lbl_view_val.grid(row=0, column=1, sticky="w", padx=(10, 20))
-        
+
         self.slider_view = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_view_label)
         self.slider_view.set(int(self.wizard_data["view_distance"]))
         self.slider_view.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 20))
-        
+
         # Simulation Distance
         ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=ctk.CTkFont(weight="bold")).grid(row=2, column=0, sticky="w", pady=(10, 5))
         self.lbl_sim_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["simulation_distance"]))
         self.lbl_sim_val.grid(row=2, column=1, sticky="w", padx=10)
-        
+
         self.slider_sim = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_sim_label)
         self.slider_sim.set(int(self.wizard_data["simulation_distance"]))
         self.slider_sim.grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 20))
@@ -581,71 +696,69 @@ class ServerWizard(ctk.CTkToplevel):
                 return
 
         elif self.current_step == 3:
-            self.wizard_data["game_mode"] = self.combo_gamemode.get()
-            self.wizard_data["difficulty"] = self.combo_difficulty.get()
-            self.wizard_data["hardcore"] = self.var_hardcore.get()
-            self.wizard_data["whitelist"] = self.var_whitelist.get()
-            self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
-            self.wizard_data["seed"] = self.entry_seed.get().strip()
-            
-            self.wizard_data["online_mode"] = self.var_online_mode.get()
-            self.wizard_data["enforce_whitelist"] = self.var_enforce_whitelist.get()
-            self.wizard_data["pvp"] = self.var_pvp.get()
-            self.wizard_data["allow_flight"] = self.var_allow_flight.get()
-            self.wizard_data["enforce_secure_profile"] = self.var_enforce_secure_profile.get()
-            self.wizard_data["enable_command_block"] = self.var_enable_command_block.get()
-            
-            try:
-                self.wizard_data["max_players"] = int(self.entry_max_players.get().strip())
-            except ValueError:
-                self.wizard_data["max_players"] = 20
-            try:
-                self.wizard_data["spawn_protection"] = int(self.entry_spawn_protection.get().strip())
-            except ValueError:
-                self.wizard_data["spawn_protection"] = 16
-            
-            port_val = self.entry_port.get().strip()
-            self.wizard_data["playit_port"] = port_val if port_val else "25565"
-            
+            self._collect_step3_fields()
+
+        elif self.current_step == 4:
+            self._collect_step4_fields()
+
+        elif self.current_step == 5:
+            self._collect_step5_fields()
             self.on_complete_callback(self.wizard_data)
             self.destroy()
             return
 
         self.current_step += 1
         self.show_step()
-        
+
     def go_back(self):
         if self.current_step == 3:
-            self.wizard_data["game_mode"] = self.combo_gamemode.get()
-            self.wizard_data["difficulty"] = self.combo_difficulty.get()
-            self.wizard_data["hardcore"] = self.var_hardcore.get()
-            self.wizard_data["whitelist"] = self.var_whitelist.get()
-            self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
-            self.wizard_data["seed"] = self.entry_seed.get().strip()
-            
-            self.wizard_data["online_mode"] = self.var_online_mode.get()
-            self.wizard_data["enforce_whitelist"] = self.var_enforce_whitelist.get()
-            self.wizard_data["pvp"] = self.var_pvp.get()
-            self.wizard_data["allow_flight"] = self.var_allow_flight.get()
-            self.wizard_data["enforce_secure_profile"] = self.var_enforce_secure_profile.get()
-            self.wizard_data["enable_command_block"] = self.var_enable_command_block.get()
-            try:
-                self.wizard_data["max_players"] = int(self.entry_max_players.get().strip())
-            except ValueError:
-                pass
-            try:
-                self.wizard_data["spawn_protection"] = int(self.entry_spawn_protection.get().strip())
-            except ValueError:
-                pass
-            
-            port_val = getattr(self, "entry_port", None)
-            if port_val:
-                self.wizard_data["playit_port"] = port_val.get().strip() or "25565"
-            
+            self._collect_step3_fields()
+        elif self.current_step == 4:
+            self._collect_step4_fields()
+        elif self.current_step == 5:
+            self._collect_step5_fields()
+
         self.current_step -= 1
         self.show_step()
-        
+
+    def _collect_step3_fields(self):
+        if self.java_choice_var.get() == "detected" and self._detected_java:
+            idx = self.java_detected_menu.cget("values").index(self.java_detected_menu.get())
+            self.wizard_data["java_path"] = self._detected_java[idx].path
+        else:
+            self.wizard_data["java_path"] = "auto"
+
+    def _collect_step4_fields(self):
+        self.wizard_data["game_mode"] = self.combo_gamemode.get()
+        self.wizard_data["difficulty"] = self.combo_difficulty.get()
+        self.wizard_data["hardcore"] = self.var_hardcore.get()
+        self.wizard_data["whitelist"] = self.var_whitelist.get()
+        self.wizard_data["auto_install_jdk"] = self.var_auto_jdk.get()
+
+        self.wizard_data["online_mode"] = self.var_online_mode.get()
+        self.wizard_data["enforce_whitelist"] = self.var_enforce_whitelist.get()
+        self.wizard_data["pvp"] = self.var_pvp.get()
+        self.wizard_data["allow_flight"] = self.var_allow_flight.get()
+        self.wizard_data["enforce_secure_profile"] = self.var_enforce_secure_profile.get()
+        self.wizard_data["enable_command_block"] = self.var_enable_command_block.get()
+
+        try:
+            self.wizard_data["max_players"] = int(self.entry_max_players.get().strip())
+        except ValueError:
+            self.wizard_data["max_players"] = 20
+        try:
+            self.wizard_data["spawn_protection"] = int(self.entry_spawn_protection.get().strip())
+        except ValueError:
+            self.wizard_data["spawn_protection"] = 16
+
+    def _collect_step5_fields(self):
+        self.wizard_data["seed"] = self.entry_seed.get().strip()
+        port_val = self.entry_port.get().strip()
+        self.wizard_data["playit_port"] = port_val if port_val else "25565"
+
     def show_step(self):
         if self.current_step == 1: self.show_step_1()
         elif self.current_step == 2: self.show_step_2()
         elif self.current_step == 3: self.show_step_3()
+        elif self.current_step == 4: self.show_step_4()
+        elif self.current_step == 5: self.show_step_5()

@@ -1,0 +1,19 @@
+{
+  "type": "Paper",
+  "ram": 4096,
+  "game_mode": "survival",
+  "difficulty": "normal",
+  "hardcore": false,
+  "whitelist": false,
+  "enforce_whitelist": false,
+  "pvp": true,
+  "online_mode": true,
+  "max_players": 20,
+  "spawn_protection": 16,
+  "enable_command_block": false,
+  "allow_flight": false,
+  "enforce_secure_profile": true,
+  "view_distance": "6",
+  "simulation_distance": "4",
+  "_description": "Paper with reduced view/simulation distance for maximum TPS on modest hardware."
+}

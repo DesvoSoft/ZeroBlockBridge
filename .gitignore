@@ -37,7 +37,8 @@ env/
 
 # Project Specific
 /servers/
-/config/
+/config/*
+!/config/templates/
 /bin/
 /backups/
 config.json
