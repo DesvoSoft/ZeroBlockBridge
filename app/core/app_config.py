@@ -58,6 +58,8 @@ class AppConfig:
     COLOR_BTN_WARNING_HOVER = COLOR_ACCENT_AMBER_HOVER
     COLOR_BTN_GHOST = "#1e293b"          # slate-800
     COLOR_BTN_GHOST_HOVER = "#334155"    # slate-700
+    COLOR_BTN_ACCENT_BLUE = "#2563eb"        # blue-600 — highlight puntual (ej. Optimizers)
+    COLOR_BTN_ACCENT_BLUE_HOVER = "#1d4ed8"  # blue-700
     # Legacy aliases — mantener para no romper callers existentes
     COLOR_BTN_INFO = "#34d399"
     COLOR_BTN_INFO_HOVER = "#10b981"

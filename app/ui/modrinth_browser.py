@@ -323,7 +323,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.btn_opt = ctk.CTkButton(
             actions_row, text="Optimizers", image=icon("bolt", 12, "#ffffff"), width=90, height=26,
             corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+            fg_color=AppConfig.COLOR_BTN_ACCENT_BLUE, hover_color=AppConfig.COLOR_BTN_ACCENT_BLUE_HOVER,
             text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
             command=self._on_install_optimizers,
         )
@@ -609,7 +609,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if ctx:
             _, mc_version, loader = ctx
 
-        self._set_status("Loading popular mods...", busy=True)
+        self._show_placeholder("Loading mods", spinner=True)
         self._search_query = ""
         self._search_project_type = "mod"
         self._search_mc_version = mc_version
@@ -628,8 +628,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._on_search_done(hits, total))
             except Exception as exc:
                 logger.error("Failed to load popular mods: %s", exc)
-            finally:
-                self.after(0, lambda: self._set_status("Ready"))
+                msg = f"Could not load mods:\n{exc}"
+                self.after(0, lambda m=msg: self._show_placeholder(m))
 
         threading.Thread(target=_do_load, daemon=True).start()
 

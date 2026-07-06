@@ -17,6 +17,9 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.geometry("600x600")
         center_on_parent(self, master, 600, 600)
         self.minsize(500, 500)
+        self.transient(master)
+        self.lift()
+        self.focus_force()
         self.event_bus = event_bus
         self.zbb_manager = zbb_manager
         

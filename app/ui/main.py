@@ -256,7 +256,7 @@ class MCTunnelApp(ctk.CTk):
  
         # --- Tunnel ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 1))
+        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 10))
         self._build_tunnel_controls()
 
     def _build_tunnel_controls(self):
@@ -303,11 +303,14 @@ class MCTunnelApp(ctk.CTk):
         self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=AppConfig.RADIUS_BTN, height=36, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"))
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("refresh", 15),
-                                   command=self.reset_tunnel,
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="Reset", image=icon("refresh", 14, AppConfig.COLOR_ACCENT_AMBER),
+                                   command=self.reset_tunnel, compound="left",
                                    fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
-                                   hover_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
-                                   width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+                                   hover_color=("#fde9c8", "#3a2e12"),
+                                   border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
+                                   text_color=AppConfig.COLOR_ACCENT_AMBER,
+                                   width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
+                                   font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"))
         self.btn_reset.pack(side="left", padx=2)
         ToolTip(self.btn_reset, "Reset tunnels")
 
