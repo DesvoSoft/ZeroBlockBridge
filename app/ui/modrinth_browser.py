@@ -432,12 +432,6 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         self.btn_next.pack(side="left", padx=(6, 0))
 
-        self.lbl_count = ctk.CTkLabel(
-            self.pagination_bar, text="",
-            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY),
-            font=AppConfig.FONT_BODY_SMALL,
-        )
-        self.lbl_count.pack(side="right", padx=12, pady=4)
 
         self.btn_install_selected = ctk.CTkButton(
             self.pagination_bar, text="Install Selected (0)", width=150, height=26,
@@ -592,9 +586,6 @@ class ModrinthBrowser(ctk.CTkFrame):
                                 fg_color=AppConfig.COLOR_BTN_PRIMARY if prev_ok else _ghost)
         self.btn_next.configure(state="normal" if next_ok else "disabled",
                                 fg_color=AppConfig.COLOR_BTN_PRIMARY if next_ok else _ghost)
-        self.lbl_count.configure(
-            text=f"{len(self._current_hits)} of {self._search_total} results"
-        )
 
     def _on_first_shown(self, event=None):
         self.refresh_server_context()
@@ -716,7 +707,6 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         if not self._current_hits:
             self._show_placeholder("No results found.\nTry a different search term.")
-            self.lbl_count.configure(text="0 results")
             return
 
         ctx = self._resolve_server_context()
@@ -872,16 +862,26 @@ class ModrinthBrowser(ctk.CTkFrame):
         is_modpack = hit.get("project_type") == "modpack"
         install_cmd = self._on_install_modpack if is_modpack else self._on_install
         unsupported = server_side == "unsupported" and not is_modpack
-        btn_install = ctk.CTkButton(
-            card, text="Client-only" if unsupported else "Install", width=90, height=32,
-            corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
-            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY) if unsupported else "#0f172a",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
-            state="disabled" if unsupported else "normal",
-            command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
-        )
+        already_installed = hit_key in self._installed_slugs_cache and not is_modpack
+        if already_installed:
+            btn_install = ctk.CTkButton(
+                card, text="Uninstall", width=90, height=32,
+                corner_radius=AppConfig.RADIUS_BTN,
+                fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+                text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+                command=lambda k=hit_key, t=hit.get("title", hit_key): self._confirm_uninstall_mod(k, t),
+            )
+        else:
+            btn_install = ctk.CTkButton(
+                card, text="Client-only" if unsupported else "Install", width=90, height=32,
+                corner_radius=AppConfig.RADIUS_BTN,
+                fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
+                hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
+                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY) if unsupported else "#0f172a",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+                state="disabled" if unsupported else "normal",
+                command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
+            )
         btn_install.grid(row=0, column=3, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
         return card
@@ -1068,6 +1068,33 @@ class ModrinthBrowser(ctk.CTkFrame):
                 text=f"Update Selected ({n})", state="normal" if n else "disabled",
                 fg_color=_MODRINTH_GREEN if n else _ghost,
                 text_color="#0f172a" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
+
+    def _confirm_uninstall_mod(self, slug: str, title: str):
+        ctx = self._resolve_server_context()
+        if not ctx:
+            return
+        server_name = ctx[0]
+        fname = mod_install_tracker.get_installed_filename(server_name, slug)
+        if not fname:
+            return
+        filepath = None
+        for subdir in ("mods", "plugins"):
+            candidate = os.path.join(SERVERS_DIR, server_name, subdir, fname)
+            if os.path.isfile(candidate):
+                filepath = candidate
+                break
+        if not ZBBDialog.confirm(self.winfo_toplevel(), "Uninstall Mod",
+                                  f"Uninstall '{title}'?", confirm_text="Uninstall", danger=True):
+            return
+        try:
+            if filepath:
+                os.remove(filepath)
+            mod_install_tracker.remove_install(server_name, slug)
+            self._set_status(f"✓ Uninstalled {title}")
+            self._installed_slugs_cache.discard(slug)
+            self._render_results()
+        except OSError as exc:
+            self._set_status(f"✗ Failed to uninstall {title}: {exc}")
 
     def _confirm_delete_mod(self, filepath: str):
         fname = os.path.basename(filepath)

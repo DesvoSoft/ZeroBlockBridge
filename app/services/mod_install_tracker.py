@@ -37,6 +37,23 @@ def get_installed_slugs(server_name: str) -> set:
     return set(_read(_metadata_path(server_name)).keys())
 
 
+def get_installed_filename(server_name: str, slug: str) -> str:
+    return _read(_metadata_path(server_name)).get(slug, "")
+
+
+def remove_install(server_name: str, slug: str) -> None:
+    path = _metadata_path(server_name)
+    data = _read(path)
+    if slug not in data:
+        return
+    del data[slug]
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError as exc:
+        logger.warning("Failed to remove install metadata for %s: %s", slug, exc)
+
+
 def _read(path: Path) -> dict:
     if not path.exists():
         return {}

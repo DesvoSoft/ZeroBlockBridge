@@ -7,10 +7,10 @@ description: Development guide for ZeroBlockBridge (ZBB). Use for all implementa
 
 ## Project State (2026-07-05)
 
-- **461 tests**, 100% pass, 0 flaky, 0 skipped.
+- **463 tests**, 100% pass, 0 flaky, 0 skipped.
 - **Test files**: 24 files.
-- **Phases complete**: F0–F6, FA–FB, FIX-P1/P2/P3, F4 (full), P0 (all 7 tasks), EXE-PERF, BUG-AUDIT (18/19).
-- **Next targets**: MODS-B (Modrinth browser improvements) → CA-HIGH (JVM args UI, unified player mgmt, console filter).
+- **Phases complete**: F0–F6, FA–FB, FIX-P1/P2/P3, F4 (full), P0 (all 7 tasks), EXE-PERF, BUG-AUDIT (18/19), MODS-B, F8, F7.5 (modpack install), CA-H01 (JVM args UI), MODS-SEC (mrpack compat gate + zip-slip guard).
+- **Next targets**: CA-H02 (unified player management) → F7 rest (server templates).
 
 ---
 

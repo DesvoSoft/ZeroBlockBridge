@@ -2,7 +2,7 @@
 
 This document covers the internal architecture, auto-healing system, technical details, and design decisions of ZeroBlockBridge.
 
-> **Last updated:** 2026-07-05 — 461 tests, 100% pass. P0 complete, F5 (CrashReporter) + F6 (Discord Webhook) done. Playit agent migrated to v1.0.10 (playitd daemon); Paper API migrated to Fill v3.
+> **Last updated:** 2026-07-05 — 463 tests, 100% pass. P0 complete, F5 (CrashReporter) + F6 (Discord Webhook) done. Playit agent migrated to v1.0.10 (playitd daemon); Paper API migrated to Fill v3.
 
 ---
 
@@ -309,7 +309,7 @@ ZeroBlockBridge/
 │       ├── console_buffer.py          # Thread-safe console buffer (collections.deque)
 │       └── settings_manager.py        # App config singleton read/write, debounced flush
 │
-├── tests/                             # 24 test files, 461 tests, 100% pass
+├── tests/                             # 24 test files, 463 tests, 100% pass
 │   ├── conftest.py                    # FakeEmitter (EventBus stub), FakeRunner
 │   ├── test_orchestrators.py          # 26 tests — all 4 orchestrators
 │   ├── test_logic.py                  # ServerRunner, Scheduler, normalize, meta (~24 tests)

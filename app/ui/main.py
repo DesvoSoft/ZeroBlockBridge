@@ -177,8 +177,12 @@ class MCTunnelApp(ctk.CTk):
                                        text_color=AppConfig.COLOR_STATUS_OFFLINE)
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
-        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
+        self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_start.pack(side="left", padx=2)
+        ToolTip(self.btn_start, "Start server")
+        self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_stop.pack(side="left", padx=2)
+        ToolTip(self.btn_stop, "Stop server")
 
         _ghost_hover = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
         self.btn_config = ctk.CTkButton(
@@ -199,12 +203,8 @@ class MCTunnelApp(ctk.CTk):
         self.btn_open_folder.pack(side="left", padx=5)
         ToolTip(self.btn_open_folder, "Open server folder")
 
-        self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_start.pack(side="left", padx=2)
-        ToolTip(self.btn_start, "Start server")
-        self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_stop.pack(side="left", padx=2)
-        ToolTip(self.btn_stop, "Stop server")
+        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
+        self.lbl_dash_title.pack(side="left", padx=(5, 10), pady=8)
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)

@@ -102,12 +102,14 @@ class _Painters:
 
     @staticmethod
     def reset(d, s, c, w):
-        # Two mirrored arcs forming a full loop, each capped with an
-        # arrowhead — reads as "reset/restart" rather than a partial spin.
-        d.arc([0.16 * s, 0.16 * s, 0.84 * s, 0.84 * s], start=-50, end=130, fill=c, width=w)
-        d.arc([0.16 * s, 0.16 * s, 0.84 * s, 0.84 * s], start=130, end=310, fill=c, width=w)
-        d.polygon([(0.88 * s, 0.14 * s), (0.92 * s, 0.44 * s), (0.62 * s, 0.30 * s)], fill=c)
-        d.polygon([(0.12 * s, 0.86 * s), (0.08 * s, 0.56 * s), (0.38 * s, 0.70 * s)], fill=c)
+        # Ouroboros: one open ring with a visible gap, single arrowhead
+        # biting toward the tail end — clearly not a closed loop.
+        d.arc([0.14 * s, 0.14 * s, 0.86 * s, 0.86 * s], start=15, end=300, fill=c, width=w)
+        # Arrowhead at the head end (start=15deg, upper-right)
+        d.polygon([(0.86 * s, 0.42 * s), (0.78 * s, 0.20 * s), (0.62 * s, 0.34 * s)], fill=c)
+        # Tapered tail at the other end (end=300deg, lower-right) so the
+        # ring visibly doesn't close — the head just falls short of it.
+        d.ellipse([0.55 * s, 0.76 * s, 0.65 * s, 0.86 * s], fill=c)
 
     @staticmethod
     def copy(d, s, c, w):
