@@ -388,7 +388,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         for w in self.results_frame.winfo_children():
             w.destroy()
         ctk.CTkLabel(
-            self.results_frame, text="No internet connection",
+            self.results_frame, text="Could not load mods — check your internet connection.",
             text_color=AppConfig.COLOR_STATUS_ERROR,
             font=AppConfig.FONT_BODY, justify="center",
         ).grid(row=0, column=0, pady=(60, 8), padx=20)
@@ -828,7 +828,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         dl_text = self._format_downloads(downloads)
         lbl_dl = ctk.CTkLabel(badge_frame, text=dl_text,
                               image=icon("download", 11, AppConfig.COLOR_TEXT_GRAY),
-                             compound="left", padx=3,
+                              compound="left", padx=3,
                               text_color=AppConfig.COLOR_TEXT_GRAY,
                               font=AppConfig.FONT_BODY_SMALL)
         lbl_dl.pack(side="left", padx=(0, 10))
