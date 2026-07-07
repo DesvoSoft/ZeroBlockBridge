@@ -31,7 +31,9 @@ def _make_reporter(tmp_path, server_name="TestServer", meta=None, config=None, s
         buf.append(f"[Server] line {i}")
 
     runner = MagicMock()
-    runner._stderr_buffer = stderr or ["java.lang.OutOfMemoryError", "at server.Main.run()"]
+    stderr_lines = stderr or ["java.lang.OutOfMemoryError", "at server.Main.run()"]
+    runner._stderr_buffer = stderr_lines
+    runner.get_stderr_tail = lambda n: list(stderr_lines)[-n:] if n > 0 else []
 
     events = FakeEmitter()
 

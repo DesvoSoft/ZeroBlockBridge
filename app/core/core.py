@@ -8,7 +8,13 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core.server_events import EventBus, ServerEvent
 from app.core.constants import ServerState
 from app.services.backup_manager import BackupManager
-from app.core.logic import ServerRunner, load_config, save_config, Scheduler
+import datetime
+
+from app.core.logic import (
+    ServerRunner, load_config, save_config, Scheduler,
+    get_server_meta, update_server_meta, migrate_legacy_metadata,
+    invalidate_meta_cache, create_junction,
+)
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
@@ -24,6 +30,10 @@ from app.services.bytecode_analyzer import analyze_jar_bytecode
 logger = logging.getLogger(__name__)
 
 from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
+
+
+class ServerExistsError(Exception):
+    """Raised when importing a server whose name already exists."""
 
 class ZBBManager:
     """
@@ -92,9 +102,18 @@ class ZBBManager:
         from app.services.discord_webhook import DiscordWebhookService
         url = SettingsManager().get("discord_webhook_url", "")
         if url:
-            server_name = self.current_server or ""
-            self._discord_webhook = DiscordWebhookService(url, self.events, server_name)
-            logger.info("Discord webhook active for %s", server_name or "(no server)")
+            self._discord_webhook = DiscordWebhookService(
+                url, self.events,
+                server_name_getter=lambda: self.current_server or "",
+            )
+            logger.info("Discord webhook active")
+
+    def reload_discord_webhook(self) -> None:
+        """Re-create the Discord service after the webhook URL changed in settings."""
+        if self._discord_webhook:
+            self._discord_webhook.stop()
+            self._discord_webhook = None
+        self._init_discord_webhook()
 
     def _on_server_ready(self, data: Any = None) -> None:
         self.state = ServerState.ONLINE
@@ -117,7 +136,6 @@ class ZBBManager:
         self.events.emit(ServerEvent.TUNNEL_STATUS, {"status": status, "ip": display_ip, "dns": dns, "is_guest": is_guest})
 
     def _save_jdk_metadata(self, required_java: int, jdk_source: str) -> None:
-        from app.core.logic import update_server_meta
         if not self.current_server:
             return
         from app.core.constants import SERVERS_DIR
@@ -138,13 +156,11 @@ class ZBBManager:
     # --- Core Server Operations ---
     def bootstrap(self) -> None:
         logger.info("[ZBBManager] Bootstrapping core services...")
-        from app.core.logic import migrate_legacy_metadata
         migrate_legacy_metadata()
         self._start_tick_loop()
 
     def select_server(self, server_name: str) -> None:
         self.current_server = server_name
-        from app.core.logic import invalidate_meta_cache
         invalidate_meta_cache(server_name)
 
     def _auto_install_java(self, required_java: int) -> Optional[str]:
@@ -196,8 +212,7 @@ class ZBBManager:
                 required_java = version_map_java
                 source = "version-map"
 
-            from app.core.logic import update_server_meta
-            update_server_meta(self.current_server, {"required_java": required_java})
+                update_server_meta(self.current_server, {"required_java": required_java})
 
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {required_java} required (source: {source})")
 
@@ -273,26 +288,23 @@ class ZBBManager:
 
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
-        import os
         from app.core.constants import SERVERS_DIR
-        from app.core.logic import create_junction
-        
+
         server_name = os.path.basename(folder_path.rstrip("\\/"))
         link_path = os.path.join(SERVERS_DIR, server_name)
-        
+
         if os.path.exists(link_path):
-            raise Exception(f"A server named '{server_name}' already exists.")
-            
+            raise ServerExistsError(f"A server named '{server_name}' already exists.")
+
         try:
             create_junction(folder_path, link_path)
-                
+
             # Create a default metadata.json if missing
             if not os.path.exists(os.path.join(link_path, "metadata.json")):
                 jar_name = "server.jar"
                 if not os.path.exists(os.path.join(link_path, jar_name)):
                     jars = [f for f in os.listdir(link_path) if f.endswith(".jar")]
                     if jars: jar_name = jars[0]
-                from app.core.logic import update_server_meta
                 update_server_meta(server_name, {
                     "name": server_name,
                     "type": "Vanilla",
@@ -302,15 +314,20 @@ class ZBBManager:
                     "use_aikars": True,
                     "custom_jar": jar_name
                 })
-            
+
             return True
-        except Exception as e:
-            if os.path.exists(link_path):
+        except Exception:
+            if os.path.lexists(link_path):
+                # Remove only the link, never the target's contents:
+                # junctions delete via rmdir, symlinks via unlink.
                 try:
-                    os.rmdir(link_path)
-                except OSError as cleanup_err:
-                    logger.warning("Failed to cleanup link dir after error: %s", cleanup_err)
-            raise e
+                    os.unlink(link_path)
+                except OSError:
+                    try:
+                        os.rmdir(link_path)
+                    except OSError as cleanup_err:
+                        logger.warning("Failed to cleanup link after error: %s", cleanup_err)
+            raise
 
     def stop_server(self) -> None:
         self.server_orchestrator.stop_server()
@@ -368,8 +385,6 @@ class ZBBManager:
         self.events.emit(ServerEvent.NOTIFICATION, notification)
         if self.current_server:
             try:
-                from app.core.logic import get_server_meta, update_server_meta
-                import datetime
                 meta = get_server_meta(self.current_server) or {}
                 history = meta.get("crash_history", [])
                 history.append({
@@ -441,18 +456,26 @@ class ZBBManager:
                     self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Initiating async auto-backup before restart...")
 
                     def _do_backup():
-                        manager = BackupManager(self.current_server)
-                        path, error = manager.create_backup()
+                        try:
+                            manager = BackupManager(self.current_server)
+                            path, error = manager.create_backup()
+                        except Exception as e:
+                            logger.error("Backup during restart failed: %s", e)
+                            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {e}")
+                            return
                         if path:
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {os.path.basename(path)}")
                         else:
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
 
-                    future = self.executor.submit(_do_backup)
-                    try:
-                        future.result(timeout=300)
-                    except Exception as e:
-                        logger.error("Backup during restart failed or timed out: %s", e)
+                    # Dedicated thread, not the shared executor: _restart already
+                    # occupies a pool worker, and blocking on a future from the
+                    # same pool is the classic starvation deadlock pattern.
+                    backup_thread = threading.Thread(target=_do_backup, daemon=True, name="RestartBackup")
+                    backup_thread.start()
+                    backup_thread.join(timeout=300)
+                    if backup_thread.is_alive():
+                        logger.error("Backup during restart still running after 300s; proceeding with restart.")
                     time.sleep(1)
 
                 self.stop_server()
@@ -487,7 +510,6 @@ class ZBBManager:
                 if not missing_ids or not server_name:
                     return
 
-                from app.core.logic import get_server_meta
                 from app.services.modrinth import ModrinthClient, install_missing_mods
 
                 meta = get_server_meta(server_name) or {}

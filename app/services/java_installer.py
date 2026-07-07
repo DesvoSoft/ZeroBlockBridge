@@ -276,7 +276,7 @@ class JdkManager:
                     if meta_file.exists():
                         try:
                             import json
-                            with open(meta_file) as f:
+                            with open(meta_file, encoding="utf-8") as f:
                                 meta = json.load(f)
                             rj = meta.get("required_java")
                             if rj:

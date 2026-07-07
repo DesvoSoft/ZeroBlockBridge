@@ -507,6 +507,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                     try:
                         fut.result(timeout=self._ICON_PREFETCH_TIMEOUT)
                     except Exception:
+                        # Slow/broken icon must not block the page render;
+                        # the card falls back to its initial-letter badge.
                         pass
             if gen == self._render_gen and self.winfo_exists():
                 self.after(0, self._render_results)

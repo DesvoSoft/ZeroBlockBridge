@@ -113,10 +113,10 @@ class CrashReporter:
     def _get_stderr_tail(self) -> list:
         try:
             runner = self._get_server_runner()
-            if runner and hasattr(runner, "_stderr_buffer"):
-                return list(runner._stderr_buffer)[-_STDERR_TAIL:]
-        except Exception:
-            pass
+            if runner and hasattr(runner, "get_stderr_tail"):
+                return runner.get_stderr_tail(_STDERR_TAIL)
+        except Exception as e:
+            logger.debug("CrashReporter: stderr tail unavailable: %s", e)
         return []
 
     def _total_ram_gb(self) -> float:

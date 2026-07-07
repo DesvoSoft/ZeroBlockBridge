@@ -1,3 +1,4 @@
+import datetime
 import logging
 import time
 import os
@@ -77,10 +78,11 @@ class ServerOrchestrator:
 
     def stop_server(self) -> None:
         self.manager.state = ServerState.STOPPING
-        # Silence watchdog BEFORE stopping so the STOPPED event it sees
-        # is not misclassified as a crash (HA-03).
-        if self.manager._watchdog:
-            self.manager._watchdog.stop()
+        # Full monitor teardown BEFORE stopping: the watchdog must not see the
+        # STOPPED as a crash (HA-03), and heartbeat/lag/crash-reporter must not
+        # stay subscribed between servers — a stray CRASHED emitted after stop
+        # would write a report against the wrong server.
+        self.manager._stop_monitors()
         if self.manager.server_runner:
             self.manager.server_runner.stop()
         self.manager.state = ServerState.OFFLINE
@@ -162,6 +164,9 @@ class BackupOrchestrator:
 class SchedulerOrchestrator:
     def __init__(self, manager):
         self.manager = manager
+        # get_status() reports missed=True on every tick for the rest of the
+        # day — notify the user only once per day, not every 30s.
+        self._missed_notified_date = None
 
     def _start_tick_loop(self) -> None:
         if self.manager._tick_running:
@@ -172,6 +177,7 @@ class SchedulerOrchestrator:
         def _loop():
             last_sched_check = 0.0
             last_player_emit = 0.0
+            last_player_count = None
 
             while self.manager._tick_running:
                 now = time.time()
@@ -179,10 +185,14 @@ class SchedulerOrchestrator:
                 if getattr(self.manager, "_heartbeat", None):
                     self.manager._heartbeat.tick(now)
 
-                # Player Sync — rate-limited to 1x/sec
+                # Player sync — checked 1x/sec, emitted only on change
+                # (join/leave already emit; this is a safety-net resync).
                 if self.manager.server_runner and self.manager.server_runner.running:
                     if now - last_player_emit >= 1.0:
-                        self.manager.events.emit(ServerEvent.PLAYER_COUNT, self.manager.server_runner.player_count)
+                        count = self.manager.server_runner.player_count
+                        if count != last_player_count:
+                            self.manager.events.emit(ServerEvent.PLAYER_COUNT, count)
+                            last_player_count = count
                         last_player_emit = now
 
                 if now - last_sched_check >= AppConfig.SCHEDULER_CHECK_INTERVAL:
@@ -203,7 +213,8 @@ class SchedulerOrchestrator:
                                 service.update_last_run()
                                 with self.manager._restart_warnings_lock:
                                     self.manager.restart_warnings_sent.clear()
-                            elif status.get("missed"):
+                            elif status.get("missed") and self._missed_notified_date != datetime.date.today():
+                                self._missed_notified_date = datetime.date.today()
                                 logger.warning(
                                     "Scheduled restart for '%s' was missed (target passed >120s ago). "
                                     "Next window: tomorrow at configured time.",
@@ -216,8 +227,10 @@ class SchedulerOrchestrator:
 
                         self.manager.backup_orchestrator._check_auto_backup()
                 
+                # 100ms cadence: fastest consumer (player sync) only needs 1s;
+                # heartbeat/scheduler decide on 30-60s intervals.
                 elapsed = time.time() - now
-                sleep_time = max(0.0, 0.05 - elapsed)
+                sleep_time = max(0.0, 0.1 - elapsed)
                 time.sleep(sleep_time)
 
         self.manager._tick_thread = threading.Thread(target=_loop, daemon=True, name="ServerTickThread")

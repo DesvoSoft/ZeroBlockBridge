@@ -76,14 +76,13 @@ class TestServerOrchestrator:
 
     def test_stop_sets_state_offline(self):
         runner = MagicMock(running=True)
-        watchdog = MagicMock()
-        mgr = _make_manager(server_runner=runner, _watchdog=watchdog)
+        mgr = _make_manager(server_runner=runner)
         orch = ServerOrchestrator(mgr)
 
         orch.stop_server()
 
         assert mgr.state == ServerState.OFFLINE
-        watchdog.stop.assert_called_once()
+        mgr._stop_monitors.assert_called_once()
         runner.stop.assert_called_once()
 
     def test_stop_no_crash_when_runner_none(self):

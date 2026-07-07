@@ -418,6 +418,8 @@ class PlayitManager:
                     try:
                         child.kill()
                     except Exception:
+                        # Child may have exited between enumeration and kill;
+                        # remaining strays are covered by the by-name taskkill.
                         pass
                 parent.kill()
                 killed = True

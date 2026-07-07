@@ -10,6 +10,7 @@ import threading
 import sys
 import datetime
 import time
+from collections import deque
 
 from typing import Optional, Callable, Any
 
@@ -20,8 +21,21 @@ from app.services.java_detector import probe_java
 import re
 
 def create_junction(source: str, dest: str) -> None:
-    """Create a directory symlink. target_is_directory required on Windows."""
-    os.symlink(source, dest, target_is_directory=True)
+    """Link an external server folder into SERVERS_DIR.
+
+    On Windows use a real junction (mklink /J): unlike symlinks it requires
+    no admin rights or Developer Mode, so imports work on stock machines.
+    Elsewhere a plain directory symlink works.
+    """
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", dest, source],
+            capture_output=True, text=True, **subprocess_flags()
+        )
+        if result.returncode != 0:
+            raise OSError(f"mklink /J failed: {(result.stderr or result.stdout).strip()}")
+    else:
+        os.symlink(source, dest, target_is_directory=True)
 
 logger = logging.getLogger(__name__)
 
@@ -389,7 +403,6 @@ def normalize_server_jar(server_dir: str) -> bool:
     # Final verification: ensure the created symlink/copy is readable
     if result:
         try:
-            import time
             for _ in range(10):
                 if os.path.exists(server_jar_path) and os.path.getsize(server_jar_path) > 100:
                     break
@@ -428,6 +441,11 @@ def install_forge(server_name: str, mc_version: str, progress_callback: Optional
     return None
 
 class ServerRunner:
+    _CONSOLE_BUFFER_MAX = 200
+    _STDERR_BUFFER_MAX = 100
+    _CONSOLE_SNAPSHOT_TAIL = 100
+    _STDERR_SNAPSHOT_TAIL = 50
+
     def __init__(self, server_name, ram_allocation, event_bus, java_bin="java", use_aikars=True):
         self.server_name = server_name
         self.events = event_bus
@@ -435,8 +453,12 @@ class ServerRunner:
         self._running = False
         self._state_lock = threading.Lock()
         self.exit_code = None
-        self._stderr_buffer = []
-        self._console_buffer = []
+        self._stderr_buffer = deque(maxlen=self._STDERR_BUFFER_MAX)
+        self._console_buffer = deque(maxlen=self._CONSOLE_BUFFER_MAX)
+        # Reader threads append while snapshots iterate (crash reports fire
+        # exactly during output bursts) — iterating a mutating deque raises
+        # RuntimeError, so guard both sides.
+        self._buffers_lock = threading.Lock()
         self._stderr_thread = None
         self.java_bin = java_bin
         self.use_aikars = use_aikars
@@ -568,8 +590,9 @@ class ServerRunner:
         self.events.emit(ServerEvent.STARTING)
         
         try:
-            self._stderr_buffer = []
-            self._console_buffer = []
+            with self._buffers_lock:
+                self._stderr_buffer.clear()
+                self._console_buffer.clear()
             with self._players_lock:
                 self.connected_players.clear()
                 self.player_count = 0
@@ -637,9 +660,8 @@ class ServerRunner:
         for line in self.process.stdout:
             clean_line = ANSI_ESCAPE_RE.sub('', line).strip()
             if clean_line:
-                self._console_buffer.append(clean_line)
-                if len(self._console_buffer) > 200:
-                    self._console_buffer.pop(0)
+                with self._buffers_lock:
+                    self._console_buffer.append(clean_line)
             self.events.emit(ServerEvent.CONSOLE_LINE, clean_line)
             self._parse_player_count(clean_line)
             if "Done (" in clean_line and "For help, type" in clean_line:
@@ -651,13 +673,15 @@ class ServerRunner:
         console_snapshot = self.get_console_snapshot()
         uptime = time.time() - start_time
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
+        # Flip running BEFORE emitting STOPPED so subscribers (watchdog restart,
+        # UI state) never observe a stale running=True during the event.
+        self.running = False
         self.events.emit(ServerEvent.STOPPED, {
             "exit_code": self.exit_code,
             "uptime": uptime,
             "stderr": stderr_snapshot,
             "console": console_snapshot,
         })
-        self.running = False
         self.process = None
 
     def _read_stderr(self):
@@ -668,17 +692,22 @@ class ServerRunner:
         for line in self.process.stderr:
             stripped = ANSI_ESCAPE_RE.sub('', line).strip()
             if stripped:
-                self._stderr_buffer.append(stripped)
-                if len(self._stderr_buffer) > 100:
-                    self._stderr_buffer.pop(0)
+                with self._buffers_lock:
+                    self._stderr_buffer.append(stripped)
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[JVM] {stripped}")
         self._stderr_done.set()
 
+    def get_stderr_tail(self, n: int) -> list:
+        with self._buffers_lock:
+            return list(self._stderr_buffer)[-n:] if n > 0 else []
+
     def get_stderr_snapshot(self):
-        return "\n".join(self._stderr_buffer[-50:])
+        with self._buffers_lock:
+            return "\n".join(list(self._stderr_buffer)[-self._STDERR_SNAPSHOT_TAIL:])
 
     def get_console_snapshot(self):
-        return "\n".join(self._console_buffer[-100:])
+        with self._buffers_lock:
+            return "\n".join(list(self._console_buffer)[-self._CONSOLE_SNAPSHOT_TAIL:])
 
     def _parse_player_count(self, line):
         join_match = re.search(r': (\w+) joined the game', line)
@@ -688,9 +717,13 @@ class ServerRunner:
                 self.connected_players.add(player)
                 new_count = len(self.connected_players)
                 snapshot = list(self.connected_players)
-            if new_count != self.player_count:
-                self.player_count = new_count
-                self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+                changed = new_count != self.player_count
+                if changed:
+                    self.player_count = new_count
+            # Emit outside the lock: EventBus callbacks must never run while
+            # holding _players_lock.
+            if changed:
+                self.events.emit(ServerEvent.PLAYER_COUNT, new_count)
                 self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
         else:
             leave_match = re.search(r': (\w+) left the game', line)
@@ -700,9 +733,11 @@ class ServerRunner:
                     self.connected_players.discard(player)
                     new_count = len(self.connected_players)
                     snapshot = list(self.connected_players)
-                if new_count != self.player_count:
-                    self.player_count = new_count
-                    self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+                    changed = new_count != self.player_count
+                    if changed:
+                        self.player_count = new_count
+                if changed:
+                    self.events.emit(ServerEvent.PLAYER_COUNT, new_count)
                     self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
 
 def save_server_icon(server_name, image_path):
@@ -726,6 +761,9 @@ def check_eula(server_name):
         return "eula=true" in f.read()
 
 class Scheduler:
+    # server_name -> date of last "missed window" warning (see check_due).
+    _missed_warned: dict = {}
+
     def __init__(self, server_name):
         self.server_name = server_name
         self.server_path = os.path.join(SERVERS_DIR, server_name)
@@ -776,8 +814,11 @@ class Scheduler:
             if time_diff >= 120 and (not last_run_str or last_run.date() != now.date()):
                 # MA-05: tick arrived after the 120s window — restart is skipped
                 # for today, leave a trace instead of failing silently (once per day)
-                if getattr(self, "_missed_warned_date", None) != now.date():
-                    self._missed_warned_date = now.date()
+                # Class-level marker: Scheduler instances are recreated on every
+                # tick, so a per-instance flag would never persist and this
+                # would log every 30s instead of once per day.
+                if Scheduler._missed_warned.get(self.server_name) != now.date():
+                    Scheduler._missed_warned[self.server_name] = now.date()
                     logger.warning(
                         "Scheduler [%s]: restart window %s missed by %.0fs — skipping until tomorrow",
                         self.server_name, restart_time_str, time_diff - 120
