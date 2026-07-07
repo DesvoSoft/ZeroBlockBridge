@@ -2,7 +2,7 @@
 
 **Última actualización:** 2026-07-07 (rev 10 — F13/F14/F15 planificadas: higiene de disco, Settings 2.0, light theme)
 **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 539 tests, 100% pass, 0 flaky
+> **Test count:** 544 tests, 100% pass, 0 flaky
 
 **Historial completo de fases/auditorías resueltas:** ver `docs/roadmap-history.md` (F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0, EXE-PERF, F5, F6, MODS-B, F8, BUG-AUDIT, NR, AUDIT-2, AUDIT-3, Handover 2026-06-23). Este archivo solo trackea lo pendiente o en curso.
 
@@ -10,10 +10,10 @@
 - **2026-07-05 (9):** fix(core) job-object reaping proceso servidor + port preflight + mods tab gating; feat(ui) server delete via right-click + first-run EULA consent; fix(versions) migración Paper Fill API v3; fix(tunnel) reap agentes playitd huérfanos + silenciar ruido duel-session; fix(threading) I/O lento y callbacks fuera de locks; fix(heartbeat) eventos fuera del lock — 463 tests pass
 - **2026-07-05 (10):** fix(ui) icono mod card centrado verticalmente; fix(ui) contraste texto/fondo Modrinth Browser (`_MODRINTH_GREEN` con texto blanco ilegible → `#0f172a`; `COLOR_TEXT_PRIMARY` sin tupla light/dark en 3 sitios corregido) — 463 tests pass
 - **2026-07-06 (11):** feat(players) CA-H02 — player_files.py (ops/bans/whitelist persistence) + PlayersDashboard como CTkTabview (Online/Whitelist/Operators/Bans), ban/kick funcionan offline, confirmaciones ZBBDialog; feat(console) CA-H03 — ConsoleWidget.highlight()/jump_to_next_match() con tags search_hit/search_hit_current, search bar en Console + Tunnel Log tabs; feat(world) CA-H04 — list_worlds/get_active_world/set_active_world en server_properties.py + dropdown en World tab; feat(templates) F7 resto — template_manager.py (save/load/list/delete) + selector en wizard Step 2 + save-as-template + 4 templates por defecto; feat(migration) F9 — migration.py export_server/import_server (.zbbpack, excluye jar/logs, zip-slip guard) + botón export en Backups tab + menú "Add Server" (Folder/.zbbpack) en main.py — 483 tests pass
-- **2026-07-07 (13):** feat(settings) F14 completo — AppSettingsDialog reescrito como CTkTabview 5 tabs (General/Notifications/Java/Storage/About); selector de tema (Light/System gated hasta F15 con toast); checkboxes por evento webhook (`webhook_events` setting + `enabled_events` en DiscordWebhookService); Tab Java: JDKs gestionados con tamaño + delete + purge unused (nuevos `ZBBManager.list_managed_jdks/purge_jdk/purge_unused_jdks` con guard is_running) + tabla de Javas detectados (`detect_all()`); Tab Storage: disk usage por categoría (nuevo `services/disk_usage.py`) + clear crash reports (`ZBBManager.purge_crash_reports`); Tab About con nueva `AppConfig.APP_VERSION` (también en título de ventana); keys muertas `servers_dir`/`java_preferences` eliminadas de SettingsManager; `JdkManager.list_installed()` nuevo — 539 tests pass + smoke test Tk real
+- **2026-07-07 (13):** feat(settings) F14 completo — AppSettingsDialog reescrito como CTkTabview 5 tabs (General/Notifications/Java/Storage/About); selector de tema (Light/System gated hasta F15 con toast); checkboxes por evento webhook (`webhook_events` setting + `enabled_events` en DiscordWebhookService); Tab Java: JDKs gestionados con tamaño + delete + purge unused (nuevos `ZBBManager.list_managed_jdks/purge_jdk/purge_unused_jdks` con guard is_running) + tabla de Javas detectados (`detect_all()`); Tab Storage: disk usage por categoría (nuevo `services/disk_usage.py`) + clear crash reports (`ZBBManager.purge_crash_reports`); Tab About con nueva `AppConfig.APP_VERSION` (también en título de ventana); keys muertas `servers_dir`/`java_preferences` eliminadas de SettingsManager; `JdkManager.list_installed()` nuevo — smoke test Tk real; feat(java) F13 — descarga JRE preferida con fallback a JDK (`_query_assets`, ~45 MB vs ~300 MB por versión), limpieza ~1.3 GB (app/.zbb_cache stale + dist runtime dirs), `.venv` de proyecto — 544 tests pass
 - **2026-07-06 (12):** fix(ui) wizard reorganizado 4→5 steps (Identity, Engine+Version, Resources, Rules&Security, World&Network) para eliminar truncamiento de RAM y saturación de step3; feat(ui) selección de Java interactiva en wizard Step 3 (radio: usar Java detectado del sistema vs auto-descargar recomendado, con dropdown de instalaciones) — antes solo mostraba label estático; fix(ui) botón Next de búsqueda en consola ahora re-busca si el texto cambió desde el último Enter (antes solo ciclaba matches viejos); fix(ui) `VersionManager._refresh_versions` → `refresh_versions()` (AttributeError en wizard); feat(ui) merge de botones "Load Existing Folder"/"Import .zbbpack" en un único "Add Server" con menú de 2 opciones; feat(settings) export a .zbbpack ahora también disponible desde Server Settings (Backups tab), no solo click-derecho — 483 tests pass
 
-**Siguiente prioridad:** F13 (higiene de disco/JRE) → F15 (light theme). F14 ✅ 2026-07-07. Después: F10 (Linux) o F11 Bloques B/C.
+**Siguiente prioridad:** F15 (light theme). F13 y F14 ✅ 2026-07-07. Después: F10 (Linux) o F11 Bloques B/C.
 
 ---
 
@@ -45,7 +45,7 @@ F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0 (Foundation Hardening), EXE-PERF, F5 (Crash R
 | **F10** | Cross-Platform Linux | 🥉 | ⬜ Pendiente — **próxima prioridad** |
 | **F11** | UI/UX ZBB 2.0 "Dirt Block" | 🥉 | 🔶 Parcial — Bloque A (palette/botones) ✅, Bloques B/C/D pendientes |
 | **F12** | Feature Gaps vs competencia | 🥉 | ⬜ Sin iniciar |
-| **F13** | Higiene de disco + JRE on-demand | 🥇 | ⬜ Aprobado 2026-07-07 — **próxima prioridad** |
+| **F13** | Higiene de disco + JRE on-demand | 🥇 | ✅ Implementado 2026-07-07 |
 | **F14** | App Settings 2.0 (tabbed: General/Notifications/Java/Storage/About) | 🥇 | ✅ Implementado 2026-07-07 |
 | **F15** | Light theme completo (tokens a tuplas + selector) — consolida F11.D5 | 🥈 | ⬜ Aprobado 2026-07-07 |
 | **REFACT-1** | JavaResolver + launch steps | ⏸️ | Pospuesto (YAGNI pre-alpha) |
@@ -174,10 +174,10 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 
 | # | Tarea | Archivo | Esfuerzo | Estado |
 |---|-------|---------|----------|--------|
-| 13.1 | Limpieza one-time: borrar `app/.zbb_cache/` (595 MB stale) + runtime dirs de `dist/` (~730 MB, se regeneran). `backups/` NO se toca (F14.4 dará control) | — | 10 min | ⬜ |
-| 13.2 | Descargar `image_type: "jre"` en vez de `"jdk"` (Adoptium), con fallback a `"jdk"` si no hay JRE para esa versión (ej. Java 16) — ~300 MB → ~45 MB por versión. Verificado: nada usa `javac`; `_find_java_binary` compatible con layout JRE; caches existentes siguen válidos | `services/java_installer.py:110` | 1.5 hrs | ⬜ |
-| 13.3 | Dev env: crear `.venv` del proyecto con las 5 deps + pytest/flake8/pyinstaller (hoy se usa Python global `C:\Python314` con ~180 paquetes de otros proyectos — NO podar el global) | — | 20 min | ⬜ |
-| 13.4 | Tests: fallback jre→jdk, marker/checksum intactos | `tests/` | 45 min | ⬜ |
+| 13.1 | Limpieza one-time: borrar `app/.zbb_cache/` (595 MB stale) + runtime dirs de `dist/` (~730 MB, se regeneran). `backups/` NO se toca (F14.4 dará control) | — | 10 min | ✅ 2026-07-07 — ~1.3 GB liberados |
+| 13.2 | Descargar `image_type: "jre"` en vez de `"jdk"` (Adoptium), con fallback a `"jdk"` si no hay JRE para esa versión (ej. Java 16) — ~300 MB → ~45 MB por versión. Verificado: nada usa `javac`; `_find_java_binary` compatible con layout JRE; caches existentes siguen válidos | `services/java_installer.py:110` | 1.5 hrs | ✅ 2026-07-07 — `_query_assets` jre→jdk fallback (404/vacío) |
+| 13.3 | Dev env: crear `.venv` del proyecto con las 5 deps + pytest/flake8/pyinstaller (hoy se usa Python global `C:\Python314` con ~180 paquetes de otros proyectos — NO podar el global) | — | 20 min | ✅ 2026-07-07 — `.venv` con 26 paquetes (vs ~180 global) |
+| 13.4 | Tests: fallback jre→jdk, marker/checksum intactos | `tests/` | 45 min | ✅ 2026-07-07 — `TestJreFallback` 5 tests |
 
 ### F14: App Settings 2.0 — 🥇
 

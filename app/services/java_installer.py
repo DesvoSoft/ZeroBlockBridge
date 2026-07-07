@@ -101,13 +101,15 @@ def _chmod_plusx(path: Path):
         logger.warning("Failed to set executable permission on %s: %s", path, exc)
 
 
-def _fetch_asset_info(version: int) -> dict:
+def _query_assets(version: int, image_type: str) -> Optional[dict]:
+    """One Adoptium query. Returns None when no matching release exists
+    (empty asset list or 404); raises JdkDownloadError on real failures."""
     os_name = _platform_os()
     arch = _platform_arch()
     url = _ADOPTIUM_API.format(version=version)
     params = {
         "architecture": arch,
-        "image_type": "jdk",
+        "image_type": image_type,
         "os": os_name,
         "vendor": "eclipse",
         "heap_size": "normal",
@@ -115,6 +117,8 @@ def _fetch_asset_info(version: int) -> dict:
 
     try:
         resp = requests.get(url, params=params, timeout=30)
+        if resp.status_code == 404:
+            return None
         resp.raise_for_status()
         assets = resp.json()
     except requests.ConnectionError:
@@ -125,9 +129,7 @@ def _fetch_asset_info(version: int) -> dict:
         raise JdkDownloadError(f"Adoptium API request failed: {exc}")
 
     if not assets:
-        raise JdkDownloadError(
-            f"No JDK {version} asset found for {os_name}/{arch}"
-        )
+        return None
 
     asset = assets[0]
     binary = asset.get("binary", {})
@@ -143,7 +145,23 @@ def _fetch_asset_info(version: int) -> dict:
         "url": download_url,
         "checksum": checksum.upper() if checksum else "",
         "version": asset.get("version_data", {}).get("semver", str(version)),
+        "image_type": image_type,
     }
+
+
+def _fetch_asset_info(version: int) -> dict:
+    # Prefer the JRE: ~45 MB vs ~300 MB, and running a Minecraft server
+    # only needs bin/java. Some versions (e.g. 16) ship JDK-only on
+    # Adoptium, so fall back to the full JDK.
+    for image_type in ("jre", "jdk"):
+        info = _query_assets(version, image_type)
+        if info is not None:
+            if image_type == "jdk":
+                logger.info("No JRE %d on Adoptium — falling back to full JDK", version)
+            return info
+    raise JdkDownloadError(
+        f"No JDK {version} asset found for {_platform_os()}/{_platform_arch()}"
+    )
 
 
 class JdkManager:

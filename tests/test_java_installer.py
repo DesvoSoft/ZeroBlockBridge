@@ -314,3 +314,61 @@ class TestListInstalled:
     def test_missing_cache_dir_returns_empty(self, tmp_path):
         with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "nope"):
             assert JdkManagerInstance.list_installed() == []
+
+
+class TestJreFallback:
+    """F13.2 — prefer JRE image, fall back to full JDK when absent."""
+
+    @staticmethod
+    def _resp(assets, status=200):
+        resp = MagicMock()
+        resp.status_code = status
+        resp.json.return_value = assets
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    _JRE_ASSET = [{
+        "binary": {"package": {"link": "https://example.com/jre.zip", "checksum": "abc"}},
+        "version_data": {"semver": "17.0.1"},
+    }]
+    _JDK_ASSET = [{
+        "binary": {"package": {"link": "https://example.com/jdk.zip", "checksum": "def"}},
+        "version_data": {"semver": "16.0.2"},
+    }]
+
+    @patch("app.services.java_installer.requests.get")
+    def test_jre_preferred(self, mock_get):
+        mock_get.return_value = self._resp(self._JRE_ASSET)
+        result = _fetch_asset_info(17)
+        assert result["url"] == "https://example.com/jre.zip"
+        assert result["image_type"] == "jre"
+        assert mock_get.call_count == 1
+        assert mock_get.call_args.kwargs["params"]["image_type"] == "jre"
+
+    @patch("app.services.java_installer.requests.get")
+    def test_falls_back_to_jdk_on_empty_jre(self, mock_get):
+        mock_get.side_effect = [self._resp([]), self._resp(self._JDK_ASSET)]
+        result = _fetch_asset_info(16)
+        assert result["url"] == "https://example.com/jdk.zip"
+        assert result["image_type"] == "jdk"
+        assert mock_get.call_count == 2
+
+    @patch("app.services.java_installer.requests.get")
+    def test_falls_back_to_jdk_on_404(self, mock_get):
+        mock_get.side_effect = [self._resp([], status=404), self._resp(self._JDK_ASSET)]
+        result = _fetch_asset_info(16)
+        assert result["image_type"] == "jdk"
+
+    @patch("app.services.java_installer.requests.get")
+    def test_raises_when_neither_exists(self, mock_get):
+        mock_get.return_value = self._resp([])
+        with pytest.raises(JdkDownloadError, match="No JDK 99 asset"):
+            _fetch_asset_info(99)
+        assert mock_get.call_count == 2
+
+    @patch("app.services.java_installer.requests.get")
+    def test_network_error_does_not_fall_back(self, mock_get):
+        mock_get.side_effect = __import__("requests").ConnectionError()
+        with pytest.raises(JdkDownloadError, match="No internet connection"):
+            _fetch_asset_info(17)
+        assert mock_get.call_count == 1
