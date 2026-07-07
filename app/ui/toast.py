@@ -18,11 +18,12 @@ from app.ui.win_effects import apply_rounded_corners
 logger = logging.getLogger(__name__)
 
 # Toast type -> (bg_color, border_color, icon)
+# bg_color uses AppConfig card tokens to adapt to light/dark mode
 _TOAST_STYLES = {
-    "info":    ("#1e293b", "#84cc16", "i"),        # Slate-800 + Lime-400
-    "success": ("#1e293b", "#22c55e", "\u2713"),   # Slate-800 + Green-500
-    "warning": ("#1e293b", "#f97316", "!"),        # Slate-800 + Orange-500
-    "error":   ("#1e293b", "#ef4444", "x"),        # Slate-800 + Red-500
+    "info":    ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#84cc16", "i"),
+    "success": ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#22c55e", "\u2713"),
+    "warning": ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#f97316", "!"),
+    "error":   ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#ef4444", "x"),
 }
 
 # Fallback color mapping from raw color names to toast types
@@ -57,7 +58,7 @@ class ToastNotification:
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
         toast.attributes("-alpha", 0.0)
-        toast.configure(fg_color="#1e293b")
+        toast.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
 
         # Outer frame with border accent
         outer = ctk.CTkFrame(
@@ -78,7 +79,7 @@ class ToastNotification:
 
         # Message
         ctk.CTkLabel(
-            inner, text=message, text_color="#e2e8f0",
+            inner, text=message, text_color=AppConfig.COLOR_TEXT_PRIMARY,
             font=(AppConfig.FONT_FAMILY, 12), wraplength=320, justify="left",
         ).pack(side="left", fill="x", expand=True)
 

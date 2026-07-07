@@ -11,6 +11,20 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+def resolve_color(color):
+    """Resolve (light, dark) tuple to active appearance mode string.
+    
+    Passes plain strings through unchanged. Tokens like
+    ``AppConfig.COLOR_TEXT_PRIMARY = ("#0f172a", "#f1f5f9")``
+    are resolved to the single hex string matching the current
+    ``ctk.get_appearance_mode()``, for use with Tk-native widgets
+    (``tag_config``, ``tk.Menu``, PIL drawing) that don't accept tuples.
+    """
+    if isinstance(color, tuple):
+        return color[0] if ctk.get_appearance_mode() == "Light" else color[1]
+    return color
+
+
 def center_on_parent(toplevel, parent, width, height):
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
@@ -71,7 +85,7 @@ class ToolTip:
 
         label = ctk.CTkLabel(self.tooltip, text=self.text,
                              fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
-                             text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                             text_color=AppConfig.COLOR_TEXT_PRIMARY,
                              corner_radius=AppConfig.RADIUS_BADGE, padx=10, pady=5,
                              font=ctk.CTkFont(size=12))
         label.pack()
@@ -104,10 +118,10 @@ class ConsoleWidget(ctk.CTkTextbox):
         self._buffer = []
         self._is_paused = False
 
-        self.tag_config("line_error", foreground=AppConfig.COLOR_STATUS_OFFLINE)
-        self.tag_config("line_warn", foreground=AppConfig.COLOR_ACCENT_AMBER)
-        self.tag_config("line_join", foreground=AppConfig.COLOR_STATUS_ONLINE)
-        self.tag_config("line_leave", foreground=AppConfig.COLOR_TEXT_MUTED)
+        self.tag_config("line_error", foreground=resolve_color(AppConfig.COLOR_STATUS_OFFLINE))
+        self.tag_config("line_warn", foreground=resolve_color(AppConfig.COLOR_ACCENT_AMBER))
+        self.tag_config("line_join", foreground=resolve_color(AppConfig.COLOR_STATUS_ONLINE))
+        self.tag_config("line_leave", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
 
         # Bind visibility events for lazy rendering (ARCH-04)
         top = self.winfo_toplevel()
@@ -189,8 +203,8 @@ class ConsoleWidget(ctk.CTkTextbox):
         self._last_pattern = pattern
         if not pattern:
             return
-        self.tag_config("search_hit", background=AppConfig.COLOR_ACCENT_AMBER, foreground="#1e293b")
-        self.tag_config("search_hit_current", background=AppConfig.COLOR_STATUS_ONLINE, foreground="#1e293b")
+        self.tag_config("search_hit", background=resolve_color(AppConfig.COLOR_ACCENT_AMBER), foreground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY))
+        self.tag_config("search_hit_current", background=resolve_color(AppConfig.COLOR_STATUS_ONLINE), foreground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY))
         start = "1.0"
         while True:
             pos = self.search(pattern, start, stopindex="end", nocase=True)
@@ -335,9 +349,9 @@ class ServerListItem(ctk.CTkFrame):
         menu = tk.Menu(
             self, tearoff=0,
             bg=AppConfig.COLOR_BG_CARD_DARK,
-            fg=AppConfig.COLOR_TEXT_PRIMARY,
-            activebackground=AppConfig.COLOR_ACCENT_GREEN,
-            activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
+            fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+            activebackground=resolve_color(AppConfig.COLOR_ACCENT_GREEN),
+            activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
             activeborderwidth=0,
             borderwidth=1,
             relief="flat",
@@ -353,9 +367,9 @@ class ServerListItem(ctk.CTkFrame):
                 menu.add_separator()
             menu.add_command(
                 label=f"  Delete '{self.full_name}'",
-                foreground=AppConfig.COLOR_BTN_DANGER,
-                activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
-                activebackground=AppConfig.COLOR_BTN_DANGER,
+                foreground=resolve_color(AppConfig.COLOR_BTN_DANGER),
+                activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+                activebackground=resolve_color(AppConfig.COLOR_BTN_DANGER),
                 command=lambda: self.on_delete(self.server_name),
             )
         try:
@@ -402,7 +416,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             fg_color="transparent",
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
             command=self._on_cancel
         )
@@ -494,7 +508,7 @@ class EulaDialog(ctk.CTkToplevel):
             buttons, text="Decline", corner_radius=AppConfig.RADIUS_BTN, width=120,
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
             command=self._decline,
         ).pack(side="left")
@@ -583,7 +597,7 @@ class ZBBDialog(ctk.CTkToplevel):
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color="transparent", border_width=1,
                 border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                text_color=AppConfig.COLOR_TEXT_PRIMARY,
                 hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
                 command=self._cancel,
             ).pack(side="left")

@@ -107,7 +107,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             image=icon(icon_name, 13) if icon_name else None,
             corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=(AppConfig.FONT_FAMILY, 12),
         )
@@ -118,7 +118,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     def _build_general_tab(self, tab):
         card = self._card(
             tab, "Appearance",
-            "Interface color mode. Light and System follow the upcoming light-theme update.",
+            "Interface color mode — Dark, Light, or follow the system setting.",
         )
         self._theme_selector = ctk.CTkSegmentedButton(
             card, values=["Dark", "Light", "System"],
@@ -129,12 +129,6 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
 
     def _on_theme_selected(self, choice: str):
-        if choice != "Dark":
-            # Light/System land with F15 -- most widgets still carry
-            # dark-only colors and would render half-broken.
-            self._theme_selector.set("Dark")
-            Toast.show(self, "Light theme is coming in a future update.", toast_type="info")
-            return
         self._settings.set("theme", choice)
         ctk.set_appearance_mode(choice)
 

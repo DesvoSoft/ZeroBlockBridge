@@ -22,7 +22,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
 from app.ui.icons import icon
 
 import app.core.logic as logic
@@ -37,7 +37,6 @@ from app.ui.toast import Toast
 from app.core.core import ZBBManager
 from app.ui.players_dashboard import PlayersDashboard
 
-ctk.set_appearance_mode("Dark")
 _theme_path = ASSETS_DIR / "zbb_theme.json"
 ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
 
@@ -132,7 +131,7 @@ class MCTunnelApp(ctk.CTk):
             command=self.show_add_server_menu, corner_radius=AppConfig.RADIUS_BTN, height=32,
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=(AppConfig.FONT_FAMILY, 12)
         )
@@ -144,7 +143,7 @@ class MCTunnelApp(ctk.CTk):
             command=self.open_app_settings, corner_radius=AppConfig.RADIUS_BTN, height=32,
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=(AppConfig.FONT_FAMILY, 12)
         )
@@ -541,9 +540,9 @@ class MCTunnelApp(ctk.CTk):
         menu = tk.Menu(
             self, tearoff=0,
             bg=AppConfig.COLOR_BG_CARD_DARK,
-            fg=AppConfig.COLOR_TEXT_PRIMARY,
-            activebackground=AppConfig.COLOR_BTN_GHOST_HOVER,
-            activeforeground=AppConfig.COLOR_TEXT_PRIMARY,
+            fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+            activebackground=resolve_color(AppConfig.COLOR_BTN_GHOST_HOVER),
+            activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
             borderwidth=0,
         )
         menu.add_command(label="From Folder (existing server)", command=self.load_existing_server_action)
@@ -614,7 +613,7 @@ class MCTunnelApp(ctk.CTk):
         meta = logic.get_server_meta(server_name)
         server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
+        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 

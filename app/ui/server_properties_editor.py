@@ -677,10 +677,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.entry_motd.insert(0, self.properties.get("motd", "A Minecraft Server"))
         self.entry_motd.bind("<KeyRelease>", self._update_motd_preview)
 
-        self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color="#1d1d1d", corner_radius=0, border_width=2, border_color="#3e3e3e")
+        self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), corner_radius=0, border_width=2, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.preview_motd_frame.pack(fill="x", pady=(0, 0))
         
-        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color="#1d1d1d", text_color="#aaaaaa", font=("Consolas", 12), wrap="word")
+        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=("Consolas", 12), wrap="word")
         self.motd_preview.pack(fill="both", expand=True, padx=2, pady=2)
         
         mc_colors = {

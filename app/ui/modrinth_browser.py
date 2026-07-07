@@ -295,7 +295,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Installed", width=90, height=28,
             corner_radius=10,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY), font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._toggle_installed_view,
         )
         self.btn_installed.grid(row=0, column=5, padx=(4, 16), pady=6)
@@ -666,7 +666,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.btn_install_selected.configure(
                 text=f"Install Selected ({n})", state="normal" if n else "disabled",
                 fg_color=_MODRINTH_GREEN if n else (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
-                text_color="#0f172a" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
+                text_color="#0f172a" if n else AppConfig.COLOR_TEXT_PRIMARY)
 
     def _on_install_selected(self):
         hits = list(self._selected_hits.values())
@@ -810,7 +810,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if len(desc) > 160:
             desc = desc[:160].rsplit(" ", 1)[0] + "…"
         lbl_desc = ctk.CTkLabel(info_frame, text=desc,
-                                text_color=(AppConfig.COLOR_TEXT_GRAY, "#cbd5e1"),
+                                text_color=AppConfig.COLOR_TEXT_GRAY,
                                 font=AppConfig.FONT_BODY_SMALL,
                                 anchor="w", wraplength=500, justify="left")
         lbl_desc.grid(row=1, column=0, sticky="ew", pady=(2, 0))
@@ -897,7 +897,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_GHOST if unsupported else _MODRINTH_GREEN,
                 hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else _MODRINTH_GREEN_HOVER,
-                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY) if unsupported else "#0f172a",
+                text_color=AppConfig.COLOR_TEXT_PRIMARY if unsupported else "#0f172a",
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
                 state="disabled" if unsupported else "normal",
                 command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
@@ -922,7 +922,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._view = "search"
             self.btn_installed.configure(
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                text="Installed", text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                text="Installed", text_color=AppConfig.COLOR_TEXT_PRIMARY,
             )
             self.installed_action_bar.grid_remove()
             self.pagination_bar.grid()
@@ -962,7 +962,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             action_bar,
             text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
             font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
-            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             anchor="w",
         )
         header.pack(side="left")
@@ -973,7 +973,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 corner_radius=8,
                 fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
                 hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+                text_color=AppConfig.COLOR_TEXT_PRIMARY,
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_delete_selected,
             )
@@ -1082,12 +1082,12 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._btn_delete_selected.configure(
                 text=f"Delete Selected ({n})", state="normal" if n else "disabled",
                 fg_color=AppConfig.COLOR_BTN_DANGER if n else _ghost,
-                text_color="white" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
+                text_color="white" if n else AppConfig.COLOR_TEXT_PRIMARY)
         if hasattr(self, "_btn_update_selected"):
             self._btn_update_selected.configure(
                 text=f"Update Selected ({n})", state="normal" if n else "disabled",
                 fg_color=_MODRINTH_GREEN if n else _ghost,
-                text_color="#0f172a" if n else ("#0f172a", AppConfig.COLOR_TEXT_PRIMARY))
+                text_color="#0f172a" if n else AppConfig.COLOR_TEXT_PRIMARY)
 
     def _confirm_uninstall_mod(self, slug: str, title: str):
         ctx = self._resolve_server_context()
