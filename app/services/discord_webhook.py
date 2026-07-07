@@ -2,6 +2,7 @@ import logging
 import queue
 import threading
 import time
+from typing import Callable, Optional
 
 import requests
 
@@ -21,16 +22,23 @@ _EVENT_LABELS = {
 
 
 class DiscordWebhookService:
-    def __init__(self, webhook_url: str, events: EventBus, server_name: str = ""):
+    def __init__(self, webhook_url: str, events: EventBus,
+                 server_name_getter: Optional[Callable[[], str]] = None):
         self._url = webhook_url
-        self._server = server_name
+        self._events = events
+        # Getter, not a snapshot: the active server can change after the
+        # service is created (it lives for the whole app session).
+        self._get_server = server_name_getter or (lambda: "")
         self._queue: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, daemon=True, name="DiscordWebhook")
         self._worker.start()
 
+        self._subscriptions = []
         for event in _EVENT_LABELS:
-            events.subscribe(event, lambda data, e=event: self._enqueue(e, data))
+            handler = (lambda data, e=event: self._enqueue(e, data))
+            events.subscribe(event, handler)
+            self._subscriptions.append((event, handler))
 
     def _enqueue(self, event_type: str, data) -> None:
         self._queue.put((event_type, data))
@@ -54,8 +62,9 @@ class DiscordWebhookService:
                 "color": color,
             }]
         }
-        if self._server:
-            payload["embeds"][0]["footer"] = {"text": self._server}
+        server_name = self._get_server()
+        if server_name:
+            payload["embeds"][0]["footer"] = {"text": server_name}
         try:
             resp = requests.post(self._url, json=payload, timeout=_POST_TIMEOUT)
             if resp.status_code not in (200, 204):
@@ -66,7 +75,7 @@ class DiscordWebhookService:
     def _format_description(self, event_type: str, data) -> str:
         if event_type == ServerEvent.CRASHED and isinstance(data, dict):
             reason = data.get("reason", "unknown")
-            attempt = data.get("retry_attempt", 0)
+            attempt = data.get("retry", 0)
             return f"Reason: `{reason}` — Retry attempt {attempt}"
         if event_type == ServerEvent.BACKUP_COMPLETED and isinstance(data, dict):
             path = data.get("path", "")
@@ -77,3 +86,26 @@ class DiscordWebhookService:
 
     def stop(self) -> None:
         self._stop.set()
+        # Unsubscribe, otherwise the dead service keeps enqueueing into a
+        # queue nobody drains (and a re-created service would double-post).
+        for event, handler in self._subscriptions:
+            self._events.unsubscribe(event, handler)
+        self._subscriptions.clear()
+
+    @staticmethod
+    def send_test(webhook_url: str) -> tuple[bool, str]:
+        """Post a test embed synchronously. Returns (ok, error_detail)."""
+        payload = {
+            "embeds": [{
+                "title": "ZeroBlockBridge",
+                "description": "Webhook test successful. Notifications will appear here.",
+                "color": 0x57F287,
+            }]
+        }
+        try:
+            resp = requests.post(webhook_url, json=payload, timeout=_POST_TIMEOUT)
+            if resp.status_code in (200, 204):
+                return True, ""
+            return False, f"Discord returned HTTP {resp.status_code}"
+        except requests.RequestException as e:
+            return False, str(e)

@@ -16,7 +16,7 @@ def bus():
 def _make_service(url, bus, server_name="TestServer"):
     with patch("app.services.discord_webhook.requests.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=204)
-        svc = DiscordWebhookService(url, bus, server_name)
+        svc = DiscordWebhookService(url, bus, lambda: server_name)
     return svc, mock_post
 
 
@@ -49,8 +49,8 @@ class TestDiscordWebhookPosting:
             return MagicMock(status_code=204)
 
         with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
-            svc = DiscordWebhookService("http://example.com/hook", bus, "MySrv")
-            bus.emit(ServerEvent.CRASHED, {"reason": "out_of_memory", "retry_attempt": 1})
+            svc = DiscordWebhookService("http://example.com/hook", bus, lambda: "MySrv")
+            bus.emit(ServerEvent.CRASHED, {"reason": "out_of_memory", "retry": 2})
             posted.wait(timeout=5)
         svc.stop()
 
@@ -59,6 +59,7 @@ class TestDiscordWebhookPosting:
         assert embeds[0]["title"] == "Server Crashed"
         assert embeds[0]["color"] == 0xFF0000
         assert "out_of_memory" in embeds[0]["description"]
+        assert "Retry attempt 2" in embeds[0]["description"]
         assert embeds[0]["footer"]["text"] == "MySrv"
 
     def test_posts_on_ready_event(self, bus):
@@ -179,3 +180,38 @@ class TestDiscordWebhookStop:
         svc.stop()
         svc._worker.join(timeout=3)
         assert not svc._worker.is_alive()
+
+    def test_stop_unsubscribes_from_bus(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService("http://example.com/hook", bus)
+        svc.stop()
+        for event in (ServerEvent.CRASHED, ServerEvent.READY,
+                      ServerEvent.BACKUP_COMPLETED, ServerEvent.BACKUP_FAILED):
+            assert not bus._listeners.get(event), f"Listener leaked for {event}"
+        # Post-stop emits must not grow the dead queue
+        bus.emit(ServerEvent.CRASHED, {})
+        assert svc._queue.empty()
+
+
+class TestDiscordWebhookSendTest:
+    def test_send_test_success(self):
+        with patch("app.services.discord_webhook.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=204)
+            ok, error = DiscordWebhookService.send_test("http://example.com/hook")
+        assert ok
+        assert error == ""
+
+    def test_send_test_http_error(self):
+        with patch("app.services.discord_webhook.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=404)
+            ok, error = DiscordWebhookService.send_test("http://example.com/hook")
+        assert not ok
+        assert "404" in error
+
+    def test_send_test_network_error(self):
+        import requests as _requests
+        with patch("app.services.discord_webhook.requests.post",
+                   side_effect=_requests.ConnectionError("no route")):
+            ok, error = DiscordWebhookService.send_test("http://example.com/hook")
+        assert not ok
+        assert "no route" in error

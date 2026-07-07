@@ -136,7 +136,19 @@ class MCTunnelApp(ctk.CTk):
             hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
             font=(AppConfig.FONT_FAMILY, 12)
         )
-        self.btn_add_server.pack(fill="x", pady=(0, 10))
+        self.btn_add_server.pack(fill="x", pady=(0, 5))
+
+        self.btn_app_settings = ctk.CTkButton(
+            self.actions_frame, text="Settings",
+            image=icon("gear", 14),
+            command=self.open_app_settings, corner_radius=AppConfig.RADIUS_BTN, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=("#0f172a", AppConfig.COLOR_TEXT_PRIMARY),
+            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            font=(AppConfig.FONT_FAMILY, 12)
+        )
+        self.btn_app_settings.pack(fill="x", pady=(0, 10))
 
         # --- Separator ---
         self.sep = ctk.CTkFrame(self.sidebar_frame, height=2,
@@ -735,6 +747,13 @@ class MCTunnelApp(ctk.CTk):
         else:
             self.players_dashboard_window = PlayersDashboard(self, self.events, self.zbb_manager)
 
+    def open_app_settings(self):
+        if getattr(self, "app_settings_window", None) is not None and self.app_settings_window.winfo_exists():
+            self.app_settings_window.focus()
+        else:
+            from app.ui.app_settings import AppSettingsDialog
+            self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
+
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self.btn_start.configure(state="normal"))
@@ -1093,6 +1112,8 @@ class MCTunnelApp(ctk.CTk):
 
     def _kill_orphan_processes(self):
         """Force-kill any subprocesses still alive after graceful shutdown."""
+        # Best-effort last resort during app exit: a kill failure here is
+        # unactionable (the Job Object reaps survivors when the app dies).
         runner = getattr(self.zbb_manager, 'server_runner', None)
         if runner:
             proc = getattr(runner, 'process', None)
