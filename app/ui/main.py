@@ -539,7 +539,7 @@ class MCTunnelApp(ctk.CTk):
         import tkinter as tk
         menu = tk.Menu(
             self, tearoff=0,
-            bg=AppConfig.COLOR_BG_CARD_DARK,
+            bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
             fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
             activebackground=resolve_color(AppConfig.COLOR_BTN_GHOST_HOVER),
             activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
@@ -748,6 +748,9 @@ class MCTunnelApp(ctk.CTk):
 
     def open_app_settings(self):
         if getattr(self, "app_settings_window", None) is not None and self.app_settings_window.winfo_exists():
+            # The dialog may be withdrawn (CTk titlebar dance on theme switch)
+            self.app_settings_window.deiconify()
+            self.app_settings_window.lift()
             self.app_settings_window.focus()
         else:
             from app.ui.app_settings import AppSettingsDialog

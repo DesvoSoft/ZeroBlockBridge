@@ -22,7 +22,7 @@ from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
 from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent
-from app.ui.win_effects import apply_rounded_corners
+from app.ui.win_effects import apply_rounded_corners, apply_titlebar_theme
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,19 @@ class AppSettingsDialog(ctk.CTkToplevel):
     def _on_theme_selected(self, choice: str):
         self._settings.set("theme", choice)
         ctk.set_appearance_mode(choice)
+        # CTkToplevel reacts to the switch with a withdraw/deiconify dance to
+        # recolor the titlebar; its revert can lose the race and leave this
+        # dialog withdrawn forever. Re-show once the dust settles.
+        self.after(80, self._ensure_visible)
+
+    def _ensure_visible(self):
+        if not self.winfo_exists():
+            return
+        if self.state() != "normal":
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        apply_titlebar_theme(self)
 
     # ------------------------------------------------------------------
     # Tab: Notifications

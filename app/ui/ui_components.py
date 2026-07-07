@@ -357,7 +357,7 @@ class ServerListItem(ctk.CTkFrame):
         import tkinter as tk
         menu = tk.Menu(
             self, tearoff=0,
-            bg=AppConfig.COLOR_BG_CARD_DARK,
+            bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
             fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
             activebackground=resolve_color(AppConfig.COLOR_ACCENT_GREEN),
             activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
