@@ -252,7 +252,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._backup_scheduler_ui = BackupScheduler(self.server_name)
         self._next_backup_lbl = ctk.CTkLabel(
             self.frame_backups, text="", anchor="w",
-            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY), font=(AppConfig.FONT_FAMILY, 12)
+            text_color=AppConfig.COLOR_TEXT_GRAY, font=(AppConfig.FONT_FAMILY, 12)
         )
         self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
         self._refresh_backup_countdown()
@@ -278,7 +278,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             loading_lbl.destroy()
             
         if not backups:
-            ctk.CTkLabel(self.backup_list_frame, text="", image=icon("package", 36, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED))).pack(pady=(24, 4))
+            ctk.CTkLabel(self.backup_list_frame, text="", image=icon("package", 36, AppConfig.COLOR_TEXT_MUTED)).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.backup_list_frame, text="No backups found.",
                 text_color=AppConfig.COLOR_TEXT_MUTED
@@ -480,14 +480,14 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             self.chk_backup_restart.configure(state="normal")
             if self.var_schedule_mode.get() == "Interval":
                 self.entry_interval.configure(state="normal")
-                self.lbl_interval.configure(text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_PRIMARY))
+                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
                 self.entry_time.configure(state="disabled")
                 self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             else:
                 self.entry_interval.configure(state="disabled")
                 self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
                 self.entry_time.configure(state="normal")
-                self.lbl_time.configure(text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_PRIMARY))
+                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
         else:
             self.combo_mode.configure(state="disabled")
             self.chk_backup_restart.configure(state="disabled")
@@ -594,7 +594,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
                                      width=18, height=18, corner_radius=12,
-                                     fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST), text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY))
+                                     fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
             help_icon.grid(row=current_row, column=1, sticky="w", padx=2)
             help_icon.tooltip_ref = ToolTip(help_icon, text=description)
             
@@ -658,8 +658,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
                             width=100, height=28, fg_color="transparent", border_width=1,
                             border_color=AppConfig.COLOR_BORDER_DARK,
-                            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
-                            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY))
+                            hover_color=AppConfig.COLOR_BTN_GHOST,
+                            text_color=AppConfig.COLOR_TEXT_GRAY)
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
         current_row = card_identity.grid_size()[1]
@@ -736,7 +736,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         self.lbl_mrpack_status = ctk.CTkLabel(
             card_mrpack, text="", font=self.font_small, anchor="w",
-            text_color=(AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_GRAY),
+            text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_mrpack_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 8))
 

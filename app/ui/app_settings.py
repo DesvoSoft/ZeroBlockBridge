@@ -108,7 +108,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=AppConfig.COLOR_BTN_GHOST,
             font=(AppConfig.FONT_FAMILY, 12),
         )
 
@@ -331,7 +331,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             btn = ctk.CTkButton(
                 frame, text="", image=icon("trash", 13), width=30, height=26,
                 corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent",
-                hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                hover_color=AppConfig.COLOR_BTN_GHOST,
                 command=lambda v=version: self._delete_jdk(v),
                 state="disabled" if running else "normal",
             )

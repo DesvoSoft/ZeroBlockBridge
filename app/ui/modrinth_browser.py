@@ -244,10 +244,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             corner_radius=AppConfig.RADIUS_BTN, border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
-            text_color=(AppConfig.COLOR_BTN_GHOST, AppConfig.COLOR_TEXT_PRIMARY),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
             button_color=_MODRINTH_GREEN, button_hover_color=_MODRINTH_GREEN_HOVER,
             dropdown_fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
-            dropdown_text_color=(AppConfig.COLOR_BTN_GHOST, AppConfig.COLOR_TEXT_PRIMARY),
+            dropdown_text_color=AppConfig.COLOR_TEXT_PRIMARY,
             dropdown_hover_color=_MODRINTH_GREEN,
             font=AppConfig.FONT_BODY_SMALL,
             state="readonly",
@@ -436,7 +436,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.lbl_page = ctk.CTkLabel(
             self._pagination_controls, text="",
             font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
-            text_color=(AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_GRAY),
+            text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_page.pack(side="left", padx=8)
 
@@ -600,7 +600,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._pagination_controls.pack(side="left", padx=(12, 0), pady=2)
         page_num = self._current_page + 1
         self.lbl_page.configure(text=f"Page {page_num} of {self._total_pages}")
-        _ghost = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST)
+        _ghost = AppConfig.COLOR_BTN_GHOST
         prev_ok = self._current_page > 0
         next_ok = self._current_page < self._total_pages - 1
         self.btn_prev.configure(state="normal" if prev_ok else "disabled",
@@ -665,7 +665,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hasattr(self, "btn_install_selected"):
             self.btn_install_selected.configure(
                 text=f"Install Selected ({n})", state="normal" if n else "disabled",
-                fg_color=_MODRINTH_GREEN if n else (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                fg_color=_MODRINTH_GREEN if n else AppConfig.COLOR_BTN_GHOST,
                 text_color="#0f172a" if n else AppConfig.COLOR_TEXT_PRIMARY)
 
     def _on_install_selected(self):
@@ -971,7 +971,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._btn_delete_selected = ctk.CTkButton(
                 action_bar, text="Delete Selected (0)", width=140, height=28,
                 corner_radius=8,
-                fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                fg_color=AppConfig.COLOR_BTN_GHOST,
                 hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
                 text_color=AppConfig.COLOR_TEXT_PRIMARY,
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
@@ -982,7 +982,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._btn_update_selected = ctk.CTkButton(
                 action_bar, text="Update Selected (0)", width=140, height=28,
                 corner_radius=8,
-                fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                fg_color=AppConfig.COLOR_BTN_GHOST,
                 hover_color=_MODRINTH_GREEN_HOVER,
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
                 command=self._on_update_selected,
@@ -1007,7 +1007,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         if not files:
             ctk.CTkLabel(
-                self.results_frame, text="", image=icon("package", 36, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED)),
+                self.results_frame, text="", image=icon("package", 36, AppConfig.COLOR_TEXT_MUTED),
             ).grid(row=1, column=0, pady=(24, 4))
             ctk.CTkLabel(
                 self.results_frame,
@@ -1077,7 +1077,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _update_installed_action_bar(self):
         n = len(self._selected_files)
-        _ghost = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST)
+        _ghost = AppConfig.COLOR_BTN_GHOST
         if hasattr(self, "_btn_delete_selected"):
             self._btn_delete_selected.configure(
                 text=f"Delete Selected ({n})", state="normal" if n else "disabled",

@@ -1,6 +1,6 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-**Última actualización:** 2026-07-07 (rev 11 — F13 y F14 implementadas; F15 light theme pendiente)
+**Última actualización:** 2026-07-07 (rev 12 — F15 light theme implementado; pendiente QA visual)
 **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 544 tests, 100% pass, 0 flaky
 
@@ -11,9 +11,10 @@
 - **2026-07-05 (10):** fix(ui) icono mod card centrado verticalmente; fix(ui) contraste texto/fondo Modrinth Browser (`_MODRINTH_GREEN` con texto blanco ilegible → `#0f172a`; `COLOR_TEXT_PRIMARY` sin tupla light/dark en 3 sitios corregido) — 463 tests pass
 - **2026-07-06 (11):** feat(players) CA-H02 — player_files.py (ops/bans/whitelist persistence) + PlayersDashboard como CTkTabview (Online/Whitelist/Operators/Bans), ban/kick funcionan offline, confirmaciones ZBBDialog; feat(console) CA-H03 — ConsoleWidget.highlight()/jump_to_next_match() con tags search_hit/search_hit_current, search bar en Console + Tunnel Log tabs; feat(world) CA-H04 — list_worlds/get_active_world/set_active_world en server_properties.py + dropdown en World tab; feat(templates) F7 resto — template_manager.py (save/load/list/delete) + selector en wizard Step 2 + save-as-template + 4 templates por defecto; feat(migration) F9 — migration.py export_server/import_server (.zbbpack, excluye jar/logs, zip-slip guard) + botón export en Backups tab + menú "Add Server" (Folder/.zbbpack) en main.py — 483 tests pass
 - **2026-07-07 (13):** feat(settings) F14 completo — AppSettingsDialog reescrito como CTkTabview 5 tabs (General/Notifications/Java/Storage/About); selector de tema (Light/System gated hasta F15 con toast); checkboxes por evento webhook (`webhook_events` setting + `enabled_events` en DiscordWebhookService); Tab Java: JDKs gestionados con tamaño + delete + purge unused (nuevos `ZBBManager.list_managed_jdks/purge_jdk/purge_unused_jdks` con guard is_running) + tabla de Javas detectados (`detect_all()`); Tab Storage: disk usage por categoría (nuevo `services/disk_usage.py`) + clear crash reports (`ZBBManager.purge_crash_reports`); Tab About con nueva `AppConfig.APP_VERSION` (también en título de ventana); keys muertas `servers_dir`/`java_preferences` eliminadas de SettingsManager; `JdkManager.list_installed()` nuevo — smoke test Tk real; feat(java) F13 — descarga JRE preferida con fallback a JDK (`_query_assets`, ~45 MB vs ~300 MB por versión), limpieza ~1.3 GB (app/.zbb_cache stale + dist runtime dirs), `.venv` de proyecto — 544 tests pass
+- **2026-07-07 (14):** feat(ui) F15 light theme — 38 tokens de AppConfig a tuplas (light,dark); `resolve_color()` bridge para consumidores Tk-nativos (tag_config, tk.Menu, Toast, MOTD); gate del selector removido (Dark/Light/System funcionales). Hotfix post-review: 36 sitios con tuplas anidadas `(str, TOKEN)` que crasheaban la UI al instanciar (el agente no ejecutó la app) reemplazados por token directo; `ConsoleWidget._set_appearance_mode` override re-aplica tags al cambiar tema en vivo. Verificado: smoke Tk en Light y Dark + flip en vivo — 544 tests pass
 - **2026-07-06 (12):** fix(ui) wizard reorganizado 4→5 steps (Identity, Engine+Version, Resources, Rules&Security, World&Network) para eliminar truncamiento de RAM y saturación de step3; feat(ui) selección de Java interactiva en wizard Step 3 (radio: usar Java detectado del sistema vs auto-descargar recomendado, con dropdown de instalaciones) — antes solo mostraba label estático; fix(ui) botón Next de búsqueda en consola ahora re-busca si el texto cambió desde el último Enter (antes solo ciclaba matches viejos); fix(ui) `VersionManager._refresh_versions` → `refresh_versions()` (AttributeError en wizard); feat(ui) merge de botones "Load Existing Folder"/"Import .zbbpack" en un único "Add Server" con menú de 2 opciones; feat(settings) export a .zbbpack ahora también disponible desde Server Settings (Backups tab), no solo click-derecho — 483 tests pass
 
-**Siguiente prioridad:** F15 (light theme). F13 y F14 ✅ 2026-07-07. Después: F10 (Linux) o F11 Bloques B/C.
+**Siguiente prioridad:** F15.5 QA visual humana en ambos modos; después F10 (Linux) o F11 Bloques B/C. F13/F14/F15 ✅ 2026-07-07.
 
 ---
 
@@ -47,7 +48,7 @@ F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0 (Foundation Hardening), EXE-PERF, F5 (Crash R
 | **F12** | Feature Gaps vs competencia | 🥉 | ⬜ Sin iniciar |
 | **F13** | Higiene de disco + JRE on-demand | 🥇 | ✅ Implementado 2026-07-07 |
 | **F14** | App Settings 2.0 (tabbed: General/Notifications/Java/Storage/About) | 🥇 | ✅ Implementado 2026-07-07 |
-| **F15** | Light theme completo (tokens a tuplas + selector) — consolida F11.D5 | 🥈 | ⬜ Aprobado 2026-07-07 |
+| **F15** | Light theme completo (tokens a tuplas + selector) — consolida F11.D5 | 🥇 | ✅ Implementado 2026-07-07 (QA visual pendiente) |
 | **REFACT-1** | JavaResolver + launch steps | ⏸️ | Pospuesto (YAGNI pre-alpha) |
 | **CA-M01-M06** | NeoForge/Quilt, CurseForge, dep graph, perf dashboard, hot-switch | 🥉 | ⬜ Sin iniciar |
 | **CA-L01-L04** | Multi-server, profiles, remote mgmt, Hangar plugins | 🔮 | ⬜ Largo plazo |
@@ -193,17 +194,17 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 | 14.6 | Tab About: nueva constante `APP_VERSION` en `app_config.py`, mostrada en dialog + título de ventana. Base futura para update-check | `core/app_config.py`, `ui/app_settings.py`, `ui/main.py` | 45 min | ✅ 2026-07-07 |
 | 14.7 | Tests: filtro eventos webhook, purge vía ZBBManager, settings keys | `tests/` | 1.5 hrs | ✅ 2026-07-07 |
 
-### F15: Light theme completo — 🥈 (consolida F11.D5)
+### F15: Light theme completo — 🥇 (consolida F11.D5) ✅ 2026-07-07
 
-**Estado actual medido:** ~63 usos de color en `app/ui/` ya usan tuplas `(light, dark)`, pero ~104 usan tokens single-color dark-only (ej. `COLOR_TEXT_PRIMARY = "#f1f5f9"`). En light mode hoy la app se ve rota a medias. La mayoría referencia tokens de `AppConfig` → convertir tokens a tuplas arregla casi todo centralmente. `icon()` ya acepta tuplas (`main.py:453`).
+**Estado:** 38 tokens convertidos a tuplas. `resolve_color()` bridge para tag_config/tk.Menu/Toast. Gate de tema removido — Light/System funcionales. `zbb_theme.json` ya completo, 0 cambios. **Pendiente:** QA visual humano (15.5).
 
 | # | Tarea | Archivo | Esfuerzo | Estado |
 |---|-------|---------|----------|--------|
-| 15.1 | Convertir tokens single-color de `AppConfig` a tuplas `(light, dark)` | `core/app_config.py` | 2 hrs | ⬜ |
-| 15.2 | Barrido de consumidores no-CTk que no aceptan tuplas: consola (tags), PIL/icons con color string, toasts | `ui/*.py` (~7 archivos) | 2 hrs | ⬜ |
-| 15.3 | Sincronizar `assets/zbb_theme.json` con tokens light | `assets/zbb_theme.json` | 1 hr | ⬜ |
-| 15.4 | Habilitar Light/System en Tab General (F14.2): `ctk.set_appearance_mode()` en vivo + persistir. Cierra F11.D5 | `ui/app_settings.py` | 30 min | ⬜ |
-| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | ⬜ |
+| 15.1 | Convertir tokens single-color de `AppConfig` a tuplas `(light, dark)` | `core/app_config.py` | 2 hrs | ✅ 2026-07-07 |
+| 15.2 | Barrido de consumidores no-CTk que no aceptan tuplas: consola (tags), PIL/icons con color string, toasts | `ui/*.py` (~7 archivos) | 2 hrs | ✅ 2026-07-07 — resolve_color() helper + tag_config + Toast + tk.Menu + MOTD |
+| 15.3 | Sincronizar `assets/zbb_theme.json` con tokens light | `assets/zbb_theme.json` | 1 hr | ✅ 2026-07-07 — ya completo de origen, 0 cambios |
+| 15.4 | Habilitar Light/System en Tab General (F14.2): `ctk.set_appearance_mode()` en vivo + persistir. Cierra F11.D5 | `ui/app_settings.py` | 30 min | ✅ 2026-07-07 — gate removido, selector funcional |
+| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | ⬜ — pendiente, requiere revisión humana |
 
 ### Descartados por scope (2026-07-07 — reconsiderar después de F15)
 

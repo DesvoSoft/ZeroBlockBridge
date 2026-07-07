@@ -132,7 +132,7 @@ class MCTunnelApp(ctk.CTk):
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=AppConfig.COLOR_BTN_GHOST,
             font=(AppConfig.FONT_FAMILY, 12)
         )
         self.btn_add_server.pack(fill="x", pady=(0, 5))
@@ -144,7 +144,7 @@ class MCTunnelApp(ctk.CTk):
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=AppConfig.COLOR_BTN_GHOST,
             font=(AppConfig.FONT_FAMILY, 12)
         )
         self.btn_app_settings.pack(fill="x", pady=(0, 10))
@@ -195,7 +195,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_stop.pack(side="left", padx=2)
         ToolTip(self.btn_stop, "Stop server")
 
-        _ghost_hover = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
+        _ghost_hover = AppConfig.COLOR_BTN_GHOST_HOVER
         self.btn_config = ctk.CTkButton(
             self.status_frame, text="", image=icon("gear", 17), width=36, height=36,
             corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
@@ -251,7 +251,7 @@ class MCTunnelApp(ctk.CTk):
             command=self.open_players_dashboard,
             fg_color="transparent",
             text_color=AppConfig.COLOR_BADGE_TEXT,
-            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             font=AppConfig.FONT_BODY_SMALL,
             height=24,
             width=60
@@ -284,7 +284,7 @@ class MCTunnelApp(ctk.CTk):
             self.ip_frame, text="", image=icon("copy", 14, AppConfig.COLOR_LINK),
             command=self._copy_ip_to_clipboard,
             fg_color="transparent",
-            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             border_width=1, border_color=AppConfig.COLOR_LINK,
             width=36, corner_radius=AppConfig.RADIUS_BTN, height=28,
         )
@@ -303,8 +303,8 @@ class MCTunnelApp(ctk.CTk):
         self.btn_toggle_setup = ctk.CTkButton(
             self.tunnel_toolbar, text="Link", image=icon("bolt", 14, AppConfig.COLOR_ACCENT_AMBER),
             command=self._toggle_setup_section,
-            fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
-            hover_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            fg_color=AppConfig.COLOR_BTN_GHOST,
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
             width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
             font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), text_color=AppConfig.COLOR_ACCENT_AMBER,
@@ -316,7 +316,7 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("reset", 15, AppConfig.COLOR_ACCENT_AMBER),
                                    command=self.reset_tunnel,
-                                   fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+                                   fg_color=AppConfig.COLOR_BTN_GHOST,
                                    hover_color=("#fde9c8", "#3a2e12"),
                                    border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
                                    width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
@@ -449,7 +449,7 @@ class MCTunnelApp(ctk.CTk):
         if not servers:
             ctk.CTkLabel(
                 self.server_list_frame, text="",
-                image=icon("package", 40, (AppConfig.COLOR_TEXT_MUTED, AppConfig.COLOR_TEXT_MUTED))
+                image=icon("package", 40, AppConfig.COLOR_TEXT_MUTED)
             ).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.server_list_frame, text="No servers yet.",

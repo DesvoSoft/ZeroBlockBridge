@@ -78,13 +78,13 @@ class ToolTip:
         self.tooltip.wm_overrideredirect(True)
         self.tooltip.wm_geometry(f"+{tip_x}+{tip_y}")
         self.tooltip.attributes("-topmost", True)
-        self.tooltip.configure(fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER))
+        self.tooltip.configure(fg_color=AppConfig.COLOR_BTN_GHOST_HOVER)
 
         # Ensure it doesn't steal focus
         self.tooltip.bind("<Enter>", lambda e: self.hide())
 
         label = ctk.CTkLabel(self.tooltip, text=self.text,
-                             fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+                             fg_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                              text_color=AppConfig.COLOR_TEXT_PRIMARY,
                              corner_radius=AppConfig.RADIUS_BADGE, padx=10, pady=5,
                              font=ctk.CTkFont(size=12))
@@ -118,15 +118,24 @@ class ConsoleWidget(ctk.CTkTextbox):
         self._buffer = []
         self._is_paused = False
 
-        self.tag_config("line_error", foreground=resolve_color(AppConfig.COLOR_STATUS_OFFLINE))
-        self.tag_config("line_warn", foreground=resolve_color(AppConfig.COLOR_ACCENT_AMBER))
-        self.tag_config("line_join", foreground=resolve_color(AppConfig.COLOR_STATUS_ONLINE))
-        self.tag_config("line_leave", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
+        self._apply_tag_colors()
 
         # Bind visibility events for lazy rendering (ARCH-04)
         top = self.winfo_toplevel()
         top.bind("<Unmap>", self._on_unmap, add="+")
         top.bind("<Map>", self._on_map, add="+")
+
+    def _apply_tag_colors(self):
+        self.tag_config("line_error", foreground=resolve_color(AppConfig.COLOR_STATUS_OFFLINE))
+        self.tag_config("line_warn", foreground=resolve_color(AppConfig.COLOR_ACCENT_AMBER))
+        self.tag_config("line_join", foreground=resolve_color(AppConfig.COLOR_STATUS_ONLINE))
+        self.tag_config("line_leave", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
+
+    def _set_appearance_mode(self, mode_string):
+        # CTk calls this on every widget when the theme flips; tag colors are
+        # plain Tk strings that don't auto-switch, so re-resolve them here.
+        super()._set_appearance_mode(mode_string)
+        self._apply_tag_colors()
 
     @staticmethod
     def _line_tag(message):
@@ -246,7 +255,7 @@ class ServerListItem(ctk.CTkFrame):
         # Border color matches fg (invisible) until selected/hovered —
         # per-side borders don't exist in CTk, this fakes an accent ring.
         self._fg_idle = (AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
-        self._fg_hover = (AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER)
+        self._fg_hover = AppConfig.COLOR_BTN_GHOST_HOVER
 
         self.configure(
             corner_radius=AppConfig.RADIUS_CARD,
@@ -324,7 +333,7 @@ class ServerListItem(ctk.CTkFrame):
                            border_color=AppConfig.COLOR_BTN_PRIMARY)
         elif hovering:
             self.configure(fg_color=self._fg_hover,
-                           border_color=(AppConfig.COLOR_ACCENT_GREEN, AppConfig.COLOR_ACCENT_GREEN))
+                           border_color=AppConfig.COLOR_ACCENT_GREEN)
         else:
             self.configure(fg_color=self._fg_idle, border_color=self._fg_idle)
 
@@ -417,7 +426,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST),
+            hover_color=AppConfig.COLOR_BTN_GHOST,
             command=self._on_cancel
         )
         self.btn_cancel.pack(pady=(10, 20))
@@ -509,7 +518,7 @@ class EulaDialog(ctk.CTkToplevel):
             fg_color="transparent", border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             command=self._decline,
         ).pack(side="left")
         ctk.CTkButton(
@@ -598,7 +607,7 @@ class ZBBDialog(ctk.CTkToplevel):
                 fg_color="transparent", border_width=1,
                 border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
                 text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                hover_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BTN_GHOST_HOVER),
+                hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                 command=self._cancel,
             ).pack(side="left")
         confirm_fg = AppConfig.COLOR_BTN_DANGER if danger else AppConfig.COLOR_BTN_PRIMARY
