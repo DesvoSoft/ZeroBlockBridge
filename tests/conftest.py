@@ -14,11 +14,16 @@ def pytest_sessionfinish(session):
 class FakeRunner:
     def __init__(self):
         self.started = False
+        self.stopped = False
         self.running = False
 
     def start(self):
         self.started = True
         self.running = True
+
+    def stop(self):
+        self.stopped = True
+        self.running = False
 
 
 class FakeEmitter:

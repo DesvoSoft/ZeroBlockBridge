@@ -184,6 +184,43 @@ class TestWatchdogRetryLogic:
         w._on_zombie({"silence_seconds": 300})
         assert w.retry_count == 1
 
+    def test_zombie_kill_alive_process_then_restart(self):
+        # Zombie = process alive but hung. _do_restart must kill it and start fresh.
+        w, runner, emitter = self._make_watchdog()
+        runner.running = True
+        w.retry_count = 1
+        w._do_restart("zombie", backoff=0)
+        assert runner.stopped
+        assert runner.started
+
+    def test_crash_restart_aborts_if_process_alive(self):
+        # Non-zombie context: process alive during backoff means a manual start
+        # won the race — watchdog must not touch it.
+        w, runner, emitter = self._make_watchdog()
+        runner.running = True
+        w.retry_count = 1
+        w._do_restart("crash", backoff=0)
+        assert not runner.stopped
+        assert not runner.started
+
+    def test_zombie_kill_stopped_event_swallowed(self):
+        # The STOPPED caused by our own zombie kill must not be classified as
+        # a new crash nor increment the retry counter.
+        w, runner, emitter = self._make_watchdog()
+        w.retry_count = 1
+        w._zombie_kill_pending = True
+        w._on_stopped({"exit_code": 1, "uptime": 500, "stderr": ""})
+        assert w.retry_count == 1
+        assert not w._zombie_kill_pending
+
+    def test_retry_display_capped_at_max(self):
+        w, runner, emitter = self._make_watchdog(max_retries=2)
+        w.retry_count = 2
+        payloads = []
+        emitter.subscribe(ServerEvent.CRASHED, lambda d: payloads.append(d))
+        w._on_stopped({"exit_code": 1, "uptime": 2, "stderr": ""})
+        assert payloads[-1]["retry"] == 2
+
     def test_crashed_payload_shape(self):
         _, runner, emitter = self._make_watchdog()
         payload = _make_crash_payload(

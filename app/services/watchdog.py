@@ -59,12 +59,19 @@ class Watchdog:
         self._stability_window = stability_window
         self._min_uptime = min_uptime_for_retry
         self.retry_count = 0
+        # retry_count is mutated from EventBus callback threads (reader thread,
+        # tick thread) and the restart thread — guard every mutation.
+        self._retry_lock = threading.Lock()
         self._stable_since = 0.0
         self._listening = False
         self._crash_reason = None
         self._crash_detail = None
         self._crash_missing_mod_ids = []
         self._restart_thread = None
+        # True while a zombie kill we initiated is in flight: the STOPPED that
+        # kill produces must not be classified as a fresh crash (CRASHED with
+        # reason=zombie was already emitted) nor schedule a second restart.
+        self._zombie_kill_pending = False
 
     @property
     def is_retry_exhausted(self) -> bool:
@@ -72,7 +79,8 @@ class Watchdog:
 
     def _reset_retry_if_stable(self):
         if self._stable_since and (time.time() - self._stable_since) >= self._stability_window:
-            self.retry_count = 0
+            with self._retry_lock:
+                self.retry_count = 0
             logger.info("Watchdog: retry counter reset (stable for %ds)", self._stability_window)
 
     def listen(self) -> None:
@@ -84,6 +92,8 @@ class Watchdog:
 
     def _on_starting(self, data=None):
         self._crash_reason = None
+        # A new launch invalidates any zombie-kill STOPPED we were waiting for.
+        self._zombie_kill_pending = False
 
     def _on_ready(self, data=None):
         self._stable_since = time.time()
@@ -91,6 +101,10 @@ class Watchdog:
 
     def _on_stopped(self, data=None):
         if not self._listening:
+            return
+        if self._zombie_kill_pending:
+            self._zombie_kill_pending = False
+            self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Zombie process terminated.")
             return
         if data is None:
             data = {}
@@ -101,11 +115,12 @@ class Watchdog:
 
         if exit_code == 0:
             self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Server stopped normally (exit code 0).")
-            self.retry_count = 0
+            with self._retry_lock:
+                self.retry_count = 0
             return
 
         self._classify_crash(exit_code, uptime, stderr, console)
-        next_retry = self.retry_count + 1
+        next_retry = min(self.retry_count + 1, self.max_retries)
         msg = (
             f"[Watchdog] Server crashed (exit {exit_code}, {self._crash_reason}). "
             f"Retry {next_retry}/{self.max_retries}"
@@ -125,7 +140,7 @@ class Watchdog:
         if not self._listening:
             return
         silence = (data or {}).get("silence_seconds", 0)
-        next_retry = self.retry_count + 1
+        next_retry = min(self.retry_count + 1, self.max_retries)
         self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Zombie server detected (silent {silence:.0f}s). Restarting...")
         self._events.emit(ServerEvent.CRASHED, _make_crash_payload(
             reason="zombie", silence_seconds=silence, retry=next_retry, context="zombie",
@@ -133,12 +148,17 @@ class Watchdog:
         self._trigger_restart("zombie")
 
     def _trigger_restart(self, context):
-        if self.retry_count >= self.max_retries:
+        with self._retry_lock:
+            if self.retry_count >= self.max_retries:
+                exhausted = True
+            else:
+                self.retry_count += 1
+                exhausted = False
+        if exhausted:
             self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Max retries ({self.max_retries}) reached. Will not auto-restart.")
             logger.warning("Watchdog: max retries (%d) exhausted (%s)", self.max_retries, context)
             return
 
-        self.retry_count += 1
         backoff = self._compute_backoff()
         self._events.emit(ServerEvent.CONSOLE_LINE, f"[Watchdog] Auto-restart in {backoff:.0f}s (attempt {self.retry_count}/{self.max_retries})...")
         self._restart_thread = threading.Thread(
@@ -148,7 +168,28 @@ class Watchdog:
 
     def _do_restart(self, context, backoff):
         time.sleep(backoff)
-        if not self._listening or not self._runner or self._runner.running:
+        if not self._listening or not self._runner:
+            return
+        if self._runner.running:
+            if context != "zombie":
+                # Process is alive again (manual start won the race) — abort.
+                return
+            # Zombie: process alive but unresponsive. stop() escalates to
+            # kill() after its graceful timeout. Flag first so the STOPPED
+            # produced by the kill is swallowed by _on_stopped instead of
+            # being classified as a fresh crash.
+            self._zombie_kill_pending = True
+            self._runner.stop()
+            # stop() returns when the process dies, but running only flips
+            # False at the tail of the reader thread — wait for it, bounded.
+            deadline = time.time() + 15
+            while self._runner.running and time.time() < deadline:
+                time.sleep(0.2)
+            if self._runner.running:
+                logger.error("Watchdog: zombie process survived kill; aborting restart")
+                self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Zombie process could not be killed. Manual intervention required.")
+                return
+        if not self._listening:
             return
         self._runner.start()
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
