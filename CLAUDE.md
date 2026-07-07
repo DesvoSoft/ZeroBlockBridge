@@ -38,10 +38,11 @@ app/core/      -> Orchestration, EventBus, business logic.
 app/services/  -> Specialized services (auto-healing, API clients, utilities).
 ```
 
-UI never calls services directly. All flows through EventBus:
+UI never calls services directly for stateful/mutating operations. All flows through EventBus:
 1. UI emits event -> ZBBManager receives -> delegates to service -> service emits result -> UI updates.
 2. Use `events.subscribe()` not `.on()`.
 3. UI updates via `self.after(0, ...)` (Tkinter thread safety).
+4. Pragmatic exception (existing code): UI may import services for read-only/stateless helpers (load properties, list templates, file dialogs). New mutating flows (start/stop/backup/restart) MUST go through EventBus/ZBBManager.
 
 ### Central orchestrator: ZBBManager (app/core/core.py)
 
@@ -55,16 +56,17 @@ Protocol classes in `app/core/protocols.py` define structural typing contracts (
 
 ### EventBus (app/core/server_events.py)
 
-Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `CRASHED`, `ZOMBIE_DETECTED`, `LAG_SPIKE`, `TUNNEL_STATUS`, `PLAYER_COUNT`, `PLAYER_LIST`, `CONSOLE_LINE`, `TUNNEL_CONSOLE_LINE`, `NOTIFICATION`, `REQUEST_RESTART`, `BACKUP_COMPLETED`, `BACKUP_FAILED`. `TPS_UPDATE` and `ERROR` were removed (dead events).
+Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `CRASHED`, `RESTARTED`, `ZOMBIE_DETECTED`, `LAG_SPIKE`, `TUNNEL_STATUS`, `PLAYER_COUNT`, `PLAYER_LIST`, `CONSOLE_LINE`, `TUNNEL_CONSOLE_LINE`, `NOTIFICATION`, `REQUEST_RESTART`, `REQUEST_MOD_INSTALL`, `BACKUP_COMPLETED`, `BACKUP_FAILED`. `TPS_UPDATE` and `ERROR` were removed (dead events).
 
 ### Auto-healing system
 
-- `watchdog.py` -- crash detection by exit code + stderr pattern. Exponential backoff restart (cap 3600s). Stability resets after 10 min uptime. Never emits NOTIFICATION (only `_on_server_crashed` in core.py owns crash toasts).
-- `heartbeat.py` -- zombie detection. Sends `list` every 60s; no response in 15s -> emits `ZOMBIE_DETECTED`. `_last_probe` set BEFORE `send_command()` to prevent false positive.
+- `watchdog.py` -- crash detection by exit code + stderr pattern. Exponential backoff restart (cap 3600s). Stability resets after 10 min uptime. Never emits NOTIFICATION (only `_on_server_crashed` in core.py owns crash toasts). Zombie handling: `_do_restart` with `context="zombie"` kills the alive-but-hung process via `runner.stop()` first; the resulting STOPPED is swallowed by `_zombie_kill_pending` (no double CRASHED/restart).
+- `heartbeat.py` -- zombie detection. Checks every 60s (`check_interval`); after 300s of console silence (`suspect_after`) sends a `list` probe; no reply within 15s (`probe_timeout`) -> emits `ZOMBIE_DETECTED`. `_last_probe` set BEFORE `send_command()` to prevent false positive.
 - `lag_monitor.py` -- TPS lag via `"Can't keep up!"` pattern. Sliding 5-spike/5-min window.
 - `sanitizer.py` -- command allowlist (80+ safe MC commands) + character filter (`;|&` etc.). `%` is allowed (valid in MC commands).
-- `crash_reporter.py` -- subscribes to CRASHED event. Writes JSON diagnostic to `servers/<name>/crash_reports/`. Max 50 reports (FIFO rotation).
-- `discord_webhook.py` -- optional Discord notifications. Active only when `discord_webhook_url` is configured in SettingsManager. Queue worker thread, 2s rate-limit.
+- `crash_reporter.py` -- subscribes to CRASHED event. Writes JSON diagnostic to `servers/<name>/crash_reports/`. Max 50 reports (FIFO rotation). Reads stderr via `runner.get_stderr_tail(n)` (locked), never the raw buffer.
+- `discord_webhook.py` -- optional Discord notifications. Configured in the sidebar Settings dialog (`app/ui/app_settings.py`) or `discord_webhook_url` in SettingsManager; `ZBBManager.reload_discord_webhook()` re-creates the service after a URL change. Queue worker thread, 2s rate-limit; `stop()` unsubscribes from the bus. Server name resolved via getter (follows the active server).
+- Monitor lifecycle: `_setup_monitors` on every launch; `stop_server` calls `_stop_monitors()` (full teardown — watchdog, heartbeat, lag, crash reporter), not just the watchdog.
 
 ### Threading rules
 
@@ -109,7 +111,7 @@ logger = logging.getLogger(__name__)  # every module
 
 - Every `open()` must include `encoding="utf-8"` — critical on Windows for MOTDs with `§` (bug MA-02).
 - `strptime` on user-directory filenames: always `try/except ValueError` — users drop arbitrary files (bug HA-01).
-- NOTIFICATION event payload: always `{"msg": ..., "type": "error"|"warning"|"info"}`. Never `color` key (bug MA-04).
+- NOTIFICATION event payload: always `{"msg": ..., "type": "error"|"warning"|"info"|"success"}`. Never `color` key (bug MA-04). Optional functional extension: `action` + `missing_mod_ids` (mod dependency fix flow, consumed by `main._handle_notification`) — never add visual-style keys.
 - Don't emit `NOTIFICATION` in Watchdog — only `_on_server_crashed` in core.py owns crash notifications (bug CA-01).
 
 ### UI components
@@ -149,4 +151,4 @@ feature/<name>
 
 ### Test helpers (conftest.py)
 
-`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 463 tests in 24 files.
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 515 tests in 24 files.
