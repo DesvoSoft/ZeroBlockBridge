@@ -1,6 +1,6 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-**Última actualización:** 2026-07-07 (rev 10 — F13/F14/F15 planificadas: higiene de disco, Settings 2.0, light theme)
+**Última actualización:** 2026-07-07 (rev 11 — F13 y F14 implementadas; F15 light theme pendiente)
 **Versión proyecto:** Pre-alpha (desarrollo activo)
 > **Test count:** 544 tests, 100% pass, 0 flaky
 
