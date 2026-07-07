@@ -38,8 +38,6 @@ _MODRINTH_GREEN = "#1bd96a"
 _MODRINTH_GREEN_HOVER = "#15b858"
 _BADGE_BG_LIGHT, _BADGE_BG_DARK = AppConfig.COLOR_BADGE_BG
 _BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK = AppConfig.COLOR_BADGE_TEXT
-_DOWNLOADS_COLOR = "#94a3b8"   # slate-400
-
 _ICON_COLORS = ["#65a30d", "#d97706", "#16a34a", "#92400e", "#0d9488", "#ca8a04"]
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
 _ICONS_IN_FLIGHT: set[str] = set()
@@ -385,6 +383,26 @@ class ModrinthBrowser(ctk.CTkFrame):
         lbl.configure(text=f"{frame} {base_text}")
         self._spinner_job = self.after(80, lambda: self._animate_spinner(lbl, base_text))
 
+    def _show_retry_ui(self):
+        self._stop_spinner()
+        for w in self.results_frame.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(
+            self.results_frame, text="No internet connection",
+            text_color=AppConfig.COLOR_STATUS_ERROR,
+            font=AppConfig.FONT_BODY, justify="center",
+        ).grid(row=0, column=0, pady=(60, 8), padx=20)
+        btn = ctk.CTkButton(
+            self.results_frame, text="Retry",
+            fg_color=AppConfig.COLOR_BTN_PRIMARY,
+            hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+            corner_radius=AppConfig.RADIUS_BTN, height=32,
+            text_color="white",
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            command=self._load_popular_mods,
+        )
+        btn.grid(row=1, column=0)
+
     def _stop_spinner(self):
         if self._spinner_job is not None:
             self.after_cancel(self._spinner_job)
@@ -622,8 +640,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._on_search_done(hits, total))
             except Exception as exc:
                 logger.error("Failed to load popular mods: %s", exc)
-                msg = f"Could not load mods:\n{exc}"
-                self.after(0, lambda m=msg: self._show_placeholder(m))
+                self.after(0, self._show_retry_ui)
 
         threading.Thread(target=_do_load, daemon=True).start()
 
@@ -810,9 +827,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         downloads = hit.get("downloads", 0)
         dl_text = self._format_downloads(downloads)
         lbl_dl = ctk.CTkLabel(badge_frame, text=dl_text,
-                              image=icon("download", 11, _DOWNLOADS_COLOR),
-                              compound="left", padx=3,
-                              text_color=_DOWNLOADS_COLOR,
+                              image=icon("download", 11, AppConfig.COLOR_TEXT_GRAY),
+                             compound="left", padx=3,
+                              text_color=AppConfig.COLOR_TEXT_GRAY,
                               font=AppConfig.FONT_BODY_SMALL)
         lbl_dl.pack(side="left", padx=(0, 10))
 

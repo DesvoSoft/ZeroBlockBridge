@@ -6,7 +6,7 @@ from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.server_events import EventBus, ServerEvent
-from app.core.constants import ServerState
+from app.core.constants import ServerState, SERVERS_DIR
 from app.services.backup_manager import BackupManager
 import datetime
 
@@ -143,7 +143,6 @@ class ZBBManager:
     def _save_jdk_metadata(self, required_java: int, jdk_source: str) -> None:
         if not self.current_server:
             return
-        from app.core.constants import SERVERS_DIR
         if not os.path.exists(os.path.join(SERVERS_DIR, self.current_server, "metadata.json")):
             return
         update_server_meta(self.current_server, {"required_java": required_java, "jdk_source": jdk_source})
@@ -293,8 +292,6 @@ class ZBBManager:
 
     def load_server_manually(self, folder_path: str) -> bool:
         """Imports an existing server by creating a link in the servers directory."""
-        from app.core.constants import SERVERS_DIR
-
         server_name = os.path.basename(folder_path.rstrip("\\/"))
         link_path = os.path.join(SERVERS_DIR, server_name)
 

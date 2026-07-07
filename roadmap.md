@@ -238,10 +238,10 @@ Solo abordar si se toca el archivo relevante por otra razón — no priorizar ac
 | ID | Archivo | Problema | Fix |
 |----|---------|---------|-----|
 | A3-B05 | `core/playit_manager.py:522` | `_parse_line` chequea `self._api_dns or self._stdout_dns` fuera del lock — posible doble-emit TUNNEL_STATUS bajo concurrencia | Mover early-return check dentro del lock |
-| A3-A04 | `core/core.py:104-259` | 4 inline imports de `update_server_meta`/`SERVERS_DIR` (workarounds circular dep) en `_save_jdk_metadata`, `select_server`, `_resolve_java_bin`, `load_server_manually` | Mover imports al top cuando se toque core.py por otra razón |
 | LA-06 | `core/logic.py:736-740` | `get_server_ram`/`set_server_ram` thin wrappers | Confirmado usado por SPE — no es dead code, no tocar |
-| NR-05 | `ui/modrinth_browser.py` (`_load_popular_mods`) | Sin feedback si no hay internet | Label "No internet connection" + botón Retry |
-| NR-10 | `ui/modrinth_browser.py` | Constantes locales `_CARD_BG_DARK` etc. duplican AppConfig | Reemplazar con `AppConfig.COLOR_BG_CARD_DARK` etc. — verificar si sigue pendiente |
+| ~~A3-A04~~ | ~~`core/core.py:104-259`~~ | ✅ Resuelto 2026-07-07 — SERVERS_DIR movido a top imports; 2 inline imports eliminados (otro en purge_crash_reports se dejó por test patching) | — |
+| ~~NR-05~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — retry UI con label + botón | — |
+| ~~NR-10~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — `_DOWNLOADS_COLOR` reemplazado por `AppConfig.COLOR_TEXT_GRAY`; otras constantes sin equivalente AppConfig | — |
 | A2-A02 | `core/java_detector.py` | `_probe_java` privado importado desde logic.py — acoplamiento frágil | Exponer como función pública (puede ya estar resuelto vía A3-A02, verificar) |
 | A2-P03 | `services/java_detector.py` | `_shared_cache` class-level sin TTL — no detecta Java instalado con app abierta | TTL de 60-300s o método invalidate() |
 

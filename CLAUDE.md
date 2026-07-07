@@ -83,6 +83,7 @@ Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `C
 - JDK auto-downloaded from Adoptium to `.zbb_cache/jdks/{version}/` -- never modifies system PATH.
 - `bytecode_analyzer.py` detects required version from server JAR.
 - Orange warning if Detected > Required; red block if Detected > 21 or < Required.
+- Installer downloads JRE from Adoptium (`image_type=jre`, ~45 MB) with automatic fallback to JDK (`image_type=jdk`, ~300 MB) when JRE unavailable for that version — see `java_installer.py:_query_assets` / `_fetch_asset_info`.
 
 ### Playit.gg integration
 
@@ -151,4 +152,4 @@ feature/<name>
 
 ### Test helpers (conftest.py)
 
-`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 515 tests in 24 files.
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 544 tests in 26 files.
