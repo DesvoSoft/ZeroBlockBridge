@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-**Última actualización:** 2026-07-06 (rev 9 — CA-H02/H03/H04, F7 resto, F9 implementados)
+**Última actualización:** 2026-07-07 (rev 10 — F13/F14/F15 planificadas: higiene de disco, Settings 2.0, light theme)
 **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 483 tests, 100% pass, 0 flaky
+> **Test count:** 539 tests, 100% pass, 0 flaky
 
 **Historial completo de fases/auditorías resueltas:** ver `docs/roadmap-history.md` (F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0, EXE-PERF, F5, F6, MODS-B, F8, BUG-AUDIT, NR, AUDIT-2, AUDIT-3, Handover 2026-06-23). Este archivo solo trackea lo pendiente o en curso.
 
@@ -10,9 +10,10 @@
 - **2026-07-05 (9):** fix(core) job-object reaping proceso servidor + port preflight + mods tab gating; feat(ui) server delete via right-click + first-run EULA consent; fix(versions) migración Paper Fill API v3; fix(tunnel) reap agentes playitd huérfanos + silenciar ruido duel-session; fix(threading) I/O lento y callbacks fuera de locks; fix(heartbeat) eventos fuera del lock — 463 tests pass
 - **2026-07-05 (10):** fix(ui) icono mod card centrado verticalmente; fix(ui) contraste texto/fondo Modrinth Browser (`_MODRINTH_GREEN` con texto blanco ilegible → `#0f172a`; `COLOR_TEXT_PRIMARY` sin tupla light/dark en 3 sitios corregido) — 463 tests pass
 - **2026-07-06 (11):** feat(players) CA-H02 — player_files.py (ops/bans/whitelist persistence) + PlayersDashboard como CTkTabview (Online/Whitelist/Operators/Bans), ban/kick funcionan offline, confirmaciones ZBBDialog; feat(console) CA-H03 — ConsoleWidget.highlight()/jump_to_next_match() con tags search_hit/search_hit_current, search bar en Console + Tunnel Log tabs; feat(world) CA-H04 — list_worlds/get_active_world/set_active_world en server_properties.py + dropdown en World tab; feat(templates) F7 resto — template_manager.py (save/load/list/delete) + selector en wizard Step 2 + save-as-template + 4 templates por defecto; feat(migration) F9 — migration.py export_server/import_server (.zbbpack, excluye jar/logs, zip-slip guard) + botón export en Backups tab + menú "Add Server" (Folder/.zbbpack) en main.py — 483 tests pass
+- **2026-07-07 (13):** feat(settings) F14 completo — AppSettingsDialog reescrito como CTkTabview 5 tabs (General/Notifications/Java/Storage/About); selector de tema (Light/System gated hasta F15 con toast); checkboxes por evento webhook (`webhook_events` setting + `enabled_events` en DiscordWebhookService); Tab Java: JDKs gestionados con tamaño + delete + purge unused (nuevos `ZBBManager.list_managed_jdks/purge_jdk/purge_unused_jdks` con guard is_running) + tabla de Javas detectados (`detect_all()`); Tab Storage: disk usage por categoría (nuevo `services/disk_usage.py`) + clear crash reports (`ZBBManager.purge_crash_reports`); Tab About con nueva `AppConfig.APP_VERSION` (también en título de ventana); keys muertas `servers_dir`/`java_preferences` eliminadas de SettingsManager; `JdkManager.list_installed()` nuevo — 539 tests pass + smoke test Tk real
 - **2026-07-06 (12):** fix(ui) wizard reorganizado 4→5 steps (Identity, Engine+Version, Resources, Rules&Security, World&Network) para eliminar truncamiento de RAM y saturación de step3; feat(ui) selección de Java interactiva en wizard Step 3 (radio: usar Java detectado del sistema vs auto-descargar recomendado, con dropdown de instalaciones) — antes solo mostraba label estático; fix(ui) botón Next de búsqueda en consola ahora re-busca si el texto cambió desde el último Enter (antes solo ciclaba matches viejos); fix(ui) `VersionManager._refresh_versions` → `refresh_versions()` (AttributeError en wizard); feat(ui) merge de botones "Load Existing Folder"/"Import .zbbpack" en un único "Add Server" con menú de 2 opciones; feat(settings) export a .zbbpack ahora también disponible desde Server Settings (Backups tab), no solo click-derecho — 483 tests pass
 
-**Siguiente prioridad:** F10 (Cross-Platform Linux) o F11 Bloques B/C (UI polish)
+**Siguiente prioridad:** F13 (higiene de disco/JRE) → F15 (light theme). F14 ✅ 2026-07-07. Después: F10 (Linux) o F11 Bloques B/C.
 
 ---
 
@@ -44,15 +45,19 @@ F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0 (Foundation Hardening), EXE-PERF, F5 (Crash R
 | **F10** | Cross-Platform Linux | 🥉 | ⬜ Pendiente — **próxima prioridad** |
 | **F11** | UI/UX ZBB 2.0 "Dirt Block" | 🥉 | 🔶 Parcial — Bloque A (palette/botones) ✅, Bloques B/C/D pendientes |
 | **F12** | Feature Gaps vs competencia | 🥉 | ⬜ Sin iniciar |
+| **F13** | Higiene de disco + JRE on-demand | 🥇 | ⬜ Aprobado 2026-07-07 — **próxima prioridad** |
+| **F14** | App Settings 2.0 (tabbed: General/Notifications/Java/Storage/About) | 🥇 | ✅ Implementado 2026-07-07 |
+| **F15** | Light theme completo (tokens a tuplas + selector) — consolida F11.D5 | 🥈 | ⬜ Aprobado 2026-07-07 |
 | **REFACT-1** | JavaResolver + launch steps | ⏸️ | Pospuesto (YAGNI pre-alpha) |
 | **CA-M01-M06** | NeoForge/Quilt, CurseForge, dep graph, perf dashboard, hot-switch | 🥉 | ⬜ Sin iniciar |
 | **CA-L01-L04** | Multi-server, profiles, remote mgmt, Hangar plugins | 🔮 | ⬜ Largo plazo |
 
 ### Orden de Ejecución Recomendado
 ```
-F10 (Linux) + F11 Bloques B/C/D (UI 2.0)
-    → CA-M01..M06 (sprint medio: NeoForge/Quilt, modpack dep graph, perf dashboard)
-        → CA-L01..L04 (largo plazo: multi-server, remote mgmt)
+F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
+    → F10 (Linux) + F11 Bloques B/C/D (UI 2.0)
+        → CA-M01..M06 (sprint medio: NeoForge/Quilt, modpack dep graph, perf dashboard)
+            → CA-L01..L04 (largo plazo: multi-server, remote mgmt)
 ```
 
 ---
@@ -148,7 +153,7 @@ F10 (Linux) + F11 Bloques B/C/D (UI 2.0)
 | 11.D2 | ServerPropertiesEditor rediseñado (4 tabs, SettingsField, inline validation) | server_properties_editor.py | +200 | 4 hrs |
 | 11.D3 | Sidebar colapsable (toggle con animación simple) | main.py | ~60 | 1.5 hrs |
 | 11.D4 | Performance dashboard visual (TPS graph, RAM usage) — consolida con CA-M05/F12.4 | main.py + nuevo archivo | +150 | 3 hrs |
-| 11.D5 | Dark/light mode toggle persistido en settings | main.py + app_config.py | ~40 | 1 hr |
+| 11.D5 | Dark/light mode toggle persistido en settings — **consolidado en F15** (no duplicar trabajo aquí) | main.py + app_config.py | ~40 | 1 hr |
 | 11.D6 | Tooltips en botones de acción | main.py | ~30 | 45 min |
 
 **Orden recomendado:** 11.B4 → 11.B3 → 11.B1+B2 → 11.C1 → 11.D* (próxima iteración mayor)
@@ -158,6 +163,58 @@ F10 (Linux) + F11 Bloques B/C/D (UI 2.0)
 - [ ] Console colorea ERROR rojo, WARN amarillo, joins verde
 - [ ] Dashboard tunnel colapsado cuando offline
 - [ ] .exe compilado sin regresión visual en Windows
+
+---
+
+## F13-F15: Higiene de Disco, Settings 2.0, Light Theme
+
+**Origen:** Auditoría de peso del proyecto 2026-07-07. `dist/` pesaba 750 MB; diagnóstico verificado: PyInstaller NO empaqueta los JDKs (spec solo incluye `assets/`; EXE real = 21 MB). El bloat era: (a) `dist/.zbb_cache/` 595 MB + `dist/servers/` 130 MB generados en **runtime** al correr el exe desde `dist/` (diseño portable: `BASE_DIR` frozen = carpeta del exe, `constants.py:46`); (b) `app/.zbb_cache/` 595 MB stale de código viejo — nada lo referencia (`JDK_CACHE_DIR` apunta a raíz); (c) `backups/` 282 MB sin visibilidad. Total ~1.8 GB de JDKs triplicados en disco. Git no afectado (`.zbb_cache/` y `dist/` ya en `.gitignore`).
+
+### F13: Higiene de disco + JRE on-demand — 🥇 próxima prioridad
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 13.1 | Limpieza one-time: borrar `app/.zbb_cache/` (595 MB stale) + runtime dirs de `dist/` (~730 MB, se regeneran). `backups/` NO se toca (F14.4 dará control) | — | 10 min | ⬜ |
+| 13.2 | Descargar `image_type: "jre"` en vez de `"jdk"` (Adoptium), con fallback a `"jdk"` si no hay JRE para esa versión (ej. Java 16) — ~300 MB → ~45 MB por versión. Verificado: nada usa `javac`; `_find_java_binary` compatible con layout JRE; caches existentes siguen válidos | `services/java_installer.py:110` | 1.5 hrs | ⬜ |
+| 13.3 | Dev env: crear `.venv` del proyecto con las 5 deps + pytest/flake8/pyinstaller (hoy se usa Python global `C:\Python314` con ~180 paquetes de otros proyectos — NO podar el global) | — | 20 min | ⬜ |
+| 13.4 | Tests: fallback jre→jdk, marker/checksum intactos | `tests/` | 45 min | ⬜ |
+
+### F14: App Settings 2.0 — 🥇
+
+**Base:** `app/ui/app_settings.py` (hoy: 1 sección webhook, 560x340). Rediseño con `CTkTabview` + `CTkScrollableFrame` (patrón ya probado en `server_properties_editor.py:126`), ventana ~720x520. Hallazgos que habilitan esto: `purge_cache(version)`/`purge_unused_jdks()` en `java_installer.py:266,298` son código muerto útil (nadie los llama); `java_detector.detect_all()` (PATH+JAVA_HOME+registro+well-known) sin UI; webhook con 4 eventos hardcoded (`discord_webhook.py:17-20`); keys huérfanas en `SettingsManager` (`servers_dir`, `java_preferences` — declaradas, nunca leídas); no existe `APP_VERSION` en ninguna parte.
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 14.1 | Refactor dialog a CTkTabview (General/Notifications/Java/Storage/About) | `ui/app_settings.py` | 2 hrs | ✅ 2026-07-07 |
+| 14.2 | Tab General: selector tema Dark/Light/System (Light deshabilitado hasta F15; infra ya existe: `main.py:50-51` lee `theme` al arrancar) + limpiar keys muertas de `SettingsManager` | `ui/app_settings.py`, `services/settings_manager.py` | 1 hr | ✅ 2026-07-07 |
+| 14.3 | Tab Notifications: webhook actual + checkboxes por evento (crash/ready/backup ok/backup fail) filtrando `EVENT_STYLES` vía settings | `ui/app_settings.py`, `services/discord_webhook.py` | 1.5 hrs | ✅ 2026-07-07 |
+| 14.4 | Tab Java: (a) JDKs gestionados — versión + tamaño en disco + delete por versión + "Purge unused" (conecta `purge_cache`/`purge_unused_jdks` vía método nuevo en ZBBManager, arquitectura EventBus respetada); (b) tabla read-only de Javas detectados en el sistema (`detect_all()`: versión/ruta/origen). Bloqueado con server corriendo (patrón restart-required) | `ui/app_settings.py`, `core/core.py` | 2.5 hrs | ✅ 2026-07-07 |
+| 14.5 | Tab Storage: resumen de disco por categoría — servers, backups (total + por server), JDK cache, crash reports, versions cache — con botones de limpieza donde aplica | `ui/app_settings.py` | 2 hrs | ✅ 2026-07-07 |
+| 14.6 | Tab About: nueva constante `APP_VERSION` en `app_config.py`, mostrada en dialog + título de ventana. Base futura para update-check | `core/app_config.py`, `ui/app_settings.py`, `ui/main.py` | 45 min | ✅ 2026-07-07 |
+| 14.7 | Tests: filtro eventos webhook, purge vía ZBBManager, settings keys | `tests/` | 1.5 hrs | ✅ 2026-07-07 |
+
+### F15: Light theme completo — 🥈 (consolida F11.D5)
+
+**Estado actual medido:** ~63 usos de color en `app/ui/` ya usan tuplas `(light, dark)`, pero ~104 usan tokens single-color dark-only (ej. `COLOR_TEXT_PRIMARY = "#f1f5f9"`). En light mode hoy la app se ve rota a medias. La mayoría referencia tokens de `AppConfig` → convertir tokens a tuplas arregla casi todo centralmente. `icon()` ya acepta tuplas (`main.py:453`).
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 15.1 | Convertir tokens single-color de `AppConfig` a tuplas `(light, dark)` | `core/app_config.py` | 2 hrs | ⬜ |
+| 15.2 | Barrido de consumidores no-CTk que no aceptan tuplas: consola (tags), PIL/icons con color string, toasts | `ui/*.py` (~7 archivos) | 2 hrs | ⬜ |
+| 15.3 | Sincronizar `assets/zbb_theme.json` con tokens light | `assets/zbb_theme.json` | 1 hr | ⬜ |
+| 15.4 | Habilitar Light/System en Tab General (F14.2): `ctk.set_appearance_mode()` en vivo + persistir. Cierra F11.D5 | `ui/app_settings.py` | 30 min | ⬜ |
+| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | ⬜ |
+
+### Descartados por scope (2026-07-07 — reconsiderar después de F15)
+
+| Idea | Por qué se descartó | Cuándo reconsiderar |
+|------|--------------------|--------------------|
+| Idioma / i18n | Sin infra de strings; barrido masivo de UI | Post-F11.D, si hay demanda |
+| System tray (minimizar a bandeja) | Dependencia nueva (pystray) + edge cases Win | Post-F10 |
+| Auto-update real (descargar exe nuevo) | Requiere releases firmados + canal estable; hoy pre-alpha | Cuando haya releases en GitHub; F14.6 (`APP_VERSION`) es el prerrequisito |
+| Defaults globales para wizard (RAM, aikars) | El wizard ya resuelve por server; valor marginal | Si usuarios crean muchos servers |
+| jlink custom runtime | Complejidad alta sin ganancia extra vs JRE Adoptium (F13.2) | No planeado |
+| Excluir `servers/` del spec PyInstaller | Innecesario — nunca se empaquetó (diagnóstico erróneo del análisis original) | N/A |
 
 ---
 

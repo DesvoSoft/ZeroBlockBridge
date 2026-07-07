@@ -57,7 +57,7 @@ class MCTunnelApp(ctk.CTk):
         self._init_background_services()
 
     def _init_window_config(self):
-        self.title(AppConfig.WINDOW_TITLE)
+        self.title(f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
         self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
         self.minsize(AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT)
         self.grid_columnconfigure(0, weight=0, minsize=300)

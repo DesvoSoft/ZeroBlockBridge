@@ -99,14 +99,19 @@ class ZBBManager:
 
     def _init_discord_webhook(self) -> None:
         from app.services.settings_manager import SettingsManager
-        from app.services.discord_webhook import DiscordWebhookService
-        url = SettingsManager().get("discord_webhook_url", "")
+        from app.services.discord_webhook import DiscordWebhookService, SETTING_EVENT_KEYS
+        settings = SettingsManager()
+        url = settings.get("discord_webhook_url", "")
         if url:
+            prefs = settings.get("webhook_events", {}) or {}
+            enabled = {event for key, event in SETTING_EVENT_KEYS.items()
+                       if prefs.get(key, True)}
             self._discord_webhook = DiscordWebhookService(
                 url, self.events,
                 server_name_getter=lambda: self.current_server or "",
+                enabled_events=enabled,
             )
-            logger.info("Discord webhook active")
+            logger.info("Discord webhook active (%d events)", len(enabled))
 
     def reload_discord_webhook(self) -> None:
         """Re-create the Discord service after the webhook URL changed in settings."""
@@ -337,6 +342,43 @@ class ZBBManager:
 
     def is_running(self) -> bool:
         return self.server_orchestrator.is_running()
+
+    # --- Maintenance (App Settings dialog) ---
+    def list_managed_jdks(self) -> list:
+        """Cached JDKs with size on disk. Walks dirs -- call from a thread."""
+        return JdkManagerInstance.list_installed()
+
+    def purge_jdk(self, version: int) -> bool:
+        """Delete one cached JDK. Refused while a server is running."""
+        if self.is_running():
+            logger.warning("Refusing to purge JDK %d: server is running", version)
+            return False
+        JdkManagerInstance.purge_cache(version)
+        return True
+
+    def purge_unused_jdks(self) -> bool:
+        """Delete cached JDKs no server references. Refused while running."""
+        if self.is_running():
+            logger.warning("Refusing to purge unused JDKs: server is running")
+            return False
+        JdkManagerInstance.purge_unused_jdks()
+        return True
+
+    def purge_crash_reports(self) -> int:
+        """Delete crash_reports dirs for every server. Returns dirs removed."""
+        import shutil
+        from pathlib import Path
+        from app.core.constants import SERVERS_DIR
+        removed = 0
+        servers_dir = Path(SERVERS_DIR)
+        if not servers_dir.exists():
+            return 0
+        for folder in servers_dir.iterdir():
+            reports = folder / "crash_reports"
+            if reports.is_dir():
+                shutil.rmtree(reports, ignore_errors=True)
+                removed += 1
+        return removed
 
     # --- Monitors ---
     def _setup_monitors(self, config: dict) -> None:

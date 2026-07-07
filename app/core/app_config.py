@@ -1,6 +1,9 @@
 class AppConfig:
     """Application-wide configuration and constants."""
 
+    # App identity
+    APP_VERSION = "0.9.0-pre"
+
     # Window Configuration
     WINDOW_TITLE = "Zero Block Bridge"
     DEFAULT_WIDTH = 1150

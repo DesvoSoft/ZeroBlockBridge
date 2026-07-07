@@ -193,6 +193,66 @@ class TestDiscordWebhookStop:
         assert svc._queue.empty()
 
 
+class TestDiscordWebhookEventFilter:
+    def test_enabled_events_limits_subscriptions(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.CRASHED},
+            )
+        assert bus._listeners.get(ServerEvent.CRASHED)
+        for event in (ServerEvent.READY, ServerEvent.BACKUP_COMPLETED,
+                      ServerEvent.BACKUP_FAILED):
+            assert not bus._listeners.get(event), f"Unexpected listener for {event}"
+        svc.stop()
+
+    def test_disabled_event_not_posted(self, bus):
+        posted = threading.Event()
+
+        def fake_post(url, json=None, timeout=None):
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.CRASHED},
+            )
+            bus.emit(ServerEvent.READY, None)
+            time.sleep(0.5)
+        svc.stop()
+        assert not posted.is_set()
+
+    def test_unknown_event_in_set_ignored(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.CRASHED, ServerEvent.LAG_SPIKE},
+            )
+        assert ServerEvent.LAG_SPIKE not in svc._enabled
+        assert not bus._listeners.get(ServerEvent.LAG_SPIKE)
+        svc.stop()
+
+    def test_none_means_all_events(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService("http://example.com/hook", bus)
+        assert len(svc._enabled) == 4
+        svc.stop()
+
+    def test_setting_event_keys_map_covers_all_labels(self):
+        from app.services.discord_webhook import SETTING_EVENT_KEYS, _EVENT_LABELS
+        assert set(SETTING_EVENT_KEYS.values()) == set(_EVENT_LABELS)
+
+    def test_stop_unsubscribes_only_enabled(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.BACKUP_FAILED},
+            )
+        svc.stop()
+        assert not bus._listeners.get(ServerEvent.BACKUP_FAILED)
+
+
 class TestDiscordWebhookSendTest:
     def test_send_test_success(self):
         with patch("app.services.discord_webhook.requests.post") as mock_post:

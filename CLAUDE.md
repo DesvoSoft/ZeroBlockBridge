@@ -65,7 +65,7 @@ Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `C
 - `lag_monitor.py` -- TPS lag via `"Can't keep up!"` pattern. Sliding 5-spike/5-min window.
 - `sanitizer.py` -- command allowlist (80+ safe MC commands) + character filter (`;|&` etc.). `%` is allowed (valid in MC commands).
 - `crash_reporter.py` -- subscribes to CRASHED event. Writes JSON diagnostic to `servers/<name>/crash_reports/`. Max 50 reports (FIFO rotation). Reads stderr via `runner.get_stderr_tail(n)` (locked), never the raw buffer.
-- `discord_webhook.py` -- optional Discord notifications. Configured in the sidebar Settings dialog (`app/ui/app_settings.py`) or `discord_webhook_url` in SettingsManager; `ZBBManager.reload_discord_webhook()` re-creates the service after a URL change. Queue worker thread, 2s rate-limit; `stop()` unsubscribes from the bus. Server name resolved via getter (follows the active server).
+- `discord_webhook.py` -- optional Discord notifications. Configured in the sidebar Settings dialog (`app/ui/app_settings.py`, tabbed: General/Notifications/Java/Storage/About) or `discord_webhook_url` + `webhook_events` in SettingsManager; `ZBBManager.reload_discord_webhook()` re-creates the service after a change. Constructor takes `enabled_events` (set of ServerEvent) — only those are subscribed; `SETTING_EVENT_KEYS` maps settings keys to events. Queue worker thread, 2s rate-limit; `stop()` unsubscribes from the bus. Server name resolved via getter (follows the active server).
 - Monitor lifecycle: `_setup_monitors` on every launch; `stop_server` calls `_stop_monitors()` (full teardown — watchdog, heartbeat, lag, crash reporter), not just the watchdog.
 
 ### Threading rules

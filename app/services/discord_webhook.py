@@ -20,22 +20,35 @@ _EVENT_LABELS = {
     ServerEvent.BACKUP_FAILED: ("Backup Failed", 0xE67E22),
 }
 
+# Settings key (webhook_events dict) -> ServerEvent
+SETTING_EVENT_KEYS = {
+    "crashed": ServerEvent.CRASHED,
+    "ready": ServerEvent.READY,
+    "backup_completed": ServerEvent.BACKUP_COMPLETED,
+    "backup_failed": ServerEvent.BACKUP_FAILED,
+}
+
 
 class DiscordWebhookService:
     def __init__(self, webhook_url: str, events: EventBus,
-                 server_name_getter: Optional[Callable[[], str]] = None):
+                 server_name_getter: Optional[Callable[[], str]] = None,
+                 enabled_events: Optional[set] = None):
         self._url = webhook_url
         self._events = events
         # Getter, not a snapshot: the active server can change after the
         # service is created (it lives for the whole app session).
         self._get_server = server_name_getter or (lambda: "")
+        # None = all supported events (backwards compatible)
+        if enabled_events is None:
+            enabled_events = set(_EVENT_LABELS)
+        self._enabled = {e for e in enabled_events if e in _EVENT_LABELS}
         self._queue: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, daemon=True, name="DiscordWebhook")
         self._worker.start()
 
         self._subscriptions = []
-        for event in _EVENT_LABELS:
+        for event in self._enabled:
             handler = (lambda data, e=event: self._enqueue(e, data))
             events.subscribe(event, handler)
             self._subscriptions.append((event, handler))

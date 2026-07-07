@@ -287,3 +287,30 @@ class TestFetchAssetInfo:
         mock_get.side_effect = __import__("requests").RequestException("bad")
         with pytest.raises(JdkDownloadError, match="Adoptium API request failed"):
             _fetch_asset_info(17)
+
+
+class TestListInstalled:
+    def test_lists_versions_with_sizes(self, tmp_path):
+        (tmp_path / "jdk17" / "bin").mkdir(parents=True)
+        (tmp_path / "jdk17" / "bin" / "java.exe").write_bytes(b"x" * 100)
+        (tmp_path / "jdk21").mkdir()
+        (tmp_path / "jdk21" / "release").write_bytes(b"y" * 50)
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path):
+            result = JdkManagerInstance.list_installed()
+        assert [r["version"] for r in result] == [17, 21]
+        by_ver = {r["version"]: r for r in result}
+        assert by_ver[17]["size_bytes"] == 100
+        assert by_ver[21]["size_bytes"] == 50
+        assert by_ver[17]["path"] == tmp_path / "jdk17"
+
+    def test_ignores_non_jdk_entries(self, tmp_path):
+        (tmp_path / "jdkfoo").mkdir()
+        (tmp_path / "random").mkdir()
+        (tmp_path / "jdk17.tmp").mkdir()
+        (tmp_path / "notes.txt").write_text("hi", encoding="utf-8")
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path):
+            assert JdkManagerInstance.list_installed() == []
+
+    def test_missing_cache_dir_returns_empty(self, tmp_path):
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "nope"):
+            assert JdkManagerInstance.list_installed() == []

@@ -30,9 +30,13 @@ class SettingsManager:
     def _get_defaults(self) -> dict:
         return {
             "theme": "Dark",
-            "servers_dir": "servers",
-            "java_preferences": {"java8_path": "", "java17_path": "", "java21_path": ""},
             "discord_webhook_url": "",
+            "webhook_events": {
+                "crashed": True,
+                "ready": True,
+                "backup_completed": True,
+                "backup_failed": True,
+            },
         }
 
     def _ensure_loaded(self):

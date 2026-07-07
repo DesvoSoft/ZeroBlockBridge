@@ -178,3 +178,51 @@ def test_tunnel_status_event(manager, event_bus):
     assert len(received) == 1
     assert received[0]["status"] == "Online"
     assert received[0]["ip"] == "custom.dns.com"
+
+
+# --- Maintenance API (F14 Settings dialog) ---
+
+class TestMaintenanceApi:
+    def test_purge_jdk_refused_while_running(self, manager):
+        with patch.object(manager, "is_running", return_value=True), \
+             patch("app.core.core.JdkManagerInstance") as jdk:
+            assert manager.purge_jdk(17) is False
+            jdk.purge_cache.assert_not_called()
+
+    def test_purge_jdk_delegates_when_stopped(self, manager):
+        with patch.object(manager, "is_running", return_value=False), \
+             patch("app.core.core.JdkManagerInstance") as jdk:
+            assert manager.purge_jdk(17) is True
+            jdk.purge_cache.assert_called_once_with(17)
+
+    def test_purge_unused_refused_while_running(self, manager):
+        with patch.object(manager, "is_running", return_value=True), \
+             patch("app.core.core.JdkManagerInstance") as jdk:
+            assert manager.purge_unused_jdks() is False
+            jdk.purge_unused_jdks.assert_not_called()
+
+    def test_purge_unused_delegates_when_stopped(self, manager):
+        with patch.object(manager, "is_running", return_value=False), \
+             patch("app.core.core.JdkManagerInstance") as jdk:
+            assert manager.purge_unused_jdks() is True
+            jdk.purge_unused_jdks.assert_called_once_with()
+
+    def test_list_managed_jdks_delegates(self, manager):
+        with patch("app.core.core.JdkManagerInstance") as jdk:
+            jdk.list_installed.return_value = [{"version": 21}]
+            assert manager.list_managed_jdks() == [{"version": 21}]
+
+    def test_purge_crash_reports_removes_dirs(self, manager, tmp_path):
+        srv_a = tmp_path / "alpha" / "crash_reports"
+        srv_a.mkdir(parents=True)
+        (srv_a / "report.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "beta").mkdir()  # server without reports
+        with patch("app.core.constants.SERVERS_DIR", tmp_path):
+            removed = manager.purge_crash_reports()
+        assert removed == 1
+        assert not srv_a.exists()
+        assert (tmp_path / "beta").exists()
+
+    def test_purge_crash_reports_missing_servers_dir(self, manager, tmp_path):
+        with patch("app.core.constants.SERVERS_DIR", tmp_path / "nope"):
+            assert manager.purge_crash_reports() == 0

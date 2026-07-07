@@ -263,6 +263,29 @@ class JdkManager:
             else:
                 zf.extractall(dest_dir)
 
+    def list_installed(self) -> list[dict]:
+        """Installed JDKs in the cache: [{"version": int, "path": Path, "size_bytes": int}].
+
+        Walks each JDK dir to size it -- call from a background thread.
+        """
+        from app.services.disk_usage import dir_size
+        result = []
+        if not _JDK_CACHE_DIR.exists():
+            return result
+        for entry in sorted(_JDK_CACHE_DIR.iterdir()):
+            if not entry.is_dir() or not entry.name.startswith("jdk"):
+                continue
+            try:
+                version = int(entry.name.replace("jdk", ""))
+            except ValueError:
+                continue
+            result.append({
+                "version": version,
+                "path": entry,
+                "size_bytes": dir_size(entry),
+            })
+        return result
+
     def purge_unused_jdks(self, active_versions: set = None):
         """Remove JDK directories not in active_versions.
         If active_versions is None, lists server metadata to determine which
