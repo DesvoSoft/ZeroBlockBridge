@@ -7,7 +7,8 @@ from app.core.constants import BANNED_PLAYERS_FILE, OPS_FILE, WHITELIST_FILE
 from app.core.server_events import ServerEvent
 from app.services.player_files import add_entry, load_json_list, remove_entry
 from app.services.server_properties import load_server_properties, save_server_properties
-from app.ui.ui_components import ZBBDialog, center_on_parent
+from app.ui.icons import icon
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent
 from app.ui.win_effects import apply_rounded_corners
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,8 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.banned_players = load_json_list(server_name, BANNED_PLAYERS_FILE)
 
     def _on_player_list_update(self, players):
-        self.connected_players = players
-        self.after(0, self.refresh_ui)
+        self.connected_players = list(players)
+        self.after(0, self._refresh_online)
 
     def _build_header(self):
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -94,7 +95,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.lbl_player_count = ctk.CTkLabel(
             header_frame,
             text="Players Online: 0",
-            font=ctk.CTkFont(family=AppConfig.FONT_FAMILY_DISPLAY, size=22, weight="bold")
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 22, "bold")
         )
         self.lbl_player_count.pack(side="left")
 
@@ -114,7 +115,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
         header_frame.grid_columnconfigure(0, weight=1)
 
-        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist enforcement", font=ctk.CTkFont(weight="bold"))
+        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist enforcement", font=(AppConfig.FONT_FAMILY, 13, "bold"))
         lbl_title.grid(row=0, column=0, sticky="w")
 
         self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", command=self._toggle_whitelist)
@@ -132,7 +133,7 @@ class PlayersDashboard(ctk.CTkToplevel):
                                  command=self._add_to_whitelist)
         btn_add.grid(row=0, column=1)
 
-        lbl_list_title = ctk.CTkLabel(self.tab_whitelist, text="Whitelisted players:", font=ctk.CTkFont(size=12))
+        lbl_list_title = ctk.CTkLabel(self.tab_whitelist, text="Whitelisted players:", font=AppConfig.FONT_BODY_SMALL)
         lbl_list_title.grid(row=2, column=0, sticky="w", padx=10, pady=(10, 0))
 
         self.scroll_whitelist = ctk.CTkScrollableFrame(self.tab_whitelist, fg_color="transparent")
@@ -171,11 +172,24 @@ class PlayersDashboard(ctk.CTkToplevel):
     # --- Rendering ---
 
     def refresh_ui(self):
-        self.lbl_player_count.configure(text=f"Players Online: {len(self.connected_players)}")
-        self._populate_connected_players()
+        self._refresh_online()
         self._populate_whitelist()
         self._populate_operators()
         self._populate_bans()
+
+    def _refresh_online(self):
+        if not self.winfo_exists():
+            return
+        if self.zbb_manager.is_running():
+            self.lbl_player_count.configure(
+                text=f"Players Online: {len(self.connected_players)}",
+                text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            )
+        else:
+            self.lbl_player_count.configure(
+                text="Server offline", text_color=AppConfig.COLOR_TEXT_GRAY,
+            )
+        self._populate_connected_players()
 
     def _empty_label(self, parent, text):
         lbl = ctk.CTkLabel(parent, text=text, text_color=AppConfig.COLOR_TEXT_GRAY)
@@ -195,13 +209,16 @@ class PlayersDashboard(ctk.CTkToplevel):
             widget.destroy()
 
         if not self.connected_players:
-            self._empty_label(self.scroll_players, "No players online")
+            msg = ("No players online"
+                   if self.zbb_manager.is_running()
+                   else "Start the server to see connected players.")
+            self._empty_label(self.scroll_players, msg)
             return
 
         for player in self.connected_players:
             item_frame = self._row_frame(self.scroll_players)
 
-            lbl_name = ctk.CTkLabel(item_frame, text=player, font=ctk.CTkFont(weight="bold"))
+            lbl_name = ctk.CTkLabel(item_frame, text=player, font=(AppConfig.FONT_FAMILY, 13, "bold"))
             lbl_name.pack(side="left", padx=10, pady=8)
 
             btn_ban = ctk.CTkButton(
@@ -234,11 +251,13 @@ class PlayersDashboard(ctk.CTkToplevel):
             lbl_name.pack(side="left", padx=10, pady=8)
 
             btn_remove = ctk.CTkButton(
-                item_frame, text="X", width=28, height=24, corner_radius=AppConfig.RADIUS_BTN,
+                item_frame, text="", image=icon("close", 12, "#ffffff"),
+                width=28, height=24, corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
                 command=lambda p=name: self._remove_from_whitelist(p)
             )
             btn_remove.pack(side="right", padx=10, pady=8)
+            ToolTip(btn_remove, f"Remove {name} from whitelist")
 
     def _populate_operators(self):
         for widget in self.scroll_operators.winfo_children():
@@ -279,10 +298,10 @@ class PlayersDashboard(ctk.CTkToplevel):
             info_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
             info_frame.pack(side="left", padx=10, pady=8, fill="x", expand=True)
 
-            lbl_name = ctk.CTkLabel(info_frame, text=name, font=ctk.CTkFont(weight="bold"), anchor="w")
+            lbl_name = ctk.CTkLabel(info_frame, text=name, font=(AppConfig.FONT_FAMILY, 13, "bold"), anchor="w")
             lbl_name.pack(anchor="w")
             lbl_reason = ctk.CTkLabel(info_frame, text=reason, text_color=AppConfig.COLOR_TEXT_GRAY,
-                                       font=ctk.CTkFont(size=11), anchor="w")
+                                       font=AppConfig.FONT_BODY_SMALL, anchor="w")
             lbl_reason.pack(anchor="w")
 
             btn_pardon = ctk.CTkButton(
@@ -355,6 +374,8 @@ class PlayersDashboard(ctk.CTkToplevel):
         player = self.entry_op_add.get().strip()
         server_name = self.server_name
         if not player or not server_name:
+            return
+        if any(e.get("name") == player for e in self.operators):
             return
         level = int(self.op_level_var.get())
         add_entry(server_name, OPS_FILE, {
