@@ -596,14 +596,14 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # 3. Help Icon (?)
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
-                                     width=18, height=18, corner_radius=12,
+                                     width=18, height=18, corner_radius=9,
                                      fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
             help_icon.grid(row=current_row, column=1, sticky="w", padx=2)
             help_icon.tooltip_ref = ToolTip(help_icon, text=description)
             
         # 4. Impact Dot
         if impact and impact != "Low":
-            colors = {"Medium": "orange", "High": "#ff4d4d"}
+            colors = {"Medium": AppConfig.COLOR_STATUS_STARTING, "High": AppConfig.COLOR_STATUS_ERROR}
             dot = ctk.CTkFrame(parent_card, width=8, height=8, corner_radius=4, fg_color=colors[impact])
             dot.grid(row=current_row, column=2, sticky="w", padx=2)
             dot.tooltip_ref = ToolTip(dot, f"Impact: {impact}")
@@ -660,8 +660,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkLabel(card_identity, text="Server Icon", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
         btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
                             width=100, height=28, fg_color="transparent", border_width=1,
-                            border_color=AppConfig.COLOR_BORDER_DARK,
-                            hover_color=AppConfig.COLOR_BTN_GHOST,
+                            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+                            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                             text_color=AppConfig.COLOR_TEXT_GRAY)
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
@@ -683,7 +683,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), corner_radius=0, border_width=2, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.preview_motd_frame.pack(fill="x", pady=(0, 0))
         
-        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=("Consolas", 12), wrap="word")
+        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_MONO, wrap="word")
         self.motd_preview.pack(fill="both", expand=True, padx=2, pady=2)
         
         mc_colors = {
@@ -730,8 +730,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         self.btn_mrpack = ctk.CTkButton(
             card_mrpack, text="Import .mrpack", image=icon("download", 13, "#ffffff"), width=150, height=28,
-            corner_radius=10,
-            fg_color="#7c3aed", hover_color="#6d28d9",
+            corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=AppConfig.COLOR_ACCENT_BROWN, hover_color=AppConfig.COLOR_ACCENT_BROWN_HOVER,
             text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._on_import_mrpack,
         )
@@ -742,6 +742,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_mrpack_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 8))
+
+    def _set_mrpack_status(self, text: str, kind: str = "info"):
+        colors = {
+            "success": AppConfig.COLOR_STATUS_ONLINE,
+            "error": AppConfig.COLOR_STATUS_ERROR,
+        }
+        if self.lbl_mrpack_status.winfo_exists():
+            self.lbl_mrpack_status.configure(
+                text=text, text_color=colors.get(kind, AppConfig.COLOR_TEXT_GRAY))
 
     def _on_import_mrpack(self):
         meta = get_server_meta(self.server_name)
@@ -761,7 +770,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if not mrpack_path:
             return
 
-        self.lbl_mrpack_status.configure(text="Importing modpack…")
+        self._set_mrpack_status("Importing modpack…")
         self.btn_mrpack.configure(state="disabled")
 
         def _import():
@@ -769,7 +778,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 summary = install_mrpack(
                     mrpack_path=mrpack_path,
                     server_name=self.server_name,
-                    progress_callback=lambda msg: self.after(0, lambda m=msg: self.lbl_mrpack_status.configure(text=m)),
+                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_mrpack_status(m)),
                     server_type=meta.get("type"),
                     mc_version=meta.get("version"),
                 )
@@ -778,15 +787,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                     parts.append(f"{summary['skipped_client']} client-only skipped")
                 if summary.get("failed"):
                     parts.append(f"{summary['failed']} failed")
-                text = f"✓ {', '.join(parts)}"
-                self.after(0, lambda: self.lbl_mrpack_status.configure(text=text))
+                text = ", ".join(parts)
+                self.after(0, lambda t=text: self._set_mrpack_status(t, kind="success"))
             except MrpackCompatibilityError as exc:
-                self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Incompatible: {e}"))
+                self.after(0, lambda e=exc: self._set_mrpack_status(f"Incompatible: {e}", kind="error"))
                 self.after(0, lambda e=exc: ZBBDialog.info(
                     self, "Incompatible Modpack", str(e), kind="warning"))
             except Exception as exc:
                 logger.error("mrpack import failed: %s", exc)
-                self.after(0, lambda e=exc: self.lbl_mrpack_status.configure(text=f"✗ Import failed: {e}"))
+                self.after(0, lambda e=exc: self._set_mrpack_status(f"Import failed: {e}", kind="error"))
             finally:
                 self.after(0, lambda: self.btn_mrpack.configure(state="normal"))
 
