@@ -33,16 +33,17 @@ class TestFormatSize:
 
 class TestSettingsDefaults:
     def test_dead_keys_removed_and_webhook_events_present(self):
+        from app.services.discord_webhook import DEFAULT_EVENT_PREFS
         from app.services.settings_manager import SettingsManager
         defaults = SettingsManager()._get_defaults()
         assert "servers_dir" not in defaults
         assert "java_preferences" not in defaults
-        assert defaults["webhook_events"] == {
-            "crashed": True,
-            "ready": True,
-            "backup_completed": True,
-            "backup_failed": True,
-        }
+        assert defaults["webhook_events"] == DEFAULT_EVENT_PREFS
+        # Original four events stay opt-out; newer chatty ones are opt-in.
+        for key in ("crashed", "ready", "backup_completed", "backup_failed"):
+            assert defaults["webhook_events"][key] is True
+        for key in ("stopped", "player_joins", "lag_spike"):
+            assert defaults["webhook_events"][key] is False
 
     def test_webhook_event_keys_match_service_map(self):
         from app.services.discord_webhook import SETTING_EVENT_KEYS

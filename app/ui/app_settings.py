@@ -16,7 +16,7 @@ import customtkinter as ctk
 
 from app.core.app_config import AppConfig
 from app.core.constants import BASE_DIR, JDK_CACHE_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
-from app.services.discord_webhook import DiscordWebhookService
+from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS
 from app.services.disk_usage import dir_size, format_size
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
@@ -34,6 +34,12 @@ _WEBHOOK_PREFIXES = (
 _WEBHOOK_EVENT_LABELS = [
     ("crashed", "Server crashed"),
     ("ready", "Server ready"),
+    ("stopped", "Server stopped"),
+    ("restarted", "Server restarted"),
+    ("zombie_detected", "Server unresponsive"),
+    ("lag_spike", "Lag detected"),
+    ("tunnel_online", "Tunnel address ready"),
+    ("player_joins", "Player joins/leaves"),
     ("backup_completed", "Backup completed"),
     ("backup_failed", "Backup failed"),
 ]
@@ -149,8 +155,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Notifications
     # ------------------------------------------------------------------
     def _build_notifications_tab(self, tab):
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=0, pady=0)
+
         card = self._card(
-            tab, "Discord Webhook",
+            scroll, "Discord Webhook",
             "Posts server events to a Discord channel.\n"
             "Server Settings > Integrations > Webhooks > Copy Webhook URL. Leave empty to disable.",
         )
@@ -163,13 +172,13 @@ class AppSettingsDialog(ctk.CTkToplevel):
         if current:
             self.entry_webhook.insert(0, current)
 
-        events_card = self._card(tab, "Events", "Which events get posted to the webhook.")
+        events_card = self._card(scroll, "Events", "Which events get posted to the webhook.")
         prefs = self._settings.get("webhook_events", {}) or {}
         self._event_vars = {}
         checks_row = ctk.CTkFrame(events_card, fg_color="transparent")
         checks_row.grid(row=2, column=0, sticky="ew", padx=15, pady=(4, 12))
         for i, (key, label) in enumerate(_WEBHOOK_EVENT_LABELS):
-            var = ctk.BooleanVar(value=bool(prefs.get(key, True)))
+            var = ctk.BooleanVar(value=bool(prefs.get(key, DEFAULT_EVENT_PREFS.get(key, False))))
             self._event_vars[key] = var
             chk = ctk.CTkCheckBox(
                 checks_row, text=label, variable=var,
@@ -177,6 +186,45 @@ class AppSettingsDialog(ctk.CTkToplevel):
                 corner_radius=AppConfig.RADIUS_BADGE,
             )
             chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 24), pady=3)
+
+        identity_card = self._card(
+            scroll, "Bot Identity",
+            "Optional. Override the name and avatar shown on webhook messages.",
+        )
+        identity_row = ctk.CTkFrame(identity_card, fg_color="transparent")
+        identity_row.grid(row=2, column=0, sticky="ew", padx=15, pady=(0, 10))
+        identity_row.grid_columnconfigure(0, weight=1)
+        identity_row.grid_columnconfigure(1, weight=2)
+        self.entry_webhook_name = ctk.CTkEntry(
+            identity_row, placeholder_text="Bot name (e.g. ZBB)",
+            corner_radius=AppConfig.RADIUS_BTN, height=32,
+        )
+        self.entry_webhook_name.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.entry_webhook_avatar = ctk.CTkEntry(
+            identity_row, placeholder_text="Avatar image URL (https://...)",
+            corner_radius=AppConfig.RADIUS_BTN, height=32,
+        )
+        self.entry_webhook_avatar.grid(row=0, column=1, sticky="ew")
+        name = self._settings.get("webhook_username", "")
+        if name:
+            self.entry_webhook_name.insert(0, name)
+        avatar = self._settings.get("webhook_avatar_url", "")
+        if avatar:
+            self.entry_webhook_avatar.insert(0, avatar)
+
+        mention_card = self._card(
+            scroll, "Crash Alert Mention",
+            "Optional. Discord role ID to @mention when the server crashes.\n"
+            "Right-click a role in Discord (Developer Mode on) > Copy Role ID.",
+        )
+        self.entry_webhook_role = ctk.CTkEntry(
+            mention_card, placeholder_text="Role ID (numbers only)",
+            corner_radius=AppConfig.RADIUS_BTN, height=32, width=260,
+        )
+        self.entry_webhook_role.grid(row=2, column=0, sticky="w", padx=15, pady=(0, 10))
+        role = self._settings.get("webhook_crash_mention_role", "")
+        if role:
+            self.entry_webhook_role.insert(0, role)
 
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
         btn_row.pack(fill="x", padx=8, pady=(6, 4))
@@ -211,11 +259,23 @@ class AppSettingsDialog(ctk.CTkToplevel):
         url = self._current_url()
         if not self._validate(url):
             return
+        role = self.entry_webhook_role.get().strip()
+        if role and not role.isdigit():
+            ZBBDialog.info(
+                self, "Invalid Role ID",
+                "The role ID must be numbers only.\n"
+                "In Discord: Settings > Advanced > Developer Mode, then right-click the role > Copy Role ID.",
+                kind="error",
+            )
+            return
         self._settings.set("discord_webhook_url", url)
         self._settings.set(
             "webhook_events",
             {key: var.get() for key, var in self._event_vars.items()},
         )
+        self._settings.set("webhook_username", self.entry_webhook_name.get().strip())
+        self._settings.set("webhook_avatar_url", self.entry_webhook_avatar.get().strip())
+        self._settings.set("webhook_crash_mention_role", role)
         self.zbb_manager.reload_discord_webhook()
         if url:
             Toast.show(self, "Discord notifications enabled.", toast_type="success")
@@ -230,9 +290,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
         if not self._validate(url):
             return
         self.btn_test.configure(state="disabled", text="Sending...")
+        username = self.entry_webhook_name.get().strip()
+        avatar_url = self.entry_webhook_avatar.get().strip()
 
         def _worker():
-            ok, error = DiscordWebhookService.send_test(url)
+            ok, error = DiscordWebhookService.send_test(url, username=username, avatar_url=avatar_url)
             def _apply():
                 if not self.winfo_exists():
                     return

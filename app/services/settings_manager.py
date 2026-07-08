@@ -28,15 +28,16 @@ class SettingsManager:
         self._settings_lock = threading.Lock()
 
     def _get_defaults(self) -> dict:
+        # Local import: settings_manager must stay importable without
+        # pulling requests (discord_webhook) at module load.
+        from app.services.discord_webhook import DEFAULT_EVENT_PREFS
         return {
             "theme": "Dark",
             "discord_webhook_url": "",
-            "webhook_events": {
-                "crashed": True,
-                "ready": True,
-                "backup_completed": True,
-                "backup_failed": True,
-            },
+            "webhook_events": dict(DEFAULT_EVENT_PREFS),
+            "webhook_username": "",
+            "webhook_avatar_url": "",
+            "webhook_crash_mention_role": "",
         }
 
     def _ensure_loaded(self):

@@ -99,17 +99,22 @@ class ZBBManager:
 
     def _init_discord_webhook(self) -> None:
         from app.services.settings_manager import SettingsManager
-        from app.services.discord_webhook import DiscordWebhookService, SETTING_EVENT_KEYS
+        from app.services.discord_webhook import (
+            DiscordWebhookService, SETTING_EVENT_KEYS, DEFAULT_EVENT_PREFS,
+        )
         settings = SettingsManager()
         url = settings.get("discord_webhook_url", "")
         if url:
             prefs = settings.get("webhook_events", {}) or {}
             enabled = {event for key, event in SETTING_EVENT_KEYS.items()
-                       if prefs.get(key, True)}
+                       if prefs.get(key, DEFAULT_EVENT_PREFS.get(key, False))}
             self._discord_webhook = DiscordWebhookService(
                 url, self.events,
                 server_name_getter=lambda: self.current_server or "",
                 enabled_events=enabled,
+                username=settings.get("webhook_username", ""),
+                avatar_url=settings.get("webhook_avatar_url", ""),
+                crash_mention_role=settings.get("webhook_crash_mention_role", ""),
             )
             logger.info("Discord webhook active (%d events)", len(enabled))
 

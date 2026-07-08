@@ -227,16 +227,17 @@ class TestDiscordWebhookEventFilter:
         with patch("app.services.discord_webhook.requests.post"):
             svc = DiscordWebhookService(
                 "http://example.com/hook", bus,
-                enabled_events={ServerEvent.CRASHED, ServerEvent.LAG_SPIKE},
+                enabled_events={ServerEvent.CRASHED, ServerEvent.CONSOLE_LINE},
             )
-        assert ServerEvent.LAG_SPIKE not in svc._enabled
-        assert not bus._listeners.get(ServerEvent.LAG_SPIKE)
+        assert ServerEvent.CONSOLE_LINE not in svc._enabled
+        assert not bus._listeners.get(ServerEvent.CONSOLE_LINE)
         svc.stop()
 
     def test_none_means_all_events(self, bus):
+        from app.services.discord_webhook import _EVENT_LABELS
         with patch("app.services.discord_webhook.requests.post"):
             svc = DiscordWebhookService("http://example.com/hook", bus)
-        assert len(svc._enabled) == 4
+        assert svc._enabled == set(_EVENT_LABELS)
         svc.stop()
 
     def test_setting_event_keys_map_covers_all_labels(self):
@@ -251,6 +252,258 @@ class TestDiscordWebhookEventFilter:
             )
         svc.stop()
         assert not bus._listeners.get(ServerEvent.BACKUP_FAILED)
+
+
+class TestDiscordWebhookStoppedFilter:
+    def test_clean_stop_is_posted(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.STOPPED},
+            )
+            bus.emit(ServerEvent.STOPPED, {"exit_code": 0, "uptime": 3700})
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        embed = captured["payload"]["embeds"][0]
+        assert embed["title"] == "Server Stopped"
+        assert "1h 1m" in embed["description"]
+
+    def test_crash_exit_stop_is_suppressed(self, bus):
+        posted = threading.Event()
+
+        def fake_post(url, json=None, timeout=None):
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.STOPPED},
+            )
+            bus.emit(ServerEvent.STOPPED, {"exit_code": 1, "uptime": 12})
+            time.sleep(0.5)
+        svc.stop()
+        assert not posted.is_set()
+
+
+class TestDiscordWebhookTunnel:
+    def _emit_online(self, bus, addr):
+        bus.emit(ServerEvent.TUNNEL_STATUS,
+                 {"status": "Online", "ip": "", "dns": addr, "is_guest": False})
+
+    def test_tunnel_online_posts_address(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.TUNNEL_STATUS},
+            )
+            self._emit_online(bus, "play.example.joinmc.link")
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        assert "play.example.joinmc.link" in captured["payload"]["embeds"][0]["description"]
+
+    def test_same_address_not_posted_twice(self, bus):
+        count = [0]
+
+        def fake_post(url, json=None, timeout=None):
+            count[0] += 1
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.TUNNEL_STATUS},
+            )
+            self._emit_online(bus, "a.joinmc.link")
+            self._emit_online(bus, "a.joinmc.link")
+            time.sleep(3)
+        svc.stop()
+        assert count[0] == 1
+
+    def test_offline_status_not_posted(self, bus):
+        posted = threading.Event()
+
+        def fake_post(url, json=None, timeout=None):
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.TUNNEL_STATUS},
+            )
+            bus.emit(ServerEvent.TUNNEL_STATUS,
+                     {"status": "Offline", "ip": "", "dns": None, "is_guest": False})
+            time.sleep(0.5)
+        svc.stop()
+        assert not posted.is_set()
+
+
+class TestDiscordWebhookPlayers:
+    def test_join_and_leave_coalesced_into_one_post(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post), \
+             patch("app.services.discord_webhook._PLAYER_FLUSH_DELAY", 0.2):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.PLAYER_LIST},
+            )
+            bus.emit(ServerEvent.PLAYER_LIST, ["Steve"])
+            bus.emit(ServerEvent.PLAYER_LIST, ["Steve", "Alex"])
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        desc = captured["payload"]["embeds"][0]["description"]
+        assert "Steve" in desc and "Alex" in desc
+        assert "Online now: **2**" in desc
+
+    def test_join_then_leave_within_window_cancels_out(self, bus):
+        posted = threading.Event()
+
+        def fake_post(url, json=None, timeout=None):
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post), \
+             patch("app.services.discord_webhook._PLAYER_FLUSH_DELAY", 0.2):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.PLAYER_LIST},
+            )
+            bus.emit(ServerEvent.PLAYER_LIST, ["Steve"])
+            bus.emit(ServerEvent.PLAYER_LIST, [])
+            time.sleep(1)
+        svc.stop()
+        assert not posted.is_set()
+
+    def test_stopped_resets_player_state(self, bus):
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.PLAYER_LIST},
+            )
+            svc._on_player_list(["Steve", "Alex"])
+            bus.emit(ServerEvent.STOPPED, {"exit_code": 0, "uptime": 5})
+            assert svc._prev_players == set()
+        svc.stop()
+
+
+class TestDiscordWebhookIdentity:
+    def test_username_avatar_and_timestamp_in_payload(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.READY},
+                username="ZBB Bot", avatar_url="https://img.example/a.png",
+            )
+            bus.emit(ServerEvent.READY, None)
+            posted.wait(timeout=5)
+        svc.stop()
+        payload = captured["payload"]
+        assert payload["username"] == "ZBB Bot"
+        assert payload["avatar_url"] == "https://img.example/a.png"
+        assert "timestamp" in payload["embeds"][0]
+
+    def test_crash_mention_role(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.CRASHED},
+                crash_mention_role="123456789",
+            )
+            bus.emit(ServerEvent.CRASHED, {"reason": "oom", "retry": 1})
+            posted.wait(timeout=5)
+        svc.stop()
+        payload = captured["payload"]
+        assert payload["content"] == "<@&123456789>"
+        assert payload["allowed_mentions"] == {"roles": ["123456789"]}
+
+    def test_mention_not_added_to_non_crash_events(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.READY},
+                crash_mention_role="123456789",
+            )
+            bus.emit(ServerEvent.READY, None)
+            posted.wait(timeout=5)
+        svc.stop()
+        assert "content" not in captured["payload"]
+
+
+class TestDiscordWebhook429:
+    def test_retries_after_rate_limit(self, bus):
+        codes = [429, 204]
+        calls = []
+        done = threading.Event()
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append(time.monotonic())
+            resp = MagicMock(status_code=codes[min(len(calls) - 1, 1)])
+            resp.headers = {"Retry-After": "0.2"}
+            if len(calls) >= 2:
+                done.set()
+            return resp
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus,
+                enabled_events={ServerEvent.READY},
+            )
+            bus.emit(ServerEvent.READY, None)
+            done.wait(timeout=5)
+        svc.stop()
+        assert len(calls) == 2
+        assert calls[1] - calls[0] >= 0.15
 
 
 class TestDiscordWebhookSendTest:
