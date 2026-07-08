@@ -931,14 +931,29 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()
+    def _grid_help_icon(self, parent, row, text):
+        """Small '?' badge with a tooltip, in the help column of a section card."""
+        help_icon = ctk.CTkLabel(parent, text="?", font=self.font_small,
+                                 width=18, height=18, corner_radius=9,
+                                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
+        help_icon.grid(row=row, column=1, sticky="w", padx=2, pady=8)
+        help_icon.tooltip_ref = ToolTip(help_icon, text=text)
+        return help_icon
+
     def setup_launch_tab(self):
         """Setup Java and Launch arguments tab."""
         from app.services.java_detector import JavaDetector
-        
+
         card = self.create_section_frame(self.frame_launch, "Java & Runtime")
-        
+
         # Java Path
         ctk.CTkLabel(card, text="Java Version:", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._grid_help_icon(card, 0, (
+            "Which Java runtime launches the server.\n"
+            "Auto-Detect picks the version your Minecraft version requires\n"
+            "(Java 21 for 1.20.5+, 17 for 1.18-1.20.4, 8 for older) and\n"
+            "downloads it automatically if it's not installed."
+        ))
         
         self._java_label_to_path = {"Auto-Detect": "auto"}
         self._java_path_to_label = {"auto": "Auto-Detect"}
@@ -982,12 +997,23 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
         
         ctk.CTkLabel(card, text="Use Aikar's Flags:", font=self.font_bold, anchor="w").grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._grid_help_icon(card, 2, (
+            "Community-tuned JVM garbage collector flags (from PaperMC)\n"
+            "that reduce lag spikes on Minecraft servers. Recommended: on.\n"
+            "When off, only the basic memory flags (-Xms/-Xmx) are used."
+        ))
         self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
         self.chk_aikars = ctk.CTkSwitch(card, text="", variable=self.var_use_aikars)
         self.chk_aikars.grid(row=2, column=2, columnspan=2, sticky="e", padx=12, pady=5)
 
         # Custom JVM Flags
         ctk.CTkLabel(card, text="Custom JVM Flags:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=(8, 0))
+        self._grid_help_icon(card, 3, (
+            "Extra arguments appended to the Java command line, after the\n"
+            "memory and GC flags. Space-separated. Leave empty unless a mod\n"
+            "or guide asks for a specific flag - a wrong flag can prevent\n"
+            "the server from starting."
+        ))
         self.entry_jvm_flags = ctk.CTkEntry(card, height=28)
         self.entry_jvm_flags.insert(0, meta.get("jvm_custom_flags", ""))
         self.entry_jvm_flags.grid(row=3, column=2, columnspan=2, sticky="e", padx=12, pady=(8, 0))
@@ -997,19 +1023,42 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
-        ctk.CTkButton(card_tools, text="Open Server Folder", image=icon("folder", 14), command=self.open_folder,
-                          fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                          corner_radius=AppConfig.RADIUS_BTN, height=36).pack(fill="x", padx=15, pady=10)
+        tools_row = ctk.CTkFrame(card_tools, fg_color="transparent")
+        tools_row.pack(fill="x", padx=15, pady=10)
+        tools_row.grid_columnconfigure((0, 1, 2), weight=1, uniform="tools")
+        buttons = (
+            ("Open Server Folder", "folder", None,
+             "The server's root folder (world, mods, configs)."),
+            ("Open Logs", "folder", "logs",
+             "Full server logs, including sessions older than the console buffer."),
+            ("Open Crash Reports", "folder", "crash_reports",
+             "JSON diagnostics ZBB writes every time the server crashes."),
+        )
+        for col, (label, icon_name, subpath, tip) in enumerate(buttons):
+            btn = ctk.CTkButton(
+                tools_row, text=label, image=icon(icon_name, 14),
+                command=lambda s=subpath: self.open_folder(s),
+                fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                corner_radius=AppConfig.RADIUS_BTN, height=36,
+            )
+            btn.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 8, 0))
+            btn.tooltip_ref = ToolTip(btn, tip)
 
-    def open_folder(self):
+    def open_folder(self, subpath=None):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)
-        if os.path.exists(server_path):
-            if sys.platform == "win32":
-                subprocess.run(["explorer", server_path], check=False)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", server_path], check=False)
-            else:
-                subprocess.run(["xdg-open", server_path], check=False)
+        if subpath:
+            server_path = os.path.join(server_path, subpath)
+        if not os.path.exists(server_path):
+            ZBBDialog.info(self, "Nothing Here Yet",
+                           "That folder does not exist yet - it is created the first time it is needed.",
+                           kind="info")
+            return
+        if sys.platform == "win32":
+            subprocess.run(["explorer", server_path], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", server_path], check=False)
+        else:
+            subprocess.run(["xdg-open", server_path], check=False)
 
     def save_launch_settings(self):
         meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
