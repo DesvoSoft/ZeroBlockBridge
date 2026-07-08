@@ -105,6 +105,12 @@ TAB_LAYOUTS = {
         "Remote Access": ["enable-rcon", "rcon.password", "rcon.port"]
     },
     "Advanced": {
+        "Gameplay Rules": ["pvp", "allow-flight", "allow-nether", "spawn-protection"],
+        "Server Behavior": [
+            "max-tick-time", "player-idle-timeout", "function-permission-level",
+            "hide-online-players", "log-ips", "broadcast-console-to-ops",
+            "broadcast-rcon-to-ops", "require-resource-pack",
+        ],
         "System Performance": ["sync-chunk-writes"],
         "Security & Permissions": [
             "op-permission-level", "prevent-proxy-connections", "enforce-secure-profile"
@@ -652,28 +658,37 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         widget = self._create_widget(ctrl_frame, widget_type, val, options)
         self.widgets[key] = (widget, widget_type)
 
+    # Keys where the enable/spawn/white-list/... substring heuristic below
+    # doesn't apply but the value is still a vanilla true/false toggle.
+    _BOOLEAN_KEY_OVERRIDES = {
+        "pvp", "allow-flight", "allow-nether", "hide-online-players", "log-ips",
+        "broadcast-console-to-ops", "broadcast-rcon-to-ops", "require-resource-pack",
+    }
+
     def _build_tab_from_config(self, parent_frame, tab_name):
         """Generates UI sections dynamically based on TAB_LAYOUTS config."""
         layout = TAB_LAYOUTS.get(tab_name, {})
-        
+
         for section_title, keys in layout.items():
             card = self.create_section_frame(parent_frame, section_title)
             for key in keys:
                 # Get the display name from metadata or generate from key
                 label = key.replace("-", " ").replace(".", " ").title()
-                
+
                 # Determine widget type and options
                 widget_type = "entry"
                 options = None
-                
-                if any(x in key for x in ["enable", "spawn", "white-list", "hardcore", "enforce", "online"]):
+
+                if key in self._BOOLEAN_KEY_OVERRIDES:
                     widget_type = "checkbox"
-                elif key in ["gamemode", "difficulty", "level-type", "op-permission-level"]:
+                elif any(x in key for x in ["enable", "spawn-npcs", "spawn-animals", "spawn-monsters", "white-list", "hardcore", "enforce", "online"]):
+                    widget_type = "checkbox"
+                elif key in ["gamemode", "difficulty", "level-type", "op-permission-level", "function-permission-level"]:
                     widget_type = "dropdown"
                     if key == "gamemode": options = ["survival", "creative", "adventure", "spectator"]
                     elif key == "difficulty": options = ["peaceful", "easy", "normal", "hard"]
                     elif key == "level-type": options = ["minecraft:normal", "minecraft:flat", "minecraft:large_biomes"]
-                    elif key == "op-permission-level": options = ["1", "2", "3", "4"]
+                    elif key in ("op-permission-level", "function-permission-level"): options = ["1", "2", "3", "4"]
                 elif key == "level-name":
                     worlds = list_worlds(self.server_name)
                     current = self.properties.get("level-name", "world")
