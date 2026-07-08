@@ -155,10 +155,24 @@ class PlayersDashboard(ctk.CTkToplevel):
                                         variable=self.op_level_var, width=60)
         level_menu.grid(row=0, column=1, padx=(0, 10))
 
+        op_level_help_text = (
+            "Operator permission level:\n"
+            "1 - Can bypass spawn protection\n"
+            "2 - Cheat commands (/gamemode, /give, /tp) and command blocks\n"
+            "3 - Player management (/kick, /ban, /op, /deop)\n"
+            "4 - Everything, including /stop"
+        )
+        op_level_help_icon = ctk.CTkLabel(add_frame, text="?", font=AppConfig.FONT_BODY_SMALL,
+                                 width=18, height=18, corner_radius=9,
+                                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
+        op_level_help_icon.grid(row=0, column=2, padx=(0, 10))
+        op_level_help_icon.tooltip_ref = ToolTip(op_level_help_icon, text=op_level_help_text)
+        level_menu.tooltip_ref = ToolTip(level_menu, text=op_level_help_text)
+
         btn_add = ctk.CTkButton(add_frame, text="Op", width=60, corner_radius=AppConfig.RADIUS_BTN,
                                  fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
                                  command=self._add_operator)
-        btn_add.grid(row=0, column=2)
+        btn_add.grid(row=0, column=3)
 
         self.scroll_operators = ctk.CTkScrollableFrame(self.tab_operators, fg_color="transparent")
         self.scroll_operators.grid(row=1, column=0, sticky="nsew", padx=5, pady=(0, 10))
