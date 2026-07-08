@@ -1,6 +1,8 @@
 # Research: Simple Voice Chat tunnel via Playit.gg (not on roadmap)
 
-Status: exploratory only. No code changes made to the app. Not scheduled.
+Status: exploratory only. No code changes made to the app. Deliberately deferred
+(2026-07-08): revisit after the core app and its existing features are polished
+and mature. Implementation plan drafted in the "Draft automation flow" below.
 
 ## Goal
 
