@@ -8,6 +8,7 @@ from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.template_manager import list_templates, load_template, save_template
 from app.ui.ui_components import center_on_parent
+from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from PIL import Image
 
@@ -107,6 +108,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.show_step_1()
         
         self.transient(parent)
+        apply_rounded_corners(self)
         self.wait_visibility()
         self.grab_set()
 

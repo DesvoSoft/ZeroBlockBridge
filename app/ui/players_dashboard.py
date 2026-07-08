@@ -8,6 +8,7 @@ from app.core.server_events import ServerEvent
 from app.services.player_files import add_entry, load_json_list, remove_entry
 from app.services.server_properties import load_server_properties, save_server_properties
 from app.ui.ui_components import ZBBDialog, center_on_parent
+from app.ui.win_effects import apply_rounded_corners
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.transient(master)
         self.lift()
         self.focus_force()
+        apply_rounded_corners(self)
         self.event_bus = event_bus
         self.zbb_manager = zbb_manager
 

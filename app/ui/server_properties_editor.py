@@ -10,6 +10,7 @@ from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog
+from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
@@ -194,6 +195,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                                       corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_save.pack(side="right", padx=5)
         
+        apply_rounded_corners(self)
+
         # Make modal
         self.transient(parent)
         self.wait_visibility()

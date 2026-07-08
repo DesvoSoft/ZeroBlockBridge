@@ -28,6 +28,7 @@ from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
 from app.ui.ui_components import ToolTip, ZBBDialog
+from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
 logger = logging.getLogger(__name__)
@@ -1396,6 +1397,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         dialog.geometry("460x320")
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
+        apply_rounded_corners(dialog)
 
         frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
         frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
@@ -1517,6 +1519,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         dialog.title("Mod Updates Available")
         dialog.geometry("520x400")
         dialog.transient(self.winfo_toplevel())
+        apply_rounded_corners(dialog)
         dialog.grab_set()
 
         frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
