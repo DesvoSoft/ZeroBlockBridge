@@ -351,6 +351,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _build_results_area(self):
         results_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._results_container = results_container
         results_container.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         results_container.grid_columnconfigure(0, weight=1)
         results_container.grid_rowconfigure(1, weight=1)
@@ -395,7 +396,11 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _show_loading(self, text: str):
         self._stop_spinner()
-        self._loading_overlay.place(in_=self.results_frame, relx=0, rely=0,
+        # Anchor to the fixed container, NOT the scrollable frame: the scroll
+        # frame's inner widget follows content height and scroll offset, so an
+        # overlay placed in_ it lands off-viewport (or collapses to ~0px once
+        # the old cards are destroyed) and the spinner is never seen.
+        self._loading_overlay.place(in_=self._results_container, relx=0, rely=0,
                                     relwidth=1, relheight=1)
         self._loading_overlay.lift()
         self._animate_spinner(self._loading_lbl, text)
@@ -763,7 +768,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             # Async search response landed while the Installed view is open —
             # keep the hits (restored on toggle back) but don't clobber the UI.
             return
-        self._stop_spinner()
+        # Keep the spinner animating: the overlay stays up while cards render
+        # in batches below; _hide_loading (end of last batch) stops it.
         self._desc_labels.clear()
         for w in self.results_frame.winfo_children():
             w.destroy()
