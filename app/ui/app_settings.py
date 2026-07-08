@@ -16,7 +16,7 @@ import customtkinter as ctk
 
 from app.core.app_config import AppConfig
 from app.core.constants import BASE_DIR, JDK_CACHE_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
-from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS
+from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
 from app.services.disk_usage import dir_size, format_size
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
@@ -187,6 +187,45 @@ class AppSettingsDialog(ctk.CTkToplevel):
             )
             chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 24), pady=3)
 
+        templates_card = self._card(
+            scroll, "Message Templates",
+            "Optional. Override the message text for a specific event. Leave empty to use the default wording.",
+        )
+        self._webhook_templates = dict(self._settings.get("webhook_templates", {}) or {})
+        tpl_select_row = ctk.CTkFrame(templates_card, fg_color="transparent")
+        tpl_select_row.grid(row=2, column=0, sticky="ew", padx=15, pady=(0, 4))
+        tpl_select_row.grid_columnconfigure(0, weight=1)
+        self.opt_template_event = ctk.CTkOptionMenu(
+            tpl_select_row, values=[label for _, label in _WEBHOOK_EVENT_LABELS],
+            command=self._on_template_event_change, height=32,
+            corner_radius=AppConfig.RADIUS_BTN, width=220,
+        )
+        self.opt_template_event.grid(row=0, column=0, sticky="w")
+
+        self.lbl_template_placeholders = ctk.CTkLabel(
+            templates_card, text="", font=AppConfig.FONT_BODY_SMALL,
+            text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", justify="left",
+        )
+        self.lbl_template_placeholders.grid(row=3, column=0, sticky="ew", padx=15, pady=(2, 4))
+
+        self.entry_template = ctk.CTkEntry(
+            templates_card, placeholder_text="Custom message for this event...",
+            corner_radius=AppConfig.RADIUS_BTN, height=32,
+        )
+        self.entry_template.grid(row=4, column=0, sticky="ew", padx=15, pady=(0, 4))
+
+        tpl_btn_row = ctk.CTkFrame(templates_card, fg_color="transparent")
+        tpl_btn_row.grid(row=5, column=0, sticky="ew", padx=15, pady=(0, 12))
+        self._btn_template_apply = self._ghost_button(
+            tpl_btn_row, "Apply", self._apply_template, icon_name="check", width=90,
+        )
+        self._btn_template_apply.pack(side="left")
+        self._btn_template_clear = self._ghost_button(
+            tpl_btn_row, "Clear", self._clear_template, icon_name="trash", width=90,
+        )
+        self._btn_template_clear.pack(side="left", padx=(8, 0))
+        self._load_template_for_event(_WEBHOOK_EVENT_LABELS[0][0])
+
         identity_card = self._card(
             scroll, "Bot Identity",
             "Optional. Override the name and avatar shown on webhook messages.",
@@ -241,6 +280,49 @@ class AppSettingsDialog(ctk.CTkToplevel):
         )
         self.btn_save.pack(side="right")
 
+    def _current_template_key(self) -> str:
+        label = self.opt_template_event.get()
+        for key, lbl in _WEBHOOK_EVENT_LABELS:
+            if lbl == label:
+                return key
+        return _WEBHOOK_EVENT_LABELS[0][0]
+
+    def _load_template_for_event(self, key: str) -> None:
+        placeholders = ", ".join("{" + p + "}" for p in TEMPLATE_PLACEHOLDERS.get(key, ["server"]))
+        self.lbl_template_placeholders.configure(text=f"Available: {placeholders}")
+        self.entry_template.delete(0, "end")
+        existing = self._webhook_templates.get(key, "")
+        if existing:
+            self.entry_template.insert(0, existing)
+
+    def _on_template_event_change(self, _label: str) -> None:
+        self._load_template_for_event(self._current_template_key())
+
+    def _apply_template(self) -> None:
+        key = self._current_template_key()
+        text = self.entry_template.get().strip()
+        placeholders = set(TEMPLATE_PLACEHOLDERS.get(key, ["server"]))
+        try:
+            text.format(**{p: "" for p in placeholders})
+        except (KeyError, IndexError, ValueError):
+            ZBBDialog.info(
+                self, "Invalid Template",
+                "That template uses a placeholder that isn't available for this event.\n"
+                f"Available: {', '.join('{' + p + '}' for p in placeholders)}",
+                kind="error",
+            )
+            return
+        if text:
+            self._webhook_templates[key] = text
+        else:
+            self._webhook_templates.pop(key, None)
+        Toast.show(self, "Template updated. Click Save to keep it.", toast_type="info")
+
+    def _clear_template(self) -> None:
+        key = self._current_template_key()
+        self._webhook_templates.pop(key, None)
+        self.entry_template.delete(0, "end")
+
     def _current_url(self) -> str:
         return self.entry_webhook.get().strip()
 
@@ -276,6 +358,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self._settings.set("webhook_username", self.entry_webhook_name.get().strip())
         self._settings.set("webhook_avatar_url", self.entry_webhook_avatar.get().strip())
         self._settings.set("webhook_crash_mention_role", role)
+        self._settings.set("webhook_templates", dict(self._webhook_templates))
         self.zbb_manager.reload_discord_webhook()
         if url:
             Toast.show(self, "Discord notifications enabled.", toast_type="success")

@@ -506,6 +506,97 @@ class TestDiscordWebhook429:
         assert calls[1] - calls[0] >= 0.15
 
 
+class TestDiscordWebhookTemplates:
+    def test_custom_template_overrides_default_description(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus, lambda: "MySrv",
+                enabled_events={ServerEvent.CRASHED},
+                templates={"crashed": "{server} died: {reason} (try {retry})"},
+            )
+            bus.emit(ServerEvent.CRASHED, {"reason": "oom", "retry": 3})
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        desc = captured["payload"]["embeds"][0]["description"]
+        assert desc == "MySrv died: oom (try 3)"
+
+    def test_invalid_placeholder_falls_back_to_raw_template(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus, lambda: "MySrv",
+                enabled_events={ServerEvent.READY},
+                templates={"ready": "Server up: {nonexistent}"},
+            )
+            bus.emit(ServerEvent.READY, None)
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        desc = captured["payload"]["embeds"][0]["description"]
+        assert desc == "Server up: {nonexistent}"
+
+    def test_empty_template_uses_default_description(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus, lambda: "MySrv",
+                enabled_events={ServerEvent.CRASHED},
+                templates={"crashed": "   "},
+            )
+            bus.emit(ServerEvent.CRASHED, {"reason": "oom", "retry": 1})
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        desc = captured["payload"]["embeds"][0]["description"]
+        assert desc == "Reason: `oom` — Retry attempt 1"
+
+    def test_player_joins_template_uses_flush_data(self, bus):
+        posted = threading.Event()
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None):
+            captured["payload"] = json
+            posted.set()
+            return MagicMock(status_code=204)
+
+        with patch("app.services.discord_webhook.requests.post", side_effect=fake_post), \
+             patch("app.services.discord_webhook._PLAYER_FLUSH_DELAY", 0.2):
+            svc = DiscordWebhookService(
+                "http://example.com/hook", bus, lambda: "MySrv",
+                enabled_events={ServerEvent.PLAYER_LIST},
+                templates={"player_joins": "{server}: +{joined} -{left} ({online} online)"},
+            )
+            bus.emit(ServerEvent.PLAYER_LIST, ["Steve"])
+            posted.wait(timeout=5)
+        svc.stop()
+        assert posted.is_set()
+        desc = captured["payload"]["embeds"][0]["description"]
+        assert desc == "MySrv: +Steve -none (1 online)"
+
+
 class TestDiscordWebhookSendTest:
     def test_send_test_success(self):
         with patch("app.services.discord_webhook.requests.post") as mock_post:

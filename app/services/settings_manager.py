@@ -38,6 +38,7 @@ class SettingsManager:
             "webhook_username": "",
             "webhook_avatar_url": "",
             "webhook_crash_mention_role": "",
+            "webhook_templates": {},
         }
 
     def _ensure_loaded(self):

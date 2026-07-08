@@ -61,6 +61,25 @@ DEFAULT_EVENT_PREFS = {
     "player_joins": False,
 }
 
+# Placeholders available to a custom template for each settings key, shown
+# to the user in the template editor. "{server}" is always available too.
+TEMPLATE_PLACEHOLDERS = {
+    "crashed": ["server", "reason", "retry"],
+    "ready": ["server"],
+    "stopped": ["server", "uptime"],
+    "restarted": ["server", "retry", "context"],
+    "zombie_detected": ["server", "silence_seconds"],
+    "lag_spike": ["server", "count", "window_minutes"],
+    "tunnel_online": ["server", "address"],
+    "player_joins": ["server", "joined", "left", "online"],
+    "backup_completed": ["server", "path"],
+    "backup_failed": ["server", "error"],
+}
+
+
+# ServerEvent -> settings key (reverse of SETTING_EVENT_KEYS), for template lookup.
+_EVENT_SETTING_KEYS = {v: k for k, v in SETTING_EVENT_KEYS.items()}
+
 
 def _fmt_duration(seconds: float) -> str:
     seconds = int(seconds)
@@ -78,7 +97,8 @@ class DiscordWebhookService:
                  server_name_getter: Optional[Callable[[], str]] = None,
                  enabled_events: Optional[set] = None,
                  username: str = "", avatar_url: str = "",
-                 crash_mention_role: str = ""):
+                 crash_mention_role: str = "",
+                 templates: Optional[dict] = None):
         self._url = webhook_url
         self._events = events
         # Getter, not a snapshot: the active server can change after the
@@ -87,6 +107,9 @@ class DiscordWebhookService:
         self._username = username.strip()
         self._avatar_url = avatar_url.strip()
         self._crash_mention_role = crash_mention_role.strip()
+        # settings key -> custom description template ("{server} crashed: {reason}").
+        # Empty/missing key means "use the built-in description".
+        self._templates = {k: v for k, v in (templates or {}).items() if v and v.strip()}
 
         # Player join/leave coalescing state (guarded by _players_lock).
         self._players_lock = threading.Lock()
@@ -183,13 +206,7 @@ class DiscordWebhookService:
             self._flush_timer = None
         if self._stop.is_set() or (not joins and not leaves):
             return
-        parts = []
-        if joins:
-            parts.append("Joined: " + ", ".join(f"**{p}**" for p in joins))
-        if leaves:
-            parts.append("Left: " + ", ".join(f"**{p}**" for p in leaves))
-        parts.append(f"Online now: **{count}**")
-        self._enqueue(_PLAYERS_FLUSH, "\n".join(parts))
+        self._enqueue(_PLAYERS_FLUSH, {"joined": joins, "left": leaves, "online": count})
 
     def _reset_players(self, _data=None) -> None:
         with self._players_lock:
@@ -211,19 +228,27 @@ class DiscordWebhookService:
             time.sleep(_RATE_LIMIT_SECONDS)
 
     def _post(self, event_type: str, data) -> None:
+        server_name = self._get_server()
         if event_type == _PLAYERS_FLUSH:
             label, color = _EVENT_LABELS[ServerEvent.PLAYER_LIST]
-            description = data
+            template = self._templates.get("player_joins")
+            if template:
+                description = self._render_template(template, ServerEvent.PLAYER_LIST, data, server_name)
+            else:
+                description = self._format_players_flush(data)
         else:
             label, color = _EVENT_LABELS.get(event_type, ("Event", 0x99AAB5))
-            description = self._format_description(event_type, data)
+            template = self._templates.get(_EVENT_SETTING_KEYS.get(event_type, ""))
+            if template:
+                description = self._render_template(template, event_type, data, server_name)
+            else:
+                description = self._format_description(event_type, data)
         embed = {
             "title": label,
             "description": description,
             "color": color,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        server_name = self._get_server()
         if server_name:
             embed["footer"] = {"text": server_name}
         payload = {"embeds": [embed]}
@@ -287,6 +312,56 @@ class DiscordWebhookService:
         if event_type == ServerEvent.BACKUP_FAILED and isinstance(data, dict):
             return f"Error: {data.get('error', 'unknown')}"
         return ""
+
+    def _format_players_flush(self, data: dict) -> str:
+        joins = data.get("joined") or []
+        leaves = data.get("left") or []
+        parts = []
+        if joins:
+            parts.append("Joined: " + ", ".join(f"**{p}**" for p in joins))
+        if leaves:
+            parts.append("Left: " + ", ".join(f"**{p}**" for p in leaves))
+        parts.append(f"Online now: **{data.get('online', 0)}**")
+        return "\n".join(parts)
+
+    def _template_vars(self, event_type: str, data, server_name: str) -> dict:
+        """Flattens an event's data into the placeholders advertised in
+        TEMPLATE_PLACEHOLDERS. Missing/wrong-shaped data degrades to "?"
+        rather than raising, since a bad template must never break posting."""
+        d = data if isinstance(data, dict) else {}
+        vars_ = {"server": server_name or "unknown"}
+        if event_type == ServerEvent.CRASHED:
+            vars_["reason"] = d.get("reason", "unknown")
+            vars_["retry"] = d.get("retry", 0)
+        elif event_type == ServerEvent.STOPPED:
+            vars_["uptime"] = _fmt_duration(d.get("uptime", 0)) if d.get("uptime") else "n/a"
+        elif event_type == ServerEvent.RESTARTED:
+            vars_["retry"] = d.get("retry", 0)
+            vars_["context"] = d.get("context", "crash")
+        elif event_type == ServerEvent.ZOMBIE_DETECTED:
+            vars_["silence_seconds"] = int(d.get("silence_seconds", 0))
+        elif event_type == ServerEvent.LAG_SPIKE:
+            vars_["count"] = d.get("count", 0)
+            vars_["window_minutes"] = int(d.get("window_seconds", 300) // 60)
+        elif event_type == ServerEvent.TUNNEL_STATUS:
+            vars_["address"] = d.get("dns") or d.get("ip") or ""
+        elif event_type == ServerEvent.PLAYER_LIST:
+            vars_["joined"] = ", ".join(d.get("joined") or []) or "none"
+            vars_["left"] = ", ".join(d.get("left") or []) or "none"
+            vars_["online"] = d.get("online", 0)
+        elif event_type == ServerEvent.BACKUP_COMPLETED:
+            vars_["path"] = d.get("path", "")
+        elif event_type == ServerEvent.BACKUP_FAILED:
+            vars_["error"] = d.get("error", "unknown")
+        return vars_
+
+    def _render_template(self, template: str, event_type: str, data, server_name: str) -> str:
+        vars_ = self._template_vars(event_type, data, server_name)
+        try:
+            return template.format(**vars_)
+        except (KeyError, IndexError, ValueError) as e:
+            logger.warning("Discord template for %s has an invalid placeholder: %s", event_type, e)
+            return template
 
     def stop(self) -> None:
         self._stop.set()
