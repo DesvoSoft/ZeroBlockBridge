@@ -40,17 +40,49 @@ SETTINGS_METADATA = {
     
     # Network
     "server-port": {"desc": "The port the server listens on (Default: 25565).", "impact": "Low"},
+    "server-ip": {"desc": "The network interface to bind to. Leave empty to listen on all interfaces.", "impact": "Medium"},
     "white-list": {"desc": "Only allowed players can join the server.", "impact": "Low"},
+    "enforce-whitelist": {"desc": "Kicks non-whitelisted players immediately when the whitelist is reloaded, instead of waiting for their next join attempt.", "impact": "Medium"},
     "online-mode": {"desc": "Checks players against Mojang accounts. Disable for 'cracked' servers.", "impact": "Medium"},
     "network-compression-threshold": {"desc": "Size at which packets are compressed. Lower = More CPU usage.", "impact": "Medium"},
-    
+    "rcon.password": {"desc": "Password required to authenticate remote console (RCON) connections.", "impact": "Medium"},
+    "rcon.port": {"desc": "The port used for remote console (RCON) connections (Default: 25575).", "impact": "Low"},
+
     # Advanced
     "sync-chunk-writes": {"desc": "Ensures world data is saved safely. Disabling can boost performance but risks corruption.", "impact": "High"},
-    "op-permission-level": {"desc": "Default power level for operators (1-4).", "impact": "Medium"},
+    "op-permission-level": {"desc": "Default permission level for operators: 1 bypasses spawn protection, 2 unlocks cheat commands and command blocks, 3 adds player management (kick/ban/op), 4 grants full access including /stop.", "impact": "Medium"},
     "prevent-proxy-connections": {"desc": "Blocks players using VPNs or Proxies.", "impact": "Low"},
     "enforce-secure-profile": {"desc": "Requires Mojang-signed public keys for players.", "impact": "Low"},
     "enable-rcon": {"desc": "Allows remote console access (for bots/panels).", "impact": "Medium"},
     "enable-query": {"desc": "Allows external tools to see server status.", "impact": "Low"},
+
+    # Other Properties (vanilla keys with no dedicated tab section)
+    "pvp": {"desc": "Allows players to damage each other.", "impact": "Medium"},
+    "allow-flight": {"desc": "Allows use of flight mods/hacks in Survival. Disabling risks kicking legitimate players with high-latency connections (anti-cheat false positives).", "impact": "High"},
+    "allow-nether": {"desc": "Allows players to travel to the Nether dimension.", "impact": "Low"},
+    "spawn-protection": {"desc": "Radius around spawn (in blocks) where only operators can build. A large value can lock new players out of building anywhere reachable.", "impact": "High"},
+    "max-tick-time": {"desc": "Milliseconds a single tick can take before the server watchdog force-kills it as hung. Setting to -1 disables the watchdog entirely, letting a frozen server run forever undetected.", "impact": "High"},
+    "player-idle-timeout": {"desc": "Minutes of inactivity before an idle player is kicked. 0 disables the timeout.", "impact": "Low"},
+    "max-world-size": {"desc": "Maximum radius (in blocks) the world border can expand to.", "impact": "Medium"},
+    "entity-broadcast-range-percentage": {"desc": "Percentage of the default entity tracking range. Lower values reduce network traffic but may make entities pop in late.", "impact": "Medium"},
+    "rate-limit": {"desc": "Maximum packets per second a player can send before being kicked. 0 disables the limit.", "impact": "Medium"},
+    "function-permission-level": {"desc": "Permission level (1-4) required for datapack functions to run operator-level commands.", "impact": "Medium"},
+    "hide-online-players": {"desc": "Hides the player list from the server status response (server list ping).", "impact": "Low"},
+    "log-ips": {"desc": "Whether player IP addresses are written to the server log.", "impact": "Low"},
+    "broadcast-console-to-ops": {"desc": "Sends console command output to online operators as chat messages.", "impact": "Low"},
+    "broadcast-rcon-to-ops": {"desc": "Sends RCON command output to online operators as chat messages.", "impact": "Low"},
+    "max-chained-neighbor-updates": {"desc": "Limits chained block updates (e.g. large redstone contraptions) before the server stops propagating them, to prevent lag or crashes.", "impact": "Medium"},
+    "require-resource-pack": {"desc": "Forces players to accept the server resource pack or be disconnected.", "impact": "Medium"},
+    "resource-pack": {"desc": "URL of a resource pack players will be prompted to download when joining.", "impact": "Low"},
+    "resource-pack-prompt": {"desc": "Custom message shown in the resource pack download prompt.", "impact": "Low"},
+    "motd": {"desc": "Message shown in the multiplayer server list. Supports § color codes.", "impact": "Low"},
+    "use-native-transport": {"desc": "Uses optimized Linux network transport (epoll) when available. Has no effect on Windows.", "impact": "Low"},
+    "enable-jmx-monitoring": {"desc": "Exposes server metrics via JMX for monitoring tools.", "impact": "Low"},
+    "enable-status": {"desc": "Whether the server responds to server list pings (status queries).", "impact": "Low"},
+    "pause-when-empty-seconds": {"desc": "Seconds of no players online before the server pauses ticking to save CPU. 0 disables pausing.", "impact": "Medium"},
+    "accepts-transfers": {"desc": "Allows players to be transferred in from other servers via the transfer packet.", "impact": "Low"},
+    "region-file-compression": {"desc": "Compression algorithm used for region files on disk (e.g. deflate, none).", "impact": "Medium"},
+    "entity-activation-range": {"desc": "Distance around a player at which entities become active and start ticking.", "impact": "Medium"},
 }
 
 # Define the layout for the complex tabs
@@ -671,7 +703,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         current_row += 1
 
         ctk.CTkLabel(card_identity, text="Message of the Day", font=self.font_bold, anchor="w").grid(row=current_row, column=0, sticky="nw", padx=(12, 5), pady=8)
-        
+
+        motd_help_icon = ctk.CTkLabel(card_identity, text="?", font=self.font_small,
+                                 width=18, height=18, corner_radius=9,
+                                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
+        motd_help_icon.grid(row=current_row, column=1, sticky="nw", padx=2, pady=8)
+        motd_help_icon.tooltip_ref = ToolTip(motd_help_icon, text="Message shown in the multiplayer server list. Supports § color codes - the preview below shows the result.")
+
         motd_frame = ctk.CTkFrame(card_identity, fg_color="transparent")
         motd_frame.grid(row=current_row, column=2, columnspan=2, sticky="e", padx=12, pady=5)
         
