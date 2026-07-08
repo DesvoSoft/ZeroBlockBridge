@@ -89,7 +89,8 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_back.pack(side="left", padx=20, pady=12)
 
         self.btn_next = ctk.CTkButton(
-            self.footer_frame, text="Next →", command=self.go_next,
+            self.footer_frame, text="Next", command=self.go_next,
+            image=icon("chevron_right", 13, "#ffffff"), compound="right",
             corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
         )
@@ -130,7 +131,7 @@ class ServerWizard(ctk.CTkToplevel):
                                     fg_color=AppConfig.COLOR_BTN_SUCCESS,
                                     hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         else:
-            self.btn_next.configure(text="Next →", image=None,
+            self.btn_next.configure(text="Next", image=icon("chevron_right", 13, "#ffffff"),
                                     fg_color=AppConfig.COLOR_BTN_PRIMARY,
                                     hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
 

@@ -13,17 +13,21 @@ import logging
 from typing import Any
 
 from app.core.app_config import AppConfig
+from app.ui.icons import icon
 from app.ui.win_effects import apply_rounded_corners
 
 logger = logging.getLogger(__name__)
 
-# Toast type -> (bg_color, border_color, icon)
-# bg_color uses AppConfig card tokens to adapt to light/dark mode
+# Toast type -> (bg_color, border_color, badge)
+# bg_color uses AppConfig card tokens to adapt to light/dark mode.
+# badge is a letter for info/warning (no matching PIL icon) and an
+# icons.py name for success/error.
+_CARD_BG = (AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
 _TOAST_STYLES = {
-    "info":    ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#84cc16", "i"),
-    "success": ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#22c55e", "\u2713"),
-    "warning": ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#f97316", "!"),
-    "error":   ((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), "#ef4444", "x"),
+    "info":    (_CARD_BG, AppConfig.COLOR_BTN_PRIMARY, "i"),
+    "success": (_CARD_BG, AppConfig.COLOR_BTN_SUCCESS, ("icon", "check")),
+    "warning": (_CARD_BG, AppConfig.COLOR_ACCENT_AMBER, "!"),
+    "error":   (_CARD_BG, AppConfig.COLOR_BTN_DANGER, ("icon", "close")),
 }
 
 # Fallback color mapping from raw color names to toast types
@@ -70,12 +74,19 @@ class ToastNotification:
         inner = ctk.CTkFrame(outer, fg_color="transparent")
         inner.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # Icon badge
-        ctk.CTkLabel(
-            inner, text=icon_char, width=24, height=24,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color="white",
-            fg_color=border_color, corner_radius=12,
-        ).pack(side="left", padx=(0, 10))
+        # Icon badge: PIL icon when one exists, letter fallback otherwise
+        if isinstance(icon_char, tuple):
+            badge = ctk.CTkLabel(
+                inner, text="", image=icon(icon_char[1], 12, "#ffffff"),
+                width=24, height=24, fg_color=border_color, corner_radius=12,
+            )
+        else:
+            badge = ctk.CTkLabel(
+                inner, text=icon_char, width=24, height=24,
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color="white",
+                fg_color=border_color, corner_radius=12,
+            )
+        badge.pack(side="left", padx=(0, 10))
 
         # Message
         ctk.CTkLabel(
