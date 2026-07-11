@@ -62,23 +62,41 @@ class PlayitManager:
 
     def _atexit_stop(self) -> None:
         # Graceful path: skip if shutdown() already completed the full stop.
-        # However, always fire the by-name nuclear kill on Windows as a safety
-        # net in case the 3-second join timeout expired before stop() finished.
+        # However, always fire the by-name nuclear kill as a safety net in
+        # case the 3-second join timeout expired before stop() finished.
         try:
             if not self._shutdown_done:
                 self._shutdown_done = True
                 self.stop(force=True)
-            elif platform.system() == "Windows":
-                # Backstop: taskkill silently (no window, no flash) even if we
-                # think we already stopped — harmless if process is already dead.
-                for proc_name in ["playit.exe", "playit-cli.exe"]:
-                    subprocess.run(
-                        ["taskkill", "/F", "/IM", proc_name],
-                        capture_output=True, check=False,
-                        **subprocess_flags(),
-                    )
+            else:
+                self._kill_stray_by_name()
         except Exception as e:
             logger.debug("atexit_stop suppressed: %s", e)
+
+    @staticmethod
+    def _kill_stray_by_name() -> None:
+        """Last-resort: kill any remaining playit process by name."""
+        if platform.system() == "Windows":
+            for proc_name in ["playit.exe", "playit-cli.exe"]:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", proc_name],
+                    capture_output=True, check=False,
+                    **subprocess_flags(),
+                )
+        else:
+            try:
+                import psutil
+                for proc in psutil.process_iter(["pid", "name", "exe"]):
+                    try:
+                        exe = (proc.info.get("exe") or "").lower()
+                        name = (proc.info.get("name") or "").lower()
+                        if "playit" in name or "playit" in exe:
+                            proc.kill()
+                            logger.info("[Playit] Killed stray process pid=%d", proc.info["pid"])
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except ImportError:
+                subprocess.run(["pkill", "-9", "-f", "playit"], check=False)
 
     def _get_binary_path(self) -> Any:
         system = platform.system()
@@ -338,17 +356,27 @@ class PlayitManager:
 
             # playitd (v1.0+): no --stdout flag, logs go to stderr (merged into
             # the stdout pipe below). Custom IPC socket avoids clashing with an
-            # officially installed playitd service. Must be the namespaced
-            # "@name" form — the daemon rejects raw \\.\pipe\ paths at bind.
+            # officially installed playitd service.
+            # Windows: namespaced named pipe via "@name" (raw \\.\pipe\ rejected).
+            # Linux: filesystem socket in CONFIG_DIR (abstract namespace @name
+            # is supported by Rust but filesystem paths are more portable).
+            if platform.system() == "Windows":
+                socket_path = "@zbb-playitd"
+            else:
+                socket_path = str(CONFIG_DIR / "zbb-playitd.sock")
             cmd = [
                 str(self.binary_path),
                 "--secret-path", str(self.toml_path),
-                "--socket-path", "@zbb-playitd",
+                "--socket-path", socket_path,
             ]
 
             kwargs = subprocess_flags()
             if platform.system() != "Windows":
-                kwargs["preexec_fn"] = os.setsid
+                def _linux_preexec():
+                    from app.core.process_job import linux_preexec
+                    linux_preexec()
+                    os.setsid()
+                kwargs["preexec_fn"] = _linux_preexec
 
             self.process = subprocess.Popen(
                 cmd,
@@ -446,15 +474,8 @@ class PlayitManager:
             except Exception:
                 pass  # Already dead or timed out — either is acceptable.
 
-        if force and platform.system() == "Windows":
-            # Nuclear option: kill any stray playit process by image name.
-            # Uses CREATE_NO_WINDOW — no flash, silent noop if nothing running.
-            for proc_name in ["playit.exe", "playit-cli.exe"]:
-                subprocess.run(
-                    ["taskkill", "/F", "/IM", proc_name],
-                    capture_output=True, check=False,
-                    **subprocess_flags(),
-                )
+        if force:
+            self._kill_stray_by_name()
 
         self.status_callback("Offline", None)
 
@@ -704,8 +725,9 @@ class PlayitManager:
     def _parse_line(self, line: str) -> None:
         if not line:
             return
-        if self._api_dns or self._stdout_dns:
-            return
+        with self._lock:
+            if self._api_dns or self._stdout_dns:
+                return
         dns_patterns = [
             r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?(?:ply|playit)\.gg(?::\d+)?)",
             r"([a-z0-9][a-z0-9-]*\.(?:gl\.)?joinmc\.link(?::\d+)?)",
