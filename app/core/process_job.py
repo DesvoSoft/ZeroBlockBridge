@@ -30,6 +30,9 @@ def assign_to_job(pid: int) -> None:
     """
     if platform.system() != "Windows":
         return
+    if not isinstance(pid, int):
+        logger.debug("assign_to_job called with non-int pid %r, skipping", pid)
+        return
     try:
         import ctypes
         from ctypes import wintypes
