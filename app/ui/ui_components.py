@@ -130,6 +130,7 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.tag_config("line_warn", foreground=resolve_color(AppConfig.COLOR_ACCENT_AMBER))
         self.tag_config("line_join", foreground=resolve_color(AppConfig.COLOR_STATUS_ONLINE))
         self.tag_config("line_leave", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
+        self.tag_config("line_server", foreground=resolve_color(AppConfig.COLOR_ACCENT_BROWN))
 
     def _set_appearance_mode(self, mode_string):
         # CTk calls this on every widget when the theme flips; tag colors are
@@ -147,6 +148,8 @@ class ConsoleWidget(ctk.CTkTextbox):
             return "line_join"
         if "left the game" in message:
             return "line_leave"
+        if "[Server]" in message:
+            return "line_server"
         return None
 
     def _on_unmap(self, event):
