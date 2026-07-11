@@ -25,7 +25,7 @@ class ServerWizard(ctk.CTkToplevel):
 
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
-        self.total_steps = 5
+        self.total_steps = 6
         
         # Data storage
         self.wizard_data = {
@@ -53,6 +53,7 @@ class ServerWizard(ctk.CTkToplevel):
             "auto_install_jdk": True,
             "java_path": "auto",
             "playit_port": "25565",
+            "start_after_creation": False,
         }
         
         # Layout
@@ -681,6 +682,58 @@ class ServerWizard(ctk.CTkToplevel):
         self.wizard_data["simulation_distance"] = str(int(value))
         self.lbl_sim_val.configure(text=str(int(value)))
 
+    # --- Step 6: Summary ---
+    def show_step_6(self):
+        self.clear_content()
+        self.update_header("Summary")
+
+        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+        p = scroll
+
+        d = self.wizard_data
+
+        def section(title, rows):
+            ctk.CTkLabel(p, text=title, font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
+            for label, value in rows:
+                row = ctk.CTkFrame(p, fg_color="transparent")
+                row.pack(fill="x", pady=1)
+                ctk.CTkLabel(row, text=label, text_color=AppConfig.COLOR_TEXT_MUTED).pack(side="left")
+                ctk.CTkLabel(row, text=str(value)).pack(side="right")
+
+        section("Identity", [
+            ("Name", d["name"]),
+            ("Location", d["location"]),
+        ])
+        section("Engine", [
+            ("Type", d["type"]),
+            ("Version", d["version"]),
+        ])
+        section("Resources", [
+            ("RAM", f"{d['ram']} MB ({d['ram'] // 1024} GB)"),
+            ("Java", d["java_path"]),
+        ])
+        section("Rules", [
+            ("Game Mode", d["game_mode"]),
+            ("Difficulty", d["difficulty"]),
+            ("Hardcore", d["hardcore"]),
+            ("Whitelist", d["whitelist"]),
+            ("PvP", d["pvp"]),
+            ("Max Players", d["max_players"]),
+        ])
+        section("World & Network", [
+            ("Seed", d["seed"] or "(random)"),
+            ("Playit Port", d["playit_port"]),
+            ("View Distance", d["view_distance"]),
+            ("Simulation Distance", d["simulation_distance"]),
+        ])
+
+        self.var_start_after_creation = ctk.BooleanVar(value=d["start_after_creation"])
+        ctk.CTkCheckBox(
+            p, text="Start server after creation", variable=self.var_start_after_creation,
+            corner_radius=AppConfig.RADIUS_BADGE,
+        ).pack(anchor="w", pady=(15, 5))
+
     # --- Navigation ---
     def go_next(self):
         if self.current_step == 1:
@@ -706,6 +759,9 @@ class ServerWizard(ctk.CTkToplevel):
 
         elif self.current_step == 5:
             self._collect_step5_fields()
+
+        elif self.current_step == 6:
+            self.wizard_data["start_after_creation"] = self.var_start_after_creation.get()
             self.on_complete_callback(self.wizard_data)
             self.destroy()
             return
@@ -720,6 +776,8 @@ class ServerWizard(ctk.CTkToplevel):
             self._collect_step4_fields()
         elif self.current_step == 5:
             self._collect_step5_fields()
+        elif self.current_step == 6:
+            self.wizard_data["start_after_creation"] = self.var_start_after_creation.get()
 
         self.current_step -= 1
         self.show_step()
@@ -765,3 +823,4 @@ class ServerWizard(ctk.CTkToplevel):
         elif self.current_step == 3: self.show_step_3()
         elif self.current_step == 4: self.show_step_4()
         elif self.current_step == 5: self.show_step_5()
+        elif self.current_step == 6: self.show_step_6()

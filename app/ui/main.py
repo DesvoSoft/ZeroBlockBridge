@@ -898,7 +898,7 @@ class MCTunnelApp(ctk.CTk):
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.zbb_manager.create_tunnel_for_server(name)
                     dialog.update_progress(1.0, "Server ready!")
-                    self.after(0, lambda: self._on_download_complete(dialog, name))
+                    self.after(0, lambda: self._on_download_complete(dialog, name, config.get("start_after_creation", False)))
                 else:
                     self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
                     self.after(0, dialog.close)
@@ -909,11 +909,14 @@ class MCTunnelApp(ctk.CTk):
                 self.after(0, dialog.close)
         self.executor.submit(run_install)
 
-    def _on_download_complete(self, dialog, name):
+    def _on_download_complete(self, dialog, name, start_after_creation=False):
         self.load_servers()
         self.server_console.log(f"[System] Setup complete for '{name}'.")
         self.on_server_select(name)
         dialog.close()
+        if start_after_creation:
+            self.start_server_action()
+            return
         start_now = ZBBDialog.confirm(
             self, "Server Ready",
             f"'{name}' has been created successfully.\n\nDo you want to start it now?",
