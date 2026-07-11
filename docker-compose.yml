@@ -1,0 +1,38 @@
+services:
+  # GUI mode: full Python + Tk, displays via X11 forwarding
+  zbb-gui:
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
+    image: zbb-gui:latest
+    container_name: zbb-gui
+    environment:
+      - DISPLAY=${DISPLAY_HOST:-host.docker.internal}:0
+    volumes:
+      - ./servers:/app/servers
+      - zbb-data:/app/.zbb_data
+    network_mode: bridge
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+  # Native binary mode: minimal image, no Python needed
+  zbb-linux:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux
+    image: zbb-linux:latest
+    container_name: zbb-linux
+    environment:
+      - DISPLAY=${DISPLAY_HOST:-host.docker.internal}:0
+    volumes:
+      - ./servers:/opt/zeroblockbridge/servers
+      - zbb-data-linux:/opt/zeroblockbridge/.zbb_data
+    network_mode: bridge
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+volumes:
+  zbb-data:
+  zbb-data-linux:
