@@ -1,5 +1,6 @@
 import pytest
 import hashlib
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from app.services.java_installer import (
@@ -372,3 +373,83 @@ class TestJreFallback:
         with pytest.raises(JdkDownloadError, match="No internet connection"):
             _fetch_asset_info(17)
         assert mock_get.call_count == 1
+
+
+class TestExtractArchive:
+    """Real extraction (no mocks) covering the .tar.gz branch added for
+    Linux/mac Adoptium assets, tar-slip rejection, and the zip regression."""
+
+    def _make_targz(self, tmp_path: Path, entries: dict, prefix: str = "jdk-17.0.1/") -> Path:
+        archive_path = tmp_path / "jdk.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tf:
+            for rel_name, content in entries.items():
+                data = content.encode() if isinstance(content, str) else content
+                name = f"{prefix}{rel_name}" if prefix else rel_name
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                import io
+                tf.addfile(info, io.BytesIO(data))
+        return archive_path
+
+    def test_extract_tar_gz_strips_common_prefix(self, tmp_path):
+        archive = self._make_targz(tmp_path, {
+            "bin/java": "fake-binary",
+            "release": "JAVA_VERSION=17",
+        })
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "fake-binary"
+        assert (dest / "release").read_text() == "JAVA_VERSION=17"
+
+    def test_extract_tar_gz_no_common_prefix(self, tmp_path):
+        archive = self._make_targz(tmp_path, {"bin/java": "x", "release": "y"}, prefix="")
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "x"
+        assert (dest / "release").read_text() == "y"
+
+    def test_extract_tar_gz_rejects_path_traversal(self, tmp_path):
+        archive_path = tmp_path / "evil.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tf:
+            import io
+            for name, payload in (
+                ("jdk-17/bin/java", b"legit"),
+                ("jdk-17/../../evil.sh", b"pwned"),
+            ):
+                info = tarfile.TarInfo(name=name)
+                info.size = len(payload)
+                tf.addfile(info, io.BytesIO(payload))
+
+        dest = tmp_path / "dest"
+        with pytest.raises((JdkIntegrityError, tarfile.TarError, Exception)):
+            JdkManager()._extract_archive(archive_path, dest)
+
+        assert not (tmp_path / "evil.sh").exists()
+
+    def test_extract_zip_still_works(self, tmp_path):
+        import zipfile
+        archive = tmp_path / "jdk.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("jdk-17.0.1/bin/java", "fake-binary")
+            zf.writestr("jdk-17.0.1/release", "JAVA_VERSION=17")
+
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "fake-binary"
+
+    def test_download_and_install_picks_targz_extension(self, tmp_path, monkeypatch):
+        from app.services import java_installer as mod
+
+        monkeypatch.setattr(mod, "_JDK_CACHE_DIR", tmp_path)
+        mgr = JdkManager()
+        info = {"url": "https://example.com/jdk.tar.gz", "checksum": ""}
+        with patch.object(mod, "_fetch_asset_info", return_value=info), \
+             patch.object(JdkManager, "_download_file") as mock_download, \
+             patch.object(JdkManager, "_extract_archive") as mock_extract:
+            mgr._download_and_install(17)
+            archive_arg = mock_download.call_args[0][1]
+            assert str(archive_arg).endswith(".tar.gz")
+            mock_extract.assert_called_once()

@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import sys
+import tarfile
 import zipfile
 
 from pathlib import Path
@@ -209,21 +210,22 @@ class JdkManager:
             shutil.rmtree(cache_dir, ignore_errors=True)
 
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        zip_path = tmp_dir / "jdk.zip"
+        archive_ext = ".tar.gz" if url.endswith((".tar.gz", ".tgz")) else ".zip"
+        archive_path = tmp_dir / f"jdk{archive_ext}"
 
         last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                self._download_file(url, zip_path)
+                self._download_file(url, archive_path)
                 if expected_checksum:
-                    if not _verify_checksum(zip_path, expected_checksum):
-                        zip_path.unlink(missing_ok=True)
+                    if not _verify_checksum(archive_path, expected_checksum):
+                        archive_path.unlink(missing_ok=True)
                         raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
                 else:
                     logger.warning("No checksum available for JDK %d — skipping verification", version)
 
-                self._extract_zip(zip_path, cache_dir)
-                zip_path.unlink(missing_ok=True)
+                self._extract_archive(archive_path, cache_dir)
+                archive_path.unlink(missing_ok=True)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
                 return str(cache_dir)
 
@@ -257,9 +259,14 @@ class JdkManager:
         except PermissionError as exc:
             raise JdkDownloadError(f"Cannot write {dest}: permission denied ({exc})")
 
-    def _extract_zip(self, zip_path: Path, dest_dir: Path):
+    def _extract_archive(self, archive_path: Path, dest_dir: Path):
         dest_dir.mkdir(parents=True, exist_ok=True)
+        if archive_path.suffixes[-2:] == [".tar", ".gz"] or archive_path.suffix == ".tgz":
+            self._extract_tar(archive_path, dest_dir)
+        else:
+            self._extract_zip(archive_path, dest_dir)
 
+    def _extract_zip(self, zip_path: Path, dest_dir: Path):
         with zipfile.ZipFile(zip_path, "r") as zf:
             members = zf.namelist()
 
@@ -280,6 +287,44 @@ class JdkManager:
                             _chmod_plusx(target)
             else:
                 zf.extractall(dest_dir)
+
+    def _extract_tar(self, tar_path: Path, dest_dir: Path):
+        with tarfile.open(tar_path, "r:gz") as tf:
+            members = tf.getnames()
+
+            common_prefix = _get_common_prefix(members)
+            if hasattr(tarfile, "data_filter"):
+                extract_filter = tarfile.data_filter
+            else:
+                extract_filter = None
+
+            if common_prefix:
+                dest_resolved = dest_dir.resolve()
+                for member in tf.getmembers():
+                    rel = member.name[len(common_prefix):]
+                    if not rel:
+                        continue
+                    target = dest_dir / rel
+                    if not target.resolve().is_relative_to(dest_resolved):
+                        raise JdkIntegrityError(f"Unsafe tar member path: {member.name}")
+                    if member.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                        continue
+                    if not (member.isfile() or member.issym() or member.islnk()):
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    member.name = rel
+                    if extract_filter is not None:
+                        tf.extract(member, dest_dir, filter="data")
+                    else:
+                        tf.extract(member, dest_dir)
+                    if sys.platform != "win32" and target.exists():
+                        _chmod_plusx(target)
+            else:
+                if extract_filter is not None:
+                    tf.extractall(dest_dir, filter="data")
+                else:
+                    tf.extractall(dest_dir)
 
     def list_installed(self) -> list[dict]:
         """Installed JDKs in the cache: [{"version": int, "path": Path, "size_bytes": int}].
