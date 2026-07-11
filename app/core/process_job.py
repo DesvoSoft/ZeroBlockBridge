@@ -1,23 +1,33 @@
-"""Windows Job Object helper.
+"""Process lifecycle helper — cross-platform orphan prevention.
 
-A child bound to a job with KILL_ON_JOB_CLOSE is reaped by the OS when
-this process dies — including hard kills (console closed, taskkill,
-crash) that skip atexit. Processes spawned by a job member inherit the
-job, so nested children (e.g. Fabric's inner java) are covered too.
+Windows: Job Object with KILL_ON_JOB_CLOSE reaps children when the parent
+dies (including hard kills that skip atexit).  Nested children (e.g.
+Fabric's inner java) inherit the job automatically.
 
-No-op on non-Windows.
+Linux: prctl(PR_SET_PDEATHSIG, SIGKILL) tells the kernel to send SIGKILL
+to the child when its parent exits.  After setsid() the child is
+reparented to init, so we also check the parent PID to detect a race
+where the parent dies between fork and setsid.
 """
 import logging
+import os
 import platform
+import signal
 
 logger = logging.getLogger(__name__)
 
-# Job handles must stay referenced for the app's lifetime — closing the
-# handle (which the OS does at process death) is what kills the job.
+# Windows: job handles must stay referenced for the app's lifetime — closing
+# the handle (which the OS does at process death) is what kills the job.
 _handles = []
 
 
 def assign_to_job(pid: int) -> None:
+    """Bind *pid* to the current process so it is reaped on exit.
+
+    On Windows this uses Job Objects (KILL_ON_JOB_CLOSE).
+    On Linux this is a no-op — reaping is set up via ``preexec_fn`` at
+    spawn time (see ``linux_preexec()``).
+    """
     if platform.system() != "Windows":
         return
     try:
@@ -81,3 +91,37 @@ def assign_to_job(pid: int) -> None:
         _handles.append(job)
     except Exception as e:
         logger.debug("Job object assignment failed for pid %d: %s", pid, e)
+
+
+# ---------------------------------------------------------------------------
+# Linux preexec helper
+# ---------------------------------------------------------------------------
+# libc is resolved at import time (in the parent): preexec_fn runs in the
+# forked child before exec, where imports and logging can deadlock on locks
+# held by other threads at fork time — the preexec body must stay minimal.
+_PR_SET_PDEATHSIG = 1
+_libc = None
+if platform.system() != "Windows":
+    try:
+        import ctypes
+        import ctypes.util
+
+        _libc_name = ctypes.util.find_library("c")
+        if _libc_name:
+            _libc = ctypes.CDLL(_libc_name, use_errno=True)
+    except OSError as e:
+        logger.debug("libc load failed, PDEATHSIG unavailable: %s", e)
+
+
+def linux_preexec() -> None:
+    """``preexec_fn`` for subprocess.Popen on Linux.
+
+    Sets PR_SET_PDEATHSIG so the child is killed when the parent exits,
+    then checks for reparenting: if the parent died between fork and the
+    prctl call, the child was reparented to init (ppid 1) and PDEATHSIG
+    will never fire — exit immediately instead of surviving as an orphan.
+    """
+    if _libc is not None:
+        _libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
+    if os.getppid() == 1:
+        os._exit(1)

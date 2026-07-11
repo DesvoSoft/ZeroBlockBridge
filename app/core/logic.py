@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import shlex
 import subprocess
 import shutil
@@ -437,6 +438,8 @@ def install_forge(server_name: str, mc_version: str, progress_callback: Optional
 
     if os.path.exists(os.path.join(server_path, "run.bat")):
         return "FORGE_MODERN"
+    if os.path.exists(os.path.join(server_path, "run.sh")):
+        return "FORGE_MODERN"
 
     return None
 
@@ -478,6 +481,23 @@ class ServerRunner:
         self.connected_players = set()
         self._players_lock = threading.Lock()
         self._stderr_done = threading.Event()
+
+    @staticmethod
+    def _popen_kwargs() -> dict:
+        """Return platform-specific Popen kwargs.
+
+        On Linux, ``preexec_fn`` sets ``PR_SET_PDEATHSIG`` (kill child when
+        parent dies) and ``os.setsid()`` (new session for clean termination).
+        On Windows this is a no-op — Job Objects handle reaping.
+        """
+        kw = subprocess_flags()
+        if platform.system() != "Windows":
+            def _linux_preexec():
+                from app.core.process_job import linux_preexec
+                linux_preexec()
+                os.setsid()
+            kw["preexec_fn"] = _linux_preexec
+        return kw
 
     @property
     def running(self) -> bool:
@@ -604,7 +624,7 @@ class ServerRunner:
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                **subprocess_flags(),
+                **self._popen_kwargs(),
             )
             from app.core.process_job import assign_to_job
             assign_to_job(self.process.pid)
