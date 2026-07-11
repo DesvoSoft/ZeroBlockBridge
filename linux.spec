@@ -1,14 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
+
+ctk_datas, ctk_binaries, ctk_hiddenimports = collect_all('customtkinter')
 
 a = Analysis(
     ['app/launcher.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=ctk_binaries,
     datas=[
         ('assets', 'assets'),
-    ],
+    ] + ctk_datas,
     hiddenimports=[
         'customtkinter',
         'PIL',
@@ -23,7 +26,7 @@ a = Analysis(
         'app.core',
         'app.services',
         'app.ui',
-    ],
+    ] + ctk_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
