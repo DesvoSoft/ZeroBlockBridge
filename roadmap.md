@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-**Última actualización:** 2026-07-10 (rev 15 — F10 Linux completo: code fixes + Docker GUI + native binary; 560 tests)
-**Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 560 tests, 100% pass, 0 flaky
+**Última actualización:** 2026-07-10 (rev 19 — release v2.0.0: versionado unificado, fix tar.gz Linux, build specs unificados, F11.C1/D1 cerrados; 565 tests)
+**Versión proyecto:** 2.0.0
+> **Test count:** 565 tests, 100% pass, 0 flaky
 
 **Historial completo de fases/auditorías resueltas:** ver `docs/roadmap-history.md` (F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0, EXE-PERF, F5, F6, MODS-B, F8, BUG-AUDIT, NR, AUDIT-2, AUDIT-3, Handover 2026-06-23). Este archivo solo trackea lo pendiente o en curso.
 
@@ -18,8 +18,9 @@
 
 - **2026-07-10 (17):** fix(tunnel) A3-B05 — _parse_line race condition: check DNS moved inside _lock to prevent double-emit TUNNEL_STATUS; fix(java) A2-P03 — JavaDetector._shared_cache now has 5-min TTL (time.monotonic); feat(ui) F11.B — sidebar accent line (COLOR_ACCENT_GREEN on selected item), tunnel collapsed when offline+linked; feat(ui) F11.D6 — tooltips on all sidebar buttons (Create, Add Server, Settings, Link Playit); A2-A02 confirmed resolved (probe_java public wrapper exists) — 560 tests pass
 - **2026-07-10 (18):** feat(linux) F10 completo — process_job.py: prctl(PR_SET_PDEATHSIG) + parent PID guard para reap de children en Linux (ServerRunner + PlayitManager Popen sites); fix(logic) install_forge() detecta run.sh además de run.bat (Forge Modern on Linux); fix(tunnel) playit force-kill Linux: psutil by-name + pkill fallback en stop(force=True) y atexit; fix(tunnel) socket path Linux: filesystem path (CONFIG_DIR/zbb-playitd.sock) en vez de @name abstract namespace; feat(docker) Dockerfile.gui multi-stage (596→491MB) + Dockerfile.linux native binary build (PyInstaller, 15MB binary, 450MB image) + docker-compose.yml (2 services: zbb-gui + zbb-linux) + start-zbb-gui.bat one-click launcher with mode selector — 560 tests pass
+- **2026-07-10 (19):** release v2.0.0 prep — `APP_VERSION`="2.0.0" fuente de verdad (app_config.py) + pyproject.toml sync; `requires-python` bajado a ">=3.10" (coherente con CI 3.11 y Docker 3.10.12 ya verdes); build unificado: `ZeroBlockBridge.spec`/`linux.spec` ahora usan `collect_all('customtkinter')` y son la fuente única de build.yml (reemplaza flags CLI crudos que habían driftado); fix(java) crítico F10 — Adoptium sirve `.tar.gz` en Linux/mac, `java_installer.py` solo manejaba `.zip` (auto-instalación Java rota en Linux nativo); añadido `_extract_tar` con protección tar-slip + 5 tests nuevos; feat(ui) F11.C1 — coloreado `[Server]` en consola (COLOR_ACCENT_BROWN); feat(wizard) F11.D1 — Step 6 Summary/Review + checkbox "Start server after creation" (salta el diálogo de confirmación existente y dispara el flujo de start ya existente vía EventBus) — 565 tests pass
 
-**Siguiente prioridad:** F15.5 QA visual humana en ambos modos; después F11 Bloque C (console coloring). F10 ✅ 2026-07-10.
+**Siguiente prioridad:** F15.5 QA visual humana en ambos modos (pase manual, ver checklist). F10 ✅ 2026-07-10, F11 Bloque C/D1 ✅ 2026-07-10, F10 tar.gz Linux ✅ 2026-07-10.
 
 ---
 
@@ -156,12 +157,12 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 **Bloque C — Console coloring. Riesgo 🟡 (tocar ConsoleWidget).**
 | # | Tarea | Archivo | LOC | Esfuerzo |
 |---|-------|---------|-----|---------|
-| 11.C1 | Syntax coloring básico — ERROR/WARN rojo/amarillo, joined/left verde/slate, [Server] azul | ui_components.py (ConsoleWidget) | ~40 | 1 hr |
+| 11.C1 | Syntax coloring básico — ERROR/WARN rojo/amarillo, joined/left verde/slate, [Server] marrón | ui_components.py (ConsoleWidget) | ~40 | 1 hr | ✅ 2026-07-10 |
 
 **Bloque D — Rediseño mayor. Riesgo 🟠. Depende de A+B estables.**
 | # | Tarea | Archivo | LOC | Esfuerzo |
 |---|-------|---------|-----|---------|
-| 11.D1 | ServerWizard rediseñado (pre-flight, progreso, resumen, templates, start now) | server_wizard.py | +150 | 3 hrs |
+| 11.D1 | ServerWizard rediseñado (pre-flight, progreso, resumen, templates, start now) | server_wizard.py | +150 | 3 hrs | ✅ 2026-07-10 (resumen + start-after-creation; pre-flight/templates ya existían) |
 | 11.D2 | ServerPropertiesEditor rediseñado (4 tabs, SettingsField, inline validation) | server_properties_editor.py | +200 | 4 hrs |
 | 11.D3 | Sidebar colapsable (toggle con animación simple) | main.py | ~60 | 1.5 hrs |
 | 11.D4 | Performance dashboard visual (TPS graph, RAM usage) — consolida con CA-M05/F12.4 | main.py + nuevo archivo | +150 | 3 hrs |
@@ -215,7 +216,21 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 | 15.2 | Barrido de consumidores no-CTk que no aceptan tuplas: consola (tags), PIL/icons con color string, toasts | `ui/*.py` (~7 archivos) | 2 hrs | ✅ 2026-07-07 — resolve_color() helper + tag_config + Toast + tk.Menu + MOTD |
 | 15.3 | Sincronizar `assets/zbb_theme.json` con tokens light | `assets/zbb_theme.json` | 1 hr | ✅ 2026-07-07 — ya completo de origen, 0 cambios |
 | 15.4 | Habilitar Light/System en Tab General (F14.2): `ctk.set_appearance_mode()` en vivo + persistir. Cierra F11.D5 | `ui/app_settings.py` | 30 min | ✅ 2026-07-07 — gate removido, selector funcional |
-| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | ⬜ — pendiente, requiere revisión humana |
+| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | 🟡 2026-07-10 — smoke automático verde (AppSettingsDialog, ServerWizard 6 pasos, Light+Dark, 0 excepciones); falta pase visual humano |
+
+**Smoke automático (2026-07-10):** `qa_smoke.py` (scratchpad) instancia `MCTunnelApp` real y abre `AppSettingsDialog` + `ServerWizard` en Light y Dark — 4/4 pass, 0 excepciones. `PlayersDashboard`/`ServerPropertiesEditor` se saltaron (requieren un server ya configurado) — cubrir en el pase manual.
+
+**Checklist de pase visual humano (pendiente, ~15-20 min):**
+- [ ] Alternar Light/Dark/System desde Settings → General y confirmar que la ventana principal, sidebar y consola refrescan sin colores rotos.
+- [ ] Abrir **Settings** (5 tabs) en ambos modos — General, Notifications (checkboxes de eventos Discord), Java (JDKs gestionados + purge), Storage (uso de disco), About (versión 2.0.0 visible).
+- [ ] Abrir **ServerWizard** completo en ambos modos: recorrer los 6 pasos (Identity → Engine/Version → Resources → Rules/Security → World/Network → **Summary**), confirmar que el resumen refleja los valores elegidos y que el checkbox "Start server after creation" existe y persiste al ir Back/Next.
+- [ ] Crear un server de prueba con "Start server after creation" activado — confirmar que arranca automático sin el diálogo de confirmación "Start now?".
+- [ ] Crear un server de prueba con la opción desactivada — confirmar que el diálogo "Start now?" sigue apareciendo como antes.
+- [ ] Con un server existente: abrir **PlayersDashboard** (tabs Online/Ops/Whitelist/Bans) en ambos modos.
+- [ ] Con un server existente: abrir **ServerPropertiesEditor** (SPE) en ambos modos, incluir Modrinth Optimizer Bundle si aplica.
+- [ ] Abrir **Modrinth Browser** en ambos modos, buscar un mod, confirmar badges/colores.
+- [ ] Consola: verificar coloreado de líneas `[Server]` (marrón/desaturado), ERROR (rojo), WARN (ámbar), joined/left (verde/slate) en ambos modos.
+- [ ] Confirmar que ningún diálogo deja titlebar blanco residual (Win11 `apply_rounded_corners`).
 
 ### Descartados por scope (2026-07-07 — reconsiderar después de F15)
 

@@ -20,12 +20,15 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ## Features
 
-- **Server Management**: 3-step wizard, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), smart caching, RAM allocation, properties editor, integrated console, player management dashboard with whitelist controls, right-click server deletion.
-- **Automation & Backups**: One-click ZIP backups, scheduled restarts (interval or daily time), multi-stage warnings with countdown, auto-backup scheduler.
+- **Server Management**: 6-step creation wizard with a summary/review step, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), server templates, smart caching, RAM allocation, properties editor, integrated console with search and colored log lines, player management dashboard with whitelist controls, right-click server deletion.
+- **Automation & Backups**: One-click ZIP backups, scheduled restarts (interval or daily time), multi-stage warnings with countdown, auto-backup scheduler, `.zbbpack` export/import for moving a server between machines.
 - **Performance Monitoring**: Lag spike detection, server heartbeat monitoring.
 - **Modrinth Mod Browser**: Search, filter, one-click install, manage installed mods, check updates against Modrinth API. Automatically excludes client-only mods from results and badges mods that also work client-side, so you only see content that actually runs on your server. Loader-aware Optimizer Bundle (Fabric or Forge) for one-click performance tuning.
 - **Tunneling**: Built-in Playit.gg integration, persistent sessions, soft/full reset, DNS recovery chain, agent heartbeat, circuit breaker with exponential backoff.
 - **Auto-Healing**: Watchdog (crash detection + JSON crash reports), heartbeat (zombie detection), lag monitor, command sanitizer, disk space pre-flight check — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Notifications**: Optional Discord webhooks with per-event custom message templates (crash/ready/backup/player events).
+- **Theming**: Light, dark, and system theme, fully applied across the UI.
+- **Linux Support (experimental)**: Native binary and Docker images (GUI or headless) — see [Quick Start](#quick-start).
 - **Developer Experience**: JDK auto-installer (bytecode analysis detects required version), event-driven architecture, thread safety, zero bare `except:` blocks.
 
 ---
@@ -80,9 +83,9 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 ### First Server
 
 1. Click **"Create Server"** in the sidebar.
-2. Follow the 3-step wizard (identity, engine/resources, rules/world).
+2. Follow the 6-step wizard (identity, engine/version, resources, rules/security, world/network, summary) — optionally tick **"Start server after creation"** on the summary step.
 3. The wizard shows detailed progress (download, verify, scaffold, bytecode analysis, tunnel setup).
-4. After creation, click **"Start Now"** to launch your server.
+4. If you didn't check "start after creation", click **"Start Now"** when prompted to launch your server.
 5. **Optional**: Click **"⚡ Link"** to enable Playit tunneling and play with friends online.
 
 ---
