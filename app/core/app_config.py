@@ -2,7 +2,7 @@ class AppConfig:
     """Application-wide configuration and constants."""
 
     # App identity
-    APP_VERSION = "0.9.0-pre"
+    APP_VERSION = "2.0.0"
 
     # Window Configuration
     WINDOW_TITLE = "Zero Block Bridge"
