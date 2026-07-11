@@ -124,6 +124,7 @@ class MCTunnelApp(ctk.CTk):
             font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold")
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
+        ToolTip(self.btn_create_server, "Create a new Minecraft server")
 
         self.btn_add_server = ctk.CTkButton(
             self.actions_frame, text="Add Server",
@@ -136,6 +137,7 @@ class MCTunnelApp(ctk.CTk):
             font=(AppConfig.FONT_FAMILY, 12)
         )
         self.btn_add_server.pack(fill="x", pady=(0, 5))
+        ToolTip(self.btn_add_server, "Import or load an existing server")
 
         self.btn_app_settings = ctk.CTkButton(
             self.actions_frame, text="Settings",
@@ -148,6 +150,7 @@ class MCTunnelApp(ctk.CTk):
             font=(AppConfig.FONT_FAMILY, 12)
         )
         self.btn_app_settings.pack(fill="x", pady=(0, 10))
+        ToolTip(self.btn_app_settings, "Application settings")
 
         # --- Separator ---
         self.sep = ctk.CTkFrame(self.sidebar_frame, height=2,
@@ -309,6 +312,7 @@ class MCTunnelApp(ctk.CTk):
             width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
             font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
+        ToolTip(self.btn_toggle_setup, "Link Playit account")
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
         self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=AppConfig.RADIUS_INPUT)
         self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
@@ -967,7 +971,20 @@ class MCTunnelApp(ctk.CTk):
             elif status == "Starting...": color = AppConfig.COLOR_STATUS_STARTING
 
             self.lbl_tunnel_status.configure(text=f"Tunnel: ● {status}", text_color=color)
-            
+
+            # --- 11.B3: Collapse tunnel details when offline+linked ---
+            is_linked = self.zbb_manager.playit_manager.is_linked
+            tunnel_active = status in ("Online", "Starting...", "Error") or not is_linked
+            if not tunnel_active:
+                self.lbl_dns_display.pack_forget()
+                self.btn_copy_ip.pack_forget()
+                self.btn_tunnel_start.pack_forget()
+                self.btn_tunnel_stop.pack_forget()
+                self.btn_reset.pack_forget()
+                self.btn_toggle_setup.pack_forget()
+                self.setup_frame.pack_forget()
+                return
+
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
             # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
             # See playit_manager.py: _dns_polling_loop, _parse_line, _stdout_dns.
@@ -996,8 +1013,6 @@ class MCTunnelApp(ctk.CTk):
                 self._last_full_ip = None
 
             # 2. Update Buttons Visibility and State
-            is_linked = self.zbb_manager.playit_manager.is_linked
-
             if not is_linked:
                 self.btn_tunnel_start.pack_forget()
                 self.btn_tunnel_stop.pack_forget()

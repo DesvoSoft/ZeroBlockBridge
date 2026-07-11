@@ -330,7 +330,7 @@ class ServerListItem(ctk.CTkFrame):
     def _apply_style(self, hovering: bool):
         if self._selected:
             self.configure(fg_color=self._fg_hover if hovering else self._fg_idle,
-                           border_color=AppConfig.COLOR_BTN_PRIMARY)
+                           border_color=AppConfig.COLOR_ACCENT_GREEN)
         elif hovering:
             self.configure(fg_color=self._fg_hover,
                            border_color=AppConfig.COLOR_ACCENT_GREEN)
