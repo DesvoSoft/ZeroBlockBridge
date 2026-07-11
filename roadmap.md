@@ -1,8 +1,8 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-**Última actualización:** 2026-07-07 (rev 12 — F15 light theme implementado; pendiente QA visual)
+**Última actualización:** 2026-07-10 (rev 15 — F10 Linux completo: code fixes + Docker GUI + native binary; 560 tests)
 **Versión proyecto:** Pre-alpha (desarrollo activo)
-> **Test count:** 544 tests, 100% pass, 0 flaky
+> **Test count:** 560 tests, 100% pass, 0 flaky
 
 **Historial completo de fases/auditorías resueltas:** ver `docs/roadmap-history.md` (F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0, EXE-PERF, F5, F6, MODS-B, F8, BUG-AUDIT, NR, AUDIT-2, AUDIT-3, Handover 2026-06-23). Este archivo solo trackea lo pendiente o en curso.
 
@@ -16,7 +16,10 @@
 - **2026-07-07 (16):** fix/perf/style(ui) UI-AUDIT-2 — auditoria de superficies restantes: apply_rounded_corners+titlebar en 5 toplevels que faltaban (Wizard, SPE, PlayersDashboard, dialogs de modrinth — cierra el titlebar blanco residual); PlayersDashboard: evento PLAYER_LIST repinta solo tab Online (antes 4 tabs por join/leave), guard de operador duplicado, header 'Server offline', X→icon(close)+tooltip, fonts a tokens; SPE: boton mrpack violeta→brown, glifos ✓/✗ → _set_mrpack_status con color semantico, dots de impacto a tokens, MOTD preview a FONT_MONO, borde Change Icon dark-only corregido; Wizard: 'Next →'→icon chevron_right; Toast: acentos a tokens (info a lime primary), badges ✓/x → icon() check/close — 544 tests pass, 4 commits atomicos
 - **2026-07-06 (12):** fix(ui) wizard reorganizado 4→5 steps (Identity, Engine+Version, Resources, Rules&Security, World&Network) para eliminar truncamiento de RAM y saturación de step3; feat(ui) selección de Java interactiva en wizard Step 3 (radio: usar Java detectado del sistema vs auto-descargar recomendado, con dropdown de instalaciones) — antes solo mostraba label estático; fix(ui) botón Next de búsqueda en consola ahora re-busca si el texto cambió desde el último Enter (antes solo ciclaba matches viejos); fix(ui) `VersionManager._refresh_versions` → `refresh_versions()` (AttributeError en wizard); feat(ui) merge de botones "Load Existing Folder"/"Import .zbbpack" en un único "Add Server" con menú de 2 opciones; feat(settings) export a .zbbpack ahora también disponible desde Server Settings (Backups tab), no solo click-derecho — 483 tests pass
 
-**Siguiente prioridad:** F15.5 QA visual humana en ambos modos; después F10 (Linux) o F11 Bloques B/C. F13/F14/F15 ✅ 2026-07-07.
+- **2026-07-10 (17):** fix(tunnel) A3-B05 — _parse_line race condition: check DNS moved inside _lock to prevent double-emit TUNNEL_STATUS; fix(java) A2-P03 — JavaDetector._shared_cache now has 5-min TTL (time.monotonic); feat(ui) F11.B — sidebar accent line (COLOR_ACCENT_GREEN on selected item), tunnel collapsed when offline+linked; feat(ui) F11.D6 — tooltips on all sidebar buttons (Create, Add Server, Settings, Link Playit); A2-A02 confirmed resolved (probe_java public wrapper exists) — 560 tests pass
+- **2026-07-10 (18):** feat(linux) F10 completo — process_job.py: prctl(PR_SET_PDEATHSIG) + parent PID guard para reap de children en Linux (ServerRunner + PlayitManager Popen sites); fix(logic) install_forge() detecta run.sh además de run.bat (Forge Modern on Linux); fix(tunnel) playit force-kill Linux: psutil by-name + pkill fallback en stop(force=True) y atexit; fix(tunnel) socket path Linux: filesystem path (CONFIG_DIR/zbb-playitd.sock) en vez de @name abstract namespace; feat(docker) Dockerfile.gui multi-stage (596→491MB) + Dockerfile.linux native binary build (PyInstaller, 15MB binary, 450MB image) + docker-compose.yml (2 services: zbb-gui + zbb-linux) + start-zbb-gui.bat one-click launcher with mode selector — 560 tests pass
+
+**Siguiente prioridad:** F15.5 QA visual humana en ambos modos; después F11 Bloque C (console coloring). F10 ✅ 2026-07-10.
 
 ---
 
@@ -45,8 +48,8 @@ F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0 (Foundation Hardening), EXE-PERF, F5 (Crash R
 | **CA-H04** | World switching UI | 🥈 | ✅ Implementado 2026-07-06 |
 | **MODS-SEC** | Mods security hardening | — | ✅ Implementado |
 | **F9** | Server Migration (.zbbpack) | 🥉 | ✅ Implementado 2026-07-06 |
-| **F10** | Cross-Platform Linux | 🥉 | ⬜ Pendiente — **próxima prioridad** |
-| **F11** | UI/UX ZBB 2.0 "Dirt Block" | 🥉 | 🔶 Parcial — Bloque A (palette/botones) ✅, Bloques B/C/D pendientes |
+| **F10** | Cross-Platform Linux | 🥉 | ✅ Implementado 2026-07-10 |
+| **F11** | UI/UX ZBB 2.0 "Dirt Block" | 🥉 | 🔶 Parcial — Bloques A/B ✅, Bloques C/D pendientes |
 | **F12** | Feature Gaps vs competencia | 🥉 | ⬜ Sin iniciar |
 | **F13** | Higiene de disco + JRE on-demand | 🥇 | ✅ Implementado 2026-07-07 |
 | **F14** | App Settings 2.0 (tabbed: General/Notifications/Java/Storage/About) | 🥇 | ✅ Implementado 2026-07-07 |
@@ -108,6 +111,8 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 | CA-L02 | Server profiles/instances (prerrequisito de CA-L01) | Prism | — |
 | CA-L03 | Remote management — REST API + cliente pareado (patrón Telepath), requiere F10 + headless mode | auto-mcs Telepath | — |
 | CA-L04 | Spigot/CraftBukkit/Paper plugins (Hangar API client) | auto-mcs | — |
+| CA-L05 | Mapa interactivo de chunks generados en GUI ZBB — ver detalle en `F16` abajo | Dynmap/BlueMap (arquitectura, no consumible directo) | — |
+| CA-L06 | Mod Fabric companion opcional (telemetría live + chunk events) — ver `F16` abajo | FabricExporter (patrón embedded-HTTP-en-mod) | — |
 
 **Feature Matrix competitiva completa (ZBB vs auto-mcs vs Prism):** ver `docs/roadmap-history.md` si se necesita el detalle fila-por-fila; resumen: ZBB único en zombie detection, TPS lag monitor, crash backoff, bytecode analyzer. Brechas: multi-server, CurseForge, dep graph, world switching, console filter, headless/CLI.
 
@@ -122,13 +127,17 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 | 9.2 | Import — descomprimir, validar, recrear server | — | ✅ `migration.py::import_server` |
 | 9.3 | UI — menú "Add Server" (Folder/.zbbpack) en main.py + export en Backups tab | — | ✅ |
 
-### F10: Cross-Platform Linux
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 10.2 | platform_utils.py — create_link(src, dst) unificado | 🟢 |
-| 10.3 | SIGTERM handler en PlayitManager | 🟡 |
-| 10.4 | stop() con wait(timeout=5) + kill() en Linux | 🟡 |
-| 10.5 | single_instance.py verificar captura de SIGTERM | 🟢 |
+### F10: Cross-Platform Linux — ✅ 2026-07-10
+| # | Tarea | Archivo | Riesgo | Estado |
+|---|-------|---------|--------|--------|
+| 10.1 | process_job.py — prctl(PR_SET_PDEATHSIG) + parent PID guard en Linux | process_job.py, logic.py, playit_manager.py | 🟡 | ✅ 2026-07-10 |
+| 10.2 | install_forge() — detectar run.sh además de run.bat | logic.py:438 | 🟢 | ✅ 2026-07-10 |
+| 10.3 | Playit force-kill — kill-by-name Linux (psutil + pkill fallback) | playit_manager.py | 🟡 | ✅ 2026-07-10 |
+| 10.4 | Playit socket path — filesystem path en Linux, @name en Windows | playit_manager.py:346 | 🟡 | ✅ 2026-07-10 |
+| 10.5 | single_instance.py — verificar captura SIGTERM | single_instance.py | 🟢 | ✅ Ya funcional (os.kill fallback) |
+| 10.6 | Dockerfile.linux — PyInstaller multi-stage build, binario nativo 15MB | Dockerfile.linux, linux.spec | 🟡 | ✅ 2026-07-10 |
+| 10.7 | Dockerfile.gui — Python+Tk GUI via X11 forwarding (491MB) | Dockerfile.gui | 🟢 | ✅ 2026-07-10 |
+| 10.8 | docker-compose.yml + start-zbb-gui.bat — launcher one-click | docker-compose.yml, start-zbb-gui.bat | 🟢 | ✅ 2026-07-10 |
 
 ### F11: UI/UX — ZBB 2.0 — "Dirt Block" Design Language
 
@@ -137,12 +146,12 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 **Bloque A (palette, botones, labels) — ✅ Implementado**, aplicado en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
 
 **Bloque B — Cambios visuales main.py, sin tocar lógica. Riesgo 🟢.**
-| # | Tarea | Archivo | LOC | Esfuerzo |
-|---|-------|---------|-----|---------|
-| 11.B1 | Sidebar accent line — borde izquierdo 3px `COLOR_ACCENT_GREEN` en item seleccionado | ui_components.py | ~15 | 30 min |
-| 11.B2 | Server list items como cards — fondo `COLOR_BG_CARD_DARK`, dot de estado, nombre bold, versión/tipo abajo, hover sutil | ui_components.py | ~40 | 1 hr |
-| 11.B3 | Dashboard tunnel colapsado por defecto cuando offline | main.py | ~20 | 45 min |
-| 11.B4 | Status bar topbar — fondo `COLOR_BG_CARD_DARK` diferenciado | main.py | ~10 | 20 min |
+| # | Tarea | Archivo | LOC | Esfuerzo | Estado |
+|---|-------|---------|-----|---------|--------|
+| 11.B1 | Sidebar accent line — borde izquierdo 3px `COLOR_ACCENT_GREEN` en item seleccionado | ui_components.py | ~15 | 30 min | ✅ 2026-07-10 |
+| 11.B2 | Server list items como cards — fondo `COLOR_BG_CARD_DARK`, dot de estado, nombre bold, versión/tipo abajo, hover sutil | ui_components.py | ~40 | 1 hr | ✅ 2026-07-10 |
+| 11.B3 | Dashboard tunnel colapsado por defecto cuando offline | main.py | ~20 | 45 min | ✅ 2026-07-10 |
+| 11.B4 | Status bar topbar — fondo `COLOR_BG_CARD_DARK` diferenciado | main.py | ~10 | 20 min | ✅ 2026-07-10 |
 
 **Bloque C — Console coloring. Riesgo 🟡 (tocar ConsoleWidget).**
 | # | Tarea | Archivo | LOC | Esfuerzo |
@@ -157,7 +166,7 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 | 11.D3 | Sidebar colapsable (toggle con animación simple) | main.py | ~60 | 1.5 hrs |
 | 11.D4 | Performance dashboard visual (TPS graph, RAM usage) — consolida con CA-M05/F12.4 | main.py + nuevo archivo | +150 | 3 hrs |
 | 11.D5 | Dark/light mode toggle persistido en settings — **consolidado en F15** (no duplicar trabajo aquí) | main.py + app_config.py | ~40 | 1 hr |
-| 11.D6 | Tooltips en botones de acción | main.py | ~30 | 45 min |
+| 11.D6 | Tooltips en botones de acción | main.py | ~30 | 45 min | ✅ 2026-07-10 |
 
 **Orden recomendado:** 11.B4 → 11.B3 → 11.B1+B2 → 11.C1 → 11.D* (próxima iteración mayor)
 
@@ -234,19 +243,41 @@ F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
 
 ---
 
+## F16: Mapa Interactivo + Mod Fabric Companion (post-2.0)
+
+**Origen:** Ideación 2026-07-10. Bloqueado hasta que ZBB 2.0 (branch `dev`) llegue a `main`. No iniciar antes.
+
+**Objetivo:** Mapa interactivo en GUI ZBB mostrando chunks generados, más telemetría live opcional vía mod Fabric.
+
+**Research previo (2026-07-10):**
+- Dynmap/BlueMap/Squaremap leen `.mca` region files directo de disco, rasterizan a tiles vía webserver propio — ninguno expone API limpia para consumo de app externa.
+- Patrón estándar para stats live: mod embebe HTTP server localhost, tool externo hace poll (ej. FabricExporter — expone `/metrics` Prometheus). Spark sube a spark.lucko.me, no pollable local.
+- Fabric API: `ServerChunkEvents.Generate` + load/unload existen y estables 1.17–1.21.4. Netty ya viene incluido — NanoHTTPD/Javalin más liviano que Netty crudo para API local.
+- **Path sin mod existe:** `anvil-parser2` (PyPI) lee `.mca` directo en Python — `Region.from_file()`, `Chunk.from_region()`, `get_block()`. Probado 1.14.4–1.19 (riesgo de drift en versiones nuevas), write roto 1.16+ (irrelevante, solo lectura).
+
+| # | Feature | Prioridad | Notas |
+|---|---------|-----------|-------|
+| 16.1 | Mapa de chunks generados — parsing Python puro (`anvil-parser2` sobre region files) | 🟡 Media | Sin dependencia server-side nueva, funciona en mundos existentes, sin toolchain Java. Empezar aquí. |
+| 16.2 | Mod Fabric companion (experimental, opcional) — chunk events live + telemetría (entity count, tick cost/chunk) vía HTTP/WS localhost | 🔵 Baja | Solo si F16.1 valida interés. Costo: toolchain Java/Gradle/Loom + mantenimiento por versión MC. |
+| 16.3 | Refresh live del mapa cuando mod instalado (fallback a rescan periódico sin mod) | 🔵 Baja | Depende de F16.1 + F16.2 |
+
+**Decisión:** Hybrid — mapa file-parsing siempre disponible (fallback), mod mejora UX si está instalado. No invertir en mod hasta que F16.1 pruebe demanda.
+
+---
+
 ## Pendientes on-radar (bajo impacto, oportunísticos)
 
 Solo abordar si se toca el archivo relevante por otra razón — no priorizar activamente:
 
 | ID | Archivo | Problema | Fix |
 |----|---------|---------|-----|
-| A3-B05 | `core/playit_manager.py:522` | `_parse_line` chequea `self._api_dns or self._stdout_dns` fuera del lock — posible doble-emit TUNNEL_STATUS bajo concurrencia | Mover early-return check dentro del lock |
+| ~~A3-B05~~ | ~~`core/playit_manager.py:522`~~ | ✅ Resuelto 2026-07-10 — `_parse_line` check DNS moved inside `_lock` | — |
 | LA-06 | `core/logic.py:736-740` | `get_server_ram`/`set_server_ram` thin wrappers | Confirmado usado por SPE — no es dead code, no tocar |
 | ~~A3-A04~~ | ~~`core/core.py:104-259`~~ | ✅ Resuelto 2026-07-07 — SERVERS_DIR movido a top imports; 2 inline imports eliminados (otro en purge_crash_reports se dejó por test patching) | — |
 | ~~NR-05~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — retry UI con label + botón | — |
 | ~~NR-10~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — `_DOWNLOADS_COLOR` reemplazado por `AppConfig.COLOR_TEXT_GRAY`; otras constantes sin equivalente AppConfig | — |
-| A2-A02 | `core/java_detector.py` | `_probe_java` privado importado desde logic.py — acoplamiento frágil | Exponer como función pública (puede ya estar resuelto vía A3-A02, verificar) |
-| A2-P03 | `services/java_detector.py` | `_shared_cache` class-level sin TTL — no detecta Java instalado con app abierta | TTL de 60-300s o método invalidate() |
+| ~~A2-A02~~ | ~~`core/java_detector.py`~~ | ✅ Resuelto — `probe_java()` public wrapper already exists at `java_detector.py:201` | — |
+| ~~A2-P03~~ | ~~`services/java_detector.py`~~ | ✅ Resuelto 2026-07-10 — `_shared_cache` now has 5-minute TTL via `time.monotonic()` | — |
 
 ---
 

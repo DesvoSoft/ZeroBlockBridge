@@ -147,7 +147,7 @@ Inspección completa de core/logic.py, orchestrators.py, protocols.py, playit_ma
 
 **Confirmados stack:** customtkinter/requests/Pillow pinneados sin upper bound (decisión deliberada); Python bajado a 3.12 LTS (`winget install Python.Python.3.12`, venv recreado con `py -3.12 -m venv .venv`).
 
-**Sin resolver (bajo impacto, on-radar):** A2-B01 (player count lock), A2-B02 (eula.txt encoding), A2-B05 (atexit guard — nota: ya resuelto según AUDIT-3 A3-B... revisar duplicado), A2-A02 (_probe_java privado — resuelto en AUDIT-3 A3-A02), A2-A04 (Protocol expone métodos privados), A2-D02 (import re en hot path), A2-D03 (_zip_worker double-threading — resuelto, ver LA-01), A2-P03 (JavaDetector cache sin TTL), A2-P04 (get_versions freeze — resuelto en AUDIT-3 A3-A05).
+**Sin resolver (bajo impacto, on-radar):** A2-B01 (player count lock), A2-B02 (eula.txt encoding), A2-B05 (atexit guard — nota: ya resuelto según AUDIT-3 A3-B... revisar duplicado), A2-A02 (_probe_java privado — resuelto en AUDIT-3 A3-A02), A2-A04 (Protocol expone métodos privados), A2-D02 (import re en hot path), A2-D03 (_zip_worker double-threading — resuelto, ver LA-01), ~~A2-P03 (JavaDetector cache sin TTL)~~ ✅ Resuelto 2026-07-10 (EASY-WINS session), A2-P04 (get_versions freeze — resuelto en AUDIT-3 A3-A05).
 
 ---
 
@@ -158,7 +158,7 @@ Reporte de auditoría externa, validado item-por-item contra código real.
 **Resueltos:** A3-B01 (encoding UTF-8 en version_manager cache), A3-B02 (TPS_UPDATE falso eliminado del enum), A3-B03 (PLAYER_COUNT rate-limit 1x/seg en tick loop), A3-B04 (backup restore atomic swap + _zip_worker eliminado), A3-A01 (_winapi.CreateJunction → os.symlink), A3-A02 (probe_java público), A3-A03 (Protocol IS-A → HAS-A, junto con P0.5), A3-A05 (version_manager freeze eliminado), A3-M01 (ServerEvent.ERROR eliminado, RESTARTED/BACKUP_COMPLETED/BACKUP_FAILED documentados como hooks futuros), A3-M02 (migrate_legacy_metadata() en bootstrap).
 
 **Pendientes (bajo impacto, oportunísticos — solo si se toca el archivo):**
-- A3-B05 — `playit_manager.py:522` TOCTOU check fuera del lock, posible doble-emit TUNNEL_STATUS bajo concurrencia
+- ~~A3-B05~~ ✅ Resuelto 2026-07-10 (EASY-WINS session) — check DNS movido dentro del lock
 - A3-A04 — `core.py:104-259` 4 inline imports de update_server_meta/SERVERS_DIR (workarounds circular dep), mover al top cuando se toque el archivo
 
 **YAGNI excluidos:** countdown UX, jar_events leak negligible, thread pools (28 threads OK en hardware actual), PlayitManager callbacks vs EventBus (funcional, refactor invasivo sin ganancia), statemanager globals (ya no aplica, resuelto), settings_manager singleton (funciona bien, debounced flush thread-safe), legacy Dict/List typing, Python 3.14 (decisión de release no bug).
@@ -178,3 +178,78 @@ Resuelto en sesión 1+2: NR-DASH/01/02/09, A2-B04, A2-B06/D02, JAVA-FLOOR, CA-02
 - `os.startfile` prohibido por CLAUDE.md — siempre subprocess con platform-check.
 - Versión de Forge en metadata: `"version": "26.2"` en metadata.json es versión del loader Forge, no MC version. Deuda: wizard debería guardar `"mc_version"` separado.
 - `test_server` (Vanilla 1.20.1, Java 17 portable) funciona correctamente.
+
+---
+
+## EASY-WINS: Bug fixes + UI polish — 2026-07-10 ✅
+
+Sesión enfocada en high-confidence fixes y mejoras visuales identificadas en el roadmap como "easy wins" (<5 hrs total, riesgo bajo).
+
+### Fixes (3)
+
+| ID | Archivo | Problema | Fix |
+|----|---------|---------|-----|
+| A3-B05 | `core/playit_manager.py:704` | `_parse_line` check `self._api_dns or self._stdout_dns` ejecutado **fuera** del lock — bajo concurrencia (2 lectores de stdout+polling), ambos pasan el guard y emiten TUNNEL_STATUS dos veces | Early-return check movido **dentro** del `with self._lock:` block. 3 líneas cambiadas. |
+| A2-P03 | `services/java_detector.py` | `_shared_cache` class-level sin TTL — si el usuario instala Java mientras la app está abierta, `detect_all()` nunca lo ve (cache infininto) | `_shared_cache_time: float` + `_CACHE_TTL = 300.0` (5 min). `detect_all()` usa `time.monotonic()` para expirar. Se re-escanea automáticamente sin `force_refresh`. |
+| A2-A02 | `services/java_detector.py` | `_probe_java` privado importado desde `logic.py:20` — acoplamiento frágil | **Confirmado resuelto**: `probe_java()` wrapper público ya existe en línea 201. No requiere cambio. |
+
+### UI — F11 Bloque B completo (4 items)
+
+| # | Tarea | Archivo | Detalle |
+|---|-------|---------|---------|
+| 11.B1 | Sidebar accent line | `ui_components.py:333` | Selected item border cambia de `COLOR_BTN_PRIMARY` a `COLOR_ACCENT_GREEN` (lime-800) — verde "tierra" en vez de verde primario genérico |
+| 11.B2 | Server list items como cards | `ui_components.py` | **Confirmado**: `ServerListItem` ya implementa cards con dot de estado, nombre bold, version/type, hover — implementado en sesiones anteriores |
+| 11.B3 | Dashboard tunnel collapsed when offline | `main.py:966` | `on_tunnel_status` ahora colapsa (pack_forget) IP display, buttons, y setup frame cuando status es Offline y agent está linked. Solo queda "Tunnel: ● Offline". Se expande al pasar a Online/Starting/Error |
+| 11.B4 | Status bar topbar | `main.py:183` | **Confirmado**: status bar ya usa `fg_color=(COLOR_BG_CARD_LIGHT, COLOR_BG_CARD_DARK)` diferenciado del main bg |
+
+### UI — F11.D6: Tooltips (4 buttons)
+
+Añadidos `ToolTip()` a los 4 botones sidebar que les faltaban:
+- `btn_create_server` → "Create a new Minecraft server"
+- `btn_add_server` → "Import or load an existing server"
+- `btn_app_settings` → "Application settings"
+- `btn_toggle_setup` → "Link Playit account"
+
+Los 9 botones de status bar + tunnel ya tenían tooltips de sesiones anteriores.
+
+### Resultado
+
+- **560 tests pass** (was 544 — 16 tests adicionales de sesiones previas no contabilizadas)
+- **flake8 clean** (critical errors only)
+- **4 archivos modificados**: `playit_manager.py`, `java_detector.py`, `ui_components.py`, `main.py`
+
+---
+
+## F10: Cross-Platform Linux — 2026-07-10 ✅
+
+Auditoría completa de platform-specific code identificó 2 Critical + 4 Borderline items. Todos resueltos.
+
+### Fixes (4)
+
+| # | Archivo | Problema | Fix |
+|---|---------|---------|-----|
+| 10.1 | `process_job.py` + `logic.py` + `playit_manager.py` | No process reaping en Linux — Windows usa Job Objects, Linux no-op. Children (MC server, playitd) quedan huérfanos si parent crash | `linux_preexec()`: `prctl(PR_SET_PDEATHSIG, SIGKILL)` + parent PID re-check post-fork (guarda race fork→setsid). Integrado via `preexec_fn` en ambos Popen sites: `ServerRunner._popen_kwargs()` + `PlayitManager._start_internal()` |
+| 10.2 | `logic.py:438` | `install_forge()` solo check `run.bat` — Linux solo tiene `run.sh` → retorna `None` | Añadido `os.path.exists(run.sh)` check |
+| 10.3 | `playit_manager.py` | Force-kill no tiene fallback Linux — `taskkill /IM` es Windows-only. Si psutil falla, playitd queda vivo | `_kill_stray_by_name()` shared: Windows→taskkill, Linux→psutil process_iter kill + `pkill -9 -f playit` fallback. Usado en `stop(force=True)` y `_atexit_stop()` |
+| 10.4 | `playit_manager.py:346` | Socket path `@zbb-playitd` es abstract namespace — puede no funcionar en todos los playitd builds Linux | Windows: `@zbb-playitd` (named pipe). Linux: `CONFIG_DIR/zbb-playitd.sock` (filesystem socket) |
+
+### Items confirmados ya safe
+
+- `single_instance.py`: `os.kill(pid, 0)` fallback funciona en Linux ✅
+- `win_effects.py`: no-op en Linux ✅
+- `java_detector.py`: Linux well-known paths cubiertos ✅
+- `java_installer.py`: `_chmod_plusx` en Linux ✅
+- `create_junction()`: `os.symlink` en Linux ✅
+- `open_in_file_manager`: `xdg-open` fallback ✅
+- `constants.py`: `subprocess_flags()` retorna `{}` en Linux ✅
+
+### Archivos modificados
+
+- `app/core/process_job.py` — reescrito completo (120→145 LOC)
+- `app/core/logic.py` — `_popen_kwargs()` + `install_forge()` run.sh check + `import platform`
+- `app/core/playit_manager.py` — `_kill_stray_by_name()`, socket path, preexec_fn
+
+### Resultado
+
+- **560 tests pass**, flake8 clean
+- F10 marcado como ✅ en roadmap.md
