@@ -4,8 +4,7 @@ import os
 import requests
 import threading
 import datetime
-import re
-from pathlib import Path
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
@@ -54,9 +53,14 @@ class VersionManager:
         if getattr(self, '_initialized', False):
             return
         self.cache_lock = threading.RLock()
+        # Serializes the lazy first load (may hit the network) without
+        # holding cache_lock across slow I/O.
+        self._load_lock = threading.Lock()
         self.fallback_cache = self._get_default_cache()
-        self.cache = self.fallback_cache
-        self.cache = self._load_cache()
+        # Start with in-memory defaults — no disk I/O in __init__.
+        # _load_cache() runs lazily on first get_versions() call.
+        self.cache = self._get_default_cache()
+        self._cache_loaded = False
         self.refresh_thread = None
         self.callbacks = []
         self._initialized = True
@@ -65,6 +69,13 @@ class VersionManager:
         with self.cache_lock:
             if callback not in self.callbacks:
                 self.callbacks.append(callback)
+
+    def remove_callback(self, callback):
+        with self.cache_lock:
+            try:
+                self.callbacks.remove(callback)
+            except ValueError:
+                pass
 
     def _notify_callbacks(self):
         with self.cache_lock:
@@ -78,7 +89,7 @@ class VersionManager:
     def _load_cache(self):
         if os.path.exists(VERSIONS_CACHE_FILE):
             try:
-                with open(VERSIONS_CACHE_FILE, "r") as f:
+                with open(VERSIONS_CACHE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
                 fabric_versions = data.get("Fabric", [])
@@ -89,7 +100,7 @@ class VersionManager:
                 forge_versions = data.get("Forge", [])
                 if forge_versions:
                     first = forge_versions[0]
-                    if not first.startswith("1.") or re.match(r'^\d+\.\d+', first):
+                    if not first.startswith("1."):
                         logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
                         return self._fetch_defaults_sync()
 
@@ -109,7 +120,9 @@ class VersionManager:
                             if fetched:
                                 data.update(fetched)
                                 data["last_updated"] = datetime.datetime.now().isoformat()
-                                self._save_cache()
+                                with self.cache_lock:
+                                    self.cache = data
+                                    self._save_cache()
                             return data
                     except ValueError:
                         pass
@@ -129,8 +142,9 @@ class VersionManager:
             if data:
                 new_cache.update(data)
                 new_cache["last_updated"] = datetime.datetime.now().isoformat()
-                self.cache = new_cache
-                self._save_cache()
+                with self.cache_lock:
+                    self.cache = new_cache
+                    self._save_cache()
                 logger.info("Synchronous version refresh completed.")
                 return new_cache
         except Exception as e:
@@ -222,10 +236,20 @@ class VersionManager:
 
     @staticmethod
     def _fetch_paper(timeout=10):
-        resp = requests.get("https://api.papermc.io/v2/projects/paper", timeout=timeout)
+        # Fill API v3 (api.papermc.io/v2 returns 410 Gone). Response is
+        # newest-first: {"versions": [{"version": {"id": "1.21.8", ...}}]}.
+        # Fill asks for a descriptive User-Agent.
+        resp = requests.get(
+            "https://fill.papermc.io/v3/projects/paper/versions",
+            headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+            timeout=timeout,
+        )
         resp.raise_for_status()
-        versions = resp.json().get("versions", [])
-        versions.reverse()
+        versions = [
+            entry["version"]["id"]
+            for entry in resp.json().get("versions", [])
+            if entry.get("version", {}).get("id")
+        ]
         return versions[:100]
 
     @staticmethod
@@ -260,23 +284,27 @@ class VersionManager:
         """Persists current version cache to disk."""
         try:
             VERSIONS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(VERSIONS_CACHE_FILE, "w") as f:
+            with open(VERSIONS_CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, indent=4)
         except Exception as e:
             logger.error("Failed to save version cache: %s", e)
 
     def get_versions(self, server_type):
+        # Lazy-load cache from disk on first call (deferred from __init__).
+        # _load_cache may do a synchronous network fetch (stale cache) —
+        # keep it off cache_lock so other threads don't stall behind it.
+        if not self._cache_loaded:
+            with self._load_lock:
+                if not self._cache_loaded:
+                    loaded = self._load_cache()
+                    with self.cache_lock:
+                        self.cache = loaded
+                        self._cache_loaded = True
+        # Fire background refresh if stale — do NOT block; wizard uses
+        # add_callback(on_versions_refreshed) to repopulate when ready.
         self._check_and_refresh()
-        self._wait_for_background_refresh(timeout=4)
         with self.cache_lock:
             return list(self.cache.get(server_type, []))
-
-    def _wait_for_background_refresh(self, timeout=4):
-        thread = getattr(self, 'refresh_thread', None)
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=timeout)
-            return not thread.is_alive()
-        return False
 
     def _check_and_refresh(self):
         with self.cache_lock:
@@ -298,9 +326,11 @@ class VersionManager:
 
     def refresh_versions(self):
         logger.info("Refreshing server versions...")
+        # Fetch outside cache_lock: HTTP to 5 APIs (10s timeout each) must not
+        # block get_versions() callers (UI thread) waiting on the lock.
+        results = self._fetch_all_versions(timeout=10)
         with self.cache_lock:
             new_cache = self.cache.copy()
-            results = self._fetch_all_versions(timeout=10)
             for key, versions in results.items():
                 new_cache[key] = versions
             new_cache["last_updated"] = datetime.datetime.now().isoformat()
@@ -387,13 +417,16 @@ class VersionManager:
 
     def _get_paper_url(self, version):
         try:
-            url = f"https://api.papermc.io/v2/projects/paper/versions/{version}"
-            resp = requests.get(url, timeout=10)
-            data = resp.json()
-            builds = data.get("builds", [])
-            if builds:
-                latest_build = builds[-1]
-                return f"{url}/builds/{latest_build}/downloads/paper-{version}-{latest_build}.jar"
+            resp = requests.get(
+                f"https://fill.papermc.io/v3/projects/paper/versions/{version}/builds/latest",
+                headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            downloads = resp.json().get("downloads", {})
+            entry = downloads.get("server:default") or next(iter(downloads.values()), None)
+            if entry and entry.get("url"):
+                return entry["url"]
         except Exception as e:
             logger.error("Failed to resolve Paper URL for %s: %s", version, e)
         return None

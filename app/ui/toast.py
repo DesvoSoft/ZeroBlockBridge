@@ -12,14 +12,22 @@ import customtkinter as ctk
 import logging
 from typing import Any
 
+from app.core.app_config import AppConfig
+from app.ui.icons import icon
+from app.ui.win_effects import apply_rounded_corners
+
 logger = logging.getLogger(__name__)
 
-# Toast type -> (bg_color, border_color, icon)
+# Toast type -> (bg_color, border_color, badge)
+# bg_color uses AppConfig card tokens to adapt to light/dark mode.
+# badge is a letter for info/warning (no matching PIL icon) and an
+# icons.py name for success/error.
+_CARD_BG = (AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
 _TOAST_STYLES = {
-    "info":    ("#1e293b", "#3b82f6", "i"),       # Slate-800 + Blue-500
-    "success": ("#1e293b", "#22c55e", "\u2713"),   # Slate-800 + Green-500
-    "warning": ("#1e293b", "#f97316", "!"),        # Slate-800 + Orange-500
-    "error":   ("#1e293b", "#ef4444", "x"),        # Slate-800 + Red-500
+    "info":    (_CARD_BG, AppConfig.COLOR_BTN_PRIMARY, "i"),
+    "success": (_CARD_BG, AppConfig.COLOR_BTN_SUCCESS, ("icon", "check")),
+    "warning": (_CARD_BG, AppConfig.COLOR_ACCENT_AMBER, "!"),
+    "error":   (_CARD_BG, AppConfig.COLOR_BTN_DANGER, ("icon", "close")),
 }
 
 # Fallback color mapping from raw color names to toast types
@@ -54,7 +62,7 @@ class ToastNotification:
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
         toast.attributes("-alpha", 0.0)
-        toast.configure(fg_color="#1e293b")
+        toast.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
 
         # Outer frame with border accent
         outer = ctk.CTkFrame(
@@ -66,17 +74,24 @@ class ToastNotification:
         inner = ctk.CTkFrame(outer, fg_color="transparent")
         inner.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # Icon badge
-        ctk.CTkLabel(
-            inner, text=icon_char, width=24, height=24,
-            font=("Roboto Medium", 13), text_color="white",
-            fg_color=border_color, corner_radius=12,
-        ).pack(side="left", padx=(0, 10))
+        # Icon badge: PIL icon when one exists, letter fallback otherwise
+        if isinstance(icon_char, tuple):
+            badge = ctk.CTkLabel(
+                inner, text="", image=icon(icon_char[1], 12, "#ffffff"),
+                width=24, height=24, fg_color=border_color, corner_radius=12,
+            )
+        else:
+            badge = ctk.CTkLabel(
+                inner, text=icon_char, width=24, height=24,
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color="white",
+                fg_color=border_color, corner_radius=12,
+            )
+        badge.pack(side="left", padx=(0, 10))
 
         # Message
         ctk.CTkLabel(
-            inner, text=message, text_color="#e2e8f0",
-            font=("Roboto", 12), wraplength=320, justify="left",
+            inner, text=message, text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            font=(AppConfig.FONT_FAMILY, 12), wraplength=320, justify="left",
         ).pack(side="left", fill="x", expand=True)
 
         # Position: bottom-right, stacked vertically
@@ -91,8 +106,12 @@ class ToastNotification:
         offset_y = len(self._active_toasts) * (th + 10)
         x = parent.winfo_rootx() + pw - tw - 20
         y = parent.winfo_rooty() + ph - th - 20 - offset_y
+        y = max(y, parent.winfo_rooty() + 10)
         toast.geometry(f"{tw}x{th}+{x}+{y}")
+        apply_rounded_corners(toast, small=True)
 
+        toast._zbb_parent = parent
+        toast._zbb_height = th
         self._active_toasts.append(toast)
 
         # Fade-in
@@ -118,7 +137,8 @@ class ToastNotification:
                 return
             try:
                 toast.attributes("-alpha", current)
-            except Exception:
+            except Exception as e:
+                logger.debug("Toast animate error: %s", e)
                 return
             if i < steps:
                 toast.after(delay, _step, i + 1, current + delta)
@@ -133,8 +153,30 @@ class ToastNotification:
             self._active_toasts.remove(toast)
         try:
             toast.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Toast hide error: %s", e)
+        self._reflow_toasts()
+
+    def _reflow_toasts(self):
+        """Recompute vertical position of remaining active toasts to close gaps."""
+        for i, toast in enumerate(self._active_toasts):
+            if not toast.winfo_exists():
+                continue
+            parent = getattr(toast, "_zbb_parent", None)
+            th = getattr(toast, "_zbb_height", None)
+            if parent is None or th is None:
+                continue
+            try:
+                tw = toast.winfo_width()
+                pw = parent.winfo_width()
+                ph = parent.winfo_height()
+                offset_y = i * (th + 10)
+                x = parent.winfo_rootx() + pw - tw - 20
+                y = parent.winfo_rooty() + ph - th - 20 - offset_y
+                y = max(y, parent.winfo_rooty() + 10)
+                toast.geometry(f"{tw}x{th}+{x}+{y}")
+            except Exception as e:
+                logger.debug("Toast reflow error: %s", e)
 
     def dismiss(self) -> None:
         """Clear all active toasts immediately."""

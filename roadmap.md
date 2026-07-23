@@ -1,483 +1,369 @@
 # ZeroBlockBridge — Roadmap de Desarrollo
 
-> **Última actualización:** 2026-05-22
+**Última actualización:** 2026-07-10 (rev 19 — release v2.0.0: versionado unificado, fix tar.gz Linux, build specs unificados, F11.C1/D1 cerrados; 565 tests)
+**Versión proyecto:** 2.0.0
+> **Test count:** 565 tests, 100% pass, 0 flaky
+
+**Historial completo de fases/auditorías resueltas:** ver `docs/roadmap-history.md` (F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0, EXE-PERF, F5, F6, MODS-B, F8, BUG-AUDIT, NR, AUDIT-2, AUDIT-3, Handover 2026-06-23). Este archivo solo trackea lo pendiente o en curso.
+
+### Log de sesiones recientes (fuera de roadmap formal)
+- **2026-07-05 (9):** fix(core) job-object reaping proceso servidor + port preflight + mods tab gating; feat(ui) server delete via right-click + first-run EULA consent; fix(versions) migración Paper Fill API v3; fix(tunnel) reap agentes playitd huérfanos + silenciar ruido duel-session; fix(threading) I/O lento y callbacks fuera de locks; fix(heartbeat) eventos fuera del lock — 463 tests pass
+- **2026-07-05 (10):** fix(ui) icono mod card centrado verticalmente; fix(ui) contraste texto/fondo Modrinth Browser (`_MODRINTH_GREEN` con texto blanco ilegible → `#0f172a`; `COLOR_TEXT_PRIMARY` sin tupla light/dark en 3 sitios corregido) — 463 tests pass
+- **2026-07-06 (11):** feat(players) CA-H02 — player_files.py (ops/bans/whitelist persistence) + PlayersDashboard como CTkTabview (Online/Whitelist/Operators/Bans), ban/kick funcionan offline, confirmaciones ZBBDialog; feat(console) CA-H03 — ConsoleWidget.highlight()/jump_to_next_match() con tags search_hit/search_hit_current, search bar en Console + Tunnel Log tabs; feat(world) CA-H04 — list_worlds/get_active_world/set_active_world en server_properties.py + dropdown en World tab; feat(templates) F7 resto — template_manager.py (save/load/list/delete) + selector en wizard Step 2 + save-as-template + 4 templates por defecto; feat(migration) F9 — migration.py export_server/import_server (.zbbpack, excluye jar/logs, zip-slip guard) + botón export en Backups tab + menú "Add Server" (Folder/.zbbpack) en main.py — 483 tests pass
+- **2026-07-07 (13):** feat(settings) F14 completo — AppSettingsDialog reescrito como CTkTabview 5 tabs (General/Notifications/Java/Storage/About); selector de tema (Light/System gated hasta F15 con toast); checkboxes por evento webhook (`webhook_events` setting + `enabled_events` en DiscordWebhookService); Tab Java: JDKs gestionados con tamaño + delete + purge unused (nuevos `ZBBManager.list_managed_jdks/purge_jdk/purge_unused_jdks` con guard is_running) + tabla de Javas detectados (`detect_all()`); Tab Storage: disk usage por categoría (nuevo `services/disk_usage.py`) + clear crash reports (`ZBBManager.purge_crash_reports`); Tab About con nueva `AppConfig.APP_VERSION` (también en título de ventana); keys muertas `servers_dir`/`java_preferences` eliminadas de SettingsManager; `JdkManager.list_installed()` nuevo — smoke test Tk real; feat(java) F13 — descarga JRE preferida con fallback a JDK (`_query_assets`, ~45 MB vs ~300 MB por versión), limpieza ~1.3 GB (app/.zbb_cache stale + dist runtime dirs), `.venv` de proyecto — 544 tests pass
+- **2026-07-07 (14):** feat(ui) F15 light theme — 38 tokens de AppConfig a tuplas (light,dark); `resolve_color()` bridge para consumidores Tk-nativos (tag_config, tk.Menu, Toast, MOTD); gate del selector removido (Dark/Light/System funcionales). Hotfix post-review: 36 sitios con tuplas anidadas `(str, TOKEN)` que crasheaban la UI al instanciar (el agente no ejecutó la app) reemplazados por token directo; `ConsoleWidget._set_appearance_mode` override re-aplica tags al cambiar tema en vivo. Verificado: smoke Tk en Light y Dark + flip en vivo — 544 tests pass
+- **2026-07-07 (15):** perf/feat/style(mods) MODS-UX — auditoría completa de modrinth_browser.py: (A) prefetch bloqueante de iconos eliminado (cards renderizan al instante con letter-badge, iconos async), overlay de carga opaco hasta el ultimo batch (fin del pop-in), cache de iconos en disco (.zbb_cache/modrinth_icons/), un solo handler de resize para wraplength (antes 20 binds); (B) _set_status era `pass` — ~40 mensajes de feedback iban a la nada; status label real en pagination bar con severidad por color (marcadores ✓/✗/⚠ de call sites se strippean y mapean a color) + toasts al terminar bulk install; installed view con batching (15/frame); (C) verde Modrinth solo como acento (Install outline/seleccion/badge Installed), combos/search/toggle a lime tokens, Optimizers azul→amber, badges suaves (tinte+texto coloreado, cyan #0891b2 eliminado), radios a RADIUS_*, glifo ✓→icon(), autor separado en gris — smoke Tk con 20 hits sinteticos — 544 tests pass
+- **2026-07-07 (16):** fix/perf/style(ui) UI-AUDIT-2 — auditoria de superficies restantes: apply_rounded_corners+titlebar en 5 toplevels que faltaban (Wizard, SPE, PlayersDashboard, dialogs de modrinth — cierra el titlebar blanco residual); PlayersDashboard: evento PLAYER_LIST repinta solo tab Online (antes 4 tabs por join/leave), guard de operador duplicado, header 'Server offline', X→icon(close)+tooltip, fonts a tokens; SPE: boton mrpack violeta→brown, glifos ✓/✗ → _set_mrpack_status con color semantico, dots de impacto a tokens, MOTD preview a FONT_MONO, borde Change Icon dark-only corregido; Wizard: 'Next →'→icon chevron_right; Toast: acentos a tokens (info a lime primary), badges ✓/x → icon() check/close — 544 tests pass, 4 commits atomicos
+- **2026-07-06 (12):** fix(ui) wizard reorganizado 4→5 steps (Identity, Engine+Version, Resources, Rules&Security, World&Network) para eliminar truncamiento de RAM y saturación de step3; feat(ui) selección de Java interactiva en wizard Step 3 (radio: usar Java detectado del sistema vs auto-descargar recomendado, con dropdown de instalaciones) — antes solo mostraba label estático; fix(ui) botón Next de búsqueda en consola ahora re-busca si el texto cambió desde el último Enter (antes solo ciclaba matches viejos); fix(ui) `VersionManager._refresh_versions` → `refresh_versions()` (AttributeError en wizard); feat(ui) merge de botones "Load Existing Folder"/"Import .zbbpack" en un único "Add Server" con menú de 2 opciones; feat(settings) export a .zbbpack ahora también disponible desde Server Settings (Backups tab), no solo click-derecho — 483 tests pass
+
+- **2026-07-10 (17):** fix(tunnel) A3-B05 — _parse_line race condition: check DNS moved inside _lock to prevent double-emit TUNNEL_STATUS; fix(java) A2-P03 — JavaDetector._shared_cache now has 5-min TTL (time.monotonic); feat(ui) F11.B — sidebar accent line (COLOR_ACCENT_GREEN on selected item), tunnel collapsed when offline+linked; feat(ui) F11.D6 — tooltips on all sidebar buttons (Create, Add Server, Settings, Link Playit); A2-A02 confirmed resolved (probe_java public wrapper exists) — 560 tests pass
+- **2026-07-10 (18):** feat(linux) F10 completo — process_job.py: prctl(PR_SET_PDEATHSIG) + parent PID guard para reap de children en Linux (ServerRunner + PlayitManager Popen sites); fix(logic) install_forge() detecta run.sh además de run.bat (Forge Modern on Linux); fix(tunnel) playit force-kill Linux: psutil by-name + pkill fallback en stop(force=True) y atexit; fix(tunnel) socket path Linux: filesystem path (CONFIG_DIR/zbb-playitd.sock) en vez de @name abstract namespace; feat(docker) Dockerfile.gui multi-stage (596→491MB) + Dockerfile.linux native binary build (PyInstaller, 15MB binary, 450MB image) + docker-compose.yml (2 services: zbb-gui + zbb-linux) + start-zbb-gui.bat one-click launcher with mode selector — 560 tests pass
+- **2026-07-10 (19):** release v2.0.0 prep — `APP_VERSION`="2.0.0" fuente de verdad (app_config.py) + pyproject.toml sync; `requires-python` bajado a ">=3.10" (coherente con CI 3.11 y Docker 3.10.12 ya verdes); build unificado: `ZeroBlockBridge.spec`/`linux.spec` ahora usan `collect_all('customtkinter')` y son la fuente única de build.yml (reemplaza flags CLI crudos que habían driftado); fix(java) crítico F10 — Adoptium sirve `.tar.gz` en Linux/mac, `java_installer.py` solo manejaba `.zip` (auto-instalación Java rota en Linux nativo); añadido `_extract_tar` con protección tar-slip + 5 tests nuevos; feat(ui) F11.C1 — coloreado `[Server]` en consola (COLOR_ACCENT_BROWN); feat(wizard) F11.D1 — Step 6 Summary/Review + checkbox "Start server after creation" (salta el diálogo de confirmación existente y dispara el flujo de start ya existente vía EventBus) — 565 tests pass
+
+**Siguiente prioridad:** F15.5 QA visual humana en ambos modos (pase manual, ver checklist). F10 ✅ 2026-07-10, F11 Bloque C/D1 ✅ 2026-07-10, F10 tar.gz Linux ✅ 2026-07-10.
 
 ---
 
-## Estructura del Plan
+## Estado Actual
 
-- [Fase 0-2: Completado ✅](#fase-0-auditoría-táctica)
-- [Fase 3: Foundation — Refactors + Thread Safety](#fase-3-foundation--refactors--thread-safety)
-- [Fase 4: Auto-Backup Scheduler](#fase-4-auto-backup-scheduler)
-- [Fase 5: Crash Report Collector](#fase-5-crash-report-collector)
-- [Fase 6: Discord Webhook](#fase-6-discord-webhook)
-- [Fase 7: Server Templates + Modpacks](#fase-7-server-templates--modpacks)
-- [Fase 8: Bulk Mod Operations](#fase-8-bulk-mod-operations)
-- [Fase 9: Server Migration (.zbbpack)](#fase-9-server-migration-zbbpack)
-- [Fase 10: Cross-Platform (Linux)](#fase-10-cross-platform-linux)
-- [Fase 11: UI/UX — ZBB 2.0](#fase-11-uiux--zbb-20)
-- [Resumen de Fases](#resumen-de-fases)
+### Foundation Score: 6.6/10 — Sólida con fisuras conocidas
+| Área | Score | Nota |
+|------|-------|------|
+| Type hints | 3/10 | ~28.5% tipado, sin mypy en CI |
+| Dependencias | 7/10 | Pin en requirements.txt ✅, pyproject.toml ✅ |
+
+### Todas las fases fundacionales completas ✅
+F0-F3, FA-FB, FIX-P1/P2/P3, F4, P0 (Foundation Hardening), EXE-PERF, F5 (Crash Reports), F6 (Discord Webhook), MODS-B, F8 (Bulk Mods), BUG-AUDIT (18/19), AUDIT-2, AUDIT-3 — todas ✅. Detalle en `docs/roadmap-history.md`.
 
 ---
 
-## Fase 0: Auditoría Táctica ✅
-
-**Objetivo:** Entender el código base a fondo antes de modificar nada.
-
-| Tarea | Estado |
-|-------|--------|
-| Análisis de import graph (38 archivos, ~6,200 LOC) | ✅ |
-| Thread audit (24 spawns, 6 innecesarios) | ✅ |
-| I/O map (metadata.json leído en 8+ lugares) | ✅ |
-| Security scan (sanitizer OK, sin SQL) | ✅ |
-| Memory baseline (~35-45 MB idle) | ✅ |
-| Identificación sobreingeniería (46 hallazgos, 14 alto impacto) | ✅ |
-| Script de profiling generado | ✅ |
-
-## Fase 0.5: Corrección de Críticos ✅
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| 0.5.1 | Backup: ZIP de respaldo ANTES de restaurar | ✅ |
-| 0.5.2 | Sanitizer: `%` no debe estar bloqueado | ✅ |
-| 0.5.3 | JDK: SHA-256 vs SHA-512 detection + no retry | ✅ |
-| 0.5.4 | Port validation: negativos fuera (1-65535) | ✅ |
-| 0.5.5 | Dialog grab release (WM_DELETE_WINDOW) | ✅ |
-| 0.5.6 | Watchdog backoff con límite 3600s | ✅ |
-
-## Fase 1: Quick Wins ✅
-
-| # | Tarea | LOC | Estado |
-|---|-------|-----|--------|
-| 1.1 | statemanager.py — singleton → 3 vars + 2 funciones | -50 | ✅ |
-| 1.2 | Fix select_server() duplicado | 1 | ✅ |
-| 1.3 | Eliminar mod_provider.py obsoleto | -67 | ✅ |
-| 1.4 | CircularBuffer → collections.deque | -32 | ✅ |
-| 1.5 | server_events.py — eliminar RLock + EventPayload | -15 | ✅ |
-| 1.6 | Eliminar read_properties() alias | -2 | ✅ |
-| 1.7 | settings_manager.py — singleton → módulo | -35 | ✅ |
-
-## Fase 2: Bugfixes + Wizard UX ✅
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| 2.1 | Fix check_java_startup() — usar JavaDetector | ✅ |
-| 2.2 | DNS recovery chain (3 mecanismos) | ✅ |
-| 2.3 | TunnelStatusProvider elimina "Starting..." duplicado | ✅ |
-| 2.4 | Fix project_type filter + get_popular_mods() | ✅ |
-| 2.5 | Playit Link UX collapsible redesign | ✅ |
-| 2.6 | progress_callback(float) → progress_callback(float, str) | ✅ |
-| 2.7 | Mensajes de progreso detallados en wizard | ✅ |
-| 2.8 | Pre-flight Java check en ServerWizard | ✅ |
-| 2.9 | Botón "▶ Start Now" post-creación | ✅ |
-| 2.10 | Status badge por tipo de Java | ✅ |
-| 2.11 | Remote agent cleanup (gate key_valid eliminado) | ✅ |
-| 2.12 | Pre-download JDK durante wizard | ✅ |
-| 2.13 | Reset UI fijo (skip_debounce) | ✅ |
-| 2.14 | Soft reset tunnel | ✅ |
-| **Modrinth Management (3.10-3.14)** | | ✅ |
-| 3.10 | Gestión de mods instalados (lista + delete) | ✅ |
-| 3.11 | Paginación "Load More" en búsqueda | ✅ |
-| 3.12 | Íconos reales de mods vía URL asíncrona | ✅ |
-| 3.13 | Check for Updates en UI | ✅ |
-| 3.14 | Selector de versión al instalar | ✅ |
-| **Refactors adicionales (3.2, 3.3, 3.5, 3.6, 3.8, 3.9)** | | ✅ |
-| 3.2 | install_fabric + install_forge → _run_installer() | ✅ |
-| 3.3 | `start_server()` — extraer helpers `_auto_install_java()` y `_launch_server()` | ✅ |
-| 3.5 | Centralizar metadata.json en get/update_server_meta() | ✅ |
-| 3.6 | Eliminar _pre_warm_version_cache() de bootstrap | ✅ |
-| 3.8 | Eliminar _apply_pending_settings() | ✅ |
-| 3.9 | `Scheduler` + `SchedulerService` — fusionar en `logic.Scheduler` | ✅ |
-
----
-
-## Fase A: UI + Bugfixes ✅
-
-**Objetivo:** Pulir UX y corregir bugs visuales post-F3.
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| A.1 | Toast corner_radius=0 para consistencia visual | ✅ |
-| A.2 | Copy-IP solo muestra host (sin puerto) | ✅ |
-| A.3 | Toast duplicado eliminado de dashboard | ✅ |
-| A.4 | Server tag muestra versión MC en sidebar | ✅ |
-
-## Fase B: Layout Final ✅
-
-**Objetivo:** Layout definitivo de la aplicación — status bar, dashboard compacto, tunnel.
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| B.1 | Start All eliminado del dashboard | ✅ |
-| B.2 | SERVER/TUNNEL secciones con separador | ✅ |
-| B.3 | Server controls ▶ ■ movidos a status bar (inline con ⚪ Offline + Select + ⚙) | ✅ |
-| B.4 | Sección SERVER eliminada del dashboard | ✅ |
-| B.5 | Label TUNNEL eliminado (tunnel_frame va directo) | ✅ |
-| B.6 | Tunnel padding pady=(4, 1) | ✅ |
-| B.7 | Default window 1150×700, min 900×580 | ✅ |
-| B.8 | Mod card hover corregido (fg_color inicial explícito) | ✅ |
-| B.9 | Mod card grid_columnconfigure(1, weight=1) | ✅ |
-| B.10 | Java detection cache clase-level (JavaDetector._shared_cache) | ✅ |
-
-## FIX-P1: 7 Críticos Corregidos ✅
-
-| # | Bug | Archivo | Fix |
-|---|-----|---------|-----|
-| C1 | AppConfig.SERVERS_DIR inexistente | `server_properties_editor.py` | Importar SERVERS_DIR desde constants |
-| C2 | EventBus thread-safety (dict race) | `server_events.py` | RLock en _listeners |
-| C3 | settings_manager.init nunca llamado | `main.py` + `settings_manager.py` | set_config_dir(CONFIG_DIR) en init |
-| C4 | get_agent_id() retorna None (-> str) | `playit_api.py` | Optional[str], None handling en callers |
-| C5 | _jdk_source race en start_server | `core.py` | _start_lock protege start_server() |
-| C6 | _winapi.CreateJunction en core | `logic.py` + `core.py` + `main.py` | create_junction() helper cross-platform |
-| C7 | server.properties sin encoding utf-8 | `server_properties.py` + `server_properties_editor.py` | encoding=utf-8 en todos los open() |
-
-## FIX-P2: Thread Safety + Dead Code ✅
-
-| # | Tarea | Archivo | Fix |
-|---|-------|---------|-----|
-| P2.1 | playit_manager locks | `playit_manager.py` | Lock en _parse_line/_read_output, nested locks eliminados |
-| P2.2 | version_manager double-join | `version_manager.py` | _wait_for_background_refresh simplificado |
-| P2.3 | core restart race | `core.py` | _restart_lock con try/finally |
-| P2.4 | remove_config_key muerto | `core.py` | Eliminado (~9 LOC) |
-| P2.5 | stop_all muerto | `core.py` | Eliminado (~4 LOC) |
-| P2.6 | import Any muerto | `server_properties.py` | Eliminado |
-
----
-
-## Fase 3: Foundation — Refactors + Thread Safety + Tests ✅
-
-**Objetivo:** Completar refactors pendientes y corregir bug risks de concurrencia identificados en la revisión de código. **Completada en su totalidad — 375 tests pasan.**
-
-### 3A. Refactors Estructurales Pendientes (del plan original)
-
-| # | Tarea | Archivos | LOC saved | Riesgo |
-|---|-------|----------|-----------|--------|
-| 3.3 | `start_server()` — extraer `_auto_install_java()` + `_launch_server()` ✅ | `core.py` | ~80 | 🟠 |
-| 3.4 | `on_tunnel_status()` — refactor a state machine, eliminar pack_forget/pack *(skipped — marginal)* | `main.py:658-735` | ~20 | 🟡 |
-| 3.7 | `PlayitManager` — test de guardia sintáctica `--secret_path` (no `--secret-path`) + path quoting en Windows | `tests/test_playit_manager.py` | — | 🟢 |
-| 3.7b | *(Refactor a EventBus skipeado — ratio esfuerzo/beneficio marginal)* | — | — | — |
-| 3.9 | `Scheduler` + `SchedulerService` — fusionar en `logic.Scheduler` ✅ | `logic.py`, ~~`scheduler_service.py`~~ | ~90 | 🟡 |
-
-### 3B. Thread Safety + Bug Risks (hallazgos de revisión)
-
-| # | Tarea | Archivos | Riesgo |
-|---|-------|----------|--------|
-| 3.15 | `statemanager.py` — `threading.Lock` + asignación directa (eliminado `globals()`) ✅ | `statemanager.py`, `main.py` | 🟠 |
-| 3.16 | `settings_manager.py` — `_settings[key]=value` dentro del lock + double-checked locking ✅ | `settings_manager.py` | 🟠 |
-| 3.17 | Tests Windows compat — `/tmp/` → `tempfile.gettempdir()` ✅ | `test_logic.py` | 🟡 |
-| 3.18 | Type hints — añadidas a Watchdog, BackupManager, Toast, Heartbeat, ServerProperties, SingleInstance ✅ | `app/services/*.py`, `app/core/single_instance.py` | 🟢 |
-| 3.23 | Safe Init audit — verificar que todos los `__init__` en `app/services/` inicialicen atributos antes de suscripciones/hilos de fondo | `app/services/*.py` | 🟢 |
-| 3.24 | `.on()` deprecation check — escanear que no existan remanentes del patrón `.on()` en EventBus ni en ningún subscriptor | `app/core/server_events.py`, `app/**/*.py` | 🟢 |
-
-### 3C. Tests para módulos críticos sin cobertura
-
-| # | Módulo | LOC | Prioridad |
-|---|--------|-----|-----------|
-| 3.19 | `playit_manager.py` | 443 | 🔴 |
-| 3.20 | `heartbeat.py` | 61 | 🟡 |
-| 3.21 | ~~`scheduler_service.py`~~ *(eliminado en F3.9)* | — | — |
-| 3.22 | `single_instance.py` | 71 | 🟢 |
-| 3.25 | Cross-platform test isolation — mockear `sys.platform`, `platform.system()`, `platform.machine()` en tests existentes | `test_java_installer.py`, `test_provisioning.py` | 🟢 |
-
----
-
-## Fase 4: Auto-Backup Scheduler
-
-**Objetivo:** Implementar backups automáticos programables por servidor, con gestión de retención. El usuario dice "esto ya debería estar" — es una prioridad alta.
-
-### Justificación
-Ya existe `BackupManager.create_backup()` y un scheduler loop en `ZBBManager._start_scheduler_loop()` que corre cada 30s. Solo falta:
-- Un `BackupScheduler` en `metadata.json` (paralelo al restart scheduler existente)
-- Una verificación adicional en el loop
-- UI en la pestaña Automation
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 4.1 | `BackupScheduler` — modelo de datos en metadata.json (`auto_backup.enabled`, `interval_hours`, `retention_count`, `mode`, `last_run`) | `logic.py` (nueva clase o extender `Scheduler`) | Bajo |
-| 4.2 | Extender `_start_scheduler_loop` en ZBBManager para check backup due | `core.py` | Bajo |
-| 4.3 | Retención automática — al crear backup, eliminar los más viejos si excede `retention_count` | `backup_manager.py` | Bajo |
-| 4.4 | Mutex backup-in-progress para evitar colisión con restart backup | `core.py`, `backup_manager.py` | Bajo |
-| 4.5 | UI — sección "Auto-Backups" en pestaña Automation (switch, intervalo, retención) | `server_properties_editor.py` | Medio |
-| 4.6 | UI — mostrar próximo backup programado en pestaña Backups | `server_properties_editor.py` | Bajo |
-| 4.7 | Eventos `BACKUP_COMPLETED` / `BACKUP_FAILED` para notificaciones | `server_events.py`, `core.py` | Bajo |
-| 4.8 | Tests | `tests/` | Medio |
-
-**Complejidad total:** Media (~4-6 hrs)  
-**Dependencias:** Fase 3 completa (thread safety para metadata writes)
-
----
-
-## Fase 5: Crash Report Collector
-
-**Objetivo:** Ante cada crash detectado por Watchdog, escribir un archivo JSON diagnóstico con toda la información disponible del servidor, sistema, y cola de consola.
-
-### Justificación
-- **0 nuevas dependencias** — `json`, `datetime`, `platform`, `uuid` son stdlib; `psutil` ya existe
-- **Toda la data está en memoria en el momento del crash** (exit code, stderr tail, uptime, crash classification, console buffer, server metadata)
-- **Fácil integración** — Watchdog ya emite `CRASHED` vía `EventBus`. Basta un subscriptor nuevo
-
-### Formato del reporte (propuesto)
-```json
-{
-  "schema_version": 1,
-  "timestamp": "2026-05-16T14:30:22",
-  "server": { "name": "...", "version": "1.20.1", "type": "Fabric", "ram": "2G" },
-  "crash": { "reason": "out_of_memory", "exit_code": 1, "retry_attempt": 2 },
-  "stderr_tail": ["Exception in thread...", "...", "..."],
-  "console_tail": ["[14:30:20] [System] Starting server...", "..."],
-  "system_info": { "os": "Windows 10", "ram_gb": 15.9, "cpu_count": 8 },
-  "watchdog_state": { "max_retries": 3, "current_retries": 2 }
-}
-```
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 5.1 | Crear `CrashReporter` — clase que subscribe a `CRASHED`, snapshotea console buffer y escribe JSON | `app/services/crash_reporter.py` (nuevo) | Medio |
-| 5.2 | Integrar en `ZBBManager._setup_monitors()` | `core.py` | Bajo |
-| 5.3 | Almacenamiento en `servers/<name>/crash_reports/` (sigue convención Minecraft) | — | Bajo |
-| 5.4 | Tests | `tests/` | Medio |
-
-**Complejidad:** Baja (~2 hrs)  
-**Dependencias:** Fase 3 completa (thread safety), ninguna otra
-
----
-
-## Fase 6: Discord Webhook
-
-**Objetivo:** Enviar notificaciones a Discord vía webhook cuando ocurran eventos del servidor (crash, ready, zombie, lag, backup).
-
-### Justificación
-- **0 nuevas dependencias** — `requests` ya existe en `requirements.txt` (POST HTTP)
-- **API simple** — Discord webhook = POST con `{"content": "mensaje"}` a una URL, sin OAuth
-- **50-80 líneas de código** en un solo archivo nuevo
-- **Riesgo mínimo** — arquitectura puramente aditiva
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 6.1 | Crear `DiscordWebhookService` — subscribe a eventos vía EventBus, formatea mensajes, POST asíncrono | `app/services/discord_webhook.py` (nuevo) | Bajo |
-| 6.2 | Añadir `discord_webhook_url` + `discord_notify_on` a defaults de settings | `settings_manager.py` | Bajo |
-| 6.3 | Integrar en `ZBBManager.__init__()` | `core.py` | Bajo |
-| 6.4 | Diseño thread-safe con `queue.Queue` + worker único secuencial + rate-limit (evitar thread exhaustion en eventos masivos como console line spam) | `discord_webhook.py` | Medio |
-| 6.5 | Tests | `tests/` | Bajo |
-
-**Complejidad:** Muy baja (~1-2 hrs)  
-**Dependencias:** Fase 3 completa (EventBus thread safety)
-
----
-
-## Fase 7: Server Templates + Modpacks
-
-**Objetivo:** Permitir guardar y cargar configuraciones completas de servidor como plantillas reutilizables, con soporte para modpacks (lista de mods → auto-instalación desde Modrinth).
-
-### Concepto
-
-**Server Template** = archivo JSON que captura:
-- Versión + tipo de servidor (Vanilla/Fabric/Paper/Forge/Purpur)
-- RAM allocation + JVM flags
-- Server properties (gamemode, difficulty, seed, view-distance, etc.)
-- Lista de mods/plugins con slugs de Modrinth + versiones
-- Metadatos (nombre, descripción, autor, fecha)
-
-**Modpack** = template + lista de mods → al aplicarse, auto-descarga mods desde Modrinth
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 7.1 | Definir formato JSON de template (`server-template.json`) | Documentación | Bajo |
-| 7.2 | `TemplateManager` — save/load/list/delete templates | `app/services/template_manager.py` (nuevo) | Medio |
-| 7.3 | Template selector en ServerWizard Step 2 (dropdown o galería de templates) | `server_wizard.py` | Medio |
-| 7.4 | Save as template — botón en Properties Editor para guardar server actual como template | `server_properties_editor.py` | Medio |
-| 7.5 | Soporte de modpacks — al aplicar template, descargar mods listados desde Modrinth | `template_manager.py`, `modrinth.py` | Medio |
-| 7.6 | Templates incluidos por defecto: "Lite SMP", "Modded Fabric", "Vanilla+", "Paper Performance" | `assets/templates/` (carpeta nueva) | Bajo |
-| 7.7 | Tests | `tests/` | Medio |
-
-**Complejidad:** Media-alta (~6-8 hrs)  
-**Dependencias:** Fase 4-6 completas, Modrinth client existente
-
----
-
-## Fase 8: Bulk Mod Operations
-
-**Objetivo:** Operaciones masivas sobre mods instalados: selección múltiple, instalación batch, actualización masiva, eliminación en lote.
-
-### Justificación
-El Modrinth Browser ya tiene:
-- Lista de mods instalados con delete individual (`_on_show_installed`)
-- Check de updates con lista de desactualizados (`check_updates`)
-- Instalación individual
-
-Solo falta extender con multi-select y batch actions.
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 8.1 | Multi-select en lista de mods instalados (checkboxes en vez de delete individual) | `modrinth_browser.py` | Medio |
-| 8.2 | Botón "Update Selected" — descarga batch de versiones nuevas | `modrinth_browser.py`, `modrinth.py` | Medio |
-| 8.3 | Botón "Delete Selected" — batch delete con confirmación | `modrinth_browser.py` | Medio |
-| 8.4 | Botón "Install Multiple" — seleccionar varios resultados de búsqueda e instalar de una | `modrinth_browser.py` | Medio |
-| 8.5 | Progress bar batch — barra única que muestra "Installing 3/5 mods..." | `modrinth_browser.py` | Medio |
-| 8.6 | Tests | `tests/` | Medio |
-
-**Complejidad:** Media (~4-6 hrs)  
-**Dependencias:** Fase 7 (template/modpack infraestructura opcional pero recomendada para consistencia)
-
----
-
-## Fase 9: Server Migration (.zbbpack)
-
-**Objetivo:** Exportar un servidor completo (sin JAR) a un archivo portátil `.zbbpack` que pueda importarse en otra máquina u otra plataforma.
-
-### Justificación
-- **Sin JAR** — el JAR se re-descarga al importar según versión + tipo, lo que hace el pack más liviano y universal
-- **Cross-platform** — el ZIP contiene world, configs, lista de mods (no los jars), metadata
-
-### Formato .zbbpack (propuesto)
-```text
-server.zbbpack/
-├── manifest.json          # metadata, version, type, template info
-├── world/                 # world data
-├── server.properties      # config
-├── mods/                  # (opcional) mod jars OR lista en manifest
-├── plugins/               # (opcional)
-└── crash_reports/         # (opcional) historial
-```
-
-### Tareas
-
-| # | Tarea | Archivos | Esfuerzo |
-|---|-------|----------|----------|
-| 9.1 | Export — crear ZIP con world + config + metadata (sin JAR, sin JDK) | `app/services/migration.py` (nuevo) | Medio |
-| 9.2 | Import — descomprimir, re-descargar JAR según versión, re-scaffold | `migration.py` | Medio |
-| 9.3 | Mod list en manifest — guardar slugs de mods, re-descargar desde Modrinth al importar | `migration.py`, `modrinth.py` | Medio |
-| 9.4 | UI — botón Export en Dashboard/Properties | `main.py`, `server_properties_editor.py` | Bajo |
-| 9.5 | UI — Import wizard (seleccionar .zbbpack, confirmar, ver progreso) | `server_wizard.py` o `main.py` | Medio |
-| 9.6 | Tests | `tests/` | Medio |
-
-**Complejidad:** Media (~5-7 hrs)  
-**Dependencias:** Fase 7 (template format, modpack infra), Modrinth client existente
-
----
-
-## Fase 10: Cross-Platform (Linux)
-
-**Objetivo:** Garantizar funcionamiento correcto en Linux.
-
-| # | Tarea | Archivos | Riesgo |
-|---|-------|----------|--------|
-| 10.1 | `platform_utils.py` — `open_directory(path)` unificado | Nuevo + `main.py`, `server_properties_editor.py` | 🟢 |
-| 10.2 | `platform_utils.py` — `create_link(src, dst)` unificado | Nuevo + `main.py`, `core.py` | 🟢 |
-| 10.3 | SIGTERM handler en PlayitManager | `playit_manager.py` | 🟡 |
-| 10.4 | `stop()` con `wait(timeout=5)` + `kill()` en Linux | `playit_manager.py` | 🟡 |
-| 10.5 | `single_instance.py` verificar captura de SIGTERM | `single_instance.py` | 🟢 |
-
----
-
-## Fase 11: UI/UX — ZBB 2.0
-
-**Objetivo:** Transformar la experiencia de usuario con interfaces modernas, informativas, y eficientes.
-
-### 11A. ServerWizard Rediseñado
-
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 11.1 | Pre-flight checks integrados (Java, disco, puerto) | 🟡 |
-| 11.2 | Barra de progreso con tiempo estimado | 🟢 |
-| 11.3 | Resumen final antes de crear | 🟢 |
-| 11.4 | Server Templates selector (Lite SMP, Modded Fabric, Vanilla+) | 🟡 |
-| 11.5 | Botón "▶ Start Now" post-creación (ya existe, refinar) | 🟢 |
-
-### 11B. ServerPropertiesEditor Rediseñado
-
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 11.6 | Reducir de 7 a 4 pestañas (General, World, Management, Advanced) | 🟠 |
-| 11.7 | `SettingsField` unificada con validación y tooltip | 🟡 |
-| 11.8 | Agrupar Backups + Auto-restart + JDK en "Server Management" | 🟡 |
-| 11.9 | Carga eager del diálogo completo | 🟢 |
-| 11.10 | Validación visual inline | 🟢 |
-
-### 11C. Layout + Consola
-
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 11.11 | Sidebar colapsable/redimensionable | 🟠 |
-| 11.12 | Dashboard compacto (~80px) | 🟢 |
-| 11.13 | Indicador visual de servidor activo en sidebar | 🟢 |
-| 11.14 | Console search/filter | 🟡 |
-| 11.15 | Separación visual de console input | 🟢 |
-| 11.16 | Reemplazar emojis con iconos reales (CTkImage) | 🟡 |
-| 11.17 | Fuentes consistentes desde AppConfig | 🟢 |
-
-### 11D. Mejoras Generales
-
-| # | Tarea | Riesgo |
-|---|-------|--------|
-| 11.18 | Server performance dashboard (TPS, RAM, players) | 🟠 |
-| 11.19 | Modo oscuro/claro completo | 🟢 |
-| 11.20 | Tooltips descriptivos en todos los campos | 🟢 |
-
----
-
-## Resumen de Fases
-
-| Fase | Descripción | LOC cambio | Prioridad | Estado |
-|------|-------------|-----------|-----------|--------|
-| **F0-F2** | Foundation + Quick Wins + Wizard UX | — | 🥇 | ✅ |
-| **FA-FB** | UI + Layout Final v1.4 | ~150 | 🥇 | ✅ |
-| **FIX-P1** | 7 Critical Bugs | -50 / +80 | 🥇 | ✅ |
-| **FIX-P2** | Thread Safety + Dead Code | -20 / +40 | 🥇 | ✅ |
-| **F3** | Foundation — Refactors + Thread Safety + Tests | -200 / +100 | 🥇 | ✅ |
-| **F4** | Auto-Backup Scheduler | +150 | 🥇 | ✅ |
-| **F5** | Crash Report Collector | +80 | 🥇 | F3 |
-| **F6** | Discord Webhook | +60 | 🥈 | F3 |
-| **F7** | Server Templates + Modpacks | +350 | 🥈 | F4-F6 |
-| **F8** | Bulk Mod Operations | +200 | 🥈 | F7 (recomendado) |
-| **F9** | Server Migration (.zbbpack) | +250 | 🥉 | F7 |
-| **F10** | Cross-Platform (Linux) | +80 | 🥉 | F3 |
-| **F11** | UI/UX — ZBB 2.0 | +300 | 🥉 | F3 |
+## Tabla de Estado de Fases (índice único)
+
+| Fase | Descripción | Prioridad | Estado |
+|------|-------------|-----------|--------|
+| F0-F3 → F6, P0, EXE-PERF, MODS-B, F8 | Foundation completa | 🥇 | ✅ (ver history) |
+| **F7** | Templates propios (TemplateManager, save-as-template, defaults) | 🥈 | ✅ Implementado 2026-07-06 |
+| **CA-H01** | JVM args UI por servidor | 🥈 | ✅ Implementado |
+| **CA-H02** | Player management unificado (operators+bans+whitelist) | 🥈 | ✅ Implementado 2026-07-06 |
+| **CA-H03** | Console search/filter | 🥈 | ✅ Implementado 2026-07-06 |
+| **CA-H04** | World switching UI | 🥈 | ✅ Implementado 2026-07-06 |
+| **MODS-SEC** | Mods security hardening | — | ✅ Implementado |
+| **F9** | Server Migration (.zbbpack) | 🥉 | ✅ Implementado 2026-07-06 |
+| **F10** | Cross-Platform Linux | 🥉 | ✅ Implementado 2026-07-10 |
+| **F11** | UI/UX ZBB 2.0 "Dirt Block" | 🥉 | 🔶 Parcial — Bloques A/B ✅, Bloques C/D pendientes |
+| **F12** | Feature Gaps vs competencia | 🥉 | ⬜ Sin iniciar |
+| **F13** | Higiene de disco + JRE on-demand | 🥇 | ✅ Implementado 2026-07-07 |
+| **F14** | App Settings 2.0 (tabbed: General/Notifications/Java/Storage/About) | 🥇 | ✅ Implementado 2026-07-07 |
+| **F15** | Light theme completo (tokens a tuplas + selector) — consolida F11.D5 | 🥇 | ✅ Implementado 2026-07-07 (QA visual pendiente) |
+| **REFACT-1** | JavaResolver + launch steps | ⏸️ | Pospuesto (YAGNI pre-alpha) |
+| **CA-M01-M06** | NeoForge/Quilt, CurseForge, dep graph, perf dashboard, hot-switch | 🥉 | ⬜ Sin iniciar |
+| **CA-L01-L04** | Multi-server, profiles, remote mgmt, Hangar plugins | 🔮 | ⬜ Largo plazo |
 
 ### Orden de Ejecución Recomendado
-
 ```
-F0 → F0.5 → F1 → F2 → F3 → F4 → FA → FB → FIX-P1 → FIX-P2 → F5 → F6 → F7 → F8 → F9 → F10 → F11
-(hecho) (hecho) (hecho) (hecho) (hecho) (hecho) (hecho) (hecho) (hecho) (hecho) ⬆️    ↑    ↑    ↑    ↑     ↑     ↑
-                                                                                  Crash Discord  ...  Linux  ZBB
-                                                                                  Report        2.0
+F13 (disco/JRE) → F14 (Settings 2.0) → F15 (light theme)
+    → F10 (Linux) + F11 Bloques B/C/D (UI 2.0)
+        → CA-M01..M06 (sprint medio: NeoForge/Quilt, modpack dep graph, perf dashboard)
+            → CA-L01..L04 (largo plazo: multi-server, remote mgmt)
 ```
 
-### Branch Strategy
-- Rama principal: `main` (producción, estable)
-- Rama de integración: `dev` (fast-forward desde main)
-- Feature branches: `feature/<nombre>` (eliminar tras merge)
-- Sin merge commits — solo fast-forward o squash
-- Commits atómicos (un commit = un cambio)
+---
+
+## F7: Server Templates + Modpacks — ✅ Completo
+
+**Dependencia:** F8 (bulk mod ops) ✅ completo — reutiliza batch download infra.
+
+| # | Tarea | LOC | Esfuerzo | Estado |
+|---|-------|-----|----------|--------|
+| 7.1 | Definir formato JSON template | doc | 30 min | ✅ |
+| 7.2 | TemplateManager — save/load/list/delete | ~100 | 2 hrs | ✅ `app/services/template_manager.py` |
+| 7.3 | Template selector en ServerWizard Step 2 | ~50 | 1 hr | ✅ |
+| 7.4 | Save template desde Properties Editor / wizard footer | ~30 | 45 min | ✅ |
+| 7.5 | Modpack support — auto-descargar mods de Modrinth | ~60 | 1.5 hrs | ✅ Implementado 2026-07-01 — `download_version_to()` + `install_mrpack()` reutilizado de CA-M04 |
+| 7.6 | Templates por defecto (Lite SMP, Modded Fabric, Vanilla+, Paper Performance) | ~20 | 30 min | ✅ |
+| 7.7 | Tests | ~80 | 1 hr | ✅ `tests/test_template_manager.py` |
+
+---
+
+## CA-HIGH: Competitive Analysis — ✅ Completo
+
+**Origen:** Investigación comparativa vs auto-mcs (Python server manager) y Prism Launcher (Qt client launcher), 2026-06-23. ZBB lidera en auto-healing (zombie detection, exponential backoff, TPS lag monitor — nadie más lo tiene documentado).
+
+| ID | Feature | Referencia | LOC est. | Esfuerzo | Estado |
+|----|---------|-----------|----------|---------|--------|
+| CA-H01 | JVM args expuestos por servidor (`-Xmx`/`-Xms` + flags custom) | Prism da este control por instancia | ~60 | 1.5 hrs | ✅ Implementado |
+| CA-H02 | Player management unificado — operators+bans+whitelist en una página | auto-mcs patrón | ~80 | 2 hrs | ✅ Implementado 2026-07-06 — `player_files.py` + `PlayersDashboard` (CTkTabview) |
+| CA-H03 | Console search/filter — keyword/level/player en raw output | ninguno lo tiene — oportunidad | ~40 | 1 hr | ✅ Implementado 2026-07-06 — `ConsoleWidget.highlight()` + search bar |
+| CA-H04 | World switching UI — listar mundos, cambiar `level-name` sin editar server.properties a mano | auto-mcs lo tiene | ~60 | 1.5 hrs | ✅ Implementado 2026-07-06 — dropdown en Properties Editor World tab |
+
+---
+
+## CA-MED / CA-LONG (scope medio y largo plazo — sin iniciar)
+
+| ID | Feature | Referencia | LOC est. |
+|----|---------|-----------|----------|
+| CA-M01 | NeoForge/Quilt support | auto-mcs | ~80 |
+| CA-M02 | CurseForge integration (Modrinth solo hoy) | Prism | ~120 |
+| CA-M03 | Mod dep graph + conflict detection | Prism | ~150 |
+| CA-M04 | Modpack import `.mrpack` | ✅ Implementado (ver F7.5, MODS-B) | — |
+| CA-M05 | Performance metrics dashboard (TPS+RAM histórico) — overlap con F11.D4, consolidar ahí | — | ~150 |
+| CA-M06 | Version/modloader hot-switch sin crear server nuevo | auto-mcs | ~120 |
+| CA-L01 | Multi-server management — mayor brecha vs auto-mcs, requiere refactor ZBBManager | auto-mcs | grande |
+| CA-L02 | Server profiles/instances (prerrequisito de CA-L01) | Prism | — |
+| CA-L03 | Remote management — REST API + cliente pareado (patrón Telepath), requiere F10 + headless mode | auto-mcs Telepath | — |
+| CA-L04 | Spigot/CraftBukkit/Paper plugins (Hangar API client) | auto-mcs | — |
+| CA-L05 | Mapa interactivo de chunks generados en GUI ZBB — ver detalle en `F16` abajo | Dynmap/BlueMap (arquitectura, no consumible directo) | — |
+| CA-L06 | Mod Fabric companion opcional (telemetría live + chunk events) — ver `F16` abajo | FabricExporter (patrón embedded-HTTP-en-mod) | — |
+
+**Feature Matrix competitiva completa (ZBB vs auto-mcs vs Prism):** ver `docs/roadmap-history.md` si se necesita el detalle fila-por-fila; resumen: ZBB único en zombie detection, TPS lag monitor, crash backoff, bytecode analyzer. Brechas: multi-server, CurseForge, dep graph, world switching, console filter, headless/CLI.
+
+---
+
+## F9-F11: Migration, Linux, UI 2.0
+
+### F9: Server Migration (.zbbpack) — ✅ Completo
+| # | Tarea | Esfuerzo | Estado |
+|---|-------|----------|--------|
+| 9.1 | Export — ZIP con world + config + metadata (sin JAR, sin logs) | 2 hrs | ✅ `app/services/migration.py::export_server` (zip-slip guard) |
+| 9.2 | Import — descomprimir, validar, recrear server | — | ✅ `migration.py::import_server` |
+| 9.3 | UI — menú "Add Server" (Folder/.zbbpack) en main.py + export en Backups tab | — | ✅ |
+
+### F10: Cross-Platform Linux — ✅ 2026-07-10
+| # | Tarea | Archivo | Riesgo | Estado |
+|---|-------|---------|--------|--------|
+| 10.1 | process_job.py — prctl(PR_SET_PDEATHSIG) + parent PID guard en Linux | process_job.py, logic.py, playit_manager.py | 🟡 | ✅ 2026-07-10 |
+| 10.2 | install_forge() — detectar run.sh además de run.bat | logic.py:438 | 🟢 | ✅ 2026-07-10 |
+| 10.3 | Playit force-kill — kill-by-name Linux (psutil + pkill fallback) | playit_manager.py | 🟡 | ✅ 2026-07-10 |
+| 10.4 | Playit socket path — filesystem path en Linux, @name en Windows | playit_manager.py:346 | 🟡 | ✅ 2026-07-10 |
+| 10.5 | single_instance.py — verificar captura SIGTERM | single_instance.py | 🟢 | ✅ Ya funcional (os.kill fallback) |
+| 10.6 | Dockerfile.linux — PyInstaller multi-stage build, binario nativo 15MB | Dockerfile.linux, linux.spec | 🟡 | ✅ 2026-07-10 |
+| 10.7 | Dockerfile.gui — Python+Tk GUI via X11 forwarding (491MB) | Dockerfile.gui | 🟢 | ✅ 2026-07-10 |
+| 10.8 | docker-compose.yml + start-zbb-gui.bat — launcher one-click | docker-compose.yml, start-zbb-gui.bat | 🟢 | ✅ 2026-07-10 |
+
+### F11: UI/UX — ZBB 2.0 — "Dirt Block" Design Language
+
+**Objetivo:** Modernizar UI con identidad visual Minecraft (tierra pixelada, verdes apagados, marrones slate).
+
+**Bloque A (palette, botones, labels) — ✅ Implementado**, aplicado en todos los paneles (commit b5ca173). NR-DASH/01/02/09 resueltos (commit e37cc0a).
+
+**Bloque B — Cambios visuales main.py, sin tocar lógica. Riesgo 🟢.**
+| # | Tarea | Archivo | LOC | Esfuerzo | Estado |
+|---|-------|---------|-----|---------|--------|
+| 11.B1 | Sidebar accent line — borde izquierdo 3px `COLOR_ACCENT_GREEN` en item seleccionado | ui_components.py | ~15 | 30 min | ✅ 2026-07-10 |
+| 11.B2 | Server list items como cards — fondo `COLOR_BG_CARD_DARK`, dot de estado, nombre bold, versión/tipo abajo, hover sutil | ui_components.py | ~40 | 1 hr | ✅ 2026-07-10 |
+| 11.B3 | Dashboard tunnel colapsado por defecto cuando offline | main.py | ~20 | 45 min | ✅ 2026-07-10 |
+| 11.B4 | Status bar topbar — fondo `COLOR_BG_CARD_DARK` diferenciado | main.py | ~10 | 20 min | ✅ 2026-07-10 |
+
+**Bloque C — Console coloring. Riesgo 🟡 (tocar ConsoleWidget).**
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.C1 | Syntax coloring básico — ERROR/WARN rojo/amarillo, joined/left verde/slate, [Server] marrón | ui_components.py (ConsoleWidget) | ~40 | 1 hr | ✅ 2026-07-10 |
+
+**Bloque D — Rediseño mayor. Riesgo 🟠. Depende de A+B estables.**
+| # | Tarea | Archivo | LOC | Esfuerzo |
+|---|-------|---------|-----|---------|
+| 11.D1 | ServerWizard rediseñado (pre-flight, progreso, resumen, templates, start now) | server_wizard.py | +150 | 3 hrs | ✅ 2026-07-10 (resumen + start-after-creation; pre-flight/templates ya existían) |
+| 11.D2 | ServerPropertiesEditor rediseñado (4 tabs, SettingsField, inline validation) | server_properties_editor.py | +200 | 4 hrs |
+| 11.D3 | Sidebar colapsable (toggle con animación simple) | main.py | ~60 | 1.5 hrs |
+| 11.D4 | Performance dashboard visual (TPS graph, RAM usage) — consolida con CA-M05/F12.4 | main.py + nuevo archivo | +150 | 3 hrs |
+| 11.D5 | Dark/light mode toggle persistido en settings — **consolidado en F15** (no duplicar trabajo aquí) | main.py + app_config.py | ~40 | 1 hr |
+| 11.D6 | Tooltips en botones de acción | main.py | ~30 | 45 min | ✅ 2026-07-10 |
+
+**Orden recomendado:** 11.B4 → 11.B3 → 11.B1+B2 → 11.C1 → 11.D* (próxima iteración mayor)
+
+**Criterio de aceptación global:**
+- [ ] Server list items son cards con dot de estado
+- [ ] Console colorea ERROR rojo, WARN amarillo, joins verde
+- [ ] Dashboard tunnel colapsado cuando offline
+- [ ] .exe compilado sin regresión visual en Windows
+
+---
+
+## F13-F15: Higiene de Disco, Settings 2.0, Light Theme
+
+**Origen:** Auditoría de peso del proyecto 2026-07-07. `dist/` pesaba 750 MB; diagnóstico verificado: PyInstaller NO empaqueta los JDKs (spec solo incluye `assets/`; EXE real = 21 MB). El bloat era: (a) `dist/.zbb_cache/` 595 MB + `dist/servers/` 130 MB generados en **runtime** al correr el exe desde `dist/` (diseño portable: `BASE_DIR` frozen = carpeta del exe, `constants.py:46`); (b) `app/.zbb_cache/` 595 MB stale de código viejo — nada lo referencia (`JDK_CACHE_DIR` apunta a raíz); (c) `backups/` 282 MB sin visibilidad. Total ~1.8 GB de JDKs triplicados en disco. Git no afectado (`.zbb_cache/` y `dist/` ya en `.gitignore`).
+
+### F13: Higiene de disco + JRE on-demand — 🥇 próxima prioridad
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 13.1 | Limpieza one-time: borrar `app/.zbb_cache/` (595 MB stale) + runtime dirs de `dist/` (~730 MB, se regeneran). `backups/` NO se toca (F14.4 dará control) | — | 10 min | ✅ 2026-07-07 — ~1.3 GB liberados |
+| 13.2 | Descargar `image_type: "jre"` en vez de `"jdk"` (Adoptium), con fallback a `"jdk"` si no hay JRE para esa versión (ej. Java 16) — ~300 MB → ~45 MB por versión. Verificado: nada usa `javac`; `_find_java_binary` compatible con layout JRE; caches existentes siguen válidos | `services/java_installer.py:110` | 1.5 hrs | ✅ 2026-07-07 — `_query_assets` jre→jdk fallback (404/vacío) |
+| 13.3 | Dev env: crear `.venv` del proyecto con las 5 deps + pytest/flake8/pyinstaller (hoy se usa Python global `C:\Python314` con ~180 paquetes de otros proyectos — NO podar el global) | — | 20 min | ✅ 2026-07-07 — `.venv` con 26 paquetes (vs ~180 global) |
+| 13.4 | Tests: fallback jre→jdk, marker/checksum intactos | `tests/` | 45 min | ✅ 2026-07-07 — `TestJreFallback` 5 tests |
+
+### F14: App Settings 2.0 — 🥇
+
+**Base:** `app/ui/app_settings.py` (hoy: 1 sección webhook, 560x340). Rediseño con `CTkTabview` + `CTkScrollableFrame` (patrón ya probado en `server_properties_editor.py:126`), ventana ~720x520. Hallazgos que habilitan esto: `purge_cache(version)`/`purge_unused_jdks()` en `java_installer.py:266,298` son código muerto útil (nadie los llama); `java_detector.detect_all()` (PATH+JAVA_HOME+registro+well-known) sin UI; webhook con 4 eventos hardcoded (`discord_webhook.py:17-20`); keys huérfanas en `SettingsManager` (`servers_dir`, `java_preferences` — declaradas, nunca leídas); no existe `APP_VERSION` en ninguna parte.
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 14.1 | Refactor dialog a CTkTabview (General/Notifications/Java/Storage/About) | `ui/app_settings.py` | 2 hrs | ✅ 2026-07-07 |
+| 14.2 | Tab General: selector tema Dark/Light/System (Light deshabilitado hasta F15; infra ya existe: `main.py:50-51` lee `theme` al arrancar) + limpiar keys muertas de `SettingsManager` | `ui/app_settings.py`, `services/settings_manager.py` | 1 hr | ✅ 2026-07-07 |
+| 14.3 | Tab Notifications: webhook actual + checkboxes por evento (crash/ready/backup ok/backup fail) filtrando `EVENT_STYLES` vía settings | `ui/app_settings.py`, `services/discord_webhook.py` | 1.5 hrs | ✅ 2026-07-07 |
+| 14.4 | Tab Java: (a) JDKs gestionados — versión + tamaño en disco + delete por versión + "Purge unused" (conecta `purge_cache`/`purge_unused_jdks` vía método nuevo en ZBBManager, arquitectura EventBus respetada); (b) tabla read-only de Javas detectados en el sistema (`detect_all()`: versión/ruta/origen). Bloqueado con server corriendo (patrón restart-required) | `ui/app_settings.py`, `core/core.py` | 2.5 hrs | ✅ 2026-07-07 |
+| 14.5 | Tab Storage: resumen de disco por categoría — servers, backups (total + por server), JDK cache, crash reports, versions cache — con botones de limpieza donde aplica | `ui/app_settings.py` | 2 hrs | ✅ 2026-07-07 |
+| 14.6 | Tab About: nueva constante `APP_VERSION` en `app_config.py`, mostrada en dialog + título de ventana. Base futura para update-check | `core/app_config.py`, `ui/app_settings.py`, `ui/main.py` | 45 min | ✅ 2026-07-07 |
+| 14.7 | Tests: filtro eventos webhook, purge vía ZBBManager, settings keys | `tests/` | 1.5 hrs | ✅ 2026-07-07 |
+
+### F15: Light theme completo — 🥇 (consolida F11.D5) ✅ 2026-07-07
+
+**Estado:** 38 tokens convertidos a tuplas. `resolve_color()` bridge para tag_config/tk.Menu/Toast. Gate de tema removido — Light/System funcionales. `zbb_theme.json` ya completo, 0 cambios. **Pendiente:** QA visual humano (15.5).
+
+| # | Tarea | Archivo | Esfuerzo | Estado |
+|---|-------|---------|----------|--------|
+| 15.1 | Convertir tokens single-color de `AppConfig` a tuplas `(light, dark)` | `core/app_config.py` | 2 hrs | ✅ 2026-07-07 |
+| 15.2 | Barrido de consumidores no-CTk que no aceptan tuplas: consola (tags), PIL/icons con color string, toasts | `ui/*.py` (~7 archivos) | 2 hrs | ✅ 2026-07-07 — resolve_color() helper + tag_config + Toast + tk.Menu + MOTD |
+| 15.3 | Sincronizar `assets/zbb_theme.json` con tokens light | `assets/zbb_theme.json` | 1 hr | ✅ 2026-07-07 — ya completo de origen, 0 cambios |
+| 15.4 | Habilitar Light/System en Tab General (F14.2): `ctk.set_appearance_mode()` en vivo + persistir. Cierra F11.D5 | `ui/app_settings.py` | 30 min | ✅ 2026-07-07 — gate removido, selector funcional |
+| 15.5 | QA visual completa en ambos modos (todos los diálogos/tabs) | — | 1.5 hrs | 🟡 2026-07-10 — smoke automático verde (AppSettingsDialog, ServerWizard 6 pasos, Light+Dark, 0 excepciones); falta pase visual humano |
+
+**Smoke automático (2026-07-10):** `qa_smoke.py` (scratchpad) instancia `MCTunnelApp` real y abre `AppSettingsDialog` + `ServerWizard` en Light y Dark — 4/4 pass, 0 excepciones. `PlayersDashboard`/`ServerPropertiesEditor` se saltaron (requieren un server ya configurado) — cubrir en el pase manual.
+
+**Checklist de pase visual humano (pendiente, ~15-20 min):**
+- [ ] Alternar Light/Dark/System desde Settings → General y confirmar que la ventana principal, sidebar y consola refrescan sin colores rotos.
+- [ ] Abrir **Settings** (5 tabs) en ambos modos — General, Notifications (checkboxes de eventos Discord), Java (JDKs gestionados + purge), Storage (uso de disco), About (versión 2.0.0 visible).
+- [ ] Abrir **ServerWizard** completo en ambos modos: recorrer los 6 pasos (Identity → Engine/Version → Resources → Rules/Security → World/Network → **Summary**), confirmar que el resumen refleja los valores elegidos y que el checkbox "Start server after creation" existe y persiste al ir Back/Next.
+- [ ] Crear un server de prueba con "Start server after creation" activado — confirmar que arranca automático sin el diálogo de confirmación "Start now?".
+- [ ] Crear un server de prueba con la opción desactivada — confirmar que el diálogo "Start now?" sigue apareciendo como antes.
+- [ ] Con un server existente: abrir **PlayersDashboard** (tabs Online/Ops/Whitelist/Bans) en ambos modos.
+- [ ] Con un server existente: abrir **ServerPropertiesEditor** (SPE) en ambos modos, incluir Modrinth Optimizer Bundle si aplica.
+- [ ] Abrir **Modrinth Browser** en ambos modos, buscar un mod, confirmar badges/colores.
+- [ ] Consola: verificar coloreado de líneas `[Server]` (marrón/desaturado), ERROR (rojo), WARN (ámbar), joined/left (verde/slate) en ambos modos.
+- [ ] Confirmar que ningún diálogo deja titlebar blanco residual (Win11 `apply_rounded_corners`).
+
+### Descartados por scope (2026-07-07 — reconsiderar después de F15)
+
+| Idea | Por qué se descartó | Cuándo reconsiderar |
+|------|--------------------|--------------------|
+| Idioma / i18n | Sin infra de strings; barrido masivo de UI | Post-F11.D, si hay demanda |
+| System tray (minimizar a bandeja) | Dependencia nueva (pystray) + edge cases Win | Post-F10 |
+| Auto-update real (descargar exe nuevo) | Requiere releases firmados + canal estable; hoy pre-alpha | Cuando haya releases en GitHub; F14.6 (`APP_VERSION`) es el prerrequisito |
+| Defaults globales para wizard (RAM, aikars) | El wizard ya resuelve por server; valor marginal | Si usuarios crean muchos servers |
+| jlink custom runtime | Complejidad alta sin ganancia extra vs JRE Adoptium (F13.2) | No planeado |
+| Excluir `servers/` del spec PyInstaller | Innecesario — nunca se empaquetó (diagnóstico erróneo del análisis original) | N/A |
+
+---
+
+## F12: Feature Gaps (vs. competencia)
+
+**Origen:** Brechas identificadas 2026-07-04, sin trabajo iniciado.
+
+| # | Feature | Prioridad | Notas |
+|---|---------|-----------|-------|
+| 12.1 | Multi-server dashboard | 🔴 Alta | Brecha crítica — mismo scope que CA-L01 |
+| 12.2 | World switching | — | ✅ Resuelto vía CA-H04 (2026-07-06) |
+| 12.3 | Console filter/search | — | ✅ Resuelto vía CA-H03 (2026-07-06) |
+| 12.4 | Performance dashboard visual | 🟡 Media | Overlap con F11.D4 y CA-M05 — consolidar ahí, no duplicar trabajo |
+
+---
+
+## F16: Mapa Interactivo + Mod Fabric Companion (post-2.0)
+
+**Origen:** Ideación 2026-07-10. Bloqueado hasta que ZBB 2.0 (branch `dev`) llegue a `main`. No iniciar antes.
+
+**Objetivo:** Mapa interactivo en GUI ZBB mostrando chunks generados, más telemetría live opcional vía mod Fabric.
+
+**Research previo (2026-07-10):**
+- Dynmap/BlueMap/Squaremap leen `.mca` region files directo de disco, rasterizan a tiles vía webserver propio — ninguno expone API limpia para consumo de app externa.
+- Patrón estándar para stats live: mod embebe HTTP server localhost, tool externo hace poll (ej. FabricExporter — expone `/metrics` Prometheus). Spark sube a spark.lucko.me, no pollable local.
+- Fabric API: `ServerChunkEvents.Generate` + load/unload existen y estables 1.17–1.21.4. Netty ya viene incluido — NanoHTTPD/Javalin más liviano que Netty crudo para API local.
+- **Path sin mod existe:** `anvil-parser2` (PyPI) lee `.mca` directo en Python — `Region.from_file()`, `Chunk.from_region()`, `get_block()`. Probado 1.14.4–1.19 (riesgo de drift en versiones nuevas), write roto 1.16+ (irrelevante, solo lectura).
+
+| # | Feature | Prioridad | Notas |
+|---|---------|-----------|-------|
+| 16.1 | Mapa de chunks generados — parsing Python puro (`anvil-parser2` sobre region files) | 🟡 Media | Sin dependencia server-side nueva, funciona en mundos existentes, sin toolchain Java. Empezar aquí. |
+| 16.2 | Mod Fabric companion (experimental, opcional) — chunk events live + telemetría (entity count, tick cost/chunk) vía HTTP/WS localhost | 🔵 Baja | Solo si F16.1 valida interés. Costo: toolchain Java/Gradle/Loom + mantenimiento por versión MC. |
+| 16.3 | Refresh live del mapa cuando mod instalado (fallback a rescan periódico sin mod) | 🔵 Baja | Depende de F16.1 + F16.2 |
+
+**Decisión:** Hybrid — mapa file-parsing siempre disponible (fallback), mod mejora UX si está instalado. No invertir en mod hasta que F16.1 pruebe demanda.
+
+---
+
+## Pendientes on-radar (bajo impacto, oportunísticos)
+
+Solo abordar si se toca el archivo relevante por otra razón — no priorizar activamente:
+
+| ID | Archivo | Problema | Fix |
+|----|---------|---------|-----|
+| ~~A3-B05~~ | ~~`core/playit_manager.py:522`~~ | ✅ Resuelto 2026-07-10 — `_parse_line` check DNS moved inside `_lock` | — |
+| LA-06 | `core/logic.py:736-740` | `get_server_ram`/`set_server_ram` thin wrappers | Confirmado usado por SPE — no es dead code, no tocar |
+| ~~A3-A04~~ | ~~`core/core.py:104-259`~~ | ✅ Resuelto 2026-07-07 — SERVERS_DIR movido a top imports; 2 inline imports eliminados (otro en purge_crash_reports se dejó por test patching) | — |
+| ~~NR-05~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — retry UI con label + botón | — |
+| ~~NR-10~~ | ~~`ui/modrinth_browser.py`~~ | ✅ Resuelto 2026-07-07 — `_DOWNLOADS_COLOR` reemplazado por `AppConfig.COLOR_TEXT_GRAY`; otras constantes sin equivalente AppConfig | — |
+| ~~A2-A02~~ | ~~`core/java_detector.py`~~ | ✅ Resuelto — `probe_java()` public wrapper already exists at `java_detector.py:201` | — |
+| ~~A2-P03~~ | ~~`services/java_detector.py`~~ | ✅ Resuelto 2026-07-10 — `_shared_cache` now has 5-minute TTL via `time.monotonic()` | — |
+
+---
+
+## Notas para Devs y Agentes
+
+### Reglas de Oro
+1. **Sin sobreingeniería**: Si se puede hacer con 3 funciones, no se necesita una clase
+2. **483 tests deben pasar siempre**: `python -m pytest tests/ -q` antes de cada commit
+3. **Cross-platform**: `sys.platform == "win32"` y `platform.system()` guards obligatorios
+4. **Sin merge commits**: Solo fast-forward o squash merges
+5. **Commits atómicos**: Un commit = un cambio lógico completo
+
+### Dependencias Circulares Conocidas
+- `core.py` ↔ `orchestrators.py` — resuelto en P0.5, no reintroducir
+
+### Eventos Huérfanos (no suscritos)
+- `ServerEvent.RESTARTED` — sin subscriber (emitido, nunca consumido — hook futuro)
+
+### Errores Comunes a Evitar
+1. No usar `bare except:` — siempre especificar excepción
+2. No hardcodear `C:\` paths — usar `platform.system()` guards
+3. No usar `shell=True` en subprocess — siempre pasar lista de args
+4. No importar dentro de funciones para evitar circulares — mejor mover el enum a constants.py
+5. No crear threads para I/O rápido (<50ms) — el overhead del thread es mayor
+6. Todo `open()` lleva `encoding="utf-8"` — Windows con locale no-UTF8 corrompe MOTDs con `§`
+7. `strptime` sobre nombres de archivo del usuario: siempre `try/except ValueError`
+8. NOTIFICATION payload: siempre `{"msg": ..., "type": "error"|"warning"|"info"}` — nunca `color` key
+9. Watchdog NO emite `NOTIFICATION` — solo `_on_server_crashed` en core.py es dueño de notificaciones de crash
+10. Installers (Fabric/Forge): pasar el JDK resuelto por ZBB, nunca asumir `"java"` del sistema
 
 ### Testing
 ```powershell
-python -m pytest tests/ -v           # Regresión (375 tests)
-python -m pytest tests/ -x -q        # Rápido (fail-fast)
-python -m py_compile app/ruta.py     # Sintaxis
+python -m pytest tests/ -v           # Full suite (483 tests)
+python -m pytest tests/ -x -q        # Fail-fast, quiet
+python -m pytest tests/test_X.py -v  # Single file
+python -m py_compile app/ruta.py     # Syntax check after edit
 ```
+
+### Branch Strategy
+- `main` — producción, estable
+- `dev` — integración (fast-forward desde main)
+- `feature/<nombre>` — feature branches, eliminar tras merge
 
 ---
 
-## Feature Matrix
+## Decisiones Arquitectónicas Vigentes
 
-| Feature | Complejidad | Nuevas deps | Archivos nuevos | LOC estimado |
-|---------|-------------|-------------|-----------------|-------------|
-| Auto-Backup Scheduler | Media | 0 | 0 | +150 |
-| Crash Report Collector | Baja | 0 | 1 | +80 |
-| Discord Webhook | Muy baja | 0 | 1 | +60 |
-| Server Templates | Media-alta | 0 | 1 | +350 |
-| Bulk Mod Operations | Media | 0 | 0 | +200 |
-| Server Migration | Media | 0 | 1 | +250 |
+| Decisión | Detalle |
+|----------|---------|
+| **EventBus sobre callbacks** | Servicios emiten eventos, no reciben callbacks en constructor |
+| **Módulos > clases singleton** | Los módulos de Python ya son singletons |
+| **progress_callback(float, str)** | Siempre incluir texto descriptivo |
+| **Carga eager para diálogos** | No lazy loading en ServerPropertiesEditor |
+| **Java: System first, download fallback** | Detectar Java local antes de descargar JDK |
+| **DNS recovery chain (3 mecanismos)** | NO MODIFICAR — API poll + stdout regex + create_tunnel |
+| **Layout final** | Server controls inline en status bar, dashboard solo separator + tunnel |
+| **Window 1150×700** | Suficiente para status bar right items |
 
-Todas las features propuestas requieren **0 nuevas dependencias externas**. Todo se construye con `requests`, `psutil`, `json`, `threading`, `datetime`, `pathlib` — todos ya presentes en el proyecto.
+---
+
+## Glosario de Términos
+
+| Término | Definición |
+|---------|-----------|
+| **ZBB** | Zero Block Bridge (abreviatura interna) |
+| **MCTunnelApp** | Clase principal de UI (main.py) |
+| **ZBBManager** | Orquestador central (core.py) |
+| **ServerRunner** | Subprocess Java del servidor (logic.py) |
+| **PlayitManager** | Gestión del agente Playit (playit_manager.py) |
+| **EventBus** | Sistema de eventos pub/sub (server_events.py) |
+| **ServerEvent** | Enumeración de tipos de evento |
+| **Orchestrator** | Sub-orquestador de lifecycle (Server, Backup, Tunnel, Scheduler) |
+| **Pre-flight check** | Verificación de requisitos ANTES de operación |
+| **FakeRunner / FakeEmitter** | Test doubles en conftest.py |

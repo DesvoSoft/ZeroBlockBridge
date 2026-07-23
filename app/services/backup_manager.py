@@ -21,12 +21,16 @@ class BackupManager:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self, retention_count: int | None = None) -> tuple[Path | None, str | None]:
+        from app.core.constants import check_disk_space
+        if not check_disk_space(min_gb=1, target_dir=self.server_path):
+            return None, "Not enough disk space to create backup (>1GB required)."
+
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        backup_filename = f"{timestamp}.zip"
-        backup_path = self.backup_dir / backup_filename
+        backup_path = self.backup_dir / f"{timestamp}.zip"
         abs_backup_dir = self.backup_dir.resolve()
+        skipped_files = []
+
         try:
-            skipped_files = []
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
                     root_path = os.path.abspath(root)
@@ -34,17 +38,18 @@ class BackupManager:
                         continue
                     for file in files:
                         file_path = os.path.join(root, file)
-                        if os.path.abspath(file_path) == str(os.path.abspath(backup_path)):
+                        if os.path.abspath(file_path) == str(abs_backup_dir / f"{timestamp}.zip"):
                             continue
                         arcname = os.path.relpath(file_path, self.server_path)
                         try:
                             zipf.write(file_path, arcname)
                         except (PermissionError, OSError) as e:
-                            if e.errno == 13:
+                            if getattr(e, 'errno', None) == 13:
                                 skipped_files.append(arcname)
                                 logger.warning("Skipped locked file: %s", arcname)
                             else:
-                                raise e
+                                raise
+
             self._apply_retention(retention_count)
             if skipped_files:
                 return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
@@ -78,12 +83,17 @@ class BackupManager:
             return backups
         for f in self.backup_dir.iterdir():
             if f.is_file() and f.suffix == ".zip":
+                try:
+                    date_str = datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+                except ValueError:
+                    logger.warning("Skipping non-timestamp backup file: %s", f.name)
+                    continue
                 size_mb = f.stat().st_size / (1024 * 1024)
                 backups.append({
                     "name": f.name,
                     "path": str(f),
                     "size": f"{size_mb:.2f} MB",
-                    "date": datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+                    "date": date_str,
                 })
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
@@ -91,7 +101,14 @@ class BackupManager:
     def get_latest_backup(self) -> dict[str, Any] | None:
         if not self.backup_dir.exists():
             return None
-        backups = [f for f in self.backup_dir.iterdir() if f.is_file() and f.suffix == ".zip"]
+        backups = []
+        for f in self.backup_dir.iterdir():
+            if f.is_file() and f.suffix == ".zip":
+                try:
+                    datetime.datetime.strptime(f.stem, "%Y-%m-%d_%H-%M-%S")
+                except ValueError:
+                    continue
+                backups.append(f)
         if not backups:
             return None
         backups.sort(key=lambda x: x.name, reverse=True)
@@ -99,39 +116,38 @@ class BackupManager:
         return {
             "name": latest.name,
             "path": str(latest),
-            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+            "date": datetime.datetime.strptime(latest.stem, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M"),
         }
 
     def restore_backup(self, backup_path_str: str) -> bool:
         backup_path = Path(backup_path_str)
         if not backup_path.exists():
             return False
-        tmp_backup = None
+
+        tmp_extract = Path(tempfile.mkdtemp(prefix="zbb_restore_"))
+        bak_path = self.server_path.with_name(self.server_path.name + "_bak")
         try:
-            tmp_base = tempfile.mktemp()
-            tmp_backup = Path(shutil.make_archive(tmp_base, 'zip', self.server_path))
+            # Extract to temp dir first — server_path untouched until this succeeds
+            with zipfile.ZipFile(backup_path, 'r') as zipf:
+                zipf.extractall(tmp_extract)
 
-            for item in self.server_path.iterdir():
-                if item.is_file() or item.is_symlink():
-                    item.unlink()
-                elif item.is_dir():
-                    shutil.rmtree(item)
-
+            # Atomic swap: rename current → _bak, extracted → server_path
+            if bak_path.exists():
+                shutil.rmtree(bak_path)
+            self.server_path.rename(bak_path)
             try:
-                with zipfile.ZipFile(backup_path, 'r') as zipf:
-                    zipf.extractall(self.server_path)
-            except Exception:
-                with zipfile.ZipFile(tmp_backup, 'r') as zipf:
-                    zipf.extractall(self.server_path)
+                tmp_extract.rename(self.server_path)
+            except Exception as e:
+                # Rename of extracted dir failed — restore original
+                logger.error("Atomic swap failed, restoring original: %s", e)
+                bak_path.rename(self.server_path)
                 raise
 
+            shutil.rmtree(bak_path, ignore_errors=True)
             return True
-        except (FileNotFoundError, zipfile.BadZipFile, OSError) as e:
+        except Exception as e:
             logger.error("Backup restore failed: %s", e)
             return False
         finally:
-            if tmp_backup and tmp_backup.exists():
-                try:
-                    tmp_backup.unlink()
-                except OSError:
-                    pass
+            if tmp_extract.exists():
+                shutil.rmtree(tmp_extract, ignore_errors=True)

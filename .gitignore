@@ -37,9 +37,10 @@ env/
 
 # Project Specific
 /servers/
-app/servers/
-app/config/
-app/bin/
+/config/*
+!/config/templates/
+/bin/
+/backups/
 config.json
 
 # Logs
@@ -74,8 +75,10 @@ CHECKLIST.md
 # Agent workspace
 .opencode/
 .agent/
+.serena/
 skills-lock.json
 
 # Local development files (not needed in repo)
 opencode.json
 scripts/
+reset.bat

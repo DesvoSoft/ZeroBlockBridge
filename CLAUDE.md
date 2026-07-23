@@ -1,0 +1,155 @@
+﻿# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# Run application
+py app/launcher.py
+
+# Install dependencies
+pip install -r requirements.txt
+pip install pytest flake8  # dev tools
+
+# Run all tests
+pytest tests/
+
+# Run single test file
+pytest tests/test_watchdog.py -v
+
+# Run single test
+pytest tests/test_watchdog.py::test_function_name -v
+
+# Lint (critical errors only -- CI gate)
+flake8 app/ --select=E9,F63,F7,F82
+
+# Lint (full, non-blocking)
+flake8 app/ --exit-zero --max-complexity=10 --max-line-length=127
+```
+
+## Architecture
+
+### Layer separation (strict)
+
+```
+app/ui/        -> Presentation only. No business logic. No direct service calls.
+app/core/      -> Orchestration, EventBus, business logic.
+app/services/  -> Specialized services (auto-healing, API clients, utilities).
+```
+
+UI never calls services directly for stateful/mutating operations. All flows through EventBus:
+1. UI emits event -> ZBBManager receives -> delegates to service -> service emits result -> UI updates.
+2. Use `events.subscribe()` not `.on()`.
+3. UI updates via `self.after(0, ...)` (Tkinter thread safety).
+4. Pragmatic exception (existing code): UI may import services for read-only/stateless helpers (load properties, list templates, file dialogs). New mutating flows (start/stop/backup/restart) MUST go through EventBus/ZBBManager.
+
+### Central orchestrator: ZBBManager (app/core/core.py)
+
+Single source of truth for server lifecycle. Delegates to 4 sub-orchestrators in `app/core/orchestrators.py`:
+- `ServerOrchestrator` -- start/stop/restart
+- `BackupOrchestrator` -- ZIP backup create/restore
+- `TunnelOrchestrator` -- Playit.gg agent lifecycle
+- `SchedulerOrchestrator` -- restart/backup scheduling
+
+Protocol classes in `app/core/protocols.py` define structural typing contracts (HAS-A, not IS-A — ZBBManager does not inherit Protocols).
+
+### EventBus (app/core/server_events.py)
+
+Decouples all components. `ServerEvent` enum: `STARTING`, `READY`, `STOPPED`, `CRASHED`, `RESTARTED`, `ZOMBIE_DETECTED`, `LAG_SPIKE`, `TUNNEL_STATUS`, `PLAYER_COUNT`, `PLAYER_LIST`, `CONSOLE_LINE`, `TUNNEL_CONSOLE_LINE`, `NOTIFICATION`, `REQUEST_RESTART`, `REQUEST_MOD_INSTALL`, `BACKUP_COMPLETED`, `BACKUP_FAILED`. `TPS_UPDATE` and `ERROR` were removed (dead events).
+
+### Auto-healing system
+
+- `watchdog.py` -- crash detection by exit code + stderr pattern. Exponential backoff restart (cap 3600s). Stability resets after 10 min uptime. Never emits NOTIFICATION (only `_on_server_crashed` in core.py owns crash toasts). Zombie handling: `_do_restart` with `context="zombie"` kills the alive-but-hung process via `runner.stop()` first; the resulting STOPPED is swallowed by `_zombie_kill_pending` (no double CRASHED/restart).
+- `heartbeat.py` -- zombie detection. Checks every 60s (`check_interval`); after 300s of console silence (`suspect_after`) sends a `list` probe; no reply within 15s (`probe_timeout`) -> emits `ZOMBIE_DETECTED`. `_last_probe` set BEFORE `send_command()` to prevent false positive.
+- `lag_monitor.py` -- TPS lag via `"Can't keep up!"` pattern. Sliding 5-spike/5-min window.
+- `sanitizer.py` -- command allowlist (80+ safe MC commands) + character filter (`;|&` etc.). `%` is allowed (valid in MC commands).
+- `crash_reporter.py` -- subscribes to CRASHED event. Writes JSON diagnostic to `servers/<name>/crash_reports/`. Max 50 reports (FIFO rotation). Reads stderr via `runner.get_stderr_tail(n)` (locked), never the raw buffer.
+- `discord_webhook.py` -- optional Discord notifications. Configured in the sidebar Settings dialog (`app/ui/app_settings.py`, tabbed: General/Notifications/Java/Storage/About) or `discord_webhook_url` + `webhook_events` in SettingsManager; `ZBBManager.reload_discord_webhook()` re-creates the service after a change. Constructor takes `enabled_events` (set of ServerEvent) — only those are subscribed; `SETTING_EVENT_KEYS` maps settings keys to events. Queue worker thread, 2s rate-limit; `stop()` unsubscribes from the bus. Server name resolved via getter (follows the active server).
+- Monitor lifecycle: `_setup_monitors` on every launch; `stop_server` calls `_stop_monitors()` (full teardown — watchdog, heartbeat, lag, crash reporter), not just the watchdog.
+
+### Threading rules
+
+- Background threads: `daemon=True`.
+- File check before reading: `os.path.exists` + `os.path.getsize > 0` with 5s timeout (OS may not flush before thread event fires).
+- `threading.Lock` for shared mutable state.
+- `__init__` must init all data attributes before starting threads or subscribing to EventBus.
+- `ServerRunner.running` is a **property** backed by `_state_lock` -- do not access `_running` directly.
+- `ServerRunner.connected_players` mutations (join/leave) inside `_players_lock`. Cleared in `start()` before Popen.
+
+### Java version management
+
+- MC >= 1.20.5 -> Java 21; MC 1.18-1.20.4 -> Java 17; MC 1.17 -> Java 16; MC < 1.17 -> Java 8.
+- JDK auto-downloaded from Adoptium to `.zbb_cache/jdks/{version}/` -- never modifies system PATH.
+- `bytecode_analyzer.py` detects required version from server JAR.
+- Orange warning if Detected > Required; red block if Detected > 21 or < Required.
+- Installer downloads JRE from Adoptium (`image_type=jre`, ~45 MB) with automatic fallback to JDK (`image_type=jdk`, ~300 MB) when JRE unavailable for that version — see `java_installer.py:_query_assets` / `_fetch_asset_info`.
+
+### Playit.gg integration
+
+- Agent v1.0.10 (`playitd` daemon binary — the Windows release asset IS playitd.exe). Args: `--secret-path` + `--socket-path` (HYPHENS — v0.17's underscore flags are gone). Socket uses namespaced form `@zbb-playitd` (raw `\\.\pipe\` paths are rejected at bind) to avoid clashing with an official playitd install. No `--stdout` flag — playitd logs to stderr (merged into the stdout pipe). No `version` subcommand — installed version tracked in `bin/playit.version` marker file.
+- `playit_manager.py` manages agent lifecycle; `playit_api.py` is REST v2 client.
+
+### Version fetching
+
+`version_manager.py` fetches top 100 versions from Mojang/Fabric/Forge/Paper/Purpur APIs. Cached to `config/versions_cache.json`, auto-refreshed every 24h. Falls back to defaults if offline.
+
+## Standards
+
+### Logging
+
+```python
+logger = logging.getLogger(__name__)  # every module
+# No print(). No emojis in log strings.
+# Specific exceptions only -- no bare except: pass
+```
+
+### Paths
+
+`pathlib.Path` exclusively. No `os.startfile`, no `_winapi`. Platform-agnostic.
+
+### Coding rules from audit (enforce always)
+
+- Every `open()` must include `encoding="utf-8"` — critical on Windows for MOTDs with `§` (bug MA-02).
+- `strptime` on user-directory filenames: always `try/except ValueError` — users drop arbitrary files (bug HA-01).
+- NOTIFICATION event payload: always `{"msg": ..., "type": "error"|"warning"|"info"|"success"}`. Never `color` key (bug MA-04). Optional functional extension: `action` + `missing_mod_ids` (mod dependency fix flow, consumed by `main._handle_notification`) — never add visual-style keys.
+- Don't emit `NOTIFICATION` in Watchdog — only `_on_server_crashed` in core.py owns crash notifications (bug CA-01).
+
+### UI components
+
+- Framework: `customtkinter` + custom theme `assets/zbb_theme.json` (keep widget colors in sync with `app_config.py` tokens).
+- Tokens in `app/core/app_config.py`. Palette: "Dirt Block" — lime green primary (`COLOR_BTN_PRIMARY` lime-600), brown secondary, slate backgrounds. No blue accents.
+- Radius scale: `RADIUS_CARD=10` (frames/cards), `RADIUS_BTN=8` (buttons/inputs), `RADIUS_BADGE=6` (pills). Never hardcode `corner_radius=12`. Toasts/alerts: `corner_radius=0`.
+- Fonts: Segoe UI Variable Text (body) / Segoe UI Variable Display + "bold" (headings) / Cascadia Mono (console). Roboto is NOT installed on Windows — never use it. Use `AppConfig.FONT_*` tokens.
+- Icons: `app/ui/icons.py` (`icon(name, size, color)`) — PIL-drawn, antialiased, theme-tintable. NEVER use emoji as button/label icons (Tk renders them misaligned and untintable).
+- Dialogs: `ZBBDialog.confirm()/info()` from `ui_components.py`. NEVER `tkinter.messagebox` (native gray dialog clashes with dark theme). Exception: single-instance warning before the app window exists.
+- Toplevels: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (DWM, Win11 native corners+shadow; no-op elsewhere).
+- Elevation by background contrast, not borders — cards use `border_width=0`.
+- All buttons need `hover_color`. Icon-only buttons need a `ToolTip`.
+
+### Do NOT do (ever)
+
+- No `Co-Authored-By` lines in commits. No Claude name anywhere in git history.
+- No confirmation prompts before committing or editing — just do it.
+- No README or docs files unless explicitly requested.
+- No refactoring beyond the task scope. Three similar lines beats a premature abstraction.
+- No error handling for scenarios that can't happen. Trust framework guarantees.
+- No `print()`. Logger only.
+- No `os.startfile`, no `_winapi`. Use `pathlib.Path` + `subprocess`.
+- No bare `except: pass`. Specific exceptions only.
+
+### Git workflow
+
+```
+main        <- stable releases only
+dev         <- integration (all feature merges here)
+feature/<name>
+```
+
+- Feature branches: `--ff-only` merge into `dev`.
+- `dev` -> `main`: release milestones only, full test suite + lint required.
+- Commits: English, conventional prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`). No emojis. No `Co-Authored-By` lines. Git identity must be DesvoSoft / desvox23@gmail.com (already set in local git config).
+
+### Test helpers (conftest.py)
+
+`FakeEmitter` -- in-memory EventBus stub with `subscribe`/`emit`/`unsubscribe` + `events` list for assertions. Avoids real EventBus threading in unit tests. `FakeRunner` -- minimal server runner stub. `tests/test_orchestrators.py` -- 26 tests for all 4 orchestrators using `MagicMock(spec=...)` + FakeEmitter. Total: 544 tests in 26 files.

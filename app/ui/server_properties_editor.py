@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import logging
 import os
 import subprocess
@@ -9,9 +9,13 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog
+from app.ui.win_effects import apply_rounded_corners
+from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
-from app.services.server_properties import load_server_properties, save_server_properties
+from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
+from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
+from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 
 
 SETTINGS_METADATA = {
@@ -36,29 +40,61 @@ SETTINGS_METADATA = {
     
     # Network
     "server-port": {"desc": "The port the server listens on (Default: 25565).", "impact": "Low"},
+    "server-ip": {"desc": "The network interface to bind to. Leave empty to listen on all interfaces.", "impact": "Medium"},
     "white-list": {"desc": "Only allowed players can join the server.", "impact": "Low"},
+    "enforce-whitelist": {"desc": "Kicks non-whitelisted players immediately when the whitelist is reloaded, instead of waiting for their next join attempt.", "impact": "Medium"},
     "online-mode": {"desc": "Checks players against Mojang accounts. Disable for 'cracked' servers.", "impact": "Medium"},
     "network-compression-threshold": {"desc": "Size at which packets are compressed. Lower = More CPU usage.", "impact": "Medium"},
-    
+    "rcon.password": {"desc": "Password required to authenticate remote console (RCON) connections.", "impact": "Medium"},
+    "rcon.port": {"desc": "The port used for remote console (RCON) connections (Default: 25575).", "impact": "Low"},
+
     # Advanced
     "sync-chunk-writes": {"desc": "Ensures world data is saved safely. Disabling can boost performance but risks corruption.", "impact": "High"},
-    "op-permission-level": {"desc": "Default power level for operators (1-4).", "impact": "Medium"},
+    "op-permission-level": {"desc": "Default permission level for operators: 1 bypasses spawn protection, 2 unlocks cheat commands and command blocks, 3 adds player management (kick/ban/op), 4 grants full access including /stop.", "impact": "Medium"},
     "prevent-proxy-connections": {"desc": "Blocks players using VPNs or Proxies.", "impact": "Low"},
     "enforce-secure-profile": {"desc": "Requires Mojang-signed public keys for players.", "impact": "Low"},
     "enable-rcon": {"desc": "Allows remote console access (for bots/panels).", "impact": "Medium"},
     "enable-query": {"desc": "Allows external tools to see server status.", "impact": "Low"},
+
+    # Other Properties (vanilla keys with no dedicated tab section)
+    "pvp": {"desc": "Allows players to damage each other.", "impact": "Medium"},
+    "allow-flight": {"desc": "Allows use of flight mods/hacks in Survival. Disabling risks kicking legitimate players with high-latency connections (anti-cheat false positives).", "impact": "High"},
+    "allow-nether": {"desc": "Allows players to travel to the Nether dimension.", "impact": "Low"},
+    "spawn-protection": {"desc": "Radius around spawn (in blocks) where only operators can build. A large value can lock new players out of building anywhere reachable.", "impact": "High"},
+    "max-tick-time": {"desc": "Milliseconds a single tick can take before the server watchdog force-kills it as hung. Setting to -1 disables the watchdog entirely, letting a frozen server run forever undetected.", "impact": "High"},
+    "player-idle-timeout": {"desc": "Minutes of inactivity before an idle player is kicked. 0 disables the timeout.", "impact": "Low"},
+    "max-world-size": {"desc": "Maximum radius (in blocks) the world border can expand to.", "impact": "Medium"},
+    "entity-broadcast-range-percentage": {"desc": "Percentage of the default entity tracking range. Lower values reduce network traffic but may make entities pop in late.", "impact": "Medium"},
+    "rate-limit": {"desc": "Maximum packets per second a player can send before being kicked. 0 disables the limit.", "impact": "Medium"},
+    "function-permission-level": {"desc": "Permission level (1-4) required for datapack functions to run operator-level commands.", "impact": "Medium"},
+    "hide-online-players": {"desc": "Hides the player list from the server status response (server list ping).", "impact": "Low"},
+    "log-ips": {"desc": "Whether player IP addresses are written to the server log.", "impact": "Low"},
+    "broadcast-console-to-ops": {"desc": "Sends console command output to online operators as chat messages.", "impact": "Low"},
+    "broadcast-rcon-to-ops": {"desc": "Sends RCON command output to online operators as chat messages.", "impact": "Low"},
+    "max-chained-neighbor-updates": {"desc": "Limits chained block updates (e.g. large redstone contraptions) before the server stops propagating them, to prevent lag or crashes.", "impact": "Medium"},
+    "require-resource-pack": {"desc": "Forces players to accept the server resource pack or be disconnected.", "impact": "Medium"},
+    "resource-pack": {"desc": "URL of a resource pack players will be prompted to download when joining.", "impact": "Low"},
+    "resource-pack-prompt": {"desc": "Custom message shown in the resource pack download prompt.", "impact": "Low"},
+    "motd": {"desc": "Message shown in the multiplayer server list. Supports § color codes.", "impact": "Low"},
+    "use-native-transport": {"desc": "Uses optimized Linux network transport (epoll) when available. Has no effect on Windows.", "impact": "Low"},
+    "enable-jmx-monitoring": {"desc": "Exposes server metrics via JMX for monitoring tools.", "impact": "Low"},
+    "enable-status": {"desc": "Whether the server responds to server list pings (status queries).", "impact": "Low"},
+    "pause-when-empty-seconds": {"desc": "Seconds of no players online before the server pauses ticking to save CPU. 0 disables pausing.", "impact": "Medium"},
+    "accepts-transfers": {"desc": "Allows players to be transferred in from other servers via the transfer packet.", "impact": "Low"},
+    "region-file-compression": {"desc": "Compression algorithm used for region files on disk (e.g. deflate, none).", "impact": "Medium"},
+    "entity-activation-range": {"desc": "Distance around a player at which entities become active and start ticking.", "impact": "Medium"},
 }
 
 # Define the layout for the complex tabs
 TAB_LAYOUTS = {
     "World": {
-        "🌿 Environment & Generation": [
+        "Environment & Generation": [
             "level-seed", "level-name", "level-type", "generate-structures"
         ],
-        "🐾 Entities & Spawning": [
+        "Entities & Spawning": [
             "spawn-npcs", "spawn-animals", "spawn-monsters"
         ],
-        "⚙️ Performance": [
+        "Performance": [
             "view-distance", "simulation-distance"
         ]
     },
@@ -69,22 +105,30 @@ TAB_LAYOUTS = {
         "Remote Access": ["enable-rcon", "rcon.password", "rcon.port"]
     },
     "Advanced": {
-        "🚀 System Performance": ["sync-chunk-writes"],
-        "🛡️ Security & Permissions": [
+        "Gameplay Rules": ["pvp", "allow-flight", "allow-nether", "spawn-protection"],
+        "Server Behavior": [
+            "max-tick-time", "player-idle-timeout", "function-permission-level",
+            "hide-online-players", "log-ips", "broadcast-console-to-ops",
+            "broadcast-rcon-to-ops", "require-resource-pack",
+        ],
+        "System Performance": ["sync-chunk-writes"],
+        "Security & Permissions": [
             "op-permission-level", "prevent-proxy-connections", "enforce-secure-profile"
         ]
     }
 }
 
 class ServerPropertiesEditor(ctk.CTkToplevel):
-    def __init__(self, parent, server_name, logic_module):
+    def __init__(self, parent, server_name, logic_module, zbb_manager=None):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")
         self.geometry("700x600")
+        center_on_parent(self, parent, 700, 600)
         self.resizable(True, True)
-        
+
         self.server_name = server_name
         self.logic = logic_module
+        self.zbb_manager = zbb_manager
         self.properties = load_server_properties(server_name)
         
         # Shared Fonts
@@ -97,9 +141,29 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.grid_rowconfigure(0, weight=1) # Content
         self.grid_rowconfigure(1, weight=0) # Buttons
         
+        self._running_locked = bool(self.zbb_manager and self.zbb_manager.is_running()
+                                     and self.zbb_manager.current_server == server_name)
+
+        if self._running_locked:
+            banner = ctk.CTkLabel(
+                self, text="Server is running — settings that require a restart are locked. "
+                           "Backups and Automation can still be changed live.",
+                font=self.font_small, text_color=AppConfig.COLOR_STATUS_STARTING,
+                anchor="w", wraplength=660,
+            )
+            banner.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 0))
+            self.grid_rowconfigure(0, weight=0)
+            self.grid_rowconfigure(1, weight=1)
+            self.grid_rowconfigure(2, weight=0)
+            tabview_row = 1
+            self.btn_frame_row = 2
+        else:
+            tabview_row = 0
+            self.btn_frame_row = 1
+
         # Tabview
         self.tabview = ctk.CTkTabview(self)
-        self.tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.tabview.grid(row=tabview_row, column=0, sticky="nsew", padx=10, pady=10)
         
         self.tab_general = self.tabview.add("General")
         self.tab_world = self.tabview.add("World")
@@ -108,6 +172,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.tab_backups = self.tabview.add("Backups")
         self.tab_automation = self.tabview.add("Automation")
         self.tab_launch = self.tabview.add("Launch")
+
+        self._locked_tab_names = ("General", "World", "Network", "Advanced", "Launch")
+        if self._running_locked:
+            for name in self._locked_tab_names:
+                btn = self.tabview._segmented_button._buttons_dict.get(name)
+                if btn is not None:
+                    btn.configure(state="disabled")
+                    ToolTip(btn, "Stop the server to edit this — it only takes effect on next start.")
+            self.tabview.set("Automation")
         
         # Set tab change command for optimization
         self.tabview.configure(command=self._on_tab_changed)
@@ -148,14 +221,20 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # Footer Buttons
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.btn_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=10)
         
-        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy, fg_color="gray")
+        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
+                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                         corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_cancel.pack(side="right", padx=5)
-        
-        self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties, fg_color="green")
+
+        self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties,
+                                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
+                                      corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_save.pack(side="right", padx=5)
         
+        apply_rounded_corners(self)
+
         # Make modal
         self.transient(parent)
         self.wait_visibility()
@@ -190,16 +269,34 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         toolbar = ctk.CTkFrame(self.frame_backups)
         toolbar.pack(fill="x", pady=5)
         
-        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, fg_color="green", width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, fg_color="orange", width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, width=80).pack(side="right", padx=5)
-        
+        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, corner_radius=AppConfig.RADIUS_BTN,
+                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
+                      width=120).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, corner_radius=AppConfig.RADIUS_BTN,
+                      fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
+                      width=120).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
+                      fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                      width=80).pack(side="right", padx=5)
+        self.btn_export_pack = ctk.CTkButton(
+            toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            width=150)
+        self.btn_export_pack.pack(side="right", padx=5)
+
         # List
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
         self.backup_list_frame.pack(fill="both", expand=True, pady=5)
         
         self.backup_var = ctk.StringVar()
         self.backup_manager = BackupManager(self.server_name)
+        self._backup_scheduler_ui = BackupScheduler(self.server_name)
+        self._next_backup_lbl = ctk.CTkLabel(
+            self.frame_backups, text="", anchor="w",
+            text_color=AppConfig.COLOR_TEXT_GRAY, font=(AppConfig.FONT_FAMILY, 12)
+        )
+        self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
+        self._refresh_backup_countdown()
 
     def refresh_backups(self):
         # Clear current list
@@ -222,7 +319,18 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             loading_lbl.destroy()
             
         if not backups:
-            ctk.CTkLabel(self.backup_list_frame, text="No backups found.").pack(pady=20)
+            ctk.CTkLabel(self.backup_list_frame, text="", image=icon("package", 36, AppConfig.COLOR_TEXT_MUTED)).pack(pady=(24, 4))
+            ctk.CTkLabel(
+                self.backup_list_frame, text="No backups found.",
+                text_color=AppConfig.COLOR_TEXT_MUTED
+            ).pack(pady=(0, 10))
+            ctk.CTkButton(
+                self.backup_list_frame, text="Create Backup",
+                command=self.create_backup,
+                fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                corner_radius=AppConfig.RADIUS_BTN, height=32
+            ).pack(pady=(0, 20))
             return
             
         for backup in backups:
@@ -233,26 +341,101 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             rb.pack(side="left", padx=10, pady=5)
 
     def create_backup(self):
-        self.backup_manager.create_backup()
+        def worker():
+            path, error = self.backup_manager.create_backup()
+            if self.winfo_exists():
+                self.after(0, lambda: self._on_backup_created(path, error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_backup_created(self, path, error):
+        if error and not path:
+            ZBBDialog.info(self, "Error", f"Failed to create backup.\n\n{error}", kind="error")
+        elif error:
+            ZBBDialog.info(self, "Backup Created", error, kind="warning")
         self.refresh_backups()
+
+    def export_zbbpack(self):
+        from app.services.migration import export_server, MigrationError
+
+        dest_path = filedialog.asksaveasfilename(
+            defaultextension=".zbbpack",
+            initialfile=f"{self.server_name}.zbbpack",
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not dest_path:
+            return
+
+        self.btn_export_pack.configure(state="disabled", text="Exporting…")
+
+        def _export():
+            try:
+                export_server(
+                    self.server_name, dest_path,
+                    progress_callback=lambda msg: self.after(
+                        0, lambda m=msg: self.btn_export_pack.configure(text=m[:28])),
+                )
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: ZBBDialog.info(self, "Export Failed", str(e), kind="error"))
+                return
+            finally:
+                self.after(0, lambda: self.btn_export_pack.configure(state="normal", text="Export as .zbbpack"))
+            self.after(0, lambda: ZBBDialog.info(
+                self, "Export Complete", f"Server '{self.server_name}' exported to:\n\n{dest_path}"))
+
+        threading.Thread(target=_export, daemon=True).start()
+
+    def _server_is_running(self) -> bool:
+        runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
+        return bool(runner and runner.running)
 
     def restore_backup(self):
         path = self.backup_var.get()
         if not path:
             return
-        
-        confirm = messagebox.askyesno(
-            "Confirm Restore", 
-            f"Are you sure you want to restore this backup?\n\n{os.path.basename(path)}\n\nCurrent world data will be overwritten."
+
+        if self._server_is_running():
+            ZBBDialog.info(
+                self, "Server Running",
+                "Stop the server before restoring a backup.", kind="error"
+            )
+            return
+
+        confirm = ZBBDialog.confirm(
+            self, "Confirm Restore",
+            f"Are you sure you want to restore this backup?\n\n{os.path.basename(path)}\n\nCurrent world data will be overwritten.",
+            confirm_text="Restore", danger=True,
         )
-        
-        if confirm:
+        if not confirm:
+            return
+
+        def worker():
             success = self.backup_manager.restore_backup(path)
-            if success:
-                messagebox.showinfo("Success", "Server restored successfully.")
-                self.refresh_backups()
-            else:
-                messagebox.showerror("Error", "Failed to restore backup.")
+            if self.winfo_exists():
+                self.after(0, lambda: self._on_backup_restored(success))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_backup_restored(self, success):
+        if success:
+            ZBBDialog.info(self, "Success", "Server restored successfully.")
+            self.refresh_backups()
+        else:
+            ZBBDialog.info(self, "Error", "Failed to restore backup.", kind="error")
+
+    def _refresh_backup_countdown(self):
+        if not self.winfo_exists():
+            return
+        secs = self._backup_scheduler_ui.seconds_until_next()
+        if secs is None:
+            self._next_backup_lbl.configure(text="Auto-backup: disabled")
+        elif secs == 0.0:
+            self._next_backup_lbl.configure(text="Next auto-backup: overdue")
+        else:
+            h = int(secs // 3600)
+            m = int((secs % 3600) // 60)
+            self._next_backup_lbl.configure(text=f"Next auto-backup in: {h}h {m}m")
+        self.after(60_000, self._refresh_backup_countdown)
 
     def setup_automation_tab(self):
         self.scheduler = self.logic.Scheduler(self.server_name)
@@ -272,7 +455,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.chk_backup_restart.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
 
         # Separator
-        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
+        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
         
         # Mode Selection
         ctk.CTkLabel(card, text="Schedule Mode:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=8)
@@ -299,7 +482,37 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.entry_time = ctk.CTkEntry(card, height=28, width=100)
         self.entry_time.grid(row=5, column=2, sticky="e", padx=12, pady=5)
         self.entry_time.insert(0, schedule.get("restart_time", "03:00") if schedule else "03:00")
-            
+
+        # Auto-Backups card (P0.2)
+        backup_sched = BackupScheduler(self.server_name)
+        bk_cfg = backup_sched.get_config()
+
+        card_bk = self.create_section_frame(self.frame_automation, "Auto-Backups")
+
+        self.var_auto_backup = ctk.BooleanVar(value=bk_cfg.get("enabled", False))
+        ctk.CTkSwitch(card_bk, text="Enable Auto-Backups", variable=self.var_auto_backup).grid(
+            row=0, column=0, columnspan=4, sticky="w", padx=15, pady=10
+        )
+
+        ctk.CTkFrame(card_bk, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(
+            row=1, column=0, columnspan=4, sticky="ew", padx=15, pady=2
+        )
+
+        ctk.CTkLabel(card_bk, text="Interval (Hours):", font=self.font_bold, anchor="w").grid(
+            row=2, column=0, sticky="w", padx=(12, 5), pady=8
+        )
+        vcmd2 = (self.register(self.validate_int), '%P')
+        self.entry_bk_interval = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self.entry_bk_interval.insert(0, str(bk_cfg.get("interval_hours", 24)))
+        self.entry_bk_interval.grid(row=2, column=3, sticky="e", padx=12, pady=5)
+
+        ctk.CTkLabel(card_bk, text="Keep (last N backups):", font=self.font_bold, anchor="w").grid(
+            row=3, column=0, sticky="w", padx=(12, 5), pady=8
+        )
+        self.entry_bk_retention = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self.entry_bk_retention.insert(0, str(bk_cfg.get("retention_count", 10)))
+        self.entry_bk_retention.grid(row=3, column=3, sticky="e", padx=12, pady=5)
+
         self.toggle_automation_inputs()
 
     def toggle_automation_inputs(self, *args):
@@ -308,29 +521,29 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             self.chk_backup_restart.configure(state="normal")
             if self.var_schedule_mode.get() == "Interval":
                 self.entry_interval.configure(state="normal")
-                self.lbl_interval.configure(text_color=("black", "white"))
+                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
                 self.entry_time.configure(state="disabled")
-                self.lbl_time.configure(text_color="gray")
+                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             else:
                 self.entry_interval.configure(state="disabled")
-                self.lbl_interval.configure(text_color="gray")
+                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
                 self.entry_time.configure(state="normal")
-                self.lbl_time.configure(text_color=("black", "white"))
+                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
         else:
             self.combo_mode.configure(state="disabled")
             self.chk_backup_restart.configure(state="disabled")
             self.entry_interval.configure(state="disabled")
-            self.lbl_interval.configure(text_color="gray")
+            self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
             self.entry_time.configure(state="disabled")
-            self.lbl_time.configure(text_color="gray")
+            self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
 
     def save_automation(self):
         if not self.var_auto_restart: return
-            
+
         enabled = self.var_auto_restart.get()
         backup = self.var_backup_restart.get()
         mode = self.var_schedule_mode.get()
-        
+
         if mode == "Interval":
             interval = 6
             try:
@@ -341,6 +554,19 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         else:
             time_val = self.entry_time.get()
             self.scheduler.set_restart_schedule(enabled, restart_time=time_val, backup_on_restart=backup)
+
+        # Save auto-backup config
+        if hasattr(self, "var_auto_backup"):
+            bk_enabled = self.var_auto_backup.get()
+            try:
+                bk_interval = int(self.entry_bk_interval.get())
+            except (ValueError, AttributeError):
+                bk_interval = 24
+            try:
+                bk_retention = int(self.entry_bk_retention.get())
+            except (ValueError, AttributeError):
+                bk_retention = 10
+            BackupScheduler(self.server_name).set_config(bk_enabled, interval_hours=bk_interval, retention_count=bk_retention)
 
     def validate_int(self, P):
         """Callback to allow only digits."""
@@ -374,10 +600,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         """Creates a modern 'Card' container for a group of settings."""
         if title:
             lbl = ctk.CTkLabel(parent, text=title, font=self.font_header, 
-                               text_color="royalblue", anchor="w")
+                               text_color=AppConfig.COLOR_LINK, anchor="w")
             lbl.pack(fill="x", padx=15, pady=(15, 5))
 
-        card = ctk.CTkFrame(parent, fg_color=("white", "gray17"), corner_radius=12)
+        card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=AppConfig.RADIUS_CARD)
         card.pack(fill="x", padx=10, pady=(0, 5))
         
         card.grid_columnconfigure(0, weight=1) # Label
@@ -397,7 +623,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # 1. Separator
         if current_row > 0:
-            sep = ctk.CTkFrame(parent_card, height=1, fg_color=("gray90", "gray25"))
+            sep = ctk.CTkFrame(parent_card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
             sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
             current_row += 1
 
@@ -408,14 +634,14 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # 3. Help Icon (?)
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
-                                     width=18, height=18, corner_radius=12,
-                                     fg_color=("gray85", "gray30"), text_color=("gray40", "gray70"))
+                                     width=18, height=18, corner_radius=9,
+                                     fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
             help_icon.grid(row=current_row, column=1, sticky="w", padx=2)
             help_icon.tooltip_ref = ToolTip(help_icon, text=description)
             
         # 4. Impact Dot
         if impact and impact != "Low":
-            colors = {"Medium": "orange", "High": "#ff4d4d"}
+            colors = {"Medium": AppConfig.COLOR_STATUS_STARTING, "High": AppConfig.COLOR_STATUS_ERROR}
             dot = ctk.CTkFrame(parent_card, width=8, height=8, corner_radius=4, fg_color=colors[impact])
             dot.grid(row=current_row, column=2, sticky="w", padx=2)
             dot.tooltip_ref = ToolTip(dot, f"Impact: {impact}")
@@ -432,29 +658,46 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         widget = self._create_widget(ctrl_frame, widget_type, val, options)
         self.widgets[key] = (widget, widget_type)
 
+    # Keys where the enable/spawn/white-list/... substring heuristic below
+    # doesn't apply but the value is still a vanilla true/false toggle.
+    _BOOLEAN_KEY_OVERRIDES = {
+        "pvp", "allow-flight", "allow-nether", "hide-online-players", "log-ips",
+        "broadcast-console-to-ops", "broadcast-rcon-to-ops", "require-resource-pack",
+    }
+
     def _build_tab_from_config(self, parent_frame, tab_name):
         """Generates UI sections dynamically based on TAB_LAYOUTS config."""
         layout = TAB_LAYOUTS.get(tab_name, {})
-        
+
         for section_title, keys in layout.items():
             card = self.create_section_frame(parent_frame, section_title)
             for key in keys:
                 # Get the display name from metadata or generate from key
                 label = key.replace("-", " ").replace(".", " ").title()
-                
+
                 # Determine widget type and options
                 widget_type = "entry"
                 options = None
-                
-                if any(x in key for x in ["enable", "spawn", "white-list", "hardcore", "enforce", "online"]):
+
+                if key in self._BOOLEAN_KEY_OVERRIDES:
                     widget_type = "checkbox"
-                elif key in ["gamemode", "difficulty", "level-type", "op-permission-level"]:
+                elif any(x in key for x in ["enable", "spawn-npcs", "spawn-animals", "spawn-monsters", "white-list", "hardcore", "enforce", "online"]):
+                    widget_type = "checkbox"
+                elif key in ["gamemode", "difficulty", "level-type", "op-permission-level", "function-permission-level"]:
                     widget_type = "dropdown"
                     if key == "gamemode": options = ["survival", "creative", "adventure", "spectator"]
                     elif key == "difficulty": options = ["peaceful", "easy", "normal", "hard"]
                     elif key == "level-type": options = ["minecraft:normal", "minecraft:flat", "minecraft:large_biomes"]
-                    elif key == "op-permission-level": options = ["1", "2", "3", "4"]
-                
+                    elif key in ("op-permission-level", "function-permission-level"): options = ["1", "2", "3", "4"]
+                elif key == "level-name":
+                    worlds = list_worlds(self.server_name)
+                    current = self.properties.get("level-name", "world")
+                    if worlds:
+                        widget_type = "dropdown"
+                        options = worlds if current in worlds else worlds + [current]
+                    else:
+                        widget_type = "entry"
+
                 self.add_field_to_section(card, key, label, widget_type, options)
 
     def setup_general_tab(self):
@@ -462,17 +705,26 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         card_identity = self.create_section_frame(self.frame_general, "Identity & Appearance")
         
         ctk.CTkLabel(card_identity, text="Server Icon", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
-        btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon, 
-                            width=100, height=28, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"))
+        btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
+                            width=100, height=28, fg_color="transparent", border_width=1,
+                            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+                            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                            text_color=AppConfig.COLOR_TEXT_GRAY)
         btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
         
         current_row = card_identity.grid_size()[1]
-        sep = ctk.CTkFrame(card_identity, height=1, fg_color=("gray90", "gray25"))
+        sep = ctk.CTkFrame(card_identity, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
         current_row += 1
 
         ctk.CTkLabel(card_identity, text="Message of the Day", font=self.font_bold, anchor="w").grid(row=current_row, column=0, sticky="nw", padx=(12, 5), pady=8)
-        
+
+        motd_help_icon = ctk.CTkLabel(card_identity, text="?", font=self.font_small,
+                                 width=18, height=18, corner_radius=9,
+                                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
+        motd_help_icon.grid(row=current_row, column=1, sticky="nw", padx=2, pady=8)
+        motd_help_icon.tooltip_ref = ToolTip(motd_help_icon, text="Message shown in the multiplayer server list. Supports § color codes - the preview below shows the result.")
+
         motd_frame = ctk.CTkFrame(card_identity, fg_color="transparent")
         motd_frame.grid(row=current_row, column=2, columnspan=2, sticky="e", padx=12, pady=5)
         
@@ -481,10 +733,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.entry_motd.insert(0, self.properties.get("motd", "A Minecraft Server"))
         self.entry_motd.bind("<KeyRelease>", self._update_motd_preview)
 
-        self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color="#1d1d1d", corner_radius=0, border_width=2, border_color="#3e3e3e")
+        self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), corner_radius=0, border_width=2, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.preview_motd_frame.pack(fill="x", pady=(0, 0))
         
-        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color="#1d1d1d", text_color="#aaaaaa", font=("Consolas", 12), wrap="word")
+        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_MONO, wrap="word")
         self.motd_preview.pack(fill="both", expand=True, padx=2, pady=2)
         
         mc_colors = {
@@ -523,7 +775,91 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.add_field_to_section(card_game, "hardcore", "Hardcore Mode", "checkbox")
         self.add_field_to_section(card_game, "enable-command-block", "Command Blocks", "checkbox")
 
+        # 4. Modpack Import Section
+        card_mrpack = self.create_section_frame(self.frame_general, "Modpack Import")
+        ctk.CTkLabel(
+            card_mrpack, text="Import from .mrpack", font=self.font_bold, anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+
+        self.btn_mrpack = ctk.CTkButton(
+            card_mrpack, text="Import .mrpack", image=icon("download", 13, "#ffffff"), width=150, height=28,
+            corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=AppConfig.COLOR_ACCENT_BROWN, hover_color=AppConfig.COLOR_ACCENT_BROWN_HOVER,
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            command=self._on_import_mrpack,
+        )
+        self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)
+
+        self.lbl_mrpack_status = ctk.CTkLabel(
+            card_mrpack, text="", font=self.font_small, anchor="w",
+            text_color=AppConfig.COLOR_TEXT_GRAY,
+        )
+        self.lbl_mrpack_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 8))
+
+    def _set_mrpack_status(self, text: str, kind: str = "info"):
+        colors = {
+            "success": AppConfig.COLOR_STATUS_ONLINE,
+            "error": AppConfig.COLOR_STATUS_ERROR,
+        }
+        if self.lbl_mrpack_status.winfo_exists():
+            self.lbl_mrpack_status.configure(
+                text=text, text_color=colors.get(kind, AppConfig.COLOR_TEXT_GRAY))
+
+    def _on_import_mrpack(self):
+        meta = get_server_meta(self.server_name)
+        loader = meta.get("type", "vanilla")
+        if loader in (None, "vanilla"):
+            ZBBDialog.info(
+                self, "Vanilla Server",
+                "Vanilla servers can't load mods or plugins.\n\n"
+                "Create a Fabric or Forge server for mods, or Paper/Purpur for plugins.",
+            )
+            return
+
+        mrpack_path = filedialog.askopenfilename(
+            title="Select Modpack File",
+            filetypes=[("Modrinth Modpack", "*.mrpack"), ("All files", "*.*")],
+        )
+        if not mrpack_path:
+            return
+
+        self._set_mrpack_status("Importing modpack…")
+        self.btn_mrpack.configure(state="disabled")
+
+        def _import():
+            try:
+                summary = install_mrpack(
+                    mrpack_path=mrpack_path,
+                    server_name=self.server_name,
+                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_mrpack_status(m)),
+                    server_type=meta.get("type"),
+                    mc_version=meta.get("version"),
+                )
+                parts = [f"{summary['installed']} mods installed"]
+                if summary.get("skipped_client"):
+                    parts.append(f"{summary['skipped_client']} client-only skipped")
+                if summary.get("failed"):
+                    parts.append(f"{summary['failed']} failed")
+                text = ", ".join(parts)
+                self.after(0, lambda t=text: self._set_mrpack_status(t, kind="success"))
+            except MrpackCompatibilityError as exc:
+                self.after(0, lambda e=exc: self._set_mrpack_status(f"Incompatible: {e}", kind="error"))
+                self.after(0, lambda e=exc: ZBBDialog.info(
+                    self, "Incompatible Modpack", str(e), kind="warning"))
+            except Exception as exc:
+                logger.error("mrpack import failed: %s", exc)
+                self.after(0, lambda e=exc: self._set_mrpack_status(f"Import failed: {e}", kind="error"))
+            finally:
+                self.after(0, lambda: self.btn_mrpack.configure(state="normal"))
+
+        threading.Thread(target=_import, daemon=True).start()
+
     def setup_world_tab(self):
+        ctk.CTkLabel(
+            self.frame_world,
+            text="Changing the active world requires the server to be stopped for the change to take effect.",
+            font=self.font_small, text_color=AppConfig.COLOR_TEXT_MUTED, anchor="w", wraplength=600,
+        ).pack(fill="x", padx=12, pady=(4, 8))
         self._build_tab_from_config(self.frame_world, "World")
 
     def setup_network_tab(self):
@@ -533,7 +869,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._build_tab_from_config(self.frame_advanced, "Advanced")
         
         # Dynamic "Other Properties"
-        card_other = self.create_section_frame(self.frame_advanced, "�️ Other Properties")
+        card_other = self.create_section_frame(self.frame_advanced, "Other Properties")
         
         used_keys = set(self.widgets.keys())
         used_keys.update(["motd", "server-ip", "server-port", "white-list", "enforce-whitelist"]) 
@@ -575,9 +911,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             if not ram_input.isdigit():
                 self.entry_ram.configure(border_color="red")
                 self.tabview.set("General")
-                messagebox.showerror("Invalid Input", "RAM Allocation must be a whole number (MB).")
+                ZBBDialog.info(self, "Invalid Input", "RAM Allocation must be a whole number (MB).", kind="error")
                 return
-            self.entry_ram.configure(border_color=["#979da2", "#565b5e"]) # Reset color
+            self.entry_ram.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
             
             try:
                 ram = int(ram_input)
@@ -591,9 +927,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             if not interval_input.isdigit():
                 self.entry_interval.configure(border_color="red")
                 self.tabview.set("Automation")
-                messagebox.showerror("Invalid Input", "Restart Interval must be a whole number (Hours).")
+                ZBBDialog.info(self, "Invalid Input", "Restart Interval must be a whole number (Hours).", kind="error")
                 return
-            self.entry_interval.configure(border_color=["#979da2", "#565b5e"])
+            self.entry_interval.configure(border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
 
         self.save_automation()
 
@@ -606,76 +942,147 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             elif w_type == "dropdown":
                 new_props[key] = widget.get()
                 
-        save_server_properties(self.server_name, new_props)
+        save_server_properties(self.server_name, new_properties=new_props)
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()
+    def _grid_help_icon(self, parent, row, text):
+        """Small '?' badge with a tooltip, in the help column of a section card."""
+        help_icon = ctk.CTkLabel(parent, text="?", font=self.font_small,
+                                 width=18, height=18, corner_radius=9,
+                                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
+        help_icon.grid(row=row, column=1, sticky="w", padx=2, pady=8)
+        help_icon.tooltip_ref = ToolTip(help_icon, text=text)
+        return help_icon
+
     def setup_launch_tab(self):
         """Setup Java and Launch arguments tab."""
         from app.services.java_detector import JavaDetector
-        
+
         card = self.create_section_frame(self.frame_launch, "Java & Runtime")
-        
+
         # Java Path
         ctk.CTkLabel(card, text="Java Version:", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._grid_help_icon(card, 0, (
+            "Which Java runtime launches the server.\n"
+            "Auto-Detect picks the version your Minecraft version requires\n"
+            "(Java 21 for 1.20.5+, 17 for 1.18-1.20.4, 8 for older) and\n"
+            "downloads it automatically if it's not installed."
+        ))
         
-        detector = JavaDetector()
-        javas = detector.detect_all()
         self._java_label_to_path = {"Auto-Detect": "auto"}
         self._java_path_to_label = {"auto": "Auto-Detect"}
-        for j in javas:
-            self._java_label_to_path[j.label] = j.path
-            self._java_path_to_label[j.path] = j.label
-            
-        options = list(self._java_label_to_path.keys())
-        
-        meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
-        meta = {}
-        if os.path.exists(meta_path):
-            import json
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-        
+
+        meta = get_server_meta(self.server_name)
+
         saved_path = meta.get("java_path", "auto")
+        # Placeholder mapping so a previously saved path stays selectable
+        # (and saveable) while detection runs in the background
+        if saved_path != "auto":
+            self._java_label_to_path[saved_path] = saved_path
+            self._java_path_to_label[saved_path] = saved_path
         self.var_java_path = ctk.StringVar(value=self._java_path_to_label.get(saved_path, "Auto-Detect"))
-        
-        self.combo_java = ctk.CTkOptionMenu(card, values=options, variable=self.var_java_path, height=28)
+
+        self.combo_java = ctk.CTkOptionMenu(card, values=list(self._java_label_to_path.keys()),
+                                            variable=self.var_java_path, height=28)
         self.combo_java.grid(row=0, column=2, columnspan=2, sticky="e", padx=12, pady=5)
 
+        # detect_all() scans registry + filesystem — keep it off the UI thread
+        def _load_javas():
+            javas = JavaDetector().detect_all()
+
+            def _apply():
+                if not self.combo_java.winfo_exists():
+                    return
+                for j in javas:
+                    self._java_label_to_path[j.label] = j.path
+                    self._java_path_to_label[j.path] = j.label
+                if saved_path != "auto" and self._java_path_to_label.get(saved_path) != saved_path:
+                    # Real label now known — replace the raw-path placeholder
+                    self._java_label_to_path.pop(saved_path, None)
+                    if self.var_java_path.get() == saved_path:
+                        self.var_java_path.set(self._java_path_to_label[saved_path])
+                self.combo_java.configure(values=list(self._java_label_to_path.keys()))
+
+            self.after(0, _apply)
+
+        threading.Thread(target=_load_javas, daemon=True).start()
+
         # Aikar's Flags
-        ctk.CTkFrame(card, height=1, fg_color=("gray90", "gray25")).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
+        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
         
         ctk.CTkLabel(card, text="Use Aikar's Flags:", font=self.font_bold, anchor="w").grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._grid_help_icon(card, 2, (
+            "Community-tuned JVM garbage collector flags (from PaperMC)\n"
+            "that reduce lag spikes on Minecraft servers. Recommended: on.\n"
+            "When off, only the basic memory flags (-Xms/-Xmx) are used."
+        ))
         self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
         self.chk_aikars = ctk.CTkSwitch(card, text="", variable=self.var_use_aikars)
         self.chk_aikars.grid(row=2, column=2, columnspan=2, sticky="e", padx=12, pady=5)
-        
+
+        # Custom JVM Flags
+        ctk.CTkLabel(card, text="Custom JVM Flags:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=(8, 0))
+        self._grid_help_icon(card, 3, (
+            "Extra arguments appended to the Java command line, after the\n"
+            "memory and GC flags. Space-separated. Leave empty unless a mod\n"
+            "or guide asks for a specific flag - a wrong flag can prevent\n"
+            "the server from starting."
+        ))
+        self.entry_jvm_flags = ctk.CTkEntry(card, height=28)
+        self.entry_jvm_flags.insert(0, meta.get("jvm_custom_flags", ""))
+        self.entry_jvm_flags.grid(row=3, column=2, columnspan=2, sticky="e", padx=12, pady=(8, 0))
+        ctk.CTkLabel(card, text="e.g. -XX:+UseG1GC -Dfoo=bar", font=self.font_small,
+                     text_color=AppConfig.COLOR_TEXT_MUTED,
+                     anchor="e").grid(row=4, column=2, columnspan=2, sticky="e", padx=12, pady=(0, 8))
+
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
-        ctk.CTkButton(card_tools, text="📂 Open Server Folder", command=self.open_folder, fg_color="gray30", height=32).pack(fill="x", padx=15, pady=10)
+        tools_row = ctk.CTkFrame(card_tools, fg_color="transparent")
+        tools_row.pack(fill="x", padx=15, pady=10)
+        tools_row.grid_columnconfigure((0, 1, 2), weight=1, uniform="tools")
+        buttons = (
+            ("Open Server Folder", "folder", None,
+             "The server's root folder (world, mods, configs)."),
+            ("Open Logs", "folder", "logs",
+             "Full server logs, including sessions older than the console buffer."),
+            ("Open Crash Reports", "folder", "crash_reports",
+             "JSON diagnostics ZBB writes every time the server crashes."),
+        )
+        for col, (label, icon_name, subpath, tip) in enumerate(buttons):
+            btn = ctk.CTkButton(
+                tools_row, text=label, image=icon(icon_name, 14),
+                command=lambda s=subpath: self.open_folder(s),
+                fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                corner_radius=AppConfig.RADIUS_BTN, height=36,
+            )
+            btn.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 8, 0))
+            btn.tooltip_ref = ToolTip(btn, tip)
 
-    def open_folder(self):
+    def open_folder(self, subpath=None):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)
-        if os.path.exists(server_path):
-            if sys.platform == "win32":
-                os.startfile(server_path)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", server_path], check=False)
-            else:
-                subprocess.run(["xdg-open", server_path], check=False)
+        if subpath:
+            server_path = os.path.join(server_path, subpath)
+        if not os.path.exists(server_path):
+            ZBBDialog.info(self, "Nothing Here Yet",
+                           "That folder does not exist yet - it is created the first time it is needed.",
+                           kind="info")
+            return
+        if sys.platform == "win32":
+            subprocess.run(["explorer", server_path], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", server_path], check=False)
+        else:
+            subprocess.run(["xdg-open", server_path], check=False)
 
     def save_launch_settings(self):
         meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
         if not os.path.exists(meta_path): return
-        
-        import json
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-            
+
         label = self.var_java_path.get()
         path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-        meta["java_path"] = path
-        meta["use_aikars"] = self.var_use_aikars.get()
-        
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
+        update_server_meta(self.server_name, {
+            "java_path": path,
+            "use_aikars": self.var_use_aikars.get(),
+            "jvm_custom_flags": self.entry_jvm_flags.get().strip(),
+        })

@@ -1,0 +1,19 @@
+{
+  "type": "Fabric",
+  "ram": 6144,
+  "game_mode": "survival",
+  "difficulty": "normal",
+  "hardcore": false,
+  "whitelist": true,
+  "enforce_whitelist": true,
+  "pvp": false,
+  "online_mode": true,
+  "max_players": 10,
+  "spawn_protection": 16,
+  "enable_command_block": false,
+  "allow_flight": true,
+  "enforce_secure_profile": true,
+  "view_distance": "10",
+  "simulation_distance": "8",
+  "_description": "Higher RAM allocation for modded Fabric packs, PVP off, whitelist enforced."
+}

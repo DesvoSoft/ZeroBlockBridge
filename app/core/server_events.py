@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -9,24 +9,25 @@ class ServerEvent:
     STARTING = "starting"
     READY = "ready"
     STOPPED = "stopped"
-    ERROR = "error"
     PLAYER_COUNT = "player_count"
+    PLAYER_LIST = "player_list"
     CRASHED = "crashed"
-    RESTARTED = "restarted"
+    RESTARTED = "restarted"          # emitted by watchdog; available for future UI subscribers
     ZOMBIE_DETECTED = "zombie_detected"
     LAG_SPIKE = "lag_spike"
     CONSOLE_LINE = "console_line"
     TUNNEL_CONSOLE_LINE = "tunnel_console_line"
     NOTIFICATION = "notification"
     REQUEST_RESTART = "request_restart"
+    REQUEST_MOD_INSTALL = "request_mod_install"
     TUNNEL_STATUS = "tunnel_status"
-    BACKUP_COMPLETED = "backup_completed"
-    BACKUP_FAILED = "backup_failed"
+    BACKUP_COMPLETED = "backup_completed"  # emitted by BackupOrchestrator; available for future UI subscribers
+    BACKUP_FAILED = "backup_failed"        # emitted by BackupOrchestrator; available for future UI subscribers
 
 
 class EventBus:
     def __init__(self):
-        self._listeners: Dict[str, List[Callable]] = {}
+        self._listeners: dict[str, list[Callable]] = {}
         self._lock = threading.RLock()
 
     def subscribe(self, event_type: str, callback: Callable):
@@ -49,4 +50,4 @@ class EventBus:
             try:
                 callback(data)
             except Exception as e:
-                logger.error(f"[EventBus] Error in callback for {event_type}: {e}", exc_info=True)
+                logger.error("[EventBus] Error in callback for %s: %s", event_type, e, exc_info=True)

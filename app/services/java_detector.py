@@ -14,10 +14,11 @@ import os
 import platform
 import re
 import subprocess
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from app.core.constants import JDK_CACHE_DIR
+from app.core.constants import JDK_CACHE_DIR, subprocess_flags
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +88,7 @@ def get_required_java(mc_version: str) -> int:
     return 17
 
 
-def check_java_compatibility(mc_version: str, java_major: int) -> tuple:
-    required = get_required_java(mc_version)
-    if java_major == required:
-        return True, required, f"Java {java_major} is compatible with MC {mc_version} (requires {required})."
-    return False, required, f"Java {java_major} is incompatible with MC {mc_version}. Requires Java == {required}."
+
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +169,7 @@ def _probe_java(java_path: str, source: str) -> Optional[JavaInstallation]:
         result = subprocess.run(
             [java_path, "-version"],
             capture_output=True, text=True, timeout=10,
+            **subprocess_flags(),
         )
         output = result.stderr or result.stdout
         if not output:
@@ -201,6 +199,11 @@ def _probe_java(java_path: str, source: str) -> Optional[JavaInstallation]:
         return None
 
 
+def probe_java(java_path: str, source: str = "PROBE") -> Optional[JavaInstallation]:
+    """Public wrapper around _probe_java for use outside this module."""
+    return _probe_java(java_path, source)
+
+
 # ---------------------------------------------------------------------------
 # Discovery Sources
 # ---------------------------------------------------------------------------
@@ -213,6 +216,8 @@ class JavaDetector:
     """
 
     _shared_cache: Optional[List[JavaInstallation]] = None
+    _shared_cache_time: float = 0.0
+    _CACHE_TTL: float = 300.0  # 5 minutes
 
     def __init__(self):
         self._cache: Optional[List[JavaInstallation]] = None
@@ -222,7 +227,8 @@ class JavaDetector:
         Discover all Java installations on the system.
 
         Results are cached after the first scan. Use force_refresh=True
-        to re-scan.
+        to re-scan.  The shared (class-level) cache expires after 5
+        minutes so newly installed JDKs are picked up automatically.
 
         Returns:
             List of JavaInstallation objects, sorted by major version descending.
@@ -230,7 +236,9 @@ class JavaDetector:
         if self._cache is not None and not force_refresh:
             return self._cache
 
-        if JavaDetector._shared_cache is not None and not force_refresh:
+        if (JavaDetector._shared_cache is not None
+                and not force_refresh
+                and (time.monotonic() - JavaDetector._shared_cache_time) < JavaDetector._CACHE_TTL):
             self._cache = JavaDetector._shared_cache
             return self._cache
 
@@ -263,6 +271,7 @@ class JavaDetector:
 
         result = sorted(found.values(), key=lambda j: j.major, reverse=True)
         JavaDetector._shared_cache = result
+        JavaDetector._shared_cache_time = time.monotonic()
         self._cache = result
         logger.info("Detected %d Java installations", len(result))
         return result

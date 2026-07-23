@@ -12,13 +12,14 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import time
 from typing import Dict, List, Optional
 
 import requests
 
 from app.core.constants import SERVERS_DIR
+from app.services import mod_id_resolver, mod_install_tracker
+from app.services.sha1_validator import download_with_verification
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class ModrinthClient:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _request(self, method: str, path: str, params: dict = None) -> dict | list:
+    def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict | list:
         """
         Execute an HTTP request against the Modrinth API.
 
@@ -60,7 +61,7 @@ class ModrinthClient:
         """
         url = f"{MODRINTH_API}/{path.lstrip('/')}"
         try:
-            resp = self.session.request(method, url, params=params, timeout=REQUEST_TIMEOUT)
+            resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
             raise ModrinthException(f"Network error: {exc}") from exc
 
@@ -70,7 +71,7 @@ class ModrinthClient:
             logger.warning("Modrinth rate-limited. Waiting %ds…", wait)
             time.sleep(min(wait, 30))
             try:
-                resp = self.session.request(method, url, params=params, timeout=REQUEST_TIMEOUT)
+                resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
             except requests.RequestException as exc:
                 raise ModrinthException(f"Network error on retry: {exc}") from exc
 
@@ -95,6 +96,7 @@ class ModrinthClient:
         project_type: str = "mod",
         limit: int = 20,
         offset: int = 0,
+        index: str = "relevance",
     ) -> Dict:
         """
         Search for projects on Modrinth.
@@ -106,6 +108,7 @@ class ModrinthClient:
             project_type: One of "mod", "modpack", "resourcepack", "shader", "plugin".
             limit: Max results per page (1-100).
             offset: Pagination offset.
+            index: Sort order — "relevance", "downloads", "follows", "newest", "updated".
 
         Returns:
             dict with keys: hits (list), total_hits, offset, limit.
@@ -117,11 +120,16 @@ class ModrinthClient:
             facets.append(f'["versions:{mc_version}"]')
         if loader:
             facets.append(f'["categories:{loader}"]')
+        if project_type in ("mod", "plugin"):
+            # Exclude client-only projects — mods that are also server-side
+            # (server_side "optional" or "required") are unaffected.
+            facets.append('["server_side!=unsupported"]')
 
         params = {
             "query": query,
             "limit": min(limit, 100),
             "offset": offset,
+            "index": index,
         }
         if facets:
             params["facets"] = f"[{','.join(facets)}]"
@@ -164,41 +172,92 @@ class ModrinthClient:
         return self._request("GET", f"/project/{project_id}/version", params=params)
 
     # ------------------------------------------------------------------
+    # Public API — Dependency resolution
+    # ------------------------------------------------------------------
+    def get_required_dependencies(
+        self,
+        version: dict,
+        mc_version: str,
+        loader: str,
+        installed_slugs: set,
+    ) -> Dict[str, List[Dict]]:
+        """
+        Resolve a version's dependencies into installable/warnable groups.
+
+        Optional/embedded dependencies are ignored — embedded deps ship
+        inside the mod's own jar, optional ones are user choices we don't
+        prompt for.
+
+        Returns {"required": [...], "incompatible": [...]}.
+        "required" entries are {"project": <project dict>, "version": <version dict>},
+        ready to install (already-installed slugs and versions with no
+        compatible build for mc_version/loader are skipped).
+        "incompatible" entries are {"project": <project dict>} only — surfaced
+        as a warning, not something we auto-resolve a version for.
+        """
+        resolved = []
+        incompatible = []
+        seen_ids = set()
+        seen_incompatible_ids = set()
+        for dep in version.get("dependencies", []):
+            dep_type = dep.get("dependency_type")
+            if dep_type not in ("required", "incompatible"):
+                continue
+            project_id = dep.get("project_id")
+            if not project_id:
+                continue
+
+            if dep_type == "incompatible":
+                if project_id in seen_incompatible_ids:
+                    continue
+                seen_incompatible_ids.add(project_id)
+                try:
+                    incompatible.append({"project": self.get_project(project_id)})
+                except ModrinthException as exc:
+                    logger.warning("Could not resolve incompatible dependency %s: %s", project_id, exc)
+                continue
+
+            if project_id in seen_ids:
+                continue
+            seen_ids.add(project_id)
+
+            try:
+                project = self.get_project(project_id)
+            except ModrinthException as exc:
+                logger.warning("Could not resolve dependency %s: %s", project_id, exc)
+                continue
+            if project.get("slug") in installed_slugs:
+                continue
+
+            dep_version_id = dep.get("version_id")
+            try:
+                if dep_version_id:
+                    dep_version = self._request("GET", f"/version/{dep_version_id}")
+                else:
+                    versions = self.get_versions(project_id, mc_version=mc_version, loader=loader)
+                    dep_version = versions[0] if versions else None
+            except ModrinthException as exc:
+                logger.warning("Could not fetch dependency version for %s: %s", project_id, exc)
+                continue
+            if not dep_version:
+                continue
+
+            resolved.append({"project": project, "version": dep_version})
+
+        return {"required": resolved, "incompatible": incompatible}
+
+    # ------------------------------------------------------------------
     # Public API — Download + Install
     # ------------------------------------------------------------------
     def _download_file(self, download_url, filename, expected_sha1, dest_dir, progress_callback=None):
         dest_path = os.path.join(dest_dir, filename)
-        try:
-            resp = self.session.get(download_url, stream=True, timeout=30)
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            sha1 = hashlib.sha1()
-
-            with open(dest_path, "wb") as fp:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        fp.write(chunk)
-                        sha1.update(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback and total > 0:
-                            progress_callback(downloaded / total)
-
-            if expected_sha1 and sha1.hexdigest() != expected_sha1:
-                logger.error(
-                    "SHA1 mismatch for %s: expected %s, got %s",
-                    filename, expected_sha1, sha1.hexdigest(),
-                )
-                os.remove(dest_path)
-                return None
-
-            logger.info("Downloaded %s to %s", filename, dest_path)
-            return dest_path
-
-        except Exception as exc:
-            logger.error("Download failed for %s: %s", filename, exc)
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
+        success, path, error = download_with_verification(
+            download_url, dest_path, expected_sha1, progress_callback
+        )
+        if success:
+            return path
+        else:
+            logger.error("Download failed for %s: %s", filename, error)
             return None
 
     def _resolve_version_file(self, version):
@@ -277,6 +336,30 @@ class ModrinthClient:
             primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
         )
 
+    def download_version_to(
+        self,
+        version: dict,
+        dest_dir: str,
+        progress_callback=None,
+    ) -> Optional[str]:
+        """
+        Download a version's primary file to an arbitrary directory, without
+        assuming a mods/plugins layout. Used for archive-type downloads
+        (e.g. modpack .mrpack files) that don't belong under SERVERS_DIR/<name>/mods.
+
+        Returns path to the downloaded file, or None on failure.
+        """
+        primary_file = self._resolve_version_file(version)
+        if not primary_file:
+            logger.error("Version %s has no downloadable files", version.get("id"))
+            return None
+
+        os.makedirs(dest_dir, exist_ok=True)
+        return self._download_file(
+            primary_file["url"], primary_file["filename"],
+            primary_file.get("hashes", {}).get("sha1"), dest_dir, progress_callback,
+        )
+
     # ------------------------------------------------------------------
     # Public API — Update checking
     # ------------------------------------------------------------------
@@ -316,27 +399,17 @@ class ModrinthClient:
 
         # Batch lookup via version-files endpoint
         try:
-            data = self._request(
+            results = self._request(
                 "POST",
-                "/version_files/update",
-                params=None,
-            )
-            # The batch endpoint requires a POST body, so use session directly
-            resp = self.session.post(
-                f"{MODRINTH_API}/version_files/update",
-                json={
+                "version_files/update",
+                json_body={
                     "hashes": list(hashes.keys()),
                     "algorithm": "sha1",
                     "loaders": [loader],
                     "game_versions": [mc_version],
                 },
-                timeout=REQUEST_TIMEOUT,
             )
-            if resp.status_code >= 400:
-                logger.warning("Batch update check failed: HTTP %d", resp.status_code)
-                return []
-            results = resp.json()
-        except Exception as exc:
+        except ModrinthException as exc:
             logger.error("Update check failed: %s", exc)
             return []
 
@@ -344,13 +417,7 @@ class ModrinthClient:
         for old_hash, new_version in results.items():
             if old_hash not in hashes:
                 continue
-            primary = None
-            for f in new_version.get("files", []):
-                if f.get("primary"):
-                    primary = f
-                    break
-            if not primary:
-                primary = new_version["files"][0] if new_version.get("files") else None
+            primary = self._resolve_version_file(new_version)
             if primary and primary.get("hashes", {}).get("sha1") != old_hash:
                 updates.append({
                     "filename": hashes[old_hash],
@@ -359,6 +426,83 @@ class ModrinthClient:
                     "latest_version": new_version.get("version_number"),
                     "update_url": primary.get("url"),
                     "update_filename": primary.get("filename"),
+                    "update_sha1": primary.get("hashes", {}).get("sha1"),
                 })
 
         return updates
+
+    def apply_update(self, update: Dict, server_name: str, loader: str) -> bool:
+        """
+        Download an update's replacement file and remove the old one.
+
+        `update` is one entry from check_updates(). Returns True on success.
+        """
+        target_dir = "plugins" if loader in ("paper", "purpur", "spigot", "bukkit") else "mods"
+        dir_path = os.path.join(SERVERS_DIR, server_name, target_dir)
+        old_path = os.path.join(dir_path, update["filename"])
+
+        downloaded = self._download_file(
+            update["update_url"], update["update_filename"],
+            update.get("update_sha1"), dir_path,
+        )
+        if not downloaded:
+            return False
+
+        if os.path.exists(old_path) and os.path.abspath(old_path) != os.path.abspath(downloaded):
+            try:
+                os.remove(old_path)
+            except OSError as exc:
+                logger.warning("Could not remove old file %s: %s", old_path, exc)
+
+        return True
+
+
+def install_missing_mods(
+    client: "ModrinthClient",
+    missing_mod_ids: List[str],
+    server_name: str,
+    mc_version: str,
+    loader: str,
+) -> Dict[str, List[str]]:
+    """
+    Resolve Fabric/Forge internal mod-ids (as extracted from a crash log) to
+    real Modrinth projects and install them. Ids not covered by the static
+    mod_id_resolver map are looked up via search() as a fallback.
+    """
+    result = {"installed": [], "failed": [], "unresolved": []}
+    seen_slugs = set()
+
+    for mod_id in missing_mod_ids:
+        slug = mod_id_resolver.resolve_slug(mod_id)
+        if not slug:
+            try:
+                hits = client.search(mod_id, mc_version=mc_version, loader=loader, limit=1).get("hits", [])
+            except ModrinthException as exc:
+                logger.warning("Search fallback failed for %s: %s", mod_id, exc)
+                hits = []
+            slug = hits[0]["slug"] if hits else None
+
+        if not slug:
+            result["unresolved"].append(mod_id)
+            continue
+        if slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+
+        try:
+            versions = client.get_versions(slug, mc_version=mc_version, loader=loader)
+            if not versions:
+                result["failed"].append(mod_id)
+                continue
+            path = client.download_mod(slug, server_name, mc_version, loader)
+            if not path:
+                result["failed"].append(mod_id)
+                continue
+            filename = os.path.basename(path)
+            mod_install_tracker.record_install(server_name, slug, filename)
+            result["installed"].append(f"{mod_id} -> {filename}")
+        except ModrinthException as exc:
+            logger.error("Failed installing resolved mod %s (%s): %s", mod_id, slug, exc)
+            result["failed"].append(mod_id)
+
+    return result

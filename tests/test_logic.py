@@ -3,7 +3,6 @@
 import os
 import sys
 import json
-import threading
 import tempfile
 import shutil
 from unittest.mock import patch, MagicMock, mock_open
@@ -12,46 +11,13 @@ TMP = tempfile.gettempdir()
 
 from app.core.logic import (
     normalize_server_jar,
-    _get_jar_event,
-    wait_for_jar_ready,
     get_server_meta,
     set_server_meta,
     update_server_meta,
     _run_installer,
     download_server,
+    ServerRunner,
 )
-
-
-class TestGetJarEvent:
-    def test_get_or_create_event(self):
-        ev = _get_jar_event(f"{TMP}/test_server")
-        assert isinstance(ev, threading.Event)
-        ev2 = _get_jar_event(f"{TMP}/test_server")
-        assert ev is ev2
-
-    def test_different_dirs_different_events(self):
-        ev1 = _get_jar_event(f"{TMP}/server1")
-        ev2 = _get_jar_event(f"{TMP}/server2")
-        assert ev1 is not ev2
-
-    def teardown_method(self):
-        from app.core.logic import _jar_ready_events
-        _jar_ready_events.clear()
-
-
-class TestWaitForJarReady:
-    def test_wait_returns_true_when_set(self):
-        ev = _get_jar_event(f"{TMP}/test")
-        ev.set()
-        assert wait_for_jar_ready(f"{TMP}/test", timeout=1) is True
-
-    def test_wait_returns_false_on_timeout(self):
-        result = wait_for_jar_ready(f"{TMP}/nonexistent", timeout=0.1)
-        assert result is False
-
-    def teardown_method(self):
-        from app.core.logic import _jar_ready_events
-        _jar_ready_events.clear()
 
 
 class TestNormalizeServerJar:
@@ -140,6 +106,8 @@ class TestServerMeta:
 
     def teardown_method(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
+        from app.core.logic import _meta_cache
+        _meta_cache.clear()
 
     @patch("app.core.logic.SERVERS_DIR", new_callable=lambda: None)
     def test_get_server_meta_missing_returns_empty(self, mock_servers_dir):
@@ -192,6 +160,88 @@ class TestServerMeta:
             with patch("builtins.open", side_effect=OSError("Permission denied")):
                 result = set_server_meta("test_server", "ram", 2048)
                 assert result is False
+
+
+class TestSchedulerGetStatus:
+    """Tests for Scheduler.get_status() — particularly the 'missed' field (MA-05)."""
+
+    def _make_scheduler(self, meta_override):
+        from app.core.logic import Scheduler
+        with patch("app.core.logic.get_server_meta", return_value=meta_override):
+            return Scheduler("test_server")
+
+    def test_get_status_returns_none_when_no_schedule(self):
+        from app.core.logic import Scheduler
+        with patch("app.core.logic.get_server_meta", return_value={}):
+            sched = Scheduler("test_server")
+        with patch("app.core.logic.get_server_meta", return_value={}):
+            assert sched.get_status() is None
+
+    def test_get_status_interval_not_missed(self):
+        import datetime
+        from app.core.logic import Scheduler
+        last_run = (datetime.datetime.now() - datetime.timedelta(hours=3)).isoformat()
+        meta = {"scheduler": {"type": "interval", "interval_hours": 6,
+                               "last_run": last_run, "backup_on_restart": False}}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is False
+        assert status["remaining_seconds"] > 0
+
+    def test_get_status_time_mode_missed_window(self):
+        """If >120s past target time today, missed=True."""
+        import datetime
+        from app.core.logic import Scheduler
+        now = datetime.datetime.now()
+        # Target was 5 minutes ago, not run today
+        target = now - datetime.timedelta(minutes=5)
+        meta = {"scheduler": {
+            "type": "time",
+            "restart_time": f"{target.hour:02d}:{target.minute:02d}",
+            "last_run": None,
+            "backup_on_restart": False,
+        }}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is True
+        assert status["remaining_seconds"] < -120
+
+    def test_get_status_time_mode_within_window(self):
+        """If within 0-120s of target, missed=False (window still valid)."""
+        import datetime
+        from app.core.logic import Scheduler
+        now = datetime.datetime.now()
+        # Target was 30 seconds ago — still within window
+        target = now - datetime.timedelta(seconds=30)
+        meta = {"scheduler": {
+            "type": "time",
+            "restart_time": f"{target.hour:02d}:{target.minute:02d}",
+            "last_run": None,
+            "backup_on_restart": False,
+        }}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert status is not None
+        assert status["missed"] is False
+
+    def test_get_status_has_missed_key(self):
+        """All returned dicts must have a 'missed' key."""
+        import datetime
+        from app.core.logic import Scheduler
+        last_run = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+        meta = {"scheduler": {"type": "interval", "interval_hours": 6,
+                               "last_run": last_run, "backup_on_restart": False}}
+        with patch("app.core.logic.get_server_meta", return_value=meta):
+            sched = Scheduler("test_server")
+            status = sched.get_status()
+        assert "missed" in status
+        assert "is_due" in status
+        assert "remaining_seconds" in status
 
 
 class TestRunInstaller:
@@ -313,3 +363,91 @@ class TestDownloadServer:
         # Verify SHA1 was passed to download_with_verification
         _, kwargs = mock_dl_verify.call_args
         assert kwargs.get("expected_sha1") == "abc123def456"
+
+
+class TestServerRunnerJvmCustomFlags:
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+        from app.core.logic import _meta_cache
+        _meta_cache.clear()
+
+    def _make_server(self, tmpdir, jvm_custom_flags=None):
+        server_dir = os.path.join(tmpdir, "test_server")
+        os.makedirs(server_dir)
+        with open(os.path.join(server_dir, "server.jar"), "w", encoding="utf-8") as f:
+            f.write("")
+        meta = {"ram": 1024}
+        if jvm_custom_flags is not None:
+            meta["jvm_custom_flags"] = jvm_custom_flags
+        with open(os.path.join(server_dir, "metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f)
+        return server_dir
+
+    @patch("app.core.logic._port_in_use", return_value=False)
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_custom_flags_appended_to_cmd(self, mock_eula, mock_probe, mock_popen, mock_port):
+        self._make_server(self.tmpdir, jvm_custom_flags="-XX:+UseG1GC -Dfoo=bar")
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        cmd = mock_popen.call_args.args[0]
+        assert "-XX:+UseG1GC" in cmd
+        assert "-Dfoo=bar" in cmd
+
+    @patch("app.core.logic._port_in_use", return_value=False)
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_empty_custom_flags_no_op(self, mock_eula, mock_probe, mock_popen, mock_port):
+        self._make_server(self.tmpdir)
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        cmd = mock_popen.call_args.args[0]
+        assert cmd.count("-jar") == 1
+        assert "server.jar" in cmd
+
+    @patch("app.core.logic._port_in_use", return_value=False)
+    @patch("app.core.logic.subprocess.Popen")
+    @patch("app.core.logic.probe_java", return_value=None)
+    @patch("app.core.logic.check_eula", return_value=True)
+    def test_malformed_custom_flags_caught(self, mock_eula, mock_probe, mock_popen, mock_port):
+        self._make_server(self.tmpdir, jvm_custom_flags='-Dfoo="unterminated')
+        mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), returncode=0)
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            runner = ServerRunner("test_server", "1024M", MagicMock())
+            runner.start()
+        assert mock_popen.called
+        cmd = mock_popen.call_args.args[0]
+        assert "server.jar" in cmd
+
+
+class TestDeleteServer:
+    def test_deletes_real_directory(self, tmp_path):
+        from app.core.logic import delete_server
+        server = tmp_path / "myserver"
+        (server / "world").mkdir(parents=True)
+        (server / "server.jar").write_text("x")
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("myserver")
+        assert not server.exists()
+
+    def test_missing_server_is_noop(self, tmp_path):
+        from app.core.logic import delete_server
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("ghost")  # must not raise
+
+    def test_empty_directory_deleted(self, tmp_path):
+        from app.core.logic import delete_server
+        server = tmp_path / "empty"
+        server.mkdir()
+        with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
+            delete_server("empty")
+        assert not server.exists()

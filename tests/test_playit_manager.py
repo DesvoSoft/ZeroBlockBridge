@@ -23,6 +23,9 @@ def manager(callbacks):
     with patch("app.core.playit_manager.PlayitApiClient") as mock_api_cls:
         mock_api = MagicMock()
         mock_api.load_secret_key.return_value = False
+        mock_api.secret_rejected.return_value = False
+        mock_api.consecutive_auth_failures = 0
+        mock_api.list_account_tunnels.return_value = []
         mock_api_cls.return_value = mock_api
         m = PlayitManager(
             console_callback=callbacks["console"],
@@ -109,29 +112,67 @@ class TestEnsureBinary:
                 return fake_bin
 
     def test_binary_exists_and_version_matches(self, manager, tmp_path):
+        from app.core.constants import PLAYIT_VERSION
         m, _, _ = manager
-        fake_bin = self.make_binary(m, tmp_path)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "0.17.1"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+        fake_bin = tmp_path / "playit.exe"
+        fake_bin.touch()
+        marker = tmp_path / "playit.version"
+        marker.write_text(PLAYIT_VERSION, encoding="utf-8")
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin), \
+             patch.object(m, "version_marker_path", marker):
             assert m.ensure_binary() is True
 
     def test_binary_exists_version_mismatch_replaces(self, manager, tmp_path):
+        from app.core.constants import PLAYIT_VERSION
         m, _, _ = manager
-        fake_bin = self.make_binary(m, tmp_path)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "0.16.0"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+        fake_bin = tmp_path / "playit.exe"
+        fake_bin.touch()
+        marker = tmp_path / "playit.version"
+        marker.write_text("0.17.1", encoding="utf-8")
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin), \
+             patch.object(m, "version_marker_path", marker):
+            smoke = MagicMock(returncode=0, stdout="Usage: playitd", stderr="")
+            with patch("subprocess.run", return_value=smoke):
+                with patch("requests.get") as mock_get:
+                    mock_response = MagicMock()
+                    mock_response.iter_content.return_value = [b"x" * 1_000_000]
+                    mock_response.raise_for_status = MagicMock()
+                    mock_get.return_value = mock_response
+                    assert m.ensure_binary() is True
+                    assert fake_bin.stat().st_size >= 1_000_000
+                    assert marker.read_text(encoding="utf-8") == PLAYIT_VERSION
+
+    def test_download_truncated_rejected(self, manager, tmp_path):
+        m, _, _ = manager
+        fake_bin = tmp_path / "playit.exe"
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin):
             with patch("requests.get") as mock_get:
                 mock_response = MagicMock()
                 mock_response.iter_content.return_value = [b"data"]
                 mock_response.raise_for_status = MagicMock()
                 mock_get.return_value = mock_response
-                assert m.ensure_binary() is True
+                assert m.ensure_binary() is False
+                assert not fake_bin.exists()
+                assert not (tmp_path / "agent_download.tmp").exists()
+
+    def test_download_incompatible_binary_rejected(self, manager, tmp_path):
+        m, _, _ = manager
+        fake_bin = tmp_path / "playit.exe"
+        with patch("app.core.playit_manager.BIN_DIR", tmp_path), \
+             patch.object(m, "binary_path", fake_bin):
+            err = OSError("not compatible")
+            err.winerror = 216
+            with patch("subprocess.run", side_effect=err):
+                with patch("requests.get") as mock_get:
+                    mock_response = MagicMock()
+                    mock_response.iter_content.return_value = [b"x" * 1_000_000]
+                    mock_response.raise_for_status = MagicMock()
+                    mock_get.return_value = mock_response
+                    assert m.ensure_binary() is False
+                    assert not fake_bin.exists()
 
     def test_download_failure(self, manager, tmp_path):
         m, _, _ = manager
@@ -172,6 +213,35 @@ class TestGetOrCreateTunnel:
         result = m.get_or_create_tunnel(19132)
         assert result == "new.ply.gg:19132"
         mock_api.create_tunnel.assert_called_once_with(19132)
+
+    def test_pending_tunnel_warns_about_port_quota(self, manager):
+        m, mock_api, _ = manager
+        mock_api.load_secret_key.return_value = True
+        mock_api.list_tunnels.return_value = []
+        mock_api.create_tunnel.return_value = {"id": "pending-tunnel"}
+        mock_api.get_tunnel_address.return_value = None
+        result = m.get_or_create_tunnel(25565)
+        assert result is None
+        m.notification_callback.assert_called_once()
+        assert "warning" in m.notification_callback.call_args[0]
+
+    def test_cleanup_deletes_stale_zbb_tunnels_only(self, manager):
+        m, mock_api, _ = manager
+        mock_api.get_agent_id.return_value = "current-agent"
+        mock_api.list_account_tunnels.return_value = [
+            # stale ZBB tunnel from a dead agent — must be deleted
+            {"id": "t1", "name": "minecraft-java_ab12",
+             "origin": {"data": {"agent_id": "dead-agent"}}},
+            # same-name tunnel owned by current agent — keep
+            {"id": "t2", "name": "minecraft-java_cd34",
+             "origin": {"data": {"agent_id": "current-agent"}}},
+            # user-made tunnel on another agent — keep
+            {"id": "t3", "name": "my-custom-tunnel",
+             "origin": {"data": {"agent_id": "dead-agent"}}},
+        ]
+        mock_api.delete_tunnel.return_value = True
+        m._cleanup_stale_tunnels()
+        mock_api.delete_tunnel.assert_called_once_with("t1")
 
     def test_read_only_guest_mode(self, manager):
         m, mock_api, _ = manager
@@ -218,24 +288,28 @@ class TestStart:
 
     def test_start_not_linked(self, manager):
         m, _, _ = manager
-        m.is_linked = False
+        def _exists_side_effect(path):
+            if str(path) == str(m.toml_path):
+                return False
+            return True
         with patch.object(m, "ensure_binary", return_value=True):
-            m.start(25565)
-            m.console_callback.assert_any_call("[Playit] No playit.toml found. Link account first.")
+            with patch("os.path.exists", side_effect=_exists_side_effect):
+                with patch("os.makedirs"):
+                    m.start(25565)
+                    m.console_callback.assert_any_call("[Playit] No playit.toml found. Link account first.")
 
     def test_start_full_flow(self, manager):
         m, mock_api, _ = manager
         m.is_linked = True
-        mock_api.initialize.return_value = True
         with patch.object(m, "ensure_binary", return_value=True):
-            with patch.object(m, "get_or_create_tunnel", return_value="tunnel.ply.gg:25565"):
-                with patch.object(m, "_current_port", 25565, create=True):
-                    with patch("os.path.exists", return_value=True):
-                        with patch("subprocess.Popen") as mock_popen:
-                            mock_popen.return_value = FakeProcess()
-                            with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
-                                m.start(25565)
-                                assert m.current_address == "tunnel.ply.gg:25565"
+            with patch.object(m, "_current_port", 25565, create=True):
+                with patch("os.path.exists", return_value=True):
+                    with patch("subprocess.Popen") as mock_popen:
+                        mock_popen.return_value = FakeProcess()
+                        with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
+                            m.start(25565)
+                            # Agent launched — address resolved via _parse_line or dns poll, not in start()
+                            assert m.running is True
 
     def test_oserror_handling(self, manager):
         m, _, _ = manager
@@ -247,6 +321,99 @@ class TestStart:
                         with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
                             m.start(25565)
                             assert m.running is False
+
+
+class TestAuthFailure:
+    def test_start_blocked_when_secret_rejected(self, manager):
+        m, mock_api, _ = manager
+        mock_api.secret_rejected.return_value = True
+        with patch.object(m, "ensure_binary", return_value=True):
+            with patch("os.path.exists", return_value=True):
+                with patch("subprocess.Popen") as mock_popen:
+                    m.start(25565)
+                    mock_popen.assert_not_called()
+        assert m._auth_failed is True
+        assert m.running is False
+        m.status_callback.assert_any_call("Error", None)
+        m.notification_callback.assert_called_once()
+
+    def test_start_proceeds_when_check_inconclusive(self, manager):
+        m, mock_api, _ = manager
+        mock_api.secret_rejected.return_value = False
+        with patch.object(m, "ensure_binary", return_value=True):
+            with patch("os.path.exists", return_value=True):
+                with patch("subprocess.Popen") as mock_popen:
+                    mock_popen.return_value = FakeProcess()
+                    with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
+                        m.start(25565)
+        assert m.running is True
+        assert m._auth_failed is False
+
+    def test_handle_auth_failure_idempotent(self, manager):
+        m, _, _ = manager
+        m._handle_auth_failure("Agent secret invalid")
+        m._handle_auth_failure("Agent secret invalid")
+        assert m._auth_failed is True
+        m.notification_callback.assert_called_once()
+
+    def test_dns_polling_stops_after_repeated_401(self, manager):
+        m, mock_api, _ = manager
+        m.running = True
+        m._api_dns = None
+        m._stdout_dns = None
+        mock_api.get_tunnels.return_value = []
+        mock_api.consecutive_auth_failures = 3
+        with patch("time.sleep"):
+            m._dns_polling_loop()
+        assert m._auth_failed is True
+        m.status_callback.assert_any_call("Error", None)
+
+    def test_got_error_without_dns_sets_error_status(self, manager):
+        m, _, _ = manager
+        m.running = True
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"2026-07-05T00:10:42Z  INFO playit_cli::ui: Got Error\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        m.status_callback.assert_any_call("Error", None)
+
+    def test_got_error_with_dns_is_ignored(self, manager):
+        m, _, _ = manager
+        m.running = True
+        m._api_dns = "abc.ply.gg:25565"
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"2026-07-05T00:10:42Z  INFO playit_cli::ui: Got Error\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        for call in m.status_callback.call_args_list:
+            assert call[0][0] != "Error"
+
+    def test_auth_failure_soon_after_link_mentions_account_limit(self, manager):
+        m, _, _ = manager
+        m._linked_at = time.time() - 60
+        m._handle_auth_failure("Agent secret invalid")
+        joined = " ".join(str(c) for c in m.console_callback.call_args_list)
+        assert "over its agent/port limit" in joined
+
+    def test_invalid_agent_key_stdout_marks_auth_failed(self, manager):
+        m, _, _ = manager
+        m.running = True
+        mock_proc = MagicMock()
+        mock_proc.stdout.readline.side_effect = [
+            b"error: InvalidAgentKey\n",
+            b"",
+        ]
+        m.process = mock_proc
+        m._read_output()
+        assert m._auth_failed is True
+        assert m._tunnel_create_inflight is False
+        m.status_callback.assert_any_call("Error", None)
 
 
 class TestStop:
@@ -263,12 +430,13 @@ class TestStop:
         m.running = True
         m.process = mock_proc
         with patch.object(platform, "system", return_value="Windows"):
-            with patch("subprocess.run") as mock_run:
-                m.stop()
-                taskkill_calls = [c for c in mock_run.call_args_list if "taskkill" in str(c)]
-                assert len(taskkill_calls) >= 1
-                assert m.running is False
-                assert m.current_address is None
+            with patch("subprocess.CREATE_NO_WINDOW", 0x08000000, create=True):
+                with patch("subprocess.run") as mock_run:
+                    m.stop()
+                    taskkill_calls = [c for c in mock_run.call_args_list if "taskkill" in str(c)]
+                    assert len(taskkill_calls) >= 1
+                    assert m.running is False
+                    assert m.current_address is None
 
     def test_stop_linux_terminate(self, manager):
         m, _, _ = manager
@@ -318,6 +486,23 @@ class TestReset:
                 assert m.current_address is None
                 assert m._api_dns is None
                 assert mock_api._secret_key is None
+
+    def test_soft_reset_escalates_to_full_when_auth_failed(self, manager, tmp_path):
+        m, mock_api, _ = manager
+        m.is_linked = True
+        m._auth_failed = True
+        toml = tmp_path / "playit.toml"
+        toml.touch()
+        with patch.object(m, "toml_path", toml):
+            with patch.object(m, "stop"):
+                mock_api.load_secret_key.return_value = True
+                mock_api.list_tunnels.return_value = []
+                mock_api.delete_agent.return_value = True
+                m.reset(mode="soft")
+                assert toml.exists() is False
+                assert m.is_linked is False
+                assert m._auth_failed is False
+                assert mock_api.consecutive_auth_failures == 0
 
     def test_full_reset_api_delete_fails(self, manager, tmp_path):
         m, mock_api, _ = manager
@@ -422,15 +607,15 @@ class TestHeartbeatLoop:
                 m._heartbeat_loop()
             assert m.console_callback.call_count == 0
 
-    def test_restarts_after_3_failures(self, manager):
+    def test_restarts_after_10_failures(self, manager):
         m, _, _ = manager
         m.running = True
         m.process = None
         with patch("time.sleep"):
             with patch.object(m, "start"):
                 m._heartbeat_loop()
-                m.start.assert_called_once_with(25565)
-                m.console_callback.assert_any_call("[Playit] CRITICAL: Agent process dead. Auto-restarting...")
+                assert m.start.call_count == 9
+                m.console_callback.assert_any_call("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
 
 
 class TestParseLine:

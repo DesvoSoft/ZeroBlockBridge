@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import threading
+import concurrent.futures
 import webbrowser
 import time
 import subprocess
@@ -21,8 +22,9 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog
-from app.core.logic import check_java, download_server, accept_eula, install_fabric, Scheduler
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
+from app.ui.icons import icon
+
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR
 from app.ui.server_wizard import ServerWizard
@@ -33,14 +35,16 @@ from app.ui.modrinth_browser import ModrinthBrowser
 from app.services.sanitizer import is_safe_command
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
+from app.ui.players_dashboard import PlayersDashboard
 
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+_theme_path = ASSETS_DIR / "zbb_theme.json"
+ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
-        from app.services import settings_manager
+        from app.services.settings_manager import SettingsManager
         from app.core.constants import CONFIG_DIR
+        settings_manager = SettingsManager()
         settings_manager.set_config_dir(str(CONFIG_DIR))
         theme = settings_manager.get("theme", "Dark")
         ctk.set_appearance_mode(theme)
@@ -52,7 +56,7 @@ class MCTunnelApp(ctk.CTk):
         self._init_background_services()
 
     def _init_window_config(self):
-        self.title(AppConfig.WINDOW_TITLE)
+        self.title(f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
         self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
         self.minsize(AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT)
         self.grid_columnconfigure(0, weight=0, minsize=300)
@@ -61,9 +65,11 @@ class MCTunnelApp(ctk.CTk):
 
     def _init_state_variables(self):
         self.claim_url = None
-        
+        self.server_items = {}
+
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
         
         self.events.subscribe(ServerEvent.CONSOLE_LINE, self.update_console)
         self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
@@ -73,7 +79,6 @@ class MCTunnelApp(ctk.CTk):
         self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
         self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
         self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
-        
         # Toast notification for lag spikes
         self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
             self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
@@ -112,40 +117,62 @@ class MCTunnelApp(ctk.CTk):
         self.actions_frame.grid_columnconfigure(0, weight=1)
 
         self.btn_create_server = ctk.CTkButton(
-            self.actions_frame, text="+ Create New Server", 
-            command=self.create_server_dialog, corner_radius=12, height=36,
-            font=("Roboto Medium", 13)
+            self.actions_frame, text="Create New Server",
+            image=icon("plus", 14, "#ffffff"),
+            command=self.create_server_dialog, corner_radius=AppConfig.RADIUS_BTN, height=36,
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold")
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
+        ToolTip(self.btn_create_server, "Create a new Minecraft server")
 
-        self.btn_load_server = ctk.CTkButton(
-            self.actions_frame, text="📁 Load Existing Folder", 
-            command=self.load_existing_server_action, corner_radius=12, height=32, 
-            fg_color="transparent", border_width=1, border_color=AppConfig.COLOR_BORDER_DARK,
-            font=("Roboto", 12)
+        self.btn_add_server = ctk.CTkButton(
+            self.actions_frame, text="Add Server",
+            image=icon("folder", 14),
+            command=self.show_add_server_menu, corner_radius=AppConfig.RADIUS_BTN, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            hover_color=AppConfig.COLOR_BTN_GHOST,
+            font=(AppConfig.FONT_FAMILY, 12)
         )
-        self.btn_load_server.pack(fill="x", pady=(0, 10))
+        self.btn_add_server.pack(fill="x", pady=(0, 5))
+        ToolTip(self.btn_add_server, "Import or load an existing server")
+
+        self.btn_app_settings = ctk.CTkButton(
+            self.actions_frame, text="Settings",
+            image=icon("gear", 14),
+            command=self.open_app_settings, corner_radius=AppConfig.RADIUS_BTN, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            hover_color=AppConfig.COLOR_BTN_GHOST,
+            font=(AppConfig.FONT_FAMILY, 12)
+        )
+        self.btn_app_settings.pack(fill="x", pady=(0, 10))
+        ToolTip(self.btn_app_settings, "Application settings")
 
         # --- Separator ---
-        self.sep = ctk.CTkFrame(self.sidebar_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
+        self.sep = ctk.CTkFrame(self.sidebar_frame, height=2,
+                                fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.sep.grid(row=2, column=0, padx=25, pady=5, sticky="ew")
 
         # --- List Group ---
         self.lbl_servers = ctk.CTkLabel(
-            self.sidebar_frame, text="YOUR SERVERS", 
-            anchor="w", font=("Roboto Medium", 11), text_color=AppConfig.COLOR_TEXT_GRAY
+            self.sidebar_frame, text="SERVERS",
+            anchor="center", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), text_color=AppConfig.COLOR_TEXT_GRAY
         )
-        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="w")
+        self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="ew")
 
         self.server_list_frame = ctk.CTkScrollableFrame(
-            self.sidebar_frame, label_text="", corner_radius=12, 
-            border_width=1, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            fg_color=("gray95", "gray12")
+            self.sidebar_frame, label_text="", corner_radius=AppConfig.RADIUS_CARD,
+            border_width=0,
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)
         )
         self.server_list_frame.grid(row=4, column=0, padx=20, pady=(5, 15), sticky="nsew")
 
     def _build_main_area(self):
-        self.main_frame = ctk.CTkFrame(self, corner_radius=0)
+        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
         self.main_frame.grid(row=0, column=1, sticky="nsew")
         self.main_frame.grid_rowconfigure(0, weight=0) # Status bar
         self.main_frame.grid_rowconfigure(1, weight=0) # Compact Dashboard (Controls & Tunnel)
@@ -156,54 +183,93 @@ class MCTunnelApp(ctk.CTk):
         self._build_console_tabs()
 
     def _build_status_bar(self):
-        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
-        
-        self.lbl_status = ctk.CTkLabel(self.status_frame, text="⚪ Offline", font=("Roboto Medium", 15))
+
+        self.lbl_status = ctk.CTkLabel(self.status_frame, text="● Offline",
+                                       font=(AppConfig.FONT_FAMILY_DISPLAY, 15, "bold"),
+                                       text_color=AppConfig.COLOR_STATUS_OFFLINE)
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
-        # Moved from dashboard to save space
-        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(side="left", padx=(0, 10), pady=8)
+        self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        ToolTip(self.btn_start, "Start server")
+        self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        ToolTip(self.btn_stop, "Stop server")
+        self.btn_start.pack(side="left", padx=2)
 
+        _ghost_hover = AppConfig.COLOR_BTN_GHOST_HOVER
         self.btn_config = ctk.CTkButton(
-            self.status_frame, text="⚙", width=36, height=36, 
-            corner_radius=12, fg_color="transparent", hover_color="#334155",
-            font=("Roboto", 18), command=self.edit_server_properties,
+            self.status_frame, text="", image=icon("gear", 17), width=36, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
+            command=self.edit_server_properties,
             state="disabled"
         )
         self.btn_config.pack(side="left", padx=5)
+        ToolTip(self.btn_config, "Server settings")
 
-        self.btn_start = ctk.CTkButton(self.status_frame, text="▶", state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=12, height=36)
-        self.btn_start.pack(side="left", padx=2)
-        self.btn_stop = ctk.CTkButton(self.status_frame, text="■", state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
-        self.btn_stop.pack(side="left", padx=2)
+        self.btn_open_folder = ctk.CTkButton(
+            self.status_frame, text="", image=icon("folder", 16), width=36, height=36,
+            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
+            command=self.open_server_folder,
+            state="disabled"
+        )
+        self.btn_open_folder.pack(side="left", padx=5)
+        ToolTip(self.btn_open_folder, "Open server folder")
+
+        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
+        self.lbl_dash_title.pack(side="left", padx=(5, 10), pady=8)
 
         self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
-        self.status_right_frame.pack(side="right", padx=20, pady=8)
-        
-        self.lbl_server_info = ctk.CTkLabel(self.status_right_frame, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_server_info.pack(side="left", padx=(0, 15))
-        
-        self.lbl_player_count = ctk.CTkLabel(self.status_right_frame, text="Players: 0", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_player_count.pack(side="left", padx=(0, 15))
-        
-        self.lbl_java_ver = ctk.CTkLabel(self.status_right_frame, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_java_ver.pack(side="left", padx=(0, 15))
+        self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)
+
+        badge_java = ctk.CTkFrame(
+            self.status_right_frame, fg_color="transparent"
+        )
+        badge_java.pack(side="right", padx=(5, 10))
+        self.lbl_java_ver = ctk.CTkLabel(
+            badge_java, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_java_ver.pack(padx=8, pady=2)
+
+        badge_server_info = ctk.CTkFrame(
+            self.status_right_frame, fg_color="transparent"
+        )
+        badge_server_info.pack(side="right", padx=(5, 10))
+        self.lbl_server_info = ctk.CTkLabel(
+            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL
+        )
+        self.lbl_server_info.pack(padx=8, pady=2)
+
+        badge_players = ctk.CTkFrame(
+            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE
+        )
+        badge_players.pack(side="right", padx=(5, 5))
+        self.btn_players = ctk.CTkButton(
+            badge_players,
+            text="0",
+            image=icon("user", 13, AppConfig.COLOR_BADGE_TEXT),
+            command=self.open_players_dashboard,
+            fg_color="transparent",
+            text_color=AppConfig.COLOR_BADGE_TEXT,
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            font=AppConfig.FONT_BODY_SMALL,
+            height=24,
+            width=60
+        )
+        self.btn_players.pack(padx=2, pady=2)
+        ToolTip(self.btn_players, "Players online")
 
 
 
     def _build_dashboard(self):
-        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
  
-        # --- Separator ---
-        sep = ctk.CTkFrame(self.dashboard_frame, height=2, fg_color=AppConfig.COLOR_BORDER_DARK)
-        sep.pack(fill="x", padx=15, pady=4)
-
         # --- Tunnel ---
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 1))
+        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 4))
         self._build_tunnel_controls()
 
     def _build_tunnel_controls(self):
@@ -213,39 +279,52 @@ class MCTunnelApp(ctk.CTk):
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
 
-        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=("Roboto Medium", 13), text_color="#3b82f6")
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color=AppConfig.COLOR_LINK)
         self.lbl_dns_display.pack(side="left", padx=(5, 0))
 
         self.btn_copy_ip = ctk.CTkButton(
-            self.ip_frame, text="📋", command=self._copy_ip_to_clipboard,
-            fg_color="#1e293b", hover_color="#334155",
-            border_width=1, border_color="#3b82f6",
-            width=36, corner_radius=12, height=28,
-            font=("Roboto", 13), text_color="#3b82f6",
+            self.ip_frame, text="", image=icon("copy", 14, AppConfig.COLOR_LINK),
+            command=self._copy_ip_to_clipboard,
+            fg_color="transparent",
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            border_width=1, border_color=AppConfig.COLOR_LINK,
+            width=36, corner_radius=AppConfig.RADIUS_BTN, height=28,
         )
+        ToolTip(self.btn_copy_ip, "Copy address")
 
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="▶", command=self.start_tunnel, width=45, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="■", command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=12, height=36)
-        
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, "#ffffff"), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+        ToolTip(self.btn_tunnel_start, "Start tunnel")
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, "#ffffff"), command=self.stop_tunnel, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        ToolTip(self.btn_tunnel_stop, "Stop tunnel")
+
         # --- Playit Account Linking (collapsible when unlinked) ---
         self._setup_expanded = False
         self.btn_toggle_setup = ctk.CTkButton(
-            self.tunnel_toolbar, text="⚡ Link", command=self._toggle_setup_section,
-            fg_color="#1e293b", hover_color="#334155",
-            border_width=1, border_color="#f97316",
-            width=70, corner_radius=12, height=36,
-            font=("Roboto Medium", 12), text_color="#f97316",
+            self.tunnel_toolbar, text="Link", image=icon("bolt", 14, AppConfig.COLOR_ACCENT_AMBER),
+            command=self._toggle_setup_section,
+            fg_color=AppConfig.COLOR_BTN_GHOST,
+            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
+            width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
+            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
+        ToolTip(self.btn_toggle_setup, "Link Playit account")
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
-        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=12)
-        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=12, fg_color=AppConfig.COLOR_BTN_PRIMARY)
-        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=12, height=36, font=("Roboto Medium", 11))
+        self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=AppConfig.RADIUS_INPUT)
+        self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=AppConfig.RADIUS_BTN, height=36, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"))
 
-        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="↻", command=self.reset_tunnel, fg_color="gray", hover_color="gray30", width=45, corner_radius=12, height=36)
+        self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("reset", 15, AppConfig.COLOR_ACCENT_AMBER),
+                                   command=self.reset_tunnel,
+                                   fg_color=AppConfig.COLOR_BTN_GHOST,
+                                   hover_color=("#fde9c8", "#3a2e12"),
+                                   border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
+                                   width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_reset.pack(side="left", padx=2)
+        ToolTip(self.btn_reset, "Reset tunnels")
 
         # Initial UI State Check
         self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
@@ -264,20 +343,22 @@ class MCTunnelApp(ctk.CTk):
         
         self.console_tabs.add("Console")
         self.console_tabs.add("Tunnel Log")
-        
+
+        self._build_console_search_bar(self.console_tabs.tab("Console"), "server_console")
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
         self.server_console.pack(fill="both", expand=True)
-        
-        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=12, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
+
+        self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
-        
-        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Type command here...", corner_radius=12, height=36)
+
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands...", corner_radius=AppConfig.RADIUS_INPUT, height=36, state="disabled")
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
-        
-        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=12, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+
+        self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
         self.btn_send.pack(side="right", padx=10, pady=5)
-        
+
+        self._build_console_search_bar(self.console_tabs.tab("Tunnel Log"), "tunnel_console")
         self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
         self.tunnel_console.pack(fill="both", expand=True)
 
@@ -288,12 +369,38 @@ class MCTunnelApp(ctk.CTk):
             get_server_info=self._get_current_server_info,
         )
         self.modrinth_browser.pack(fill="both", expand=True)
+        self._update_mods_tab_state()
 
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
         self.zbb_manager.bootstrap()
         # Pre-warm now handled by ZBBManager.bootstrap() → core.py
+
+    def _build_console_search_bar(self, parent, console_attr):
+        bar = ctk.CTkFrame(parent, fg_color="transparent")
+        bar.pack(fill="x", pady=(0, 5))
+
+        entry = ctk.CTkEntry(bar, placeholder_text="Search console...", corner_radius=AppConfig.RADIUS_INPUT, height=30)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        def do_search(event=None):
+            console = getattr(self, console_attr)
+            console.highlight(entry.get())
+
+        def do_next(event=None):
+            console = getattr(self, console_attr)
+            pattern = entry.get()
+            if pattern != getattr(console, "_last_pattern", None) or not getattr(console, "_search_matches", None):
+                console.highlight(pattern)
+            else:
+                console.jump_to_next_match()
+
+        entry.bind("<Return>", do_search)
+
+        btn_next = ctk.CTkButton(bar, text="Next", width=60, height=30, corner_radius=AppConfig.RADIUS_BTN,
+                                  hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, command=do_next)
+        btn_next.pack(side="right")
 
     def send_server_command(self, event=None):
         if not self.zbb_manager.is_running():
@@ -319,12 +426,12 @@ class MCTunnelApp(ctk.CTk):
                 best = installations[0]
                 source_badge = "Portable" if best.source == "PORTABLE" else "System"
                 label = f"Java {best.major} ({source_badge})"
-                self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color="green"))
+                self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=AppConfig.COLOR_BTN_SUCCESS))
                 self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
-                self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color="red"))
+                self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color=AppConfig.COLOR_STATUS_ERROR))
                 self.after(0, lambda: self.server_console.log("[System] No Java detected on this system. ZeroBlockBridge will auto-install the required JDK when the server starts."))
-        threading.Thread(target=_check, daemon=True).start()
+        self.executor.submit(_check)
 
     def load_servers(self):
         def _scan():
@@ -336,19 +443,162 @@ class MCTunnelApp(ctk.CTk):
                 logger.warning("Failed to scan servers: %s", e)
                 servers = []
             self.after(0, lambda s=servers: self._render_server_list(s))
-        threading.Thread(target=_scan, daemon=True).start()
+        self.executor.submit(_scan)
 
     def _render_server_list(self, servers):
         for widget in self.server_list_frame.winfo_children():
             widget.destroy()
+        self.server_items = {}
         if not servers:
-            lbl = ctk.CTkLabel(self.server_list_frame, text="No servers found.")
-            lbl.pack(pady=10)
+            ctk.CTkLabel(
+                self.server_list_frame, text="",
+                image=icon("package", 40, AppConfig.COLOR_TEXT_MUTED)
+            ).pack(pady=(24, 4))
+            ctk.CTkLabel(
+                self.server_list_frame, text="No servers yet.",
+                text_color=AppConfig.COLOR_TEXT_MUTED, font=(AppConfig.FONT_FAMILY, 13)
+            ).pack(pady=(0, 6))
+            ctk.CTkButton(
+                self.server_list_frame, text="Create your first server",
+                command=self.create_server_dialog,
+                fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                corner_radius=AppConfig.RADIUS_BTN, height=32
+            ).pack(padx=16)
         else:
             for s in servers:
-                item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select)
+                item = ServerListItem(self.server_list_frame, server_name=s, on_click=self.on_server_select,
+                                      on_delete=self.on_server_delete, on_export=self.on_server_export)
                 item.pack(fill="x", padx=5, pady=5)
+                self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
+
+    def _update_mods_tab_state(self):
+        """Mods tab is only usable with a server selected."""
+        enabled = bool(self.zbb_manager.current_server)
+        try:
+            btn = self.console_tabs._segmented_button._buttons_dict["Mods"]
+            btn.configure(state="normal" if enabled else "disabled")
+        except (AttributeError, KeyError) as e:
+            logger.debug("Mods tab state update failed: %s", e)
+        if not enabled and self.console_tabs.get() == "Mods":
+            self.console_tabs.set("Console")
+
+    def on_server_delete(self, server_name):
+        if self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name:
+            Toast.show(self, "Stop the server before deleting it", toast_type="warning")
+            return
+        confirmed = ZBBDialog.confirm(
+            self, "Delete Server",
+            f"Delete '{server_name}' permanently?\n\n"
+            "The world, configs and everything inside the server folder "
+            "will be removed. This cannot be undone.\n\n"
+            "(Imported servers: only the link is removed, the original "
+            "folder is kept.)",
+            confirm_text="Delete", danger=True,
+        )
+        if not confirmed:
+            return
+        try:
+            logic.delete_server(server_name)
+        except OSError as e:
+            Toast.show(self, f"Delete failed: {e}", toast_type="error")
+            return
+        if self.zbb_manager.current_server == server_name:
+            self.zbb_manager.current_server = None
+            self.lbl_dash_title.configure(text="Select a server")
+            self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
+            self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False)
+            self._update_mods_tab_state()
+        Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
+        self.load_servers()
+
+    def on_server_export(self, server_name):
+        from tkinter import filedialog
+        from app.services.migration import export_server, MigrationError
+
+        dest_path = filedialog.asksaveasfilename(
+            defaultextension=".zbbpack",
+            initialfile=f"{server_name}.zbbpack",
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not dest_path:
+            return
+
+        Toast.show(self, f"Exporting '{server_name}'...", toast_type="info")
+
+        def _export():
+            try:
+                export_server(server_name, dest_path)
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: Toast.show(self, f"Export failed: {e}", toast_type="error"))
+                return
+            self.after(0, lambda: Toast.show(self, f"Server '{server_name}' exported", toast_type="info"))
+
+        threading.Thread(target=_export, daemon=True).start()
+
+    def show_add_server_menu(self):
+        import tkinter as tk
+        menu = tk.Menu(
+            self, tearoff=0,
+            bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
+            fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+            activebackground=resolve_color(AppConfig.COLOR_BTN_GHOST_HOVER),
+            activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+            borderwidth=0,
+        )
+        menu.add_command(label="From Folder (existing server)", command=self.load_existing_server_action)
+        menu.add_command(label="From .zbbpack (import)", command=self.on_import_zbbpack)
+        btn = self.btn_add_server
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def on_import_zbbpack(self):
+        from tkinter import filedialog
+        from app.services.migration import import_server, MigrationError
+
+        src_path = filedialog.askopenfilename(
+            filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
+        )
+        if not src_path:
+            return
+
+        suggested_name = os.path.splitext(os.path.basename(src_path))[0]
+        prompt_text = f"Server name (suggested: {suggested_name}):"
+        new_name = None
+        while True:
+            dialog = ctk.CTkInputDialog(text=prompt_text, title="Import .zbbpack")
+            entered = dialog.get_input()
+            if not entered:
+                return
+            entered = entered.strip()
+            if not entered:
+                entered = suggested_name
+            if os.path.isdir(os.path.join(SERVERS_DIR, entered)):
+                Toast.show(self, f"A server named '{entered}' already exists", toast_type="error")
+                prompt_text = f"Server name (suggested: {suggested_name}):"
+                continue
+            new_name = entered
+            break
+
+        Toast.show(self, f"Importing '{new_name}'...", toast_type="info")
+
+        def _import():
+            try:
+                import_server(src_path, new_name)
+            except (MigrationError, OSError) as e:
+                self.after(0, lambda e=e: Toast.show(self, f"Import failed: {e}", toast_type="error"))
+                return
+            self.after(0, lambda: Toast.show(
+                self, f"Server '{new_name}' imported. Reinstall the server jar via Properties before starting.",
+                toast_type="info"))
+            self.after(0, self.load_servers)
+
+        threading.Thread(target=_import, daemon=True).start()
 
     def on_server_select(self, server_name):
         # UI Locking: Block switching if current server is active
@@ -358,43 +608,51 @@ class MCTunnelApp(ctk.CTk):
 
         self.zbb_manager.select_server(server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
-        server_path = os.path.join(SERVERS_DIR, server_name)
-        
-        server_type = "Vanilla"
-        if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")): 
-            server_type = "Fabric"
-        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
-            server_type = "Forge"
-        
-        meta = logic.get_server_meta(server_name)
-        mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"🎮 {server_type} {mc_version}", text_color="white")
-        
-        is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
-        
-        self.btn_start.configure(state="disabled" if is_running else "normal")
-        self.btn_stop.configure(state="normal" if is_running else "disabled")
-        
-        self.btn_config.configure(state="normal")
-        self.server_console.log(f"[UI] Selected server: {server_name}")
-    def open_server_folder(self):
-        def _open_folder(p):
-            import subprocess
-            if sys.platform == "win32":
-                os.startfile(p)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", str(p)])
-            else:
-                subprocess.run(["xdg-open", str(p)])
 
+        for name, it in self.server_items.items():
+            it.set_selected(name == server_name)
+
+        meta = logic.get_server_meta(server_name)
+        server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
+        mc_version = meta.get("version", "?") if meta else "?"
+        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+
+        is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
+
+        self._show_run_stop(self.btn_start, self.btn_stop, running=is_running)
+
+        if hasattr(self, "modrinth_browser"):
+            self.modrinth_browser.refresh_server_context()
+        self._update_mods_tab_state()
+
+        item = self.server_items.get(server_name)
+        if item:
+            item.set_status("online" if is_running else "offline")
+
+        self.btn_config.configure(state="normal")
+        self.btn_open_folder.configure(state="normal")
+        self.entry_console.configure(state="normal", placeholder_text="Type command here...")
+        self.btn_send.configure(state="normal")
+        self.server_console.log(f"[UI] Selected server: {server_name}")
+
+    def _open_in_file_manager(self, path) -> None:
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["explorer", str(path)], check=False)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(path)], check=False)
+        except Exception as e:
+            self.server_console.log(f"[Error] Failed to open folder: {e}")
+
+    def open_server_folder(self):
         if not self.zbb_manager.current_server:
-            path = SERVERS_DIR
-            _open_folder(path)
+            self._open_in_file_manager(SERVERS_DIR)
             return
-            
         server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
         if os.path.exists(server_path):
-            _open_folder(server_path)
+            self._open_in_file_manager(server_path)
 
     def _get_current_server_info(self):
         if not self.zbb_manager.current_server:
@@ -406,7 +664,7 @@ class MCTunnelApp(ctk.CTk):
         if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
             loader = stype
         
-        logger.info(f"Server Info for Mod Search: {self.zbb_manager.current_server} | MC: {mc_version} | Loader: {loader or 'any'}")
+        logger.info("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.zbb_manager.current_server, mc_version, loader or 'any')
         return (self.zbb_manager.current_server, mc_version, loader)
 
     def save_advanced_settings(self, *args):
@@ -421,22 +679,7 @@ class MCTunnelApp(ctk.CTk):
 
     def edit_server_properties(self):
         if not self.zbb_manager.current_server: return
-        if self.zbb_manager.is_running():
-            self.server_console.log("[Error] Stop the server before editing properties.")
-            return
-        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic)
-
-    def open_mods_folder_action(self):
-        if not self.zbb_manager.current_server: return
-        server_path = SERVERS_DIR / self.zbb_manager.current_server
-        if not server_path.exists(): return
-        try:
-            if sys.platform == "win32": os.startfile(str(server_path))
-            elif sys.platform == "darwin": subprocess.run(["open", str(server_path)])
-            else: subprocess.run(["xdg-open", str(server_path)])
-            self.server_console.log(f"[System] Opened server folder for '{self.zbb_manager.current_server}'")
-        except Exception as e:
-            self.server_console.log(f"[Error] Failed to open server folder: {e}")
+        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic, self.zbb_manager)
 
     def update_console(self, text):
         if isinstance(text, str):
@@ -448,6 +691,23 @@ class MCTunnelApp(ctk.CTk):
             toast_type = Toast.resolve_type(data)
             duration = 6000 if toast_type == "error" else 4000
             self.after(0, lambda: Toast.show(self, msg, toast_type=toast_type, duration=duration))
+            if data.get("action") == "mod_dependency_fix":
+                missing_mod_ids = data.get("missing_mod_ids") or []
+                self.after(0, lambda: self._offer_mod_auto_install(missing_mod_ids))
+
+    def _offer_mod_auto_install(self, missing_mod_ids):
+        if not missing_mod_ids or not self.zbb_manager.current_server:
+            return
+        preview = ", ".join(missing_mod_ids[:5]) + ("..." if len(missing_mod_ids) > 5 else "")
+        msg = (
+            f"The server crashed due to missing mod dependencies:\n\n{preview}\n\n"
+            "Attempt to auto-install these from Modrinth into the mods/ folder?"
+        )
+        if ZBBDialog.confirm(self, "Missing Mod Dependencies", msg, confirm_text="Install"):
+            self.events.emit(ServerEvent.REQUEST_MOD_INSTALL, {
+                "missing_mod_ids": missing_mod_ids,
+                "server_name": self.zbb_manager.current_server,
+            })
 
     def update_tunnel_console(self, text):
         self.after(0, lambda: self.tunnel_console.log(text))
@@ -455,33 +715,69 @@ class MCTunnelApp(ctk.CTk):
     def start_server_action(self):
         def _start():
             self.zbb_manager.start_server()
-        threading.Thread(target=_start, daemon=True).start()
+        self.executor.submit(_start)
+
+    def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True):
+        """Show only one of run/stop at a time, matching current state."""
+        if running:
+            btn_run.pack_forget()
+            btn_stop.pack(side="left", padx=2)
+            btn_stop.configure(state="normal" if enabled else "disabled")
+        else:
+            btn_stop.pack_forget()
+            btn_run.pack(side="left", padx=2)
+            btn_run.configure(state="normal" if enabled else "disabled")
+
+    def _set_current_server_pill(self, status: str):
+        item = self.server_items.get(self.zbb_manager.current_server)
+        if item:
+            item.set_status(status)
 
     def on_server_starting(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="⏳ Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
-        self.after(0, lambda: self.btn_start.configure(state="disabled"))
-        self.after(0, lambda: self.btn_stop.configure(state="normal"))
+        self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True))
+        self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
             java_ver = data.get("required_java", "?")
             label = f"Java {java_ver} ({jdk_src})"
-            color = "green" if jdk_src == "system" else "orange"
+            color = AppConfig.COLOR_STATUS_ONLINE if jdk_src == "system" else AppConfig.COLOR_STATUS_STARTING
             self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=color))
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="🟢 Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
-        self.after(0, lambda: self.lbl_player_count.configure(text=f"Players: {count}"))
+        self.after(0, lambda: self.btn_players.configure(text=f"{count}"))
+
+    def open_players_dashboard(self):
+        if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
+            self.players_dashboard_window.focus()
+        else:
+            self.players_dashboard_window = PlayersDashboard(self, self.events, self.zbb_manager)
+
+    def open_app_settings(self):
+        if getattr(self, "app_settings_window", None) is not None and self.app_settings_window.winfo_exists():
+            # The dialog may be withdrawn (CTk titlebar dance on theme switch)
+            self.app_settings_window.deiconify()
+            self.app_settings_window.lift()
+            self.app_settings_window.focus()
+        else:
+            from app.ui.app_settings import AppSettingsDialog
+            self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="⚪ Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
-        self.after(0, lambda: self.btn_start.configure(state="normal"))
-        self.after(0, lambda: self.btn_stop.configure(state="disabled"))
+        self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False))
+        self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):
-        self.zbb_manager.stop_server()
-        self.on_server_stopped()
+        # Off the Tk thread: stop() blocks up to ~15s (graceful wait + kill).
+        def _stop():
+            self.zbb_manager.stop_server()
+            self.on_server_stopped()
+        self.executor.submit(_stop)
 
     def create_server_dialog(self):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
@@ -504,7 +800,7 @@ class MCTunnelApp(ctk.CTk):
                 self.server_console.log(f"[Error] Failed to map custom location: {e}")
                 return
 
-        threading.Thread(target=self.start_download_process, args=(config,), daemon=True).start()
+        self.executor.submit(self.start_download_process, config)
 
     def start_download_process(self, config):
         self.after(0, lambda: self.show_progress_dialog(config))
@@ -529,10 +825,16 @@ class MCTunnelApp(ctk.CTk):
                     success = logic.download_server(name, engine, version, dialog.update_progress)
                 elif engine == "Fabric":
                     self.server_console.log(f"[System] Installing Fabric {version}...")
-                    success = logic.install_fabric(name, version, dialog.update_progress)
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
+                    success = logic.install_fabric(name, version, dialog.update_progress, java_bin=_java_bin)
                 elif engine == "Forge":
                     self.server_console.log(f"[System] Installing Forge {version}...")
-                    success = logic.install_forge(name, version, dialog.update_progress)
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
+                    success = logic.install_forge(name, version, dialog.update_progress, java_bin=_java_bin)
                 else:
                     self.server_console.log(f"[Error] Unknown server type: {engine}")
                     success = False
@@ -549,7 +851,8 @@ class MCTunnelApp(ctk.CTk):
                     self.server_console.log("[System] Scaffolding server environment...")
                     from app.services.scaffolder import pre_boot_scaffold
                     server_dir = os.path.join(SERVERS_DIR, name)
-                    port = self.zbb_manager.get_server_port(name)
+                    port_str = config.get("playit_port")
+                    port = int(port_str) if port_str and str(port_str).isdigit() else self.zbb_manager.get_server_port(name)
                     pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
                     self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
                     if "auto_install_jdk" in config:
@@ -559,7 +862,6 @@ class MCTunnelApp(ctk.CTk):
                     dialog.update_progress(0.50, "Analyzing Java requirements from server jar...")
                     self.server_console.log("[System] Analyzing Java requirements from server jar...")
                     from app.services.bytecode_analyzer import analyze_jar_bytecode
-                    from app.core.logic import wait_for_jar_ready
                     jar_path = os.path.join(server_dir, "server.jar")
                     # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
                     self.server_console.log("[System] Waiting for server.jar normalization...")
@@ -579,26 +881,30 @@ class MCTunnelApp(ctk.CTk):
                         except Exception as e:
                             self.server_console.log(f"[Warning] Bytecode analysis crashed: {e}")
 
-                    if required_java:
-                        self.server_console.log(f"[System] Bytecode analysis: Java {required_java} required.")
-                        # Pre-download JDK during wizard so it's ready when server starts
-                        from app.services.java_installer import JdkManagerInstance
-                        if not JdkManagerInstance.get_java_path(required_java):
-                            dialog.update_progress(0.65, f"Downloading Java {required_java}...")
-                            self.server_console.log(f"[System] Downloading Java {required_java}...")
-                            try:
-                                JdkManagerInstance.ensure_java(required_java)
-                                self.server_console.log(f"[System] Java {required_java} ready.")
-                            except Exception as jde:
-                                self.server_console.log(f"[Warning] Java {required_java} download failed: {jde}")
+                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_detector import get_required_java
+                    version_map_java = get_required_java(version)
+                    # Floor bytecode result against version-map to avoid Forge shim (Java 8) overriding correct version
+                    if required_java and required_java >= version_map_java:
+                        final_java = required_java
                     else:
-                        self.server_console.log("[System] Bytecode analysis inconclusive; will use version map at startup.")
+                        final_java = version_map_java
+                    self.server_console.log(f"[System] Java {final_java} required (source: {'bytecode' if required_java and required_java >= version_map_java else 'version-map'}).")
+                    logic.update_server_meta(name, {"required_java": final_java})
+                    if not JdkManagerInstance.get_java_path(final_java):
+                        dialog.update_progress(0.65, f"Downloading Java {final_java}...")
+                        self.server_console.log(f"[System] Downloading Java {final_java}...")
+                        try:
+                            JdkManagerInstance.ensure_java(final_java)
+                            self.server_console.log(f"[System] Java {final_java} ready.")
+                        except Exception as jde:
+                            self.server_console.log(f"[Warning] Java {final_java} download failed: {jde}")
 
                     dialog.update_progress(0.70, "Setting up Playit tunnel...")
                     self.server_console.log(f"[System] Server '{name}' created successfully.")
                     self.zbb_manager.create_tunnel_for_server(name)
                     dialog.update_progress(1.0, "Server ready!")
-                    self.after(0, lambda: self._on_download_complete(dialog, name))
+                    self.after(0, lambda: self._on_download_complete(dialog, name, config.get("start_after_creation", False)))
                 else:
                     self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
                     self.after(0, dialog.close)
@@ -607,30 +913,31 @@ class MCTunnelApp(ctk.CTk):
                 import traceback
                 logger.error("Installation failed:\n%s", traceback.format_exc())
                 self.after(0, dialog.close)
-        threading.Thread(target=run_install, daemon=True).start()
+        self.executor.submit(run_install)
 
-    def _on_download_complete(self, dialog, name):
+    def _on_download_complete(self, dialog, name, start_after_creation=False):
         self.load_servers()
         self.server_console.log(f"[System] Setup complete for '{name}'.")
         self.on_server_select(name)
         dialog.close()
-        start_now = tkinter.messagebox.askyesno(
-            "Server Ready",
+        if start_after_creation:
+            self.start_server_action()
+            return
+        start_now = ZBBDialog.confirm(
+            self, "Server Ready",
             f"'{name}' has been created successfully.\n\nDo you want to start it now?",
-            icon="question"
+            confirm_text="Start now", cancel_text="Later",
         )
         if start_now:
             self.start_server_action()
 
     def start_tunnel(self):
-        self.btn_tunnel_start.configure(state="disabled")
-        self.btn_tunnel_stop.configure(state="normal")
+        self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
         self.zbb_manager.start_tunnel()
 
     def stop_tunnel(self):
         self.zbb_manager.stop_tunnel()
-        self.btn_tunnel_start.configure(state="normal")
-        self.btn_tunnel_stop.configure(state="disabled")
+        self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)
 
     def reset_tunnel(self):
         msg = (
@@ -638,7 +945,7 @@ class MCTunnelApp(ctk.CTk):
             "After reset, click ▶ to create a new tunnel.\n\n"
             "Are you sure?"
         )
-        if not tkinter.messagebox.askyesno("Reset Tunnels", msg): return
+        if not ZBBDialog.confirm(self, "Reset Tunnels", msg, confirm_text="Reset"): return
         
         Toast.show(self, "Clearing tunnels...", toast_type="info")
         self.tunnel_console.log("[System] Clearing tunnels...")
@@ -646,12 +953,11 @@ class MCTunnelApp(ctk.CTk):
         def _reset_task():
             self.zbb_manager.reset_tunnel(mode="soft")
             self.after(0, lambda: self.on_tunnel_status({"status": "Offline", "skip_debounce": True}))
-            self.after(0, lambda: self.btn_tunnel_start.configure(state="normal"))
-            self.after(0, lambda: self.btn_tunnel_stop.configure(state="disabled"))
+            self.after(0, lambda: self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False))
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
             # Toast is handled by PlayitManager.notification_callback via EventBus
 
-        threading.Thread(target=_reset_task, daemon=True).start()
+        self.executor.submit(_reset_task)
 
     def on_tunnel_status(self, data):
         if not data: return
@@ -665,14 +971,15 @@ class MCTunnelApp(ctk.CTk):
 
         def _update():
             # 1. Update Status Label and Colors
-            color = "gray"
-            icon = "●"
-            if status == "Online": color = "green"
-            elif status == "Error": color, icon = "red", "✖"
-            elif status == "Starting...": color, icon = "orange", "⏳"
-            
-            self.lbl_tunnel_status.configure(text=f"Tunnel: {icon} {status}", text_color=color)
-            
+            color = AppConfig.COLOR_STATUS_OFFLINE
+            if status == "Online": color = AppConfig.COLOR_STATUS_ONLINE
+            elif status == "Error": color = AppConfig.COLOR_STATUS_ERROR
+            elif status == "Starting...": color = AppConfig.COLOR_STATUS_STARTING
+
+            self.lbl_tunnel_status.configure(text=f"Tunnel: ● {status}", text_color=color)
+
+            is_linked = self.zbb_manager.playit_manager.is_linked
+
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
             # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
             # See playit_manager.py: _dns_polling_loop, _parse_line, _stdout_dns.
@@ -686,29 +993,27 @@ class MCTunnelApp(ctk.CTk):
             if status == "Online" and display_dns:
                 self._last_full_ip = display_dns
                 host = display_dns.split(":")[0] if ":" in display_dns else display_dns
-                self.lbl_dns_display.configure(text=host, text_color="#3b82f6")
+                self.lbl_dns_display.configure(text=host, text_color=AppConfig.COLOR_LINK)
                 self.lbl_dns_display.pack(side="left", padx=5)
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
             elif status == "Starting...":
-                self.lbl_dns_display.configure(text="Waiting for domain...", text_color="#f97316")
+                self.lbl_dns_display.configure(text="Waiting for domain...", text_color=AppConfig.COLOR_STATUS_STARTING)
                 self.lbl_dns_display.pack(side="left", padx=5)
             elif status == "Error":
-                self.lbl_dns_display.configure(text="Error", text_color="#ef4444")
+                self.lbl_dns_display.configure(text="Error", text_color=AppConfig.COLOR_STATUS_ERROR)
                 self.lbl_dns_display.pack(side="left", padx=5)
             else: # Offline
                 self.lbl_dns_display.configure(text="")
                 self._last_full_ip = None
 
             # 2. Update Buttons Visibility and State
-            is_linked = self.zbb_manager.playit_manager.is_linked
-
             if not is_linked:
                 self.btn_tunnel_start.pack_forget()
                 self.btn_tunnel_stop.pack_forget()
                 self.setup_frame.pack_forget()
                 self.btn_reset.pack_forget()
-                self.btn_toggle_setup.pack(side="left", padx=2)
+                self.btn_toggle_setup.pack(side="left", padx=(8, 2))
                 if self._setup_expanded:
                     self.btn_toggle_setup.pack_forget()
                     self.setup_frame.pack(side="left", fill="x")
@@ -727,19 +1032,14 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_link_code.pack_forget()
                 self.btn_claim.pack_forget()
 
-                self.btn_tunnel_start.pack(side="left", padx=2)
-                self.btn_tunnel_stop.pack(side="left", padx=2)
-                self.btn_reset.pack(side="left", padx=2)
-
                 if status == "Online":
-                    self.btn_tunnel_start.configure(state="disabled")
-                    self.btn_tunnel_stop.configure(state="normal")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True)
                 elif status == "Starting...":
-                    self.btn_tunnel_start.configure(state="disabled")
-                    self.btn_tunnel_stop.configure(state="disabled")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
                 else:
-                    self.btn_tunnel_start.configure(state="normal")
-                    self.btn_tunnel_stop.configure(state="disabled")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)
+
+                self.btn_reset.pack(side="left", padx=2)
 
         self.after(0, _update)
 
@@ -764,18 +1064,20 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, "Please enter a valid Setup Code.", toast_type="error")
             return
             
+        self.btn_link_code.configure(state="disabled")
         self.tunnel_console.log(f"[System] Linking account...")
         Toast.show(self, "Verifying code with Playit...", toast_type="info")
         
         def _link_task():
             success = self.zbb_manager.link_playit_manually(code)
+            self.after(0, lambda: self.btn_link_code.configure(state="normal"))
             if success:
                 self.after(0, lambda: self.entry_setup_code.delete(0, 'end'))
                 self.after(0, lambda: setattr(self, '_setup_expanded', False))
             else:
                 self.after(0, lambda: Toast.show(self, "Link failed. Verify your code.", toast_type="error"))
         
-        threading.Thread(target=_link_task, daemon=True).start()
+        self.executor.submit(_link_task)
 
     def load_existing_server_action(self):
         folder = ctk.filedialog.askdirectory(title="Select Existing Server Folder")
@@ -796,10 +1098,53 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
     def on_close(self):
-        self.zbb_manager.shutdown()
-        if hasattr(self, '_instance_lock'): self._instance_lock.release()
-        self.destroy()
-        sys.exit(0)
+        self.withdraw()
+
+        # Cancel in-flight UI tasks immediately (downloads, link checks, etc.)
+        self.executor.shutdown(wait=False, cancel_futures=True)
+
+        self._shutdown_event = threading.Event()
+
+        def _do_shutdown():
+            try:
+                self.zbb_manager.shutdown()
+                self._kill_orphan_processes()
+            finally:
+                if hasattr(self, '_instance_lock'):
+                    self._instance_lock.release()
+                self._shutdown_event.set()
+
+        threading.Thread(target=_do_shutdown, daemon=True, name="AppShutdown").start()
+        self._poll_shutdown(deadline=time.monotonic() + 8.0)
+
+    def _kill_orphan_processes(self):
+        """Force-kill any subprocesses still alive after graceful shutdown."""
+        # Best-effort last resort during app exit: a kill failure here is
+        # unactionable (the Job Object reaps survivors when the app dies).
+        runner = getattr(self.zbb_manager, 'server_runner', None)
+        if runner:
+            proc = getattr(runner, 'process', None)
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+        pm = getattr(self.zbb_manager, 'playit_manager', None)
+        if pm:
+            proc = getattr(pm, 'process', None)
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+
+    def _poll_shutdown(self, deadline: float):
+        if self._shutdown_event.is_set() or time.monotonic() >= deadline:
+            self.destroy()
+            return
+        self.after(100, lambda: self._poll_shutdown(deadline))
 
 def main():
     # --- CONV-01: Structured Logging Configuration ---
@@ -826,6 +1171,21 @@ def main():
     app = MCTunnelApp()
     app._instance_lock = instance_lock
     app.protocol("WM_DELETE_WINDOW", app.on_close)
+
+    # First-run Minecraft EULA consent (shown once; ZBB auto-writes
+    # eula=true on created servers, so explicit consent is required).
+    from app.services.settings_manager import SettingsManager
+    _settings = SettingsManager()
+    if not _settings.get("eula_accepted", False):
+        from app.ui.ui_components import EulaDialog
+        eula_dialog = EulaDialog(app)
+        app.wait_window(eula_dialog)
+        if not eula_dialog.accepted:
+            logger.info("EULA declined - exiting.")
+            instance_lock.release()
+            app.destroy()
+            sys.exit(0)
+        _settings.set("eula_accepted", True)
 
     import signal
     signal.signal(signal.SIGTERM, lambda sig, frame: app.after(0, app.on_close))

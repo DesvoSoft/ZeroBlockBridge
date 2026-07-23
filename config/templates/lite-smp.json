@@ -1,0 +1,19 @@
+{
+  "type": "Paper",
+  "ram": 2048,
+  "game_mode": "survival",
+  "difficulty": "normal",
+  "hardcore": false,
+  "whitelist": false,
+  "enforce_whitelist": false,
+  "pvp": true,
+  "online_mode": true,
+  "max_players": 10,
+  "spawn_protection": 16,
+  "enable_command_block": false,
+  "allow_flight": false,
+  "enforce_secure_profile": true,
+  "view_distance": "8",
+  "simulation_distance": "8",
+  "_description": "Lightweight survival SMP for a small group of friends."
+}

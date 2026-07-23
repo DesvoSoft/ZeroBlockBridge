@@ -1,5 +1,6 @@
 import pytest
 import hashlib
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from app.services.java_installer import (
@@ -137,13 +138,21 @@ class TestJdkManager:
     @patch("app.services.java_installer.JdkManager._download_and_install")
     def test_ensure_java_downloads(self, mock_dl, mock_fetch, tmp_path):
         cache_dir = tmp_path / "jdks"
-        mock_dl.return_value = str(cache_dir / "jdk17")
+        jdk_dir = cache_dir / "jdk17"
+
+        def fake_download(version):
+            bin_dir = jdk_dir / "bin"
+            bin_dir.mkdir(parents=True)
+            (bin_dir / _java_exe_name()).write_text("")
+            return str(jdk_dir)
+
+        mock_dl.side_effect = fake_download
 
         with patch("app.services.java_installer._JDK_CACHE_DIR", cache_dir):
             mgr = JdkManager()
             result = mgr.ensure_java(17)
             mock_dl.assert_called_once_with(17)
-            assert result == mock_dl.return_value
+            assert result == str(jdk_dir / "bin" / _java_exe_name())
 
     @patch("app.services.java_installer._fetch_asset_info")
     @patch("app.services.java_installer.JdkManager._download_file")
@@ -279,3 +288,168 @@ class TestFetchAssetInfo:
         mock_get.side_effect = __import__("requests").RequestException("bad")
         with pytest.raises(JdkDownloadError, match="Adoptium API request failed"):
             _fetch_asset_info(17)
+
+
+class TestListInstalled:
+    def test_lists_versions_with_sizes(self, tmp_path):
+        (tmp_path / "jdk17" / "bin").mkdir(parents=True)
+        (tmp_path / "jdk17" / "bin" / "java.exe").write_bytes(b"x" * 100)
+        (tmp_path / "jdk21").mkdir()
+        (tmp_path / "jdk21" / "release").write_bytes(b"y" * 50)
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path):
+            result = JdkManagerInstance.list_installed()
+        assert [r["version"] for r in result] == [17, 21]
+        by_ver = {r["version"]: r for r in result}
+        assert by_ver[17]["size_bytes"] == 100
+        assert by_ver[21]["size_bytes"] == 50
+        assert by_ver[17]["path"] == tmp_path / "jdk17"
+
+    def test_ignores_non_jdk_entries(self, tmp_path):
+        (tmp_path / "jdkfoo").mkdir()
+        (tmp_path / "random").mkdir()
+        (tmp_path / "jdk17.tmp").mkdir()
+        (tmp_path / "notes.txt").write_text("hi", encoding="utf-8")
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path):
+            assert JdkManagerInstance.list_installed() == []
+
+    def test_missing_cache_dir_returns_empty(self, tmp_path):
+        with patch("app.services.java_installer._JDK_CACHE_DIR", tmp_path / "nope"):
+            assert JdkManagerInstance.list_installed() == []
+
+
+class TestJreFallback:
+    """F13.2 — prefer JRE image, fall back to full JDK when absent."""
+
+    @staticmethod
+    def _resp(assets, status=200):
+        resp = MagicMock()
+        resp.status_code = status
+        resp.json.return_value = assets
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    _JRE_ASSET = [{
+        "binary": {"package": {"link": "https://example.com/jre.zip", "checksum": "abc"}},
+        "version_data": {"semver": "17.0.1"},
+    }]
+    _JDK_ASSET = [{
+        "binary": {"package": {"link": "https://example.com/jdk.zip", "checksum": "def"}},
+        "version_data": {"semver": "16.0.2"},
+    }]
+
+    @patch("app.services.java_installer.requests.get")
+    def test_jre_preferred(self, mock_get):
+        mock_get.return_value = self._resp(self._JRE_ASSET)
+        result = _fetch_asset_info(17)
+        assert result["url"] == "https://example.com/jre.zip"
+        assert result["image_type"] == "jre"
+        assert mock_get.call_count == 1
+        assert mock_get.call_args.kwargs["params"]["image_type"] == "jre"
+
+    @patch("app.services.java_installer.requests.get")
+    def test_falls_back_to_jdk_on_empty_jre(self, mock_get):
+        mock_get.side_effect = [self._resp([]), self._resp(self._JDK_ASSET)]
+        result = _fetch_asset_info(16)
+        assert result["url"] == "https://example.com/jdk.zip"
+        assert result["image_type"] == "jdk"
+        assert mock_get.call_count == 2
+
+    @patch("app.services.java_installer.requests.get")
+    def test_falls_back_to_jdk_on_404(self, mock_get):
+        mock_get.side_effect = [self._resp([], status=404), self._resp(self._JDK_ASSET)]
+        result = _fetch_asset_info(16)
+        assert result["image_type"] == "jdk"
+
+    @patch("app.services.java_installer.requests.get")
+    def test_raises_when_neither_exists(self, mock_get):
+        mock_get.return_value = self._resp([])
+        with pytest.raises(JdkDownloadError, match="No JDK 99 asset"):
+            _fetch_asset_info(99)
+        assert mock_get.call_count == 2
+
+    @patch("app.services.java_installer.requests.get")
+    def test_network_error_does_not_fall_back(self, mock_get):
+        mock_get.side_effect = __import__("requests").ConnectionError()
+        with pytest.raises(JdkDownloadError, match="No internet connection"):
+            _fetch_asset_info(17)
+        assert mock_get.call_count == 1
+
+
+class TestExtractArchive:
+    """Real extraction (no mocks) covering the .tar.gz branch added for
+    Linux/mac Adoptium assets, tar-slip rejection, and the zip regression."""
+
+    def _make_targz(self, tmp_path: Path, entries: dict, prefix: str = "jdk-17.0.1/") -> Path:
+        archive_path = tmp_path / "jdk.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tf:
+            for rel_name, content in entries.items():
+                data = content.encode() if isinstance(content, str) else content
+                name = f"{prefix}{rel_name}" if prefix else rel_name
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                import io
+                tf.addfile(info, io.BytesIO(data))
+        return archive_path
+
+    def test_extract_tar_gz_strips_common_prefix(self, tmp_path):
+        archive = self._make_targz(tmp_path, {
+            "bin/java": "fake-binary",
+            "release": "JAVA_VERSION=17",
+        })
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "fake-binary"
+        assert (dest / "release").read_text() == "JAVA_VERSION=17"
+
+    def test_extract_tar_gz_no_common_prefix(self, tmp_path):
+        archive = self._make_targz(tmp_path, {"bin/java": "x", "release": "y"}, prefix="")
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "x"
+        assert (dest / "release").read_text() == "y"
+
+    def test_extract_tar_gz_rejects_path_traversal(self, tmp_path):
+        archive_path = tmp_path / "evil.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tf:
+            import io
+            for name, payload in (
+                ("jdk-17/bin/java", b"legit"),
+                ("jdk-17/../../evil.sh", b"pwned"),
+            ):
+                info = tarfile.TarInfo(name=name)
+                info.size = len(payload)
+                tf.addfile(info, io.BytesIO(payload))
+
+        dest = tmp_path / "dest"
+        with pytest.raises((JdkIntegrityError, tarfile.TarError, Exception)):
+            JdkManager()._extract_archive(archive_path, dest)
+
+        assert not (tmp_path / "evil.sh").exists()
+
+    def test_extract_zip_still_works(self, tmp_path):
+        import zipfile
+        archive = tmp_path / "jdk.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("jdk-17.0.1/bin/java", "fake-binary")
+            zf.writestr("jdk-17.0.1/release", "JAVA_VERSION=17")
+
+        dest = tmp_path / "dest"
+        JdkManager()._extract_archive(archive, dest)
+
+        assert (dest / "bin" / "java").read_text() == "fake-binary"
+
+    def test_download_and_install_picks_targz_extension(self, tmp_path, monkeypatch):
+        from app.services import java_installer as mod
+
+        monkeypatch.setattr(mod, "_JDK_CACHE_DIR", tmp_path)
+        mgr = JdkManager()
+        info = {"url": "https://example.com/jdk.tar.gz", "checksum": ""}
+        with patch.object(mod, "_fetch_asset_info", return_value=info), \
+             patch.object(JdkManager, "_download_file") as mock_download, \
+             patch.object(JdkManager, "_extract_archive") as mock_extract:
+            mgr._download_and_install(17)
+            archive_arg = mock_download.call_args[0][1]
+            assert str(archive_arg).endswith(".tar.gz")
+            mock_extract.assert_called_once()

@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import platform
+import shlex
 import subprocess
 import shutil
 import requests
@@ -9,40 +11,36 @@ import threading
 import sys
 import datetime
 import time
-from pathlib import Path
+from collections import deque
 
-from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL
+from typing import Optional, Callable, Any
+
+from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
-
-# Per-server threading.Events for jar normalization synchronization
-_jar_ready_events: dict[str, threading.Event] = {}
-_jar_events_lock = threading.Lock()
-
+from app.services.java_detector import probe_java
+import re
 
 def create_junction(source: str, dest: str) -> None:
-    """Create a cross-platform filesystem link (junction on Windows, symlink on Linux)."""
+    """Link an external server folder into SERVERS_DIR.
+
+    On Windows use a real junction (mklink /J): unlike symlinks it requires
+    no admin rights or Developer Mode, so imports work on stock machines.
+    Elsewhere a plain directory symlink works.
+    """
     if sys.platform == "win32":
-        import _winapi
-        _winapi.CreateJunction(source, dest)
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", dest, source],
+            capture_output=True, text=True, **subprocess_flags()
+        )
+        if result.returncode != 0:
+            raise OSError(f"mklink /J failed: {(result.stderr or result.stdout).strip()}")
     else:
-        os.symlink(source, dest)
-
-def _get_jar_event(server_dir: str) -> threading.Event:
-    """Get or create a threading.Event for a server's jar normalization."""
-    with _jar_events_lock:
-        if server_dir not in _jar_ready_events:
-            _jar_ready_events[server_dir] = threading.Event()
-        return _jar_ready_events[server_dir]
-
-def wait_for_jar_ready(server_dir: str, timeout: float = 5.0) -> bool:
-    """Wait until normalize_server_jar signals that the jar is ready."""
-    ev = _get_jar_event(server_dir)
-    return ev.wait(timeout=timeout)
+        os.symlink(source, dest, target_is_directory=True)
 
 logger = logging.getLogger(__name__)
 
-def load_config():
+def load_config() -> dict:
     """Loads the configuration from config.json."""
     default_config = {
         "java_path": "auto",
@@ -57,86 +55,124 @@ def load_config():
         return default_config
     
     try:
-        with open(APP_CONFIG_PATH, "r") as f:
+        with open(APP_CONFIG_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         logger.warning("Config file corrupted. Resetting to defaults.")
         save_config(default_config)
         return default_config
 
-def save_config(config):
+def save_config(config: dict) -> None:
     """Saves the configuration to config.json."""
     APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(APP_CONFIG_PATH, "w") as f:
+    with open(APP_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
 
-def get_server_meta(server_name):
-    """Centralized reader for server metadata.json."""
-    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
-    if not os.path.exists(meta_path):
-        return {}
-    try:
-        with open(meta_path, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.error("Failed to load metadata for %s: %s", server_name, e)
-        return {}
+_meta_lock = threading.Lock()
+_meta_cache: dict[str, dict] = {}
 
-def set_server_meta(server_name, key, value):
+def invalidate_meta_cache(server_name: str) -> None:
+    with _meta_lock:
+        _meta_cache.pop(server_name, None)
+
+def get_server_meta(server_name: str) -> dict:
+    """Centralized reader for server metadata.json with write-through cache."""
+    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    with _meta_lock:
+        if server_name in _meta_cache:
+            return _meta_cache[server_name].copy()
+        if not os.path.exists(meta_path):
+            return {}
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                data: dict = json.load(f)
+                _meta_cache[server_name] = data
+                return data.copy()
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error("Failed to load metadata for %s: %s", server_name, e)
+            return {}
+
+def set_server_meta(server_name: str, key: str, value: Any) -> bool:
     """Centralized writer for server metadata.json."""
+    return update_server_meta(server_name, {key: value})
+
+def update_server_meta(server_name: str, updates: dict) -> bool:
+    """Atomic multi-key update for server metadata.json with write-through cache."""
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    with _meta_lock:
+        try:
+            if server_name in _meta_cache:
+                meta = _meta_cache[server_name].copy()
+            elif os.path.exists(meta_path):
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            else:
+                meta = {}
+            meta.update(updates)
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=4)
+            _meta_cache[server_name] = meta
+            return True
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("Failed to update metadata for %s: %s", server_name, e)
+            return False
+
+
+def _infer_server_type(server_dir: str) -> str:
+    """Infer server type from files present in the server directory."""
     try:
-        meta = get_server_meta(server_name)
-        meta[key] = value
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
-        return True
-    except (OSError, json.JSONDecodeError) as e:
-        logger.error("Failed to set metadata %s for %s: %s", key, server_name, e)
-        return False
+        files = [f.lower() for f in os.listdir(server_dir)]
+    except OSError:
+        return "Vanilla"
+    for f in files:
+        if "fabric" in f and f.endswith(".jar"):
+            return "Fabric"
+        if "forge" in f and f.endswith(".jar"):
+            return "Forge"
+        if "purpur" in f and f.endswith(".jar"):
+            return "Purpur"
+        if "paper" in f and f.endswith(".jar"):
+            return "Paper"
+        if "spigot" in f and f.endswith(".jar"):
+            return "Paper"
+    return "Vanilla"
 
-def update_server_meta(server_name, updates):
-    """Atomic multi-key update for server metadata.json."""
-    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+
+def migrate_legacy_metadata() -> None:
+    """One-shot migration: add 'type' field to metadata.json for servers that lack it."""
+    if not os.path.isdir(SERVERS_DIR):
+        return
     try:
+        server_names = [d for d in os.listdir(SERVERS_DIR)
+                        if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+    except OSError as e:
+        logger.warning("migrate_legacy_metadata: failed to list servers: %s", e)
+        return
+    for server_name in server_names:
         meta = get_server_meta(server_name)
-        meta.update(updates)
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
-        return True
-    except (OSError, json.JSONDecodeError) as e:
-        logger.error("Failed to update metadata for %s: %s", server_name, e)
-        return False
+        if meta and "type" not in meta:
+            server_dir = os.path.join(SERVERS_DIR, server_name)
+            inferred = _infer_server_type(server_dir)
+            update_server_meta(server_name, {"type": inferred})
+            logger.info("migrate_legacy_metadata: %s -> type=%s", server_name, inferred)
 
-def check_java():
-    """Check if a compatible Java installation is available on the system.
-    
-    Returns:
-        str: The path to the java executable if found, None otherwise.
-    """
-    from app.services.java_detector import JavaDetector
-    
-    detector = JavaDetector()
-    installations = detector.detect_all()
-    if installations:
-        # Return the path to the most preferred installation (highest Java version)
-        best = installations[0]
-        return best.path
-    return None
 
-def create_server_directory(server_name, server_type="Vanilla", version="1.20.1"):
+def create_server_directory(server_name: str, server_type: str = "Vanilla", version: str = "1.20.1") -> str:
     """Creates the server directory if it doesn't exist."""
     path = os.path.join(SERVERS_DIR, server_name)
     if not os.path.exists(path):
-        os.makedirs(path)
-    # Atomic Metadata: ensure metadata.json exists immediately after folder creation
-    metadata_path = os.path.join(path, "metadata.json")
-    if not os.path.exists(metadata_path):
-        with open(metadata_path, "w") as f:
-            json.dump({"name": server_name, "ram": 2048, "type": server_type, "version": version}, f, indent=4)
+        try:
+            os.makedirs(path)
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot create server directory {path}: permission denied. "
+                f"Check that ZeroBlockBridge has write access to this location."
+            ) from e
+    if not os.path.exists(os.path.join(path, "metadata.json")):
+        update_server_meta(server_name, {"name": server_name, "ram": 2048, "type": server_type, "version": version})
     return path
 
-def download_server(server_name, server_type, version, progress_callback=None):
+def download_server(server_name: str, server_type: str, version: str, progress_callback: Optional[Callable] = None) -> Optional[str]:
     """Downloads the server jar with SHA1 verification (PROV-04)."""
     vm = VersionManager()
     url = vm.get_download_url(server_type, version)
@@ -164,40 +200,61 @@ def download_server(server_name, server_type, version, progress_callback=None):
         except Exception as e:
             logger.warning("Failed to fetch SHA1 for validation: %s", e)
 
-    if expected_sha1:
-        from app.services.sha1_validator import download_with_verification
-        success, path, error = download_with_verification(
-            url, jar_path,
-            expected_sha1=expected_sha1,
-            progress_callback=progress_callback,
-            max_retries=3,
-        )
-        if not success:
-            logger.error("Download with SHA1 verification failed: %s", error)
-            return None
-    else:
-        # Fallback to simple download with retry on network errors
-        from app.services.sha1_validator import download_with_verification
-        success, path, error = download_with_verification(
-            url, jar_path,
-            expected_sha1=None,
-            progress_callback=progress_callback,
-            max_retries=3,
-        )
-        if not success:
-            logger.error("Download failed after retries: %s", error)
-            return None
+    from app.services.sha1_validator import download_with_verification
+    success, path, error = download_with_verification(
+        url, jar_path,
+        expected_sha1=expected_sha1,
+        progress_callback=progress_callback,
+        max_retries=3,
+    )
+    if not success:
+        logger.error("Download failed: %s", error)
+        return None
 
     normalize_server_jar(server_path)
     return jar_path
 
-def accept_eula(server_name):
+def _port_in_use(port: int) -> bool:
+    """True if a TCP listener already holds the port (any interface)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("0.0.0.0", port))
+        return False
+    except OSError:
+        return True
+
+
+def delete_server(server_name: str) -> None:
+    """Deletes a server permanently.
+
+    Imported servers are junctions (Windows) or symlinks (POSIX) into the
+    servers directory — for those only the link is removed, never the
+    original folder. os.rmdir on a Windows junction removes the reparse
+    point without touching its target; a real non-empty directory raises
+    OSError and falls through to rmtree.
+    """
+    path = os.path.join(SERVERS_DIR, server_name)
+    if not os.path.exists(path):
+        return
+    if os.path.islink(path):
+        os.unlink(path)
+    else:
+        try:
+            os.rmdir(path)
+        except OSError:
+            shutil.rmtree(path)
+    invalidate_meta_cache(server_name)
+    logger.info("Deleted server '%s'", server_name)
+
+
+def accept_eula(server_name: str) -> None:
     """Writes eula.txt=true by delegating to scaffolder."""
     from app.services.scaffolder import _generate_eula
     server_path = os.path.join(SERVERS_DIR, server_name)
     _generate_eula(server_path, accepted=True)
 
-def _run_installer(server_name, server_type, mc_version, installer_name, installer_args, progress_callback=None):
+def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
     server_path = create_server_directory(server_name, server_type, mc_version)
     vm = VersionManager()
     installer_url = vm.get_download_url(server_type, mc_version)
@@ -215,29 +272,66 @@ def _run_installer(server_name, server_type, mc_version, installer_name, install
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         if progress_callback: progress_callback(0.3)
-    except Exception:
+    except PermissionError as e:
+        logger.error("Installer download permission denied at %s: %s", installer_path, e)
+        return None
+    except Exception as e:
+        logger.error("Installer failed: %s", e)
         return None
 
-    cmd = ["java", "-jar", installer_name] + installer_args
+    cmd = [java_bin, "-jar", installer_name] + installer_args
     try:
         if progress_callback: progress_callback(0.5)
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
+        # Retry on transient WinError 5/32: OneDrive/AV can briefly lock a
+        # jar right after it's written to a synced folder before it's
+        # executable.
+        last_error = None
+        for attempt in range(3):
+            try:
+                subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
+                last_error = None
+                break
+            except OSError as e:
+                last_error = e
+                if getattr(e, "winerror", None) not in (5, 32):
+                    raise
+                logger.warning("Installer spawn blocked (attempt %d/3): %s", attempt + 1, e)
+                time.sleep(1.5)
+        if last_error:
+            raise last_error
         if progress_callback: progress_callback(0.9)
         normalize_server_jar(server_path)
         return server_path
     except subprocess.CalledProcessError:
         return None
+    except OSError as e:
+        logger.error("Installer failed to spawn after retries: %s", e)
+        return None
 
 
-def install_fabric(server_name, mc_version, progress_callback=None):
+def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
     server_path = _run_installer(server_name, "Fabric", mc_version, "fabric-installer.jar",
-                                  ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback)
+                                  ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback, java_bin=java_bin)
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
         return os.path.join(server_path, "fabric-server-launch.jar")
     return None
 
 
-def normalize_server_jar(server_dir):
+def _try_link_or_copy(src: str, dest: str, debug_name: str) -> bool:
+    try:
+        src_rel = os.path.relpath(src, os.path.dirname(dest)) if os.path.isabs(src) else src
+        os.symlink(src_rel, dest)
+        return True
+    except (OSError, NotImplementedError):
+        try:
+            shutil.copy2(src, dest)
+            return True
+        except Exception as e:
+            logger.debug("Normalize: %s copy failed: %s", debug_name, e)
+            return False
+
+
+def normalize_server_jar(server_dir: str) -> bool:
     """Normalize the server jar to 'server.jar' for consistent access.
 
     Forge uses dynamic names like 'forge-1.20.1-44.1.23.jar'.
@@ -263,36 +357,19 @@ def normalize_server_jar(server_dir):
         except OSError as e:
             logger.debug("Normalize: existing server.jar validation failed: %s", e)
         if result:
-            _get_jar_event(server_dir).set()
             return True
 
     # Fabric
     fabric_jar = os.path.join(server_dir, "fabric-server-launch.jar")
     if os.path.exists(fabric_jar):
-        try:
-            os.symlink("fabric-server-launch.jar", server_jar_path)
-            result = True
-        except (OSError, NotImplementedError):
-            try:
-                shutil.copy2(fabric_jar, server_jar_path)
-                result = True
-            except Exception as e:
-                logger.debug("Normalize: fabric copy failed: %s", e)
+        result = _try_link_or_copy(fabric_jar, server_jar_path, "fabric")
 
     # Forge (legacy: forge-*.jar, excluding installer)
     if not result:
         for fname in os.listdir(server_dir):
             if fname.startswith("forge-") and fname.endswith(".jar") and "installer" not in fname:
                 src = os.path.join(server_dir, fname)
-                try:
-                    os.symlink(fname, server_jar_path)
-                    result = True
-                except (OSError, NotImplementedError):
-                    try:
-                        shutil.copy2(src, server_jar_path)
-                        result = True
-                    except Exception as e:
-                        logger.debug("Normalize: forge legacy copy failed: %s", e)
+                result = _try_link_or_copy(src, server_jar_path, "forge legacy")
                 if result:
                     break
 
@@ -303,19 +380,14 @@ def normalize_server_jar(server_dir):
             if args_pattern in files:
                 args_path = os.path.join(root, args_pattern)
                 try:
-                    with open(args_path, "r") as f:
+                    with open(args_path, "r", encoding="utf-8") as f:
                         content = f.read()
-                    import re as _re
-                    lib_jar_match = _re.search(r'([^\s]+\.jar)', content)
+                    lib_jar_match = re.search(r'([^\s]+\.jar)', content)
                     if lib_jar_match:
                         lib_rel = lib_jar_match.group(1)
                         lib_abs = os.path.join(server_dir, lib_rel)
                         if os.path.exists(lib_abs):
-                            try:
-                                os.symlink(os.path.relpath(lib_abs, server_dir), server_jar_path)
-                            except (OSError, NotImplementedError):
-                                shutil.copy2(lib_abs, server_jar_path)
-                            result = True
+                            result = _try_link_or_copy(lib_abs, server_jar_path, "forge modern")
                 except Exception as e:
                     logger.debug("Normalize: forge modern detection failed: %s", e)
                 break
@@ -325,22 +397,13 @@ def normalize_server_jar(server_dir):
         for fname in os.listdir(server_dir):
             if fname.endswith(".jar") and fname not in ("forge-installer.jar", "fabric-installer.jar"):
                 src = os.path.join(server_dir, fname)
-                try:
-                    os.symlink(fname, server_jar_path)
-                    result = True
-                except (OSError, NotImplementedError):
-                    try:
-                        shutil.copy2(src, server_jar_path)
-                        result = True
-                    except Exception as e:
-                        logger.debug("Normalize: paper/purpur copy failed: %s", e)
+                result = _try_link_or_copy(src, server_jar_path, "paper/purpur")
                 if result:
                     break
 
     # Final verification: ensure the created symlink/copy is readable
     if result:
         try:
-            import time
             for _ in range(10):
                 if os.path.exists(server_jar_path) and os.path.getsize(server_jar_path) > 100:
                     break
@@ -357,67 +420,54 @@ def normalize_server_jar(server_dir):
             logger.debug("Normalize: final verification failed: %s", e)
             result = False
 
-    # Signal consumers the jar is ready (or timeout will handle failure)
-    _get_jar_event(server_dir).set()
     return result
 
 
-def install_forge(server_name, mc_version, progress_callback=None):
-    """Installs Forge."""
-    server_path = create_server_directory(server_name, "Forge", mc_version)
-    vm = VersionManager()
-    installer_url = vm.get_download_url("Forge", mc_version)
-    
-    if not installer_url:
-        return None
-        
-    installer_path = os.path.join(server_path, "forge-installer.jar")
-    
-    try:
-        if progress_callback: progress_callback(0.1)
-        response = requests.get(installer_url, stream=True, timeout=30)
-        response.raise_for_status()
-        with open(installer_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        if progress_callback: progress_callback(0.3)
-    except Exception as e:
+def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
+    """Installs Forge by delegating to the unified installer runner."""
+    server_path = _run_installer(
+        server_name, "Forge", mc_version, "forge-installer.jar",
+        ["--installServer"], progress_callback, java_bin=java_bin
+    )
+    if not server_path:
         return None
 
-    cmd = ["java", "-jar", "forge-installer.jar", "--installServer"]
-    try:
-        if progress_callback: progress_callback(0.5)
-        subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True)
-        if progress_callback: progress_callback(0.9)
-        
-        # Normalize: ensure server.jar exists for bytecode analyzer
-        normalize_server_jar(server_path)
-        
-        for file in os.listdir(server_path):
-            if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                return os.path.join(server_path, file)
-        
-        if os.path.exists(os.path.join(server_path, "run.bat")):
-            return "FORGE_MODERN"
-            
-        return None
-    except subprocess.CalledProcessError:
-        return None
+    for file in os.listdir(server_path):
+        if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
+            return os.path.join(server_path, file)
+
+    if os.path.exists(os.path.join(server_path, "run.bat")):
+        return "FORGE_MODERN"
+    if os.path.exists(os.path.join(server_path, "run.sh")):
+        return "FORGE_MODERN"
+
+    return None
 
 class ServerRunner:
+    _CONSOLE_BUFFER_MAX = 200
+    _STDERR_BUFFER_MAX = 100
+    _CONSOLE_SNAPSHOT_TAIL = 100
+    _STDERR_SNAPSHOT_TAIL = 50
+
     def __init__(self, server_name, ram_allocation, event_bus, java_bin="java", use_aikars=True):
         self.server_name = server_name
         self.events = event_bus
         self.process = None
-        self.running = False
+        self._running = False
+        self._state_lock = threading.Lock()
         self.exit_code = None
-        self._stderr_buffer = []
+        self._stderr_buffer = deque(maxlen=self._STDERR_BUFFER_MAX)
+        self._console_buffer = deque(maxlen=self._CONSOLE_BUFFER_MAX)
+        # Reader threads append while snapshots iterate (crash reports fire
+        # exactly during output bursts) — iterating a mutating deque raises
+        # RuntimeError, so guard both sides.
+        self._buffers_lock = threading.Lock()
         self._stderr_thread = None
         self.java_bin = java_bin
         self.use_aikars = use_aikars
 
         try:
-            with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r") as f:
+            with open(os.path.join(SERVERS_DIR, server_name, "metadata.json"), "r", encoding="utf-8") as f:
                 meta = json.load(f)
                 if "ram" in meta:
                     self.ram_allocation = f"{meta['ram']}M"
@@ -426,9 +476,38 @@ class ServerRunner:
         except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
             logger.warning("Could not load metadata for %s: %s", server_name, e)
             self.ram_allocation = ram_allocation
-            
+
         self.player_count = 0
+        self.connected_players = set()
+        self._players_lock = threading.Lock()
         self._stderr_done = threading.Event()
+
+    @staticmethod
+    def _popen_kwargs() -> dict:
+        """Return platform-specific Popen kwargs.
+
+        On Linux, ``preexec_fn`` sets ``PR_SET_PDEATHSIG`` (kill child when
+        parent dies) and ``os.setsid()`` (new session for clean termination).
+        On Windows this is a no-op — Job Objects handle reaping.
+        """
+        kw = subprocess_flags()
+        if platform.system() != "Windows":
+            def _linux_preexec():
+                from app.core.process_job import linux_preexec
+                linux_preexec()
+                os.setsid()
+            kw["preexec_fn"] = _linux_preexec
+        return kw
+
+    @property
+    def running(self) -> bool:
+        with self._state_lock:
+            return self._running
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        with self._state_lock:
+            self._running = value
 
     def start(self):
         if self.running:
@@ -481,35 +560,62 @@ class ServerRunner:
         # Find Java major version
         java_major = 17
         try:
-            from app.services.java_detector import _probe_java
-            inst = _probe_java(self.java_bin, "PROBE")
+            inst = probe_java(self.java_bin, "PROBE")
             if inst:
                 java_major = inst.major
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to probe java version: %s", e)
 
         from app.services.aikars_flags import calculate_flags
         aikars = calculate_flags(ram_mb, java_major=java_major) if self.use_aikars else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"]
 
+        custom_flags = []
+        raw_flags = get_server_meta(self.server_name).get("jvm_custom_flags", "")
+        if raw_flags:
+            try:
+                custom_flags = shlex.split(raw_flags)
+            except ValueError as e:
+                logger.warning("Invalid jvm_custom_flags for %s: %s", self.server_name, e)
+
         if is_forge_modern and forge_args_file:
-            cmd = [self.java_bin] + aikars + [
+            cmd = [self.java_bin] + aikars + custom_flags + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 f"@{forge_args_file}",
                 "nogui",
             ]
         else:
-            cmd = [self.java_bin] + aikars + [
+            cmd = [self.java_bin] + aikars + custom_flags + [
                 "-jar",
                 jar_file,
                 "nogui",
             ]
         
+        # Preflight: a leftover process (e.g. an orphaned java from a
+        # previous session) holding the port produces a cryptic
+        # "FAILED TO BIND TO PORT" crash 30s into startup — fail fast
+        # with a clear message instead.
+        try:
+            from app.services.server_properties import load_server_properties
+            port = int(load_server_properties(self.server_name).get("server-port", 25565))
+        except Exception:
+            port = 25565
+        if _port_in_use(port):
+            msg = f"Port {port} is already in use by another process. Close it and try again."
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+            return
+
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
         self.events.emit(ServerEvent.STARTING)
         
         try:
-            self._stderr_buffer = []
+            with self._buffers_lock:
+                self._stderr_buffer.clear()
+                self._console_buffer.clear()
+            with self._players_lock:
+                self.connected_players.clear()
+                self.player_count = 0
             self.process = subprocess.Popen(
                 cmd,
                 cwd=server_path,
@@ -517,8 +623,11 @@ class ServerRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                **self._popen_kwargs(),
             )
+            from app.core.process_job import assign_to_job
+            assign_to_job(self.process.pid)
             self.running = True
             threading.Thread(target=self._read_output, daemon=True).start()
             self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
@@ -569,23 +678,31 @@ class ServerRunner:
             return
         start_time = time.time()
         for line in self.process.stdout:
-            self.events.emit(ServerEvent.CONSOLE_LINE, line.strip())
-            self._parse_player_count(line.strip())
-            if "Done (" in line and "For help, type" in line:
+            clean_line = ANSI_ESCAPE_RE.sub('', line).strip()
+            if clean_line:
+                with self._buffers_lock:
+                    self._console_buffer.append(clean_line)
+            self.events.emit(ServerEvent.CONSOLE_LINE, clean_line)
+            self._parse_player_count(clean_line)
+            if "Done (" in clean_line and "For help, type" in clean_line:
                 self.events.emit(ServerEvent.READY)
         self.process.wait()
         self._stderr_done.wait(timeout=2)
         self.exit_code = self.process.returncode
         stderr_snapshot = self.get_stderr_snapshot()
+        console_snapshot = self.get_console_snapshot()
         uptime = time.time() - start_time
-        self.running = False
-        self.process = None
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Server process exited (code {self.exit_code}, uptime {uptime:.1f}s).")
+        # Flip running BEFORE emitting STOPPED so subscribers (watchdog restart,
+        # UI state) never observe a stale running=True during the event.
+        self.running = False
         self.events.emit(ServerEvent.STOPPED, {
             "exit_code": self.exit_code,
             "uptime": uptime,
             "stderr": stderr_snapshot,
+            "console": console_snapshot,
         })
+        self.process = None
 
     def _read_stderr(self):
         self._stderr_done.clear()
@@ -593,24 +710,55 @@ class ServerRunner:
             self._stderr_done.set()
             return
         for line in self.process.stderr:
-            stripped = line.strip()
+            stripped = ANSI_ESCAPE_RE.sub('', line).strip()
             if stripped:
-                self._stderr_buffer.append(stripped)
-                if len(self._stderr_buffer) > 100:
-                    self._stderr_buffer.pop(0)
+                with self._buffers_lock:
+                    self._stderr_buffer.append(stripped)
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[JVM] {stripped}")
         self._stderr_done.set()
 
+    def get_stderr_tail(self, n: int) -> list:
+        with self._buffers_lock:
+            return list(self._stderr_buffer)[-n:] if n > 0 else []
+
     def get_stderr_snapshot(self):
-        return "\n".join(self._stderr_buffer[-50:])
+        with self._buffers_lock:
+            return "\n".join(list(self._stderr_buffer)[-self._STDERR_SNAPSHOT_TAIL:])
+
+    def get_console_snapshot(self):
+        with self._buffers_lock:
+            return "\n".join(list(self._console_buffer)[-self._CONSOLE_SNAPSHOT_TAIL:])
 
     def _parse_player_count(self, line):
-        if "joined the game" in line:
-            self.player_count += 1
-            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
-        elif "left the game" in line:
-            self.player_count = max(0, self.player_count - 1)
-            self.events.emit(ServerEvent.PLAYER_COUNT, self.player_count)
+        join_match = re.search(r': (\w+) joined the game', line)
+        if join_match:
+            player = join_match.group(1)
+            with self._players_lock:
+                self.connected_players.add(player)
+                new_count = len(self.connected_players)
+                snapshot = list(self.connected_players)
+                changed = new_count != self.player_count
+                if changed:
+                    self.player_count = new_count
+            # Emit outside the lock: EventBus callbacks must never run while
+            # holding _players_lock.
+            if changed:
+                self.events.emit(ServerEvent.PLAYER_COUNT, new_count)
+                self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
+        else:
+            leave_match = re.search(r': (\w+) left the game', line)
+            if leave_match:
+                player = leave_match.group(1)
+                with self._players_lock:
+                    self.connected_players.discard(player)
+                    new_count = len(self.connected_players)
+                    snapshot = list(self.connected_players)
+                    changed = new_count != self.player_count
+                    if changed:
+                        self.player_count = new_count
+                if changed:
+                    self.events.emit(ServerEvent.PLAYER_COUNT, new_count)
+                    self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
 
 def save_server_icon(server_name, image_path):
     try:
@@ -629,12 +777,13 @@ def check_eula(server_name):
     server_path = os.path.join(SERVERS_DIR, server_name)
     eula_path = os.path.join(server_path, "eula.txt")
     if not os.path.exists(eula_path): return False
-    with open(eula_path, "r") as f:
+    with open(eula_path, "r", encoding="utf-8") as f:
         return "eula=true" in f.read()
 
-from app.services.server_properties import load_server_properties, save_server_properties
-
 class Scheduler:
+    # server_name -> date of last "missed window" warning (see check_due).
+    _missed_warned: dict = {}
+
     def __init__(self, server_name):
         self.server_name = server_name
         self.server_path = os.path.join(SERVERS_DIR, server_name)
@@ -643,24 +792,17 @@ class Scheduler:
     def _load_metadata(self):
         return get_server_meta(self.server_name)
     
-    def _save_metadata(self, data):
-        meta_path = self.metadata_path
-        try:
-            with open(meta_path, "w") as f: 
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            logger.error("Failed to save scheduler metadata: %s", e)
+    def _make_scheduler_dict(self, enabled, interval_hours=None, restart_time=None, backup_on_restart=False):
+        if not enabled:
+            return None
+        if restart_time:
+            return {"type": "time", "restart_time": restart_time, "last_run": None, "backup_on_restart": backup_on_restart}
+        return {"type": "interval", "interval_hours": interval_hours, "last_run": datetime.datetime.now().isoformat(), "backup_on_restart": backup_on_restart}
 
     def set_restart_schedule(self, enabled, interval_hours=None, restart_time=None, backup_on_restart=False):
-        data = self._load_metadata()
-        if not enabled:
-            if "scheduler" in data: del data["scheduler"]
-        else:
-            if restart_time:
-                data["scheduler"] = {"type": "time", "restart_time": restart_time, "last_run": None, "backup_on_restart": backup_on_restart}
-            else:
-                data["scheduler"] = {"type": "interval", "interval_hours": interval_hours, "last_run": datetime.datetime.now().isoformat(), "backup_on_restart": backup_on_restart}
-        self._save_metadata(data)
+        scheduler = self._make_scheduler_dict(enabled, interval_hours, restart_time, backup_on_restart)
+        updates = {"scheduler": scheduler} if scheduler else {"scheduler": None}
+        update_server_meta(self.server_name, updates)
 
     def get_schedule(self):
         return self._load_metadata().get("scheduler", None)
@@ -689,13 +831,26 @@ class Scheduler:
                     if (now - last_run).total_seconds() < 300: return False
             time_diff = (now - target_time_today).total_seconds()
             if 0 <= time_diff < 120: return True
+            if time_diff >= 120 and (not last_run_str or last_run.date() != now.date()):
+                # MA-05: tick arrived after the 120s window — restart is skipped
+                # for today, leave a trace instead of failing silently (once per day)
+                # Class-level marker: Scheduler instances are recreated on every
+                # tick, so a per-instance flag would never persist and this
+                # would log every 30s instead of once per day.
+                if Scheduler._missed_warned.get(self.server_name) != now.date():
+                    Scheduler._missed_warned[self.server_name] = now.date()
+                    logger.warning(
+                        "Scheduler [%s]: restart window %s missed by %.0fs — skipping until tomorrow",
+                        self.server_name, restart_time_str, time_diff - 120
+                    )
         return False
 
     def update_last_run(self):
-        data = self._load_metadata()
-        if "scheduler" in data:
-            data["scheduler"]["last_run"] = datetime.datetime.now().isoformat()
-            self._save_metadata(data)
+        data = get_server_meta(self.server_name)
+        scheduler = data.get("scheduler")
+        if scheduler:
+            scheduler["last_run"] = datetime.datetime.now().isoformat()
+            update_server_meta(self.server_name, {"scheduler": scheduler})
 
     def get_status(self):
         schedule = self.get_schedule()
@@ -703,6 +858,7 @@ class Scheduler:
             return None
         now = datetime.datetime.now()
         remaining = None
+        missed = False
         if schedule["type"] == "interval":
             last_run_str = schedule.get("last_run")
             if last_run_str:
@@ -711,7 +867,10 @@ class Scheduler:
         elif schedule["type"] == "time":
             hour, minute = map(int, schedule["restart_time"].split(":"))
             remaining = (now.replace(hour=hour, minute=minute, second=0, microsecond=0) - now).total_seconds()
-        return {"is_due": self.check_due(), "remaining_seconds": remaining}
+            # Detect missed window: target time passed but check_due() already returned False
+            if remaining <= -120:
+                missed = True
+        return {"is_due": self.check_due(), "remaining_seconds": remaining, "missed": missed}
 
     @staticmethod
     def get_warning_message(remaining_seconds, sent_warnings):

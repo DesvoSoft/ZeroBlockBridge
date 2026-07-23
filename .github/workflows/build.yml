@@ -18,13 +18,9 @@ jobs:
         include:
           - os: ubuntu-latest
             TARGET: linux
-            SEP: ":"
-            ICON: "assets/logo.png"
             EXT: ""
           - os: windows-latest
             TARGET: windows
-            SEP: ";"
-            ICON: "assets/logo.ico"
             EXT: ".exe"
     steps:
       # 1. Checkout code
@@ -60,23 +56,15 @@ jobs:
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pyinstaller --noconsole --onefile \
-            --name "ZeroBlockBridge-${{ matrix.TARGET }}" \
-            --add-data "assets${{ matrix.SEP }}assets" \
-            --collect-all "customtkinter" \
-            --icon "${{ matrix.ICON }}" \
-            app/launcher.py
+          pyinstaller linux.spec
+          mv dist/zeroblockbridge dist/ZeroBlockBridge-linux
 
-      # 6b. Build on Windows (PowerShell safe syntax)
+      # 6b. Build on Windows
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
-        run: >
-          pyinstaller --noconsole --onefile
-          --name "ZeroBlockBridge-${{ matrix.TARGET }}"
-          --add-data "assets${{ matrix.SEP }}assets"
-          --collect-all "customtkinter"
-          --icon "${{ matrix.ICON }}"
-          app/launcher.py
+        run: |
+          pyinstaller ZeroBlockBridge.spec
+          Move-Item dist/ZeroBlockBridge.exe dist/ZeroBlockBridge-windows.exe
 
       # 7. Upload artifacts
       - name: Upload Artifacts

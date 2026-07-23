@@ -4,14 +4,15 @@ import os
 import platform
 import shutil
 import sys
+import tarfile
 import zipfile
-import io
+
 from pathlib import Path
 from typing import Optional
 
 import requests
 
-from app.core.constants import BASE_DIR, JDK_CACHE_DIR
+from app.core.constants import JDK_CACHE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +102,15 @@ def _chmod_plusx(path: Path):
         logger.warning("Failed to set executable permission on %s: %s", path, exc)
 
 
-def _fetch_asset_info(version: int) -> dict:
+def _query_assets(version: int, image_type: str) -> Optional[dict]:
+    """One Adoptium query. Returns None when no matching release exists
+    (empty asset list or 404); raises JdkDownloadError on real failures."""
     os_name = _platform_os()
     arch = _platform_arch()
     url = _ADOPTIUM_API.format(version=version)
     params = {
         "architecture": arch,
-        "image_type": "jdk",
+        "image_type": image_type,
         "os": os_name,
         "vendor": "eclipse",
         "heap_size": "normal",
@@ -115,6 +118,8 @@ def _fetch_asset_info(version: int) -> dict:
 
     try:
         resp = requests.get(url, params=params, timeout=30)
+        if resp.status_code == 404:
+            return None
         resp.raise_for_status()
         assets = resp.json()
     except requests.ConnectionError:
@@ -125,9 +130,7 @@ def _fetch_asset_info(version: int) -> dict:
         raise JdkDownloadError(f"Adoptium API request failed: {exc}")
 
     if not assets:
-        raise JdkDownloadError(
-            f"No JDK {version} asset found for {os_name}/{arch}"
-        )
+        return None
 
     asset = assets[0]
     binary = asset.get("binary", {})
@@ -143,12 +146,26 @@ def _fetch_asset_info(version: int) -> dict:
         "url": download_url,
         "checksum": checksum.upper() if checksum else "",
         "version": asset.get("version_data", {}).get("semver", str(version)),
+        "image_type": image_type,
     }
 
 
+def _fetch_asset_info(version: int) -> dict:
+    # Prefer the JRE: ~45 MB vs ~300 MB, and running a Minecraft server
+    # only needs bin/java. Some versions (e.g. 16) ship JDK-only on
+    # Adoptium, so fall back to the full JDK.
+    for image_type in ("jre", "jdk"):
+        info = _query_assets(version, image_type)
+        if info is not None:
+            if image_type == "jdk":
+                logger.info("No JRE %d on Adoptium — falling back to full JDK", version)
+            return info
+    raise JdkDownloadError(
+        f"No JDK {version} asset found for {_platform_os()}/{_platform_arch()}"
+    )
+
+
 class JdkManager:
-    def __init__(self):
-        _JDK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def get_java_path(self, version: int) -> Optional[str]:
         cache_dir = _jdk_cache_dir(version)
@@ -170,13 +187,15 @@ class JdkManager:
         logger.info("JDK %d not in cache — downloading", version)
         path = self._download_and_install(version)
 
-        binary = _find_java_binary(Path(path).parent.parent)
-        if binary:
-            if sys.platform != "win32":
-                _chmod_plusx(binary)
+        binary = _find_java_binary(Path(path))
+        if binary is None:
+            shutil.rmtree(path, ignore_errors=True)
+            raise JdkError(f"JDK {version} extracted but no java binary found in {path}")
+        if sys.platform != "win32":
+            _chmod_plusx(binary)
 
-        logger.info("JDK %d installed at %s", version, path)
-        return path
+        logger.info("JDK %d installed at %s", version, binary)
+        return str(binary)
 
     def _download_and_install(self, version: int) -> str:
         info = _fetch_asset_info(version)
@@ -191,21 +210,22 @@ class JdkManager:
             shutil.rmtree(cache_dir, ignore_errors=True)
 
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        zip_path = tmp_dir / "jdk.zip"
+        archive_ext = ".tar.gz" if url.endswith((".tar.gz", ".tgz")) else ".zip"
+        archive_path = tmp_dir / f"jdk{archive_ext}"
 
         last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                self._download_file(url, zip_path)
+                self._download_file(url, archive_path)
                 if expected_checksum:
-                    if not _verify_checksum(zip_path, expected_checksum):
-                        zip_path.unlink(missing_ok=True)
+                    if not _verify_checksum(archive_path, expected_checksum):
+                        archive_path.unlink(missing_ok=True)
                         raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
                 else:
                     logger.warning("No checksum available for JDK %d — skipping verification", version)
 
-                self._extract_zip(zip_path, cache_dir)
-                zip_path.unlink(missing_ok=True)
+                self._extract_archive(archive_path, cache_dir)
+                archive_path.unlink(missing_ok=True)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
                 return str(cache_dir)
 
@@ -236,10 +256,17 @@ class JdkManager:
             raise JdkDownloadError("JDK download timed out")
         except requests.RequestException as exc:
             raise JdkDownloadError(f"JDK download failed: {exc}")
+        except PermissionError as exc:
+            raise JdkDownloadError(f"Cannot write {dest}: permission denied ({exc})")
+
+    def _extract_archive(self, archive_path: Path, dest_dir: Path):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        if archive_path.suffixes[-2:] == [".tar", ".gz"] or archive_path.suffix == ".tgz":
+            self._extract_tar(archive_path, dest_dir)
+        else:
+            self._extract_zip(archive_path, dest_dir)
 
     def _extract_zip(self, zip_path: Path, dest_dir: Path):
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
         with zipfile.ZipFile(zip_path, "r") as zf:
             members = zf.namelist()
 
@@ -261,6 +288,67 @@ class JdkManager:
             else:
                 zf.extractall(dest_dir)
 
+    def _extract_tar(self, tar_path: Path, dest_dir: Path):
+        with tarfile.open(tar_path, "r:gz") as tf:
+            members = tf.getnames()
+
+            common_prefix = _get_common_prefix(members)
+            if hasattr(tarfile, "data_filter"):
+                extract_filter = tarfile.data_filter
+            else:
+                extract_filter = None
+
+            if common_prefix:
+                dest_resolved = dest_dir.resolve()
+                for member in tf.getmembers():
+                    rel = member.name[len(common_prefix):]
+                    if not rel:
+                        continue
+                    target = dest_dir / rel
+                    if not target.resolve().is_relative_to(dest_resolved):
+                        raise JdkIntegrityError(f"Unsafe tar member path: {member.name}")
+                    if member.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                        continue
+                    if not (member.isfile() or member.issym() or member.islnk()):
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    member.name = rel
+                    if extract_filter is not None:
+                        tf.extract(member, dest_dir, filter="data")
+                    else:
+                        tf.extract(member, dest_dir)
+                    if sys.platform != "win32" and target.exists():
+                        _chmod_plusx(target)
+            else:
+                if extract_filter is not None:
+                    tf.extractall(dest_dir, filter="data")
+                else:
+                    tf.extractall(dest_dir)
+
+    def list_installed(self) -> list[dict]:
+        """Installed JDKs in the cache: [{"version": int, "path": Path, "size_bytes": int}].
+
+        Walks each JDK dir to size it -- call from a background thread.
+        """
+        from app.services.disk_usage import dir_size
+        result = []
+        if not _JDK_CACHE_DIR.exists():
+            return result
+        for entry in sorted(_JDK_CACHE_DIR.iterdir()):
+            if not entry.is_dir() or not entry.name.startswith("jdk"):
+                continue
+            try:
+                version = int(entry.name.replace("jdk", ""))
+            except ValueError:
+                continue
+            result.append({
+                "version": version,
+                "path": entry,
+                "size_bytes": dir_size(entry),
+            })
+        return result
+
     def purge_unused_jdks(self, active_versions: set = None):
         """Remove JDK directories not in active_versions.
         If active_versions is None, lists server metadata to determine which
@@ -274,13 +362,13 @@ class JdkManager:
                     if meta_file.exists():
                         try:
                             import json
-                            with open(meta_file) as f:
+                            with open(meta_file, encoding="utf-8") as f:
                                 meta = json.load(f)
                             rj = meta.get("required_java")
                             if rj:
                                 active_versions.add(int(rj))
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("Failed parsing server meta: %s", e)
         if not _JDK_CACHE_DIR.exists():
             return
         for entry in _JDK_CACHE_DIR.iterdir():

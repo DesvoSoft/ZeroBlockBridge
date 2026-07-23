@@ -70,7 +70,8 @@ class SingleInstanceLock:
                     return bool(result) and exit_code.value == 259
                 finally:
                     kernel32.CloseHandle(handle)
-            except Exception:
+            except Exception as e:
+                logger.debug("PID check error: %s", e)
                 return False
         else:
             try:

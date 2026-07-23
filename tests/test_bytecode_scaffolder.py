@@ -229,3 +229,86 @@ class TestPreBootScaffold:
         pre_boot_scaffold(str(tmp_path), port=25565)
         assert "eula=true" in (tmp_path / "eula.txt").read_text()
         assert "server-port=25565" in (tmp_path / "server.properties").read_text()
+
+    def test_config_all_fields_written_on_fresh_properties(self, tmp_path):
+        config = {
+            "seed": "12345",
+            "game_mode": "creative",
+            "difficulty": "hard",
+            "hardcore": True,
+            "whitelist": True,
+            "enforce_whitelist": False,
+            "pvp": False,
+            "online_mode": True,
+            "max_players": 10,
+            "spawn_protection": 0,
+            "enable_command_block": True,
+            "allow_flight": True,
+            "enforce_secure_profile": False,
+            "view_distance": 12,
+            "simulation_distance": 8,
+        }
+        pre_boot_scaffold(str(tmp_path), port=25565, config=config)
+        content = (tmp_path / "server.properties").read_text()
+        assert "level-seed=12345" in content
+        assert "gamemode=creative" in content
+        assert "difficulty=hard" in content
+        assert "hardcore=true" in content
+        assert "white-list=true" in content
+        assert "enforce-whitelist=false" in content
+        assert "pvp=false" in content
+        assert "online-mode=true" in content
+        assert "max-players=10" in content
+        assert "spawn-protection=0" in content
+        assert "enable-command-block=true" in content
+        assert "allow-flight=true" in content
+        assert "enforce-secure-profile=false" in content
+        assert "view-distance=12" in content
+        assert "simulation-distance=8" in content
+
+    def test_config_seed_omitted_when_falsy(self, tmp_path):
+        pre_boot_scaffold(str(tmp_path), port=25565, config={"seed": ""})
+        content = (tmp_path / "server.properties").read_text()
+        assert "level-seed" not in content
+
+    def test_config_empty_dict_uses_defaults_only(self, tmp_path):
+        pre_boot_scaffold(str(tmp_path), port=25565, config={})
+        content = (tmp_path / "server.properties").read_text()
+        assert "server-port=25565" in content
+        assert "motd=A ZeroBlockBridge Server" in content
+        assert "enable-query=false" in content
+        assert "enable-rcon=false" in content
+        assert "gamemode" not in content
+
+    def test_config_none_uses_defaults_only(self, tmp_path):
+        pre_boot_scaffold(str(tmp_path), port=25565, config=None)
+        content = (tmp_path / "server.properties").read_text()
+        assert "server-port=25565" in content
+        assert "gamemode" not in content
+
+    def test_config_port_always_patched_even_if_present(self, tmp_path):
+        """server-port must always be overwritten in-place, never skipped."""
+        props = tmp_path / "server.properties"
+        props.write_text("server-port=1111\n")
+        pre_boot_scaffold(str(tmp_path), port=25565, config={"game_mode": "survival"})
+        content = props.read_text()
+        assert "server-port=25565" in content
+        assert "server-port=1111" not in content
+
+    def test_config_does_not_overwrite_existing_manual_value(self, tmp_path):
+        """Non-port keys already present in the file must be left untouched."""
+        props = tmp_path / "server.properties"
+        props.write_text("server-port=25565\ngamemode=survival\n")
+        pre_boot_scaffold(str(tmp_path), port=25565, config={"game_mode": "creative"})
+        content = props.read_text()
+        # user's manual value wins, scaffolder does not clobber it
+        assert "gamemode=survival" in content
+        assert "gamemode=creative" not in content
+
+    def test_config_adds_new_key_to_existing_properties(self, tmp_path):
+        props = tmp_path / "server.properties"
+        props.write_text("server-port=25565\nmotd=Hello\n")
+        pre_boot_scaffold(str(tmp_path), port=25565, config={"difficulty": "hard"})
+        content = props.read_text()
+        assert "difficulty=hard" in content
+        assert "motd=Hello" in content

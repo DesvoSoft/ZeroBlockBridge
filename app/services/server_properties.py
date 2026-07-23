@@ -57,3 +57,24 @@ def save_server_properties(server_name: str | None = None, server_dir: str | Non
             new_lines.append(f"{k}={v}\n")
     with open(props_path, "w", encoding="utf-8") as f:
         f.writelines(new_lines)
+
+
+def list_worlds(server_name: str | None = None, server_dir: str | None = None) -> list[str]:
+    base_dir = server_dir if server_dir else os.path.join(SERVERS_DIR, server_name)
+    if not os.path.isdir(base_dir):
+        return []
+    worlds = []
+    for entry in os.listdir(base_dir):
+        entry_path = os.path.join(base_dir, entry)
+        if os.path.isdir(entry_path) and os.path.exists(os.path.join(entry_path, "level.dat")):
+            worlds.append(entry)
+    return sorted(worlds)
+
+
+def get_active_world(server_name: str | None = None, server_dir: str | None = None) -> str:
+    properties = load_server_properties(server_name, server_dir)
+    return properties.get("level-name", "world")
+
+
+def set_active_world(server_name: str | None = None, server_dir: str | None = None, world_dir: str = "world") -> None:
+    save_server_properties(server_name, server_dir, {"level-name": world_dir})

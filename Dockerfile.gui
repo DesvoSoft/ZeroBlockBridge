@@ -1,0 +1,52 @@
+FROM ubuntu:22.04 AS builder
+
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+    python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN python3 -m venv .venv \
+    && . .venv/bin/activate \
+    && pip install --no-cache-dir -r requirements.txt psutil \
+    && pip uninstall -y pip setuptools wheel 2>/dev/null \
+    && find .venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null \
+    && find .venv -name "*.pyc" -delete 2>/dev/null
+
+COPY app/ app/
+COPY assets/ assets/
+
+# --- Runtime ---
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DISPLAY=:0
+
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends \
+       python3 python3-tk libtk8.6 libtcl8.6 \
+       openjdk-17-jre-headless \
+    && apt-get purge -y --auto-remove \
+    && rm -rf /var/lib/apt/lists/* /tmp/* \
+    # Trim system Python cache + docs
+    && rm -rf /usr/lib/python3.10/__pycache__ \
+              /usr/lib/python3.10/pydoc_data \
+              /usr/lib/python3.10/idlelib \
+    # Trim Tcl/Tk examples, fonts, zoneinfo (not needed for MC server manager)
+    && rm -rf /usr/share/tcltk /usr/share/fonts /usr/share/zoneinfo \
+              /usr/share/zoneinfo-icu /usr/share/info /usr/share/doc \
+              /usr/share/man /usr/share/locale /usr/share/X11 \
+              /usr/share/perl5 /usr/share/alsa \
+    # Trim JVM docs/legal (not needed at runtime)
+    && rm -rf /usr/lib/jvm/java-17-openjdk-amd64/docs \
+              /usr/lib/jvm/java-17-openjdk-amd64/legal \
+              /usr/lib/jvm/java-17-openjdk-amd64/man
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv .venv
+COPY --from=builder /app/app app/
+COPY --from=builder /app/assets assets/
+
+CMD [".venv/bin/python", "app/launcher.py"]

@@ -1,13 +1,11 @@
 import requests
-import json
 import os
-import sys
 import time
 import platform
 import uuid
 import logging
 from typing import Dict, List, Optional
-from app.core.constants import CONFIG_DIR, PLAYIT_VERSION
+from app.core.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +24,9 @@ class PlayitApiClient:
         self.is_read_only = False
         self.toml_path = os.path.join(CONFIG_DIR, "playit.toml")
         self.client_id = str(uuid.uuid4())
+        # Consecutive 401/403 responses — reset on any success or new key.
+        # Consumers (PlayitManager) use this to detect a dead secret and stop retrying.
+        self.consecutive_auth_failures = 0
 
     def load_secret_key(self) -> bool:
         """Loads secret key from playit.toml. Returns True if successful."""
@@ -48,9 +49,10 @@ class PlayitApiClient:
                 # Reset identity so it fetches again
                 self._agent_id = None
                 self._proto_key = None
+                self.consecutive_auth_failures = 0
                 return True
         except Exception as e:
-            logger.error(f"Failed to read playit.toml: {e}")
+            logger.error("Failed to read playit.toml: %s", e)
         return False
 
     def _request(self, endpoint: str, json_data: dict = None, method: str = "POST") -> dict:
@@ -60,7 +62,10 @@ class PlayitApiClient:
             raise PlayitApiException("No secret key loaded. Cannot authenticate.")
             
         url = f"{self.api_base}/{endpoint.strip('/')}"
-        headers = {"Authorization": f"agent-key {self._secret_key}"}
+        headers = {
+            "Authorization": f"agent-key {self._secret_key}",
+            "User-Agent": "ZeroBlockBridge/1.0.4"
+        }
         try:
             response = self.session.request(method, url, json=json_data, headers=headers, timeout=10)
         except requests.RequestException as e:
@@ -72,6 +77,8 @@ class PlayitApiClient:
             raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {response.status_code})")
 
         if response.status_code >= 400:
+            if response.status_code in (401, 403):
+                self.consecutive_auth_failures += 1
             if "AgentDisabledOverLimit" in response.text:
                 raise PlayitApiException("AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard")
             if "NotAllowedWithReadOnly" in response.text:
@@ -80,6 +87,7 @@ class PlayitApiClient:
             error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
             raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
 
+        self.consecutive_auth_failures = 0
         return data
 
     def verify_secret_key(self) -> bool:
@@ -96,7 +104,26 @@ class PlayitApiClient:
                 timeout=5,
             )
             return resp.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed checking agent status: %s", e)
+            return False
+
+    def secret_rejected(self) -> bool:
+        """True only when the API definitively rejects the stored secret (401/403).
+        Network errors are inconclusive and return False so offline launches aren't blocked."""
+        if not self._secret_key:
+            self.load_secret_key()
+        if not self._secret_key:
+            return False
+        try:
+            resp = self.session.get(
+                f"{self.api_base}/agents/rundata",
+                headers={"Authorization": f"agent-key {self._secret_key}"},
+                timeout=5,
+            )
+            return resp.status_code in (401, 403)
+        except requests.RequestException as e:
+            logger.debug("Secret validity check inconclusive: %s", e)
             return False
 
     def _get_platform_variant(self) -> str:
@@ -173,6 +200,7 @@ class PlayitApiClient:
         self._secret_key = secret_key
         self._agent_id = agent_id
         self.session.headers["Authorization"] = f"agent-key {secret_key}"
+        self.consecutive_auth_failures = 0
         logger.info("Successfully linked playit account (Agent ID: %s)", agent_id)
         return True
 
@@ -188,7 +216,7 @@ class PlayitApiClient:
                 self._agent_id = data.get("data", {}).get("agent_id")
                 return self._agent_id
         except PlayitApiException as e:
-            logger.warning(f"Failed to get agent id via rundata: {e}")
+            logger.warning("Failed to get agent id via rundata: %s", e)
             
         # Fallback: try tunnels/list to see if we can find the agent_id there
         try:
@@ -200,7 +228,7 @@ class PlayitApiClient:
                     if self._agent_id:
                         return self._agent_id
         except Exception as e:
-            logger.warning(f"Fallback agent_id detection failed: {e}")
+            logger.warning("Fallback agent_id detection failed: %s", e)
         return None
 
     def get_agent_rundata(self) -> dict:
@@ -219,7 +247,6 @@ class PlayitApiClient:
         if os_name == "darwin":
             os_name = "macos"
 
-        from app.core.constants import PLAYIT_VERSION
         proto_data = {
             "agent_version": {
                 "official": True,
@@ -227,7 +254,7 @@ class PlayitApiClient:
                 "variant": self._get_platform_variant(),
                 "version": {
                     "platform": os_name,
-                    "version": PLAYIT_VERSION,
+                    "version": "1.0.4",
                 },
             },
             "client_addr": "0.0.0.0:0",
@@ -253,10 +280,18 @@ class PlayitApiClient:
             if self.is_read_only:
                 logger.info("Playit API initialized in Guest mode (Read-Only).")
                 return True
-            logger.error(f"Playit API initialization failed: {e}")
+            logger.error("Playit API initialization failed: %s", e)
             return False
 
     # --- Tunnel Management ---
+    def list_account_tunnels(self) -> List[Dict]:
+        """Returns all tunnels on the account, including ones owned by other
+        (possibly dead) agents. agent_id=None makes the API return the full list."""
+        data = self._request("tunnels/list", json_data={"agent_id": None})
+        if data.get("status") == "success":
+            return data.get("data", {}).get("tunnels", [])
+        return []
+
     def list_tunnels(self) -> List[Dict]:
         """Returns a list of all tunnels for the agent."""
         agent_id = self.get_agent_id()
@@ -368,11 +403,11 @@ class PlayitApiClient:
         # Try address directly from create response
         address = self.get_tunnel_address(tunnel)
         if address:
-            logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+            logger.info("Tunnel %s assigned to %s", tunnel_id, address)
             return tunnel
 
         # Poll until assigned (typically takes 5-10s)
-        logger.info(f"Tunnel {tunnel_id} pending, polling...")
+        logger.info("Tunnel %s pending, polling...", tunnel_id)
         for _ in range(15):
             time.sleep(1)
             tunnels = self.list_tunnels()
@@ -380,10 +415,10 @@ class PlayitApiClient:
                 if t.get("id") == tunnel_id:
                     address = self.get_tunnel_address(t)
                     if address:
-                        logger.info(f"Tunnel {tunnel_id} assigned to {address}")
+                        logger.info("Tunnel %s assigned to %s", tunnel_id, address)
                         return t
 
-        logger.warning(f"Tunnel {tunnel_id} remained pending after 15s.")
+        logger.warning("Tunnel %s remained pending after 15s.", tunnel_id)
         return tunnel
 
     def delete_tunnel(self, tunnel_id: str) -> bool:
@@ -395,7 +430,7 @@ class PlayitApiClient:
             return False
         except PlayitApiException as e:
             if "401" in str(e):
-                logger.warning(f"Tunnel {tunnel_id} already inaccessible (401).")
+                logger.warning("Tunnel %s already inaccessible (401).", tunnel_id)
                 return True
             raise e
 
@@ -421,10 +456,10 @@ class PlayitApiClient:
             if "401" in str(e):
                 logger.warning("Agent deletion failed with 401. Your key might be read-only or revoked.")
                 return False
-            logger.error(f"Error during agent deletion: {e}")
+            logger.error("Error during agent deletion: %s", e)
             return False
         except Exception as e:
-            logger.error(f"Unexpected error during agent deletion: {e}")
+            logger.error("Unexpected error during agent deletion: %s", e)
             return False
 
 

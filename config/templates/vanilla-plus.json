@@ -1,0 +1,19 @@
+{
+  "type": "Vanilla",
+  "ram": 2048,
+  "game_mode": "survival",
+  "difficulty": "hard",
+  "hardcore": false,
+  "whitelist": false,
+  "enforce_whitelist": false,
+  "pvp": true,
+  "online_mode": true,
+  "max_players": 20,
+  "spawn_protection": 16,
+  "enable_command_block": false,
+  "allow_flight": false,
+  "enforce_secure_profile": true,
+  "view_distance": "10",
+  "simulation_distance": "10",
+  "_description": "Vanilla experience on hard difficulty with secure profile enforced."
+}

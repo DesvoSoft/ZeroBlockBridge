@@ -125,7 +125,8 @@ def analyze_jar_bytecode(jar_path: str) -> Optional[int]:
                     if raw is not None and raw > highest_raw:
                         highest_raw = raw
                     scanned += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed checking Java 21 compatibility: %s", e)
                     continue
 
             java_ver = CLASS_VERSION_MAP.get(highest_raw)
