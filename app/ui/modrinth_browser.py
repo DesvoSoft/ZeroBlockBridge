@@ -129,6 +129,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._selected_files: set = set()      # installed view — absolute file paths
         self._selected_hits: dict = {}          # search view — slug/project_id -> hit dict
         self._installed_slugs_cache: set = set()  # search view — slugs already installed on target server
+        self._pending_updates: dict = {}          # installed view — filename -> update info (auto update check)
 
         # Render generation — invalidates stale chunked-render callbacks
         self._render_gen = 0
@@ -532,6 +533,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         self.lbl_status.pack(side="left", fill="x", expand=True, padx=12, pady=2)
 
+        self.progress_status = ctk.CTkProgressBar(
+            self.pagination_bar, mode="indeterminate", height=4,
+            width=90, corner_radius=AppConfig.RADIUS_BADGE,
+            progress_color=_MODRINTH_GREEN,
+        )
+
         self._pagination_controls.pack_forget()  # hidden until first search
 
     # ------------------------------------------------------------------
@@ -691,6 +698,13 @@ class ModrinthBrowser(ctk.CTkFrame):
         color = self._STATUS_COLORS.get(kind, AppConfig.COLOR_TEXT_GRAY)
         if self.lbl_status.winfo_exists():
             self.lbl_status.configure(text=text, text_color=color)
+        if self.progress_status.winfo_exists():
+            if busy:
+                self.progress_status.pack(side="left", padx=(0, 12), pady=2)
+                self.progress_status.start()
+            else:
+                self.progress_status.stop()
+                self.progress_status.pack_forget()
 
     def _on_toggle_hit_selection(self, key: str, hit: dict, var, card=None):
         selected = var.get()
@@ -757,6 +771,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 if total > 1:
                     Toast.show(self.winfo_toplevel(), f"Installed {total} mods",
                                toast_type="success")
+            self._render_results()
         else:
             self._set_status(f"Installing… {done}/{total}", busy=True)
 
@@ -1087,8 +1102,70 @@ class ModrinthBrowser(ctk.CTkFrame):
             return
 
         self._installed_checkboxes = {}
+        self._installed_row_frames = {}
         self._render_gen += 1
-        self._render_installed_rows(list(enumerate(files)), self._render_gen)
+        gen = self._render_gen
+        self._render_installed_rows(list(enumerate(files)), gen)
+        self._check_updates_for_badges(server_name, ctx[1], ctx[2], gen)
+
+    def _check_updates_for_badges(self, server_name: str, mc_version: str, loader: str, gen: int):
+        def _worker():
+            try:
+                updates = self.client.check_updates(server_name, mc_version, loader)
+            except Exception as exc:
+                logger.debug("Background update check failed: %s", exc)
+                return
+            if gen != self._render_gen or not self.winfo_exists():
+                return
+            self._pending_updates = {u["filename"]: u for u in updates}
+            self.after(0, lambda: self._apply_update_badges(gen))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_update_badges(self, gen: int):
+        if gen != self._render_gen or not self.winfo_exists():
+            return
+        for fpath, row_frame in self._installed_row_frames.items():
+            fname = os.path.basename(fpath)
+            update = self._pending_updates.get(fname)
+            if update:
+                self._add_update_badge(row_frame, fpath, update)
+
+    def _add_update_badge(self, row_frame, fpath: str, update: dict):
+        badge = ctk.CTkButton(
+            row_frame, text=f"● Update {update.get('latest_version', '')}".strip(),
+            width=0, height=22, corner_radius=AppConfig.RADIUS_BADGE,
+            fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
+            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"),
+            command=lambda: self._apply_single_update(fpath, update, badge),
+        )
+        badge.grid(row=0, column=2, sticky="e", padx=(4, 4))
+        ToolTip(badge, f"Update available: {update.get('latest_version', '?')}")
+
+    def _apply_single_update(self, fpath: str, update: dict, badge=None):
+        ctx = self._resolve_server_context()
+        if not ctx:
+            return
+        server_name, _mc_version, loader = ctx
+        fname = os.path.basename(fpath)
+        if badge is not None:
+            badge.configure(state="disabled", text="Updating…")
+        self._set_status(f"Updating {fname}…", busy=True)
+
+        def _worker():
+            try:
+                ok = self.client.apply_update(update, server_name, loader)
+            except Exception as exc:
+                logger.warning("Update failed for %s: %s", fname, exc)
+                ok = False
+            self._pending_updates.pop(fname, None)
+            if ok:
+                self.after(0, lambda: self._set_status(f"✓ Updated {fname}"))
+            else:
+                self.after(0, lambda: self._set_status(f"✗ Update failed for {fname}"))
+            self.after(0, self._render_installed)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _render_installed_rows(self, remaining: list, gen: int):
         if gen != self._render_gen or not self.winfo_exists():
@@ -1097,7 +1174,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         for i, fpath in chunk:
             fname = os.path.basename(fpath)
             row_frame = ctk.CTkFrame(self.results_frame, corner_radius=AppConfig.RADIUS_BTN,
-                                     fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+                                     fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
+                                     border_width=1,
+                                     border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
             row_frame.grid(row=i + 1, column=0, sticky="ew", padx=6, pady=2)
             row_frame.grid_columnconfigure(1, weight=1)
 
@@ -1124,7 +1203,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
                 command=lambda fp=fpath: self._confirm_delete_mod(fp),
             )
-            btn_del.grid(row=0, column=2, padx=(0, 6), pady=4)
+            btn_del.grid(row=0, column=3, padx=(0, 6), pady=4)
+            self._installed_row_frames[fpath] = row_frame
         if rest:
             self.after(1, lambda: self._render_installed_rows(rest, gen))
 
@@ -1210,10 +1290,23 @@ class ModrinthBrowser(ctk.CTkFrame):
         ):
             return
 
+        ctx = self._resolve_server_context()
+        server_name = ctx[0] if ctx else None
+        filename_to_slug = {}
+        if server_name:
+            for slug in mod_install_tracker.get_installed_slugs(server_name):
+                filename_to_slug[mod_install_tracker.get_installed_filename(server_name, slug)] = slug
+
         deleted, failed = 0, 0
         for fpath in selected:
             try:
+                fname = os.path.basename(fpath)
                 os.remove(fpath)
+                if server_name:
+                    mod_install_tracker.remove_install_by_filename(server_name, fname)
+                    slug = filename_to_slug.get(fname)
+                    if slug:
+                        self._installed_slugs_cache.discard(slug)
                 deleted += 1
             except OSError as exc:
                 logger.warning("Failed to delete %s: %s", fpath, exc)
@@ -1221,6 +1314,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         self._set_status(f"✓ Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""))
         self._render_installed()
+        self._render_results()
 
     def _on_update_selected(self):
         ctx = self._resolve_server_context()
@@ -1285,11 +1379,13 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
                 if len(versions) == 1:
-                    self._do_install_version(versions[0], server_name, loader, title, slug, batch=batch)
+                    self._do_install_version(versions[0], server_name, loader, title, slug,
+                                              batch=batch, mc_version=mc_version)
                 else:
                     self.after(0, lambda: self._show_version_picker(
                         versions, title,
-                        on_confirm=lambda v: self._do_install_version(v, server_name, loader, title, slug, batch=batch),
+                        on_confirm=lambda v: self._do_install_version(
+                            v, server_name, loader, title, slug, batch=batch, mc_version=mc_version),
                     ))
             except Exception as exc:
                 logger.debug("Project fetch error: %s", exc)
@@ -1298,31 +1394,128 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
 
-    def _do_install_version(self, version, server_name, loader, title, slug, batch: dict = None):
+    def _do_install_version(self, version, server_name, loader, title, slug,
+                             batch: dict = None, mc_version: str = None):
         self._set_status(f"Installing {title}…", busy=True)
+
+        def _install_one(version, server_name, loader, title, slug) -> bool:
+            """Download+record a single mod version. Returns True on success."""
+            path = self.client.download_version(
+                version, server_name, loader,
+                progress_callback=lambda p: self.after(
+                    0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
+                ),
+            )
+            if not path:
+                return False
+            fname = os.path.basename(path)
+            mod_install_tracker.record_install(server_name, slug, fname)
+
+            def _mark_installed(slug=slug, fname=fname):
+                self._installed_slugs_cache.add(slug)
+
+            self.after(0, _mark_installed)
+            logger.info("Installed %s to %s", title, path)
+            return True
 
         def _install():
             try:
-                path = self.client.download_version(
-                    version, server_name, loader,
-                    progress_callback=lambda p: self.after(
-                        0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
-                    ),
-                )
-                if path:
-                    fname = os.path.basename(path)
-                    mod_install_tracker.record_install(server_name, slug, fname)
-                    self.after(0, lambda: self._set_status(f"✓ Installed {fname}"))
-                    logger.info("Installed %s to %s", title, path)
-                    self.after(0, lambda: self._note_batch_result(batch, ok=True))
-                else:
+                ok = _install_one(version, server_name, loader, title, slug)
+                if not ok:
                     self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
+                    return
+
+                self.after(0, lambda: self._set_status(f"✓ Installed {title}"))
+
+                if mc_version:
+                    self._resolve_and_install_dependencies(
+                        version, server_name, loader, mc_version, title)
+
+                if batch is None:
+                    self.after(0, self._render_results)
+                self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"✗ Install failed: {e}"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_install, daemon=True).start()
+
+    def _resolve_and_install_dependencies(self, version, server_name, loader, mc_version, title):
+        """Resolve required deps of *version* and install them after a single
+        confirm. Runs on a background thread; blocks on the confirm dialog
+        via an Event so the primary install's batch/status bookkeeping
+        happens after dependency handling completes."""
+        try:
+            dep_result = self.client.get_required_dependencies(
+                version, mc_version, loader, self._installed_slugs_cache)
+        except Exception as exc:
+            logger.debug("Dependency resolution failed for %s: %s", title, exc)
+            return
+        deps = dep_result.get("required", [])
+        incompatible = dep_result.get("incompatible", [])
+
+        conflicting = [
+            d["project"] for d in incompatible
+            if d["project"].get("slug") in self._installed_slugs_cache
+        ]
+
+        if not deps and not conflicting:
+            return
+
+        message = ""
+        if deps:
+            names = ", ".join(d["project"].get("title", d["project"].get("slug", "?")) for d in deps)
+            message += f"{title} requires: {names}.\n\nInstall these dependencies too?"
+        if conflicting:
+            conflict_names = ", ".join(p.get("title", p.get("slug", "?")) for p in conflicting)
+            warning = f"⚠ {title} conflicts with installed: {conflict_names}"
+            message = f"{message}\n\n{warning}" if message else warning
+
+        if not deps:
+            self.after(0, lambda: self._set_status(
+                f"⚠ {title} conflicts with installed mod(s): "
+                + ", ".join(p.get("title", p.get("slug", "?")) for p in conflicting)
+            ))
+            return
+
+        confirmed = threading.Event()
+        answer = {}
+
+        def _ask():
+            answer["ok"] = ZBBDialog.confirm(
+                self.winfo_toplevel(), "Install Required Dependencies", message,
+            )
+            confirmed.set()
+
+        self.after(0, _ask)
+        confirmed.wait()
+        if not answer.get("ok"):
+            return
+
+        for dep in deps:
+            dep_project = dep["project"]
+            dep_version = dep["version"]
+            dep_slug = dep_project.get("slug", dep_project.get("id", ""))
+            dep_title = dep_project.get("title", dep_slug)
+            try:
+                dep_path = self.client.download_version(
+                    dep_version, server_name, loader,
+                    progress_callback=lambda p, t=dep_title: self.after(
+                        0, lambda: self._set_status(f"Downloading {t}… {int(p * 100)}%")
+                    ),
+                )
+                if dep_path:
+                    dep_fname = os.path.basename(dep_path)
+                    mod_install_tracker.record_install(server_name, dep_slug, dep_fname)
+
+                    def _mark(dep_slug=dep_slug):
+                        self._installed_slugs_cache.add(dep_slug)
+
+                    self.after(0, _mark)
+                    logger.info("Installed dependency %s to %s", dep_title, dep_path)
+            except Exception as exc:
+                logger.warning("Failed to install dependency %s: %s", dep_title, exc)
 
     def _on_install_modpack(self, hit: dict, batch: dict = None):
         ctx = self._resolve_install_context()

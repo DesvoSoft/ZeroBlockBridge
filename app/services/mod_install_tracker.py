@@ -54,6 +54,14 @@ def remove_install(server_name: str, slug: str) -> None:
         logger.warning("Failed to remove install metadata for %s: %s", slug, exc)
 
 
+def remove_install_by_filename(server_name: str, filename: str) -> None:
+    data = _read(_metadata_path(server_name))
+    slug = next((s for s, f in data.items() if f == filename), None)
+    if slug is None:
+        return
+    remove_install(server_name, slug)
+
+
 def _read(path: Path) -> dict:
     if not path.exists():
         return {}

@@ -172,6 +172,81 @@ class ModrinthClient:
         return self._request("GET", f"/project/{project_id}/version", params=params)
 
     # ------------------------------------------------------------------
+    # Public API — Dependency resolution
+    # ------------------------------------------------------------------
+    def get_required_dependencies(
+        self,
+        version: dict,
+        mc_version: str,
+        loader: str,
+        installed_slugs: set,
+    ) -> Dict[str, List[Dict]]:
+        """
+        Resolve a version's dependencies into installable/warnable groups.
+
+        Optional/embedded dependencies are ignored — embedded deps ship
+        inside the mod's own jar, optional ones are user choices we don't
+        prompt for.
+
+        Returns {"required": [...], "incompatible": [...]}.
+        "required" entries are {"project": <project dict>, "version": <version dict>},
+        ready to install (already-installed slugs and versions with no
+        compatible build for mc_version/loader are skipped).
+        "incompatible" entries are {"project": <project dict>} only — surfaced
+        as a warning, not something we auto-resolve a version for.
+        """
+        resolved = []
+        incompatible = []
+        seen_ids = set()
+        seen_incompatible_ids = set()
+        for dep in version.get("dependencies", []):
+            dep_type = dep.get("dependency_type")
+            if dep_type not in ("required", "incompatible"):
+                continue
+            project_id = dep.get("project_id")
+            if not project_id:
+                continue
+
+            if dep_type == "incompatible":
+                if project_id in seen_incompatible_ids:
+                    continue
+                seen_incompatible_ids.add(project_id)
+                try:
+                    incompatible.append({"project": self.get_project(project_id)})
+                except ModrinthException as exc:
+                    logger.warning("Could not resolve incompatible dependency %s: %s", project_id, exc)
+                continue
+
+            if project_id in seen_ids:
+                continue
+            seen_ids.add(project_id)
+
+            try:
+                project = self.get_project(project_id)
+            except ModrinthException as exc:
+                logger.warning("Could not resolve dependency %s: %s", project_id, exc)
+                continue
+            if project.get("slug") in installed_slugs:
+                continue
+
+            dep_version_id = dep.get("version_id")
+            try:
+                if dep_version_id:
+                    dep_version = self._request("GET", f"/version/{dep_version_id}")
+                else:
+                    versions = self.get_versions(project_id, mc_version=mc_version, loader=loader)
+                    dep_version = versions[0] if versions else None
+            except ModrinthException as exc:
+                logger.warning("Could not fetch dependency version for %s: %s", project_id, exc)
+                continue
+            if not dep_version:
+                continue
+
+            resolved.append({"project": project, "version": dep_version})
+
+        return {"required": resolved, "incompatible": incompatible}
+
+    # ------------------------------------------------------------------
     # Public API — Download + Install
     # ------------------------------------------------------------------
     def _download_file(self, download_url, filename, expected_sha1, dest_dir, progress_callback=None):
