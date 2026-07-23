@@ -192,11 +192,10 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_status.pack(side="left", padx=20, pady=8)
 
         self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_start.pack(side="left", padx=2)
         ToolTip(self.btn_start, "Start server")
         self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_stop.pack(side="left", padx=2)
         ToolTip(self.btn_stop, "Stop server")
+        self.btn_start.pack(side="left", padx=2)
 
         _ghost_hover = AppConfig.COLOR_BTN_GHOST_HOVER
         self.btn_config = ctk.CTkButton(
@@ -298,7 +297,7 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, "#ffffff"), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         ToolTip(self.btn_tunnel_start, "Start tunnel")
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, "#ffffff"), command=self.stop_tunnel, state="disabled", fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, "#ffffff"), command=self.stop_tunnel, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_tunnel_stop, "Stop tunnel")
 
         # --- Playit Account Linking (collapsible when unlinked) ---
@@ -400,7 +399,7 @@ class MCTunnelApp(ctk.CTk):
         entry.bind("<Return>", do_search)
 
         btn_next = ctk.CTkButton(bar, text="Next", width=60, height=30, corner_radius=AppConfig.RADIUS_BTN,
-                                  command=do_next)
+                                  hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, command=do_next)
         btn_next.pack(side="right")
 
     def send_server_command(self, event=None):
@@ -509,8 +508,7 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.current_server = None
             self.lbl_dash_title.configure(text="Select a server")
             self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
-            self.btn_start.configure(state="disabled")
-            self.btn_stop.configure(state="disabled")
+            self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False)
             self._update_mods_tab_state()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
         self.load_servers()
@@ -621,8 +619,7 @@ class MCTunnelApp(ctk.CTk):
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 
-        self.btn_start.configure(state="disabled" if is_running else "normal")
-        self.btn_stop.configure(state="normal" if is_running else "disabled")
+        self._show_run_stop(self.btn_start, self.btn_stop, running=is_running)
 
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
@@ -720,6 +717,17 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.start_server()
         self.executor.submit(_start)
 
+    def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True):
+        """Show only one of run/stop at a time, matching current state."""
+        if running:
+            btn_run.pack_forget()
+            btn_stop.pack(side="left", padx=2)
+            btn_stop.configure(state="normal" if enabled else "disabled")
+        else:
+            btn_stop.pack_forget()
+            btn_run.pack(side="left", padx=2)
+            btn_run.configure(state="normal" if enabled else "disabled")
+
     def _set_current_server_pill(self, status: str):
         item = self.server_items.get(self.zbb_manager.current_server)
         if item:
@@ -727,8 +735,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
-        self.after(0, lambda: self.btn_start.configure(state="disabled"))
-        self.after(0, lambda: self.btn_stop.configure(state="normal"))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
@@ -762,8 +769,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
-        self.after(0, lambda: self.btn_start.configure(state="normal"))
-        self.after(0, lambda: self.btn_stop.configure(state="disabled"))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False))
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):
@@ -926,14 +932,12 @@ class MCTunnelApp(ctk.CTk):
             self.start_server_action()
 
     def start_tunnel(self):
-        self.btn_tunnel_start.configure(state="disabled")
-        self.btn_tunnel_stop.configure(state="normal")
+        self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
         self.zbb_manager.start_tunnel()
 
     def stop_tunnel(self):
         self.zbb_manager.stop_tunnel()
-        self.btn_tunnel_start.configure(state="normal")
-        self.btn_tunnel_stop.configure(state="disabled")
+        self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)
 
     def reset_tunnel(self):
         msg = (
@@ -949,8 +953,7 @@ class MCTunnelApp(ctk.CTk):
         def _reset_task():
             self.zbb_manager.reset_tunnel(mode="soft")
             self.after(0, lambda: self.on_tunnel_status({"status": "Offline", "skip_debounce": True}))
-            self.after(0, lambda: self.btn_tunnel_start.configure(state="normal"))
-            self.after(0, lambda: self.btn_tunnel_stop.configure(state="disabled"))
+            self.after(0, lambda: self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False))
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
             # Toast is handled by PlayitManager.notification_callback via EventBus
 
@@ -975,18 +978,7 @@ class MCTunnelApp(ctk.CTk):
 
             self.lbl_tunnel_status.configure(text=f"Tunnel: ● {status}", text_color=color)
 
-            # --- 11.B3: Collapse tunnel details when offline+linked ---
             is_linked = self.zbb_manager.playit_manager.is_linked
-            tunnel_active = status in ("Online", "Starting...", "Error") or not is_linked
-            if not tunnel_active:
-                self.lbl_dns_display.pack_forget()
-                self.btn_copy_ip.pack_forget()
-                self.btn_tunnel_start.pack_forget()
-                self.btn_tunnel_stop.pack_forget()
-                self.btn_reset.pack_forget()
-                self.btn_toggle_setup.pack_forget()
-                self.setup_frame.pack_forget()
-                return
 
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
             # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
@@ -1040,19 +1032,14 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_link_code.pack_forget()
                 self.btn_claim.pack_forget()
 
-                self.btn_tunnel_start.pack(side="left", padx=2)
-                self.btn_tunnel_stop.pack(side="left", padx=2)
-                self.btn_reset.pack(side="left", padx=2)
-
                 if status == "Online":
-                    self.btn_tunnel_start.configure(state="disabled")
-                    self.btn_tunnel_stop.configure(state="normal")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True)
                 elif status == "Starting...":
-                    self.btn_tunnel_start.configure(state="disabled")
-                    self.btn_tunnel_stop.configure(state="disabled")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
                 else:
-                    self.btn_tunnel_start.configure(state="normal")
-                    self.btn_tunnel_stop.configure(state="disabled")
+                    self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)
+
+                self.btn_reset.pack(side="left", padx=2)
 
         self.after(0, _update)
 
