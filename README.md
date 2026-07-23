@@ -28,7 +28,7 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 - **Auto-Healing**: Watchdog (crash detection + JSON crash reports), heartbeat (zombie detection), lag monitor, command sanitizer, disk space pre-flight check — see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Notifications**: Optional Discord webhooks with per-event custom message templates (crash/ready/backup/player events).
 - **Theming**: Light, dark, and system theme, fully applied across the UI.
-- **Linux Support (experimental)**: Native binary and Docker images (GUI or headless) — see [Quick Start](#quick-start).
+- **Linux Support (experimental)**: Native binary via PyInstaller.
 - **Developer Experience**: JDK auto-installer (bytecode analysis detects required version), event-driven architecture, thread safety, zero bare `except:` blocks.
 
 ---
