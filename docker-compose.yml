@@ -10,6 +10,7 @@ services:
       - DISPLAY=${DISPLAY_HOST:-host.docker.internal}:0
     volumes:
       - ./servers:/app/servers
+      - ./backups:/app/backups
       - zbb-data:/app/.zbb_data
     network_mode: bridge
     stdin_open: true
@@ -27,6 +28,7 @@ services:
       - DISPLAY=${DISPLAY_HOST:-host.docker.internal}:0
     volumes:
       - ./servers:/opt/zeroblockbridge/servers
+      - ./backups:/opt/zeroblockbridge/backups
       - zbb-data-linux:/opt/zeroblockbridge/.zbb_data
     network_mode: bridge
     stdin_open: true
