@@ -687,3 +687,17 @@ class AppSettingsDialog(ctk.CTkToplevel):
             justify="center",
         )
         lbl_desc.pack()
+        lbl_author = ctk.CTkLabel(
+            wrap, text="By DesvoSoft",
+            font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_GRAY,
+        )
+        lbl_author.pack(pady=(12, 2))
+
+        import webbrowser
+        repo_url = "https://github.com/DesvoSoft/ZeroBlockBridge"
+        lbl_repo = ctk.CTkLabel(
+            wrap, text=repo_url,
+            font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_LINK, cursor="hand2",
+        )
+        lbl_repo.pack(pady=(0, 24))
+        lbl_repo.bind("<Button-1>", lambda e: webbrowser.open(repo_url))
