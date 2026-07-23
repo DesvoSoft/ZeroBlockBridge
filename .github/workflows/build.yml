@@ -56,14 +56,14 @@ jobs:
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pyinstaller linux.spec
+          pyinstaller packaging/linux.spec
           mv dist/zeroblockbridge dist/ZeroBlockBridge-linux
 
       # 6b. Build on Windows
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          pyinstaller ZeroBlockBridge.spec
+          pyinstaller packaging/ZeroBlockBridge.spec
           Move-Item dist/ZeroBlockBridge.exe dist/ZeroBlockBridge-windows.exe
 
       # 7. Upload artifacts
