@@ -67,6 +67,11 @@ Zero Block Bridge.exe
 .planning/
 AI reference/
 CHECKLIST.md
+roadmap.md
+known_issues.md
+docs/roadmap-history.md
+docs/SKILL.md
+docs/RESEARCH-*.md
 
 # Cache / Runtime
 .zbb_cache/
@@ -82,3 +87,4 @@ skills-lock.json
 opencode.json
 scripts/
 reset.bat
+rebuild_exe.bat

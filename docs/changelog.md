@@ -46,4 +46,3 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-*For detailed phase-by-phase history (pre-2.0 development), see `docs/roadmap-history.md`.*

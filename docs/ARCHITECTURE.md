@@ -326,10 +326,8 @@ ZeroBlockBridge/
 │
 ├── pyproject.toml                     # Project metadata, requires-python>=3.10, deps
 ├── requirements.txt                   # Pinned minimum versions (5 deps)
-├── roadmap.md                         # Development roadmap (local, not published)
 ├── docs/
 │   ├── ARCHITECTURE.md                # This file
-│   ├── SKILL.md                       # AI assistant development guide
 │   └── STANDARDS.md                   # Coding standards & quality criteria
 │
 ├── servers/                           # (Generated) Per-server data
