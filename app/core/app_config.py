@@ -14,10 +14,10 @@ class AppConfig:
     # Colors - UI Theme ("Dirt Block" palette)
     # Backgrounds — slate propio, no gray genérico de CTK
     COLOR_BG_LIGHT = "#f8fafc"        # slate-50  (light mode main bg)
-    COLOR_BG_DARK = "#111827"         # gray-900  (dark mode main bg)
-    COLOR_BG_SIDEBAR_LIGHT = "#f1f5f9" # slate-100 (light sidebar)
-    COLOR_BG_SIDEBAR_DARK = "#0f172a"  # slate-950 (dark sidebar — más profundo)
-    COLOR_BG_CARD_DARK = "#1e293b"     # slate-800 (cards, panels, status bar)
+    COLOR_BG_DARK = "#0b1120"         # deeper than slate-900 — separates further from card/sidebar
+    COLOR_BG_SIDEBAR_LIGHT = "#eef2f7" # cooler than slate-100 — visibly distinct from card white
+    COLOR_BG_SIDEBAR_DARK = "#0a0f1c"  # near-black — reinforces "navigation zone" depth
+    COLOR_BG_CARD_DARK = "#243044"     # slate-800/700 midpoint — perceptibly lifted off main bg
     COLOR_BG_CARD_LIGHT = "#ffffff"
     COLOR_CONSOLE_LIGHT = "#f8fafc"   # slate-50
     COLOR_CONSOLE_DARK = "#0d1117"    # casi negro — contraste máximo para logs

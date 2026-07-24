@@ -13,11 +13,11 @@ with open(SRC, encoding="utf-8") as f:
     t = json.load(f)
 
 # Palette
-BG = ["#f8fafc", "#111827"]
-CARD = ["#ffffff", "#1e293b"]
-CARD_TOP = ["#f1f5f9", "#243044"]
+BG = ["#f8fafc", "#0b1120"]
+CARD = ["#ffffff", "#243044"]
+CARD_TOP = ["#eef2f7", "#2c3a52"]
 BORDER = ["#cbd5e1", "#334155"]
-INPUT_BG = ["#ffffff", "#0f172a"]
+INPUT_BG = ["#ffffff", "#0a0f1c"]
 TEXT = ["#0f172a", "#e2e8f0"]
 TEXT_DISABLED = ["#94a3b8", "#64748b"]
 PLACEHOLDER = ["#94a3b8", "#64748b"]
@@ -89,7 +89,7 @@ t["CTkTextbox"].update({"corner_radius": 8, "border_width": 0, "fg_color": INPUT
 
 t["CTkScrollableFrame"]["label_fg_color"] = CARD_TOP
 
-t["DropdownMenu"].update({"fg_color": ["#f1f5f9", "#1e293b"], "hover_color": GHOST_HOVER,
+t["DropdownMenu"].update({"fg_color": ["#eef2f7", "#243044"], "hover_color": GHOST_HOVER,
                           "text_color": TEXT})
 
 t["CTkFont"]["Windows"] = {"family": "Segoe UI Variable Text", "size": 13, "weight": "normal"}

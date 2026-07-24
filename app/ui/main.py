@@ -183,69 +183,56 @@ class MCTunnelApp(ctk.CTk):
         self._build_console_tabs()
 
     def _build_status_bar(self):
-        self.status_frame = ctk.CTkFrame(self.main_frame, height=45, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 2))
+        self.status_frame = ctk.CTkFrame(self.main_frame, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 4))
 
-        self.lbl_status = ctk.CTkLabel(self.status_frame, text="● Offline",
-                                       font=(AppConfig.FONT_FAMILY_DISPLAY, 15, "bold"),
-                                       text_color=AppConfig.COLOR_STATUS_OFFLINE)
-        self.lbl_status.pack(side="left", padx=20, pady=8)
+        # --- Single row: status + title (left, flexible) | badges -> config/folder -> start/stop (right, fixed) ---
+        # Sizing/spacing mirrors _build_tunnel_controls below (same row height, same button size).
+        self.status_hero_row = ctk.CTkFrame(self.status_frame, fg_color="transparent")
+        self.status_hero_row.pack(fill="x", padx=15, pady=(6, 6))
 
-        self.btn_start = ctk.CTkButton(self.status_frame, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.lbl_status = ctk.CTkLabel(self.status_hero_row, text="● Offline",
+                                       font=AppConfig.FONT_BODY,
+                                       text_color=AppConfig.COLOR_STATUS_OFFLINE, anchor="w")
+        self.lbl_status.pack(side="left", padx=(5, 5))
+
+        self.lbl_dash_title = ctk.CTkLabel(self.status_hero_row, text="Select a server",
+                                            font=AppConfig.FONT_HEADING_SMALL, anchor="w")
+        self.lbl_dash_title.pack(side="left", padx=(10, 0), fill="x", expand=True)
+
+        self.btn_start = ctk.CTkButton(self.status_hero_row, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_start, "Start server")
-        self.btn_stop = ctk.CTkButton(self.status_frame, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+
+        self.btn_stop = ctk.CTkButton(self.status_hero_row, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_stop, "Stop server")
-        self.btn_start.pack(side="left", padx=2)
+
+        self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
 
         _ghost_hover = AppConfig.COLOR_BTN_GHOST_HOVER
         self.btn_config = ctk.CTkButton(
-            self.status_frame, text="", image=icon("gear", 17), width=36, height=36,
+            self.status_hero_row, text="", image=icon("gear", 14), width=36, height=36,
             corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
             command=self.edit_server_properties,
             state="disabled"
         )
-        self.btn_config.pack(side="left", padx=5)
+        self.btn_config.pack(side="right", padx=(2, 10))
         ToolTip(self.btn_config, "Server settings")
 
         self.btn_open_folder = ctk.CTkButton(
-            self.status_frame, text="", image=icon("folder", 16), width=36, height=36,
+            self.status_hero_row, text="", image=icon("folder", 13), width=36, height=36,
             corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", hover_color=_ghost_hover,
             command=self.open_server_folder,
             state="disabled"
         )
-        self.btn_open_folder.pack(side="left", padx=5)
+        self.btn_open_folder.pack(side="right", padx=2)
         ToolTip(self.btn_open_folder, "Open server folder")
 
-        self.lbl_dash_title = ctk.CTkLabel(self.status_frame, text="Select a server", font=AppConfig.FONT_HEADING)
-        self.lbl_dash_title.pack(side="left", padx=(5, 10), pady=8)
-
-        self.status_right_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
-        self.status_right_frame.pack(side="right", fill="x", expand=True, padx=5, pady=8)
-
-        badge_java = ctk.CTkFrame(
-            self.status_right_frame, fg_color="transparent"
-        )
-        badge_java.pack(side="right", padx=(5, 10))
-        self.lbl_java_ver = ctk.CTkLabel(
-            badge_java, text="Checking...", text_color=AppConfig.COLOR_TEXT_GRAY,
-            font=AppConfig.FONT_BODY_SMALL
-        )
-        self.lbl_java_ver.pack(padx=8, pady=2)
-
-        badge_server_info = ctk.CTkFrame(
-            self.status_right_frame, fg_color="transparent"
-        )
-        badge_server_info.pack(side="right", padx=(5, 10))
-        self.lbl_server_info = ctk.CTkLabel(
-            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY,
-            font=AppConfig.FONT_BODY_SMALL
-        )
-        self.lbl_server_info.pack(padx=8, pady=2)
-
         badge_players = ctk.CTkFrame(
-            self.status_right_frame, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE
+            self.status_hero_row, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE,
+            width=60, height=30
         )
-        badge_players.pack(side="right", padx=(5, 5))
+        badge_players.pack(side="right", padx=(5, 10))
+        badge_players.pack_propagate(False)
         self.btn_players = ctk.CTkButton(
             badge_players,
             text="0",
@@ -256,10 +243,27 @@ class MCTunnelApp(ctk.CTk):
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             font=AppConfig.FONT_BODY_SMALL,
             height=24,
-            width=60
+            width=56
         )
-        self.btn_players.pack(padx=2, pady=2)
+        self.btn_players.pack(expand=True, fill="both", padx=2, pady=2)
         ToolTip(self.btn_players, "Players online")
+
+        badge_server_info = ctk.CTkFrame(
+            self.status_hero_row, fg_color="transparent", width=110, height=36
+        )
+        badge_server_info.pack(side="right", padx=(5, 5))
+        badge_server_info.pack_propagate(False)
+        self.lbl_server_info = ctk.CTkLabel(
+            badge_server_info, text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY,
+            font=AppConfig.FONT_BODY_SMALL, anchor="e"
+        )
+        self.lbl_server_info.pack(fill="both", expand=True)
+
+        # Java version: not shown in the bar (declutter) — kept as a live-updating
+        # tooltip on the status dot instead. Widget stays unpacked so the existing
+        # .configure() call sites (java detection results) keep working untouched.
+        self.lbl_java_ver = ctk.CTkLabel(self.status_hero_row, text="Checking...")
+        self.status_tooltip = ToolTip(self.lbl_status, "Java: Checking...")
 
 
 
@@ -427,9 +431,11 @@ class MCTunnelApp(ctk.CTk):
                 source_badge = "Portable" if best.source == "PORTABLE" else "System"
                 label = f"Java {best.major} ({source_badge})"
                 self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=AppConfig.COLOR_BTN_SUCCESS))
+                self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
                 self.after(0, lambda: self.server_console.log(f"[System] Found Java: {best.version_string}"))
             else:
                 self.after(0, lambda: self.lbl_java_ver.configure(text="No Java", text_color=AppConfig.COLOR_STATUS_ERROR))
+                self.after(0, lambda: setattr(self.status_tooltip, "text", "Java: No Java detected"))
                 self.after(0, lambda: self.server_console.log("[System] No Java detected on this system. ZeroBlockBridge will auto-install the required JDK when the server starts."))
         self.executor.submit(_check)
 
@@ -508,7 +514,7 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.current_server = None
             self.lbl_dash_title.configure(text="Select a server")
             self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
-            self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False)
+            self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
             self._update_mods_tab_state()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
         self.load_servers()
@@ -619,7 +625,7 @@ class MCTunnelApp(ctk.CTk):
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 
-        self._show_run_stop(self.btn_start, self.btn_stop, running=is_running)
+        self._show_run_stop(self.btn_start, self.btn_stop, running=is_running, side="right")
 
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
@@ -717,15 +723,15 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.start_server()
         self.executor.submit(_start)
 
-    def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True):
+    def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True, side: str = "left"):
         """Show only one of run/stop at a time, matching current state."""
         if running:
             btn_run.pack_forget()
-            btn_stop.pack(side="left", padx=2)
+            btn_stop.pack(side=side, padx=2)
             btn_stop.configure(state="normal" if enabled else "disabled")
         else:
             btn_stop.pack_forget()
-            btn_run.pack(side="left", padx=2)
+            btn_run.pack(side=side, padx=2)
             btn_run.configure(state="normal" if enabled else "disabled")
 
     def _set_current_server_pill(self, status: str):
@@ -735,7 +741,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
-        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
@@ -743,6 +749,7 @@ class MCTunnelApp(ctk.CTk):
             label = f"Java {java_ver} ({jdk_src})"
             color = AppConfig.COLOR_STATUS_ONLINE if jdk_src == "system" else AppConfig.COLOR_STATUS_STARTING
             self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=color))
+            self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
 
     def on_server_ready(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
@@ -769,7 +776,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
-        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False))
+        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):
