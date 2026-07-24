@@ -18,6 +18,14 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ---
 
+## Dashboard Preview
+
+<p align="center">
+  <img width="1166" height="739" alt="screenshot-dashboard" src="https://github.com/user-attachments/assets/453023ea-6b98-4e36-8915-fce5418bf029" />
+</p>
+
+---
+
 ## Features
 
 - **Server Management**: 6-step creation wizard with a summary/review step, multi-version (Vanilla/Fabric/Forge/Paper/Purpur), server templates, smart caching, RAM allocation, properties editor, integrated console with search and colored log lines, player management dashboard with whitelist controls, right-click server deletion.
