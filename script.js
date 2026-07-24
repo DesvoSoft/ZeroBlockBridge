@@ -15,12 +15,12 @@
     anime({
       targets: '#hero-tiles .tile',
       opacity: toggled ? 0 : 1,
-      delay: anime.stagger(50, {
+      delay: anime.stagger(65, {
         grid: [columns, rows],
         from: index,
       }),
       easing: 'easeOutQuad',
-      duration: 400,
+      duration: 550,
     });
   };
 

@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZeroBlockBridge — Minecraft Server Manager</title>
-  <meta name="description" content="Your Minecraft server deserves better than babysitting. Auto-healing, tunneling, backups, and mod management — all in one place.">
+  <meta name="description" content="Your Minecraft server deserves better than babysitting. Auto-healing, tunneling, backups, themes, and mod management — all in one place.">
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.12.1/dist/vitra.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -17,6 +17,10 @@
   ══════════════════════════════════════ -->
   <section id="hero">
     <div class="hero-bg"></div>
+    <div class="zbb-starfield" aria-hidden="true">
+      <div class="zbb-stars zbb-stars-far"></div>
+      <div class="zbb-stars zbb-stars-near"></div>
+    </div>
     <div id="hero-tiles"></div>
 
     <div class="hero-content">
@@ -31,7 +35,7 @@
       <p class="hero-sub">Self-host your Minecraft server — crash detection, tunneling, backups and Java management, all without complex or time-consuming setups.</p>
 
       <div class="hero-actions">
-        <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
+        <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v2.0.0/ZeroBlockBridge-windows.exe"
            class="hero-btn-primary" download>
           <img src="assets/windows.svg" width="17" height="17" alt="" aria-hidden="true" class="btn-icon btn-icon-invert">
           Download
@@ -42,7 +46,11 @@
         </a>
       </div>
 
-      <p class="tiles-hint">Click to reveal</p>
+    </div>
+
+    <div class="tiles-hint">
+      <p class="tiles-hint-title">Making Minecraft server self-hosting easy</p>
+      <p class="tiles-hint-sub">Click to reveal</p>
     </div>
   </section>
 
@@ -83,26 +91,47 @@
           </div>
 
           <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
-            <div class="feature-icon">💾</div>
-            <h3 class="vitra-card-title">Scheduled Backups</h3>
-            <p class="vitra-card-body">Configure automatic ZIP backups by interval and retention count. Restores safety-copy your world first — no data loss, ever.</p>
-            <div class="mc-tag-pill">Auto-schedule · ZIP · World-only mode</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
             <div class="feature-icon">🧩</div>
             <h3 class="vitra-card-title">Modrinth Mod Browser</h3>
             <p class="vitra-card-body">Search, install, and update mods directly from inside ZBB. Per-server mod lists, version picker, and one-click update checker.</p>
             <div class="mc-tag-pill">Modrinth API · Fabric · Forge · Quilt</div>
           </div>
 
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
             <div class="feature-icon">🛡️</div>
             <h3 class="vitra-card-title">Command Sanitizer</h3>
             <p class="vitra-card-body">80+ safe Minecraft commands on an explicit allowlist. Shell injection, pipe operators, and dangerous flags are blocked before reaching the JVM.</p>
             <div class="mc-tag-pill">Allowlist · shell=False · No injection</div>
           </div>
 
+          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
+            <div class="feature-icon">🎨</div>
+            <h3 class="vitra-card-title">Settings 2.0 &amp; Themes</h3>
+            <p class="vitra-card-body">Full light/dark/system theme support with a live flip, plus a 5-tab Settings dialog for Discord webhooks, managed JDKs, and disk usage.</p>
+            <div class="mc-tag-pill">Light · Dark · System</div>
+          </div>
+
+        </div>
+
+        <ul class="more-features vitra-reveal vitra-reveal-up">
+          <li><span class="mf-icon">💾</span> <strong>Scheduled Backups</strong> — auto ZIP by interval &amp; retention</li>
+          <li><span class="mf-icon">📦</span> <strong>Templates &amp; .zbbpack</strong> — reusable configs, portable archives</li>
+          <li><span class="mf-icon">👥</span> <strong>Players Dashboard</strong> — ops, bans, whitelist in one view</li>
+          <li><span class="mf-icon">🔗</span> <strong>Mod Dependency Resolution</strong> — auto-resolve, update badges</li>
+          <li><span class="mf-icon">💬</span> <strong>Discord Webhooks</strong> — crash, ready, backup &amp; player events</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SCREENSHOT -->
+    <section id="screenshot" class="section screenshot-section">
+      <div class="vitra-container">
+        <h2 class="section-title vitra-reveal vitra-reveal-up">See it in action</h2>
+        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
+          The real dashboard — server list, live console, and tunnel status at a glance.
+        </p>
+        <div class="screenshot-frame vitra-reveal vitra-reveal-up vitra-delay-200">
+          <img src="assets/screenshot-dashboard.png" alt="ZeroBlockBridge dashboard showing server list, console output, and tunnel status" loading="lazy">
         </div>
       </div>
     </section>
@@ -144,7 +173,7 @@
         <div class="download-card vitra-glass vitra-reveal vitra-reveal-up">
           <div class="download-left">
             <h2>Get ZeroBlockBridge</h2>
-            <p class="dl-meta">Windows · Python 3.10+ · 4 dependencies</p>
+            <p class="dl-meta">Windows &amp; Linux · Python 3.10+ · v2.0.0</p>
             <div class="download-badges">
               <span class="vitra-badge">Open Source</span>
               <span class="vitra-badge vitra-badge-outline">AGPL-3.0</span>
@@ -152,14 +181,20 @@
             </div>
           </div>
           <div class="download-right">
-            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v1.4/ZeroBlockBridge-windows.exe"
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v2.0.0/ZeroBlockBridge-windows.exe"
                class="hero-btn-primary" download>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download for Windows
             </a>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/download/v2.0.0/ZeroBlockBridge-linux"
+               class="hero-btn-ghost" download>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download for Linux <span class="mc-tag-pill linux-tag-pill">Experimental</span>
+            </a>
             <div class="install-block">
               <span class="install-label">Or clone &amp; run</span>
-              <code>pip install -r requirements.txt</code>
+              <code>git clone https://github.com/DesvoSoft/ZeroBlockBridge.git</code>
+              <code>cd ZeroBlockBridge &amp;&amp; pip install -r requirements.txt</code>
               <code>py app/launcher.py</code>
             </div>
           </div>
@@ -223,7 +258,7 @@
   </div><!-- /sections-wrap -->
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.7.1/dist/vitra.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.12.1/dist/vitra.min.js" defer></script>
   <script src="script.js"></script>
 </body>
 </html>
