@@ -43,7 +43,16 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ## Quick Start
 
-### Prerequisites
+### Option A: Download the app (recommended for players)
+
+1. Grab the latest build from the [Releases page](https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest) — `ZeroBlockBridge-windows.exe` (Linux build also available, experimental).
+2. Run it, then jump straight to [First Server](#first-server) below.
+
+> **Windows SmartScreen warning?** That's expected. ZeroBlockBridge is built by an independent developer and the executable isn't code-signed (signing certificates cost money most solo/open-source projects can't justify). Windows flags any unsigned `.exe` from an unrecognized publisher, signed or not. Click **"More info" → "Run anyway"** to proceed, or if you'd rather not take our word for it, the full source is public — read it, or build it yourself with Option B below.
+
+### Option B: Run from source (for developers, or if you don't trust the prebuilt binary)
+
+#### Prerequisites
 
 - **OS**: Windows 10/11 (fully supported), Linux (experimental).
 - **Python 3.10+** ([Download](https://www.python.org/downloads/)) — during install, on Windows, check **"Add python.exe to PATH"**.
@@ -57,7 +66,7 @@ py --version
 ```
 > If that fails, try `python --version`. If both fail, reinstall Python and make sure "Add to PATH" was checked.
 
-### Installation
+#### Installation
 
 1. **Get the source**
 
@@ -115,7 +124,7 @@ py --version
    - Useful if you don't know how to safely open ports on your router/firewall — Playit tunnels the connection for you, no port forwarding required.
    - Gives you a shareable join URL that stays the same even when your server is offline, so friends can bookmark it once.
 
-### Troubleshooting
+#### Troubleshooting
 
 - **`'py' is not recognized` / `'python' is not recognized`**: Python isn't on PATH. Reinstall Python and check "Add python.exe to PATH", or use the full path to `python.exe`.
 - **`pip install` fails on a package**: Upgrade pip first — `py -m pip install --upgrade pip` — then retry.
