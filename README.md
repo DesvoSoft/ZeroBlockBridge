@@ -43,31 +43,53 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
 
 ## Quick Start
 
-### Prerequisites
+### Option A: Download the app (recommended for players)
 
-- **Python 3.10+** ([Download](https://www.python.org/downloads/))
+1. Grab the latest build from the [Releases page](https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest) — `ZeroBlockBridge-windows.exe` (Linux build also available, experimental).
+2. Run it, then jump straight to [First Server](#first-server) below.
+
+> **Windows SmartScreen warning?** That's expected. ZeroBlockBridge is built by an independent developer and the executable isn't code-signed (signing certificates cost money most solo/open-source projects can't justify). Windows flags any unsigned `.exe` from an unrecognized publisher, signed or not. Click **"More info" → "Run anyway"** to proceed, or if you'd rather not take our word for it, the full source is public — read it, or build it yourself with Option B below.
+
+### Option B: Run from source (for developers, or if you don't trust the prebuilt binary)
+
+#### Prerequisites
+
+- **OS**: Windows 10/11 (fully supported), Linux (experimental).
+- **Python 3.10+** ([Download](https://www.python.org/downloads/)) — during install, on Windows, check **"Add python.exe to PATH"**.
+- **Git** ([Download](https://git-scm.com/downloads)) — only needed to clone the repo; skip it if you download the ZIP instead.
+- **~1 GB free disk space** — the app auto-downloads a JDK (Adoptium) and, per server you create, the Minecraft server jar.
 - **Java**: Not required manually. The app automatically detects, downloads, and caches the correct JDK (Adoptium, range 8-21) based on the selected Minecraft version.
 
-### Installation
+Verify Python is installed and on PATH before continuing:
+```bash
+py --version
+```
+> If that fails, try `python --version`. If both fail, reinstall Python and make sure "Add to PATH" was checked.
 
-1. **Clone the repository**
+#### Installation
+
+1. **Get the source**
+
+   Clone with git:
    ```bash
    git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
-   ```
-
-2. **Navigate to the project folder**
-   ```bash
    cd ZeroBlockBridge
    ```
+   No git? [Download the ZIP](https://github.com/DesvoSoft/ZeroBlockBridge/archive/refs/heads/main.zip), extract it, then open a terminal in that folder.
 
-3. **Install dependencies**
+2. **Create and activate a virtual environment** (recommended, keeps dependencies isolated)
 
-   Create a virtual environment (recommended):
-
-   **Windows:**
-   ```bash
+   **Windows (PowerShell):**
+   ```powershell
    py -m venv venv
-   .\venv\Scripts\activate
+   .\venv\Scripts\Activate.ps1
+   ```
+   > If you get an error about execution policies, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, then retry the activate command.
+
+   **Windows (cmd.exe):**
+   ```bat
+   py -m venv venv
+   .\venv\Scripts\activate.bat
    ```
 
    **Linux/macOS:**
@@ -76,7 +98,9 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
    source venv/bin/activate
    ```
 
-   Install dependencies:
+   Your prompt should now be prefixed with `(venv)`.
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
@@ -85,16 +109,27 @@ ZeroBlockBridge is a desktop application that simplifies Minecraft server creati
    ```bash
    py app/launcher.py
    ```
-
    > Depending on your OS, you might need `python` or `python3` instead of `py`.
+
+   The ZeroBlockBridge window should open within a few seconds. If nothing opens and the terminal shows an error, see [Troubleshooting](#troubleshooting) below.
 
 ### First Server
 
 1. Click **"Create Server"** in the sidebar.
 2. Follow the 6-step wizard (identity, engine/version, resources, rules/security, world/network, summary) — optionally tick **"Start server after creation"** on the summary step.
-3. The wizard shows detailed progress (download, verify, scaffold, bytecode analysis, tunnel setup).
+3. The wizard shows detailed progress (download, verify, scaffold, bytecode analysis, tunnel setup). This step needs internet access and can take a few minutes on the first run.
 4. If you didn't check "start after creation", click **"Start Now"** when prompted to launch your server.
-5. **Optional**: Click **"⚡ Link"** to enable Playit tunneling and play with friends online.
+5. **Optional**: Click **"⚡ Link"** to enable tunneling via [Playit.gg](https://playit.gg), a third-party service. Skip this if you already forward ports yourself.
+   - First time only: this opens a browser to link a free Playit.gg account — takes under a minute, no server restart needed after.
+   - Useful if you don't know how to safely open ports on your router/firewall — Playit tunnels the connection for you, no port forwarding required.
+   - Gives you a shareable join URL that stays the same even when your server is offline, so friends can bookmark it once.
+
+#### Troubleshooting
+
+- **`'py' is not recognized` / `'python' is not recognized`**: Python isn't on PATH. Reinstall Python and check "Add python.exe to PATH", or use the full path to `python.exe`.
+- **`pip install` fails on a package**: Upgrade pip first — `py -m pip install --upgrade pip` — then retry.
+- **Antivirus flags or deletes the downloaded JDK/server jar**: These are legitimate downloads from Adoptium/Mojang/Fabric/Forge; add an exclusion for the `.zbb_cache/` and `servers/` folders if this happens.
+- **PowerShell blocks `Activate.ps1`**: See the execution-policy note above.
 
 ---
 
@@ -125,12 +160,6 @@ ZeroBlockBridge/
 
 ---
 
-## Contributing
-
-Contributions, issues, and pull requests are welcome!
-
----
-
 ## License
 
 **ZeroBlockBridge** © 2025-2026 by **DesvoSoft**.
@@ -141,14 +170,12 @@ Licensed under the **GNU Affero General Public License v3.0** — free software,
 
 ---
 
-## Support
+## Contributing & Support
 
-- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/DesvoSoft/ZeroBlockBridge/issues).
-- **Discussions**: Share setups and get help from the community.
+Found a bug or have a feature request? [Open an issue](https://github.com/DesvoSoft/ZeroBlockBridge/issues). Pull requests are welcome.
 
 ---
 
 ### Built by a player, for players, Minecraft creators & friends
 
-![Privacy Friendly](https://img.shields.io/badge/Privacy-Friendly-green?style=for-the-badge&logo=shield)
 ![Community](https://img.shields.io/badge/Made_for-Minecraft_Community-blue?style=for-the-badge&logo=minecraft)
