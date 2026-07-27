@@ -1,16 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
 from PyInstaller.utils.hooks import collect_all
+
+# Relative paths in a spec resolve against the spec's own directory, not the
+# working directory. This file lives in packaging/, so anchor to the repo root.
+ROOT = os.path.dirname(SPECPATH)
 
 block_cipher = None
 
 ctk_datas, ctk_binaries, ctk_hiddenimports = collect_all('customtkinter')
 
 a = Analysis(
-    ['app/launcher.py'],
-    pathex=['.'],
+    [os.path.join(ROOT, 'app', 'launcher.py')],
+    pathex=[ROOT],
     binaries=ctk_binaries,
     datas=[
-        ('assets', 'assets'),
+        (os.path.join(ROOT, 'assets'), 'assets'),
     ] + ctk_datas,
     hiddenimports=[
         'customtkinter',
@@ -59,6 +65,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/logo.ico',
-    version='packaging/version_info.txt',
+    icon=os.path.join(ROOT, 'assets', 'logo.ico'),
+    version=os.path.join(ROOT, 'packaging', 'version_info.txt'),
 )
