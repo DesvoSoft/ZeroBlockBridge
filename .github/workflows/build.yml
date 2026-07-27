@@ -6,6 +6,14 @@ on:
       - 'v*'   # Trigger on version tags like v1.2.0
   workflow_dispatch: # Allow manual trigger from Actions tab
 
+# A release must never be cancelled halfway through publishing assets.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Run tests
@@ -14,8 +22,6 @@ jobs:
   build:
     name: Build packages
     needs: test
-    permissions:
-      contents: write
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false   # <-- prevents canceling all jobs if one fails
@@ -62,7 +68,7 @@ jobs:
           python - <<'EOF'
           import re, os
 
-          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
           parts = (tag.split("-")[0].split(".") + ["0", "0", "0"])[:3]
           major, minor, patch = (int(p) for p in parts)
           dotted = f"{major}.{minor}.{patch}"
@@ -95,10 +101,15 @@ jobs:
         run: |
           pyinstaller packaging/ZeroBlockBridge.spec
 
-      # 7. Checksum
+      # 7. Checksum -- generated from inside dist/ so the .sha256 holds a bare
+      #    filename and `sha256sum -c` works next to the downloaded binary.
       - name: Generate checksum
         shell: bash
-        run: sha256sum "dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}" > "dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}.sha256"
+        working-directory: dist
+        run: |
+          file="${{ matrix.ASSET_NAME }}${{ matrix.EXT }}"
+          sha256sum "$file" > "$file.sha256"
+          cat "$file.sha256"
 
       # 8. Upload artifacts
       - name: Upload Artifacts
@@ -107,18 +118,43 @@ jobs:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
           path: dist/*
 
-      # 9. Extract release notes from changelog
-      - name: Extract changelog section
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: python tools/extract_changelog_section.py "${{ github.ref_name }}" > release_notes.md
+  release:
+    name: Publish release
+    needs: build   # every matrix leg must succeed -- no half-published releases
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
 
-      # 10. Auto-Release
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ZeroBlockBridge-*
+          merge-multiple: true
+          path: dist
+
+      # --strict: a tag with no changelog entry fails the release instead of
+      # publishing an empty body.
+      - name: Extract release notes from changelog
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: python tools/extract_changelog_section.py "$TAG_NAME" --strict > release_notes.md
+
       - name: Create Release and Upload Assets
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           body_path: release_notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
           files: |
-            dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}
-            dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}.sha256
+            dist/ZeroBlockBridge.exe
+            dist/ZeroBlockBridge.exe.sha256
+            dist/ZeroBlockBridge-linux
+            dist/ZeroBlockBridge-linux.sha256

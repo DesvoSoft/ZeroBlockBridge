@@ -4,16 +4,24 @@ on:
   push:
     branches: ["main", "master", "dev"]
   pull_request:
-    branches: ["main", "master"]
+    branches: ["main", "master", "dev"]
   workflow_call: {}
+
+# Superseded runs are cancelled, except on tags (those feed a release build).
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    # Defaults removed for clarity, explicit working-directory used in steps
     steps:
       - uses: actions/checkout@v4
 
@@ -24,14 +32,12 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        working-directory: .
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest flake8
 
       - name: Lint with flake8
-        working-directory: .
         run: |
           # stop the build if there are Python syntax errors or undefined names
           flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -39,6 +45,4 @@ jobs:
           flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run Tests
-        working-directory: .
-        run: |
-          pytest tests/
+        run: pytest tests/
