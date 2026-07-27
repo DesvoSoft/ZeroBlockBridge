@@ -7,8 +7,38 @@ on:
   workflow_dispatch: # Allow manual trigger from Actions tab
 
 jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-dev libtk8.6 libxcb-xinerama0 libxcb-cursor0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8
+
+      - name: Lint (critical errors)
+        run: flake8 app/ --select=E9,F63,F7,F82
+
+      - name: Run tests
+        run: pytest tests/
+
   build:
     name: Build packages
+    needs: test
     permissions:
       contents: write
     runs-on: ${{ matrix.os }}
@@ -19,9 +49,11 @@ jobs:
           - os: ubuntu-latest
             TARGET: linux
             EXT: ""
+            ASSET_NAME: ZeroBlockBridge-linux
           - os: windows-latest
             TARGET: windows
             EXT: ".exe"
+            ASSET_NAME: ZeroBlockBridge
     steps:
       # 1. Checkout code
       - uses: actions/checkout@v4
@@ -47,35 +79,65 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 5. Debug: show folder structure
-      - name: Show folder structure
+      # 5. Sync version metadata from git tag (release builds only)
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
-          python -c "import os; [print(os.path.join(dp, f)) for dp, dn, fn in os.walk('.') for f in fn if '.git' not in dp]"
+          python - <<'EOF'
+          import re, os
+
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          parts = (tag.split("-")[0].split(".") + ["0", "0", "0"])[:3]
+          major, minor, patch = (int(p) for p in parts)
+          dotted = f"{major}.{minor}.{patch}"
+          tup = f"({major}, {minor}, {patch}, 0)"
+
+          vi_path = "packaging/version_info.txt"
+          vi = open(vi_path, encoding="utf-8").read()
+          vi = re.sub(r"filevers=\([^)]*\)", f"filevers={tup}", vi)
+          vi = re.sub(r"prodvers=\([^)]*\)", f"prodvers={tup}", vi)
+          vi = re.sub(r"(StringStruct\('FileVersion', ')[^']*(')", rf"\g<1>{dotted}.0\g<2>", vi)
+          vi = re.sub(r"(StringStruct\('ProductVersion', ')[^']*(')", rf"\g<1>{dotted}.0\g<2>", vi)
+          open(vi_path, "w", encoding="utf-8").write(vi)
+
+          cfg_path = "app/core/app_config.py"
+          cfg = open(cfg_path, encoding="utf-8").read()
+          cfg = re.sub(r'APP_VERSION = "[^"]*"', f'APP_VERSION = "{dotted}"', cfg)
+          open(cfg_path, "w", encoding="utf-8").write(cfg)
+          EOF
 
       # 6a. Build on Linux
       - name: Build with PyInstaller (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           pyinstaller packaging/linux.spec
-          mv dist/zeroblockbridge dist/ZeroBlockBridge-linux
+          mv dist/zeroblockbridge dist/${{ matrix.ASSET_NAME }}
 
       # 6b. Build on Windows
       - name: Build with PyInstaller (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           pyinstaller packaging/ZeroBlockBridge.spec
-          Move-Item dist/ZeroBlockBridge.exe dist/ZeroBlockBridge-windows.exe
 
-      # 7. Upload artifacts
+      # 7. Checksum
+      - name: Generate checksum
+        shell: bash
+        run: sha256sum "dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}" > "dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}.sha256"
+
+      # 8. Upload artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
           path: dist/*
 
-      # 8. Auto-Release
+      # 9. Auto-Release
       - name: Create Release and Upload Assets
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ZeroBlockBridge-${{ matrix.TARGET }}${{ matrix.EXT }}
+          generate_release_notes: true
+          files: |
+            dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}
+            dist/${{ matrix.ASSET_NAME }}${{ matrix.EXT }}.sha256
