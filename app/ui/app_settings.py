@@ -9,6 +9,8 @@ Disk walks and Java probing run in daemon threads -- UI updates via
 `self.after(0, ...)`.
 """
 import logging
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -574,6 +576,21 @@ class AppSettingsDialog(ctk.CTkToplevel):
         scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
 
+        loc_card = self._card(
+            scroll, "Data Location",
+            "Where servers, backups, config and Java runtimes are stored.",
+        )
+        loc_row = ctk.CTkFrame(loc_card, fg_color="transparent")
+        loc_row.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 12))
+        loc_row.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            loc_row, text=str(BASE_DIR), font=AppConfig.FONT_BODY_SMALL,
+            text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w",
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._ghost_button(
+            loc_row, "Open Folder", self._open_data_dir, icon_name="folder", width=120,
+        ).grid(row=0, column=1, sticky="e")
+
         card = self._card(
             scroll, "Disk usage",
             "Space used by ZBB data on this machine.",
@@ -592,6 +609,16 @@ class AppSettingsDialog(ctk.CTkToplevel):
             icon_name="trash", width=160,
         )
         self.btn_clear_reports.pack(side="left", padx=(8, 0))
+
+    def _open_data_dir(self):
+        BASE_DIR.mkdir(parents=True, exist_ok=True)
+        path = str(BASE_DIR)
+        if sys.platform == "win32":
+            subprocess.run(["explorer", path], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", path], check=False)
+        else:
+            subprocess.run(["xdg-open", path], check=False)
 
     def _storage_categories(self) -> list:
         """(label, size_bytes) pairs -- runs on a worker thread."""
