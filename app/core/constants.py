@@ -42,7 +42,14 @@ def subprocess_flags() -> dict:
 # _MEIPASS extraction dir (wiped on exit, heavily AV-scanned). Anchor
 # to the real .exe's directory instead so servers/config persist and
 # aren't executed straight out of a hot temp folder (WinError 5/32).
-if getattr(sys, "frozen", False):
+_data_dir_override = os.environ.get("ZBB_DATA_DIR")
+if _data_dir_override:
+    # Set by app.core.bootstrap.resolve_data_dir() before this module is
+    # first imported -- lets the user relocate servers/config/etc. away
+    # from the .exe's own folder (first-run picker or migrated marker).
+    BASE_DIR = Path(_data_dir_override)
+    _RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
+elif getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
     # Read-only bundled data (PyInstaller `datas`) lives under the onefile
     # temp extraction dir, not next to the .exe.
