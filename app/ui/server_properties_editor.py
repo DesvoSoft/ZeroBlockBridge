@@ -336,8 +336,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         for backup in backups:
             row = ctk.CTkFrame(self.backup_list_frame)
             row.pack(fill="x", pady=2)
-            
-            rb = ctk.CTkRadioButton(row, text=f"{backup['date']} ({backup['size']})", variable=self.backup_var, value=backup['path'])
+
+            label = f"{backup['date']} ({backup['size']})"
+            if backup.get("reason") == "pre_update":
+                label = f"Pre-Update — {label}"
+            rb = ctk.CTkRadioButton(row, text=label, variable=self.backup_var, value=backup['path'])
             rb.pack(side="left", padx=10, pady=5)
 
     def create_backup(self):

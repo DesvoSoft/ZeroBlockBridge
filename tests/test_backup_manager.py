@@ -48,7 +48,7 @@ class TestBackupManager:
                 with patch.object(bm, "server_path", tmp_path):
                     (tmp_path / "dummy.txt").write_text("data")
                     bm.create_backup(retention_count=7)
-                    mock_ret.assert_called_once_with(7)
+                    mock_ret.assert_called_once_with(7, reason="manual")
 
     def test_list_backups_sorted(self, tmp_path):
         bm = BackupManager("test_server")
@@ -67,3 +67,67 @@ class TestBackupManager:
             latest = bm.get_latest_backup()
             assert latest is not None
             assert latest["name"] == "2025-04-02_00-00-00.zip"
+
+    def test_create_backup_manual_reason_untagged_filename(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path), patch.object(bm, "server_path", tmp_path):
+            (tmp_path / "dummy.txt").write_text("data")
+            path, error = bm.create_backup(reason="manual")
+            assert error is None
+            assert "__" not in path.name
+
+    def test_create_backup_tags_reason_in_filename(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path), patch.object(bm, "server_path", tmp_path):
+            (tmp_path / "dummy.txt").write_text("data")
+            path, error = bm.create_backup(reason="pre_update")
+            assert error is None
+            assert path.name.endswith("__pre_update.zip")
+
+    def test_list_backups_reports_reason(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            (tmp_path / "2025-05-01_00-00-00.zip").touch()
+            (tmp_path / "2025-05-02_00-00-00__pre_update.zip").touch()
+            backups = {b["name"]: b for b in bm.list_backups()}
+            assert backups["2025-05-01_00-00-00.zip"]["reason"] == "manual"
+            assert backups["2025-05-02_00-00-00__pre_update.zip"]["reason"] == "pre_update"
+
+    def test_apply_retention_reason_scoped_does_not_touch_other_reason(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            for i in range(3):
+                (tmp_path / f"2025-06-0{i+1}_00-00-00.zip").touch()
+            for i in range(3):
+                (tmp_path / f"2025-06-0{i+1}_00-00-00__pre_update.zip").touch()
+
+            bm._apply_retention(1, reason="pre_update")
+
+            remaining = sorted(f.name for f in tmp_path.iterdir())
+            manual = [n for n in remaining if "__" not in n]
+            tagged = [n for n in remaining if "__pre_update" in n]
+            assert len(manual) == 3
+            assert tagged == ["2025-06-03_00-00-00__pre_update.zip"]
+
+    def test_create_backup_default_retention_caps_tagged_backups(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path), patch.object(bm, "server_path", tmp_path):
+            (tmp_path / "dummy.txt").write_text("data")
+            for i in range(5):
+                (tmp_path / f"2025-06-0{i+1}_00-00-00__pre_update.zip").touch()
+
+            path, error = bm.create_backup(reason="pre_update")
+
+            assert error is None
+            tagged = [f for f in tmp_path.iterdir() if f.suffix == ".zip" and "__pre_update" in f.stem]
+            assert len(tagged) == 5
+
+    def test_get_latest_backup_handles_tagged_filename(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            (tmp_path / "2025-05-01_00-00-00.zip").touch()
+            (tmp_path / "2025-05-02_00-00-00__pre_update.zip").touch()
+            latest = bm.get_latest_backup()
+            assert latest is not None
+            assert latest["name"] == "2025-05-02_00-00-00__pre_update.zip"
+            assert latest["date"] == "02 May 2025 00:00"

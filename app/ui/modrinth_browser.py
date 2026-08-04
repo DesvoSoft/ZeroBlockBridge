@@ -16,12 +16,14 @@ import tempfile
 import threading
 import tkinter.filedialog
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Callable, Optional
 
 from PIL import Image
 
 from app.core.app_config import AppConfig
 from app.core.constants import BASE_DIR, SERVERS_DIR
+from app.services.backup_manager import BackupManager
 from app.services.modrinth import ModrinthClient, ModrinthException
 from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 from app.services import mod_install_tracker
@@ -1142,6 +1144,18 @@ class ModrinthBrowser(ctk.CTkFrame):
         badge.grid(row=0, column=2, sticky="e", padx=(4, 4))
         ToolTip(badge, f"Update available: {update.get('latest_version', '?')}")
 
+    def _snapshot_before_update(self, server_name: str) -> Optional[Path]:
+        """Create a tagged full-server backup before applying a mod update.
+
+        Returns the backup path on success, or None if the snapshot
+        failed — callers must abort the update rather than proceed
+        without a rollback point (see roadmap risk: false confidence).
+        """
+        path, error = BackupManager(server_name).create_backup(reason="pre_update")
+        if not path:
+            logger.warning("Pre-update snapshot failed for %s: %s", server_name, error)
+        return path
+
     def _apply_single_update(self, fpath: str, update: dict, badge=None):
         ctx = self._resolve_server_context()
         if not ctx:
@@ -1150,9 +1164,20 @@ class ModrinthBrowser(ctk.CTkFrame):
         fname = os.path.basename(fpath)
         if badge is not None:
             badge.configure(state="disabled", text="Updating…")
-        self._set_status(f"Updating {fname}…", busy=True)
+        self._set_status(f"Creating snapshot before updating {fname}…", busy=True)
 
         def _worker():
+            snapshot = self._snapshot_before_update(server_name)
+            if not snapshot:
+                # Nothing was touched — leave _pending_updates intact so the
+                # badge still reflects a real, retryable update offer.
+                self.after(0, lambda: self._set_status(f"✗ Snapshot failed — update of {fname} aborted."))
+                if badge is not None:
+                    self.after(0, lambda: badge.configure(
+                        state="normal", text=f"● Update {update.get('latest_version', '')}".strip()))
+                return
+
+            self.after(0, lambda: self._set_status(f"Updating {fname}…", busy=True))
             try:
                 ok = self.client.apply_update(update, server_name, loader)
             except Exception as exc:
@@ -1160,9 +1185,9 @@ class ModrinthBrowser(ctk.CTkFrame):
                 ok = False
             self._pending_updates.pop(fname, None)
             if ok:
-                self.after(0, lambda: self._set_status(f"✓ Updated {fname}"))
+                self.after(0, lambda: self._set_status(f"✓ Updated {fname} — snapshot saved (rollback in Backups tab)"))
             else:
-                self.after(0, lambda: self._set_status(f"✗ Update failed for {fname}"))
+                self.after(0, lambda: self._set_status(f"✗ Update failed for {fname} — restore snapshot from Backups tab"))
             self.after(0, self._render_installed)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1339,6 +1364,12 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._set_status("No updates available for the selected mods."))
                 return
 
+            self.after(0, lambda: self._set_status("Creating snapshot before updating…", busy=True))
+            snapshot = self._snapshot_before_update(server_name)
+            if not snapshot:
+                self.after(0, lambda: self._set_status("✗ Snapshot failed — updates aborted."))
+                return
+
             updated, failed = 0, 0
             for update in matched:
                 self.after(0, lambda u=update: self._set_status(f"Updating {u['filename']}…"))
@@ -1352,7 +1383,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                     failed += 1
 
             self.after(0, lambda: self._set_status(
-                f"✓ Updated {updated} mod(s)" + (f", {failed} failed" if failed else "")))
+                f"✓ Updated {updated} mod(s)" + (f", {failed} failed" if failed else "")
+                + " — snapshot saved (rollback in Backups tab)"))
             self.after(0, self._render_installed)
 
         threading.Thread(target=_worker, daemon=True).start()
