@@ -20,6 +20,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import BASE_DIR, JDK_CACHE_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
 from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
 from app.services.disk_usage import dir_size, format_size
+from app.services.sanitizer import ALLOWLISTED_COMMANDS
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
@@ -124,8 +125,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: General
     # ------------------------------------------------------------------
     def _build_general_tab(self, tab):
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
         card = self._card(
-            tab, "Appearance",
+            scroll, "Appearance",
             "Interface color mode — Dark, Light, or follow the system setting.",
         )
         self._theme_selector = ctk.CTkSegmentedButton(
@@ -135,6 +139,26 @@ class AppSettingsDialog(ctk.CTkToplevel):
         )
         self._theme_selector.set(self._settings.get("theme", "Dark"))
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
+
+        self._build_command_safety_card(scroll)
+
+    def _build_command_safety_card(self, parent):
+        card = self._card(
+            parent, "Console Command Safety",
+            "Commands typed in the server console are checked before reaching "
+            "the Minecraft process. Shell metacharacters and injection patterns "
+            "(pipes, backticks, redirects) are always blocked, whatever the "
+            "command. The commands below are additionally recognized outright; "
+            "anything else made only of plain letters/numbers/punctuation is "
+            "still allowed through, since Minecraft has far more valid commands "
+            "than ZBB enumerates here.",
+        )
+        allowlist_text = ", ".join(sorted(ALLOWLISTED_COMMANDS))
+        ctk.CTkLabel(
+            card, text=allowlist_text, font=(AppConfig.FONT_FAMILY_MONO, 11),
+            text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", justify="left",
+            wraplength=630,
+        ).grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 14))
 
     def _on_theme_selected(self, choice: str):
         self._settings.set("theme", choice)

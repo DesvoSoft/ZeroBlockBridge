@@ -113,6 +113,8 @@ class TestServerOrchestrator:
         runner.send_command.assert_not_called()
         lines = [e[1] for e in mgr.events.events if e[0] == ServerEvent.CONSOLE_LINE]
         assert any("Blocked" in l for l in lines)
+        notifs = [e[1] for e in mgr.events.events if e[0] == ServerEvent.NOTIFICATION]
+        assert any(n["type"] == "warning" and "injection" in n["msg"] for n in notifs)
 
     def test_send_command_passes_safe_cmd(self):
         runner = MagicMock(running=True)

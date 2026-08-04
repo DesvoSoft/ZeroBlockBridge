@@ -131,6 +131,7 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.tag_config("line_join", foreground=resolve_color(AppConfig.COLOR_STATUS_ONLINE))
         self.tag_config("line_leave", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
         self.tag_config("line_server", foreground=resolve_color(AppConfig.COLOR_ACCENT_BROWN))
+        self.tag_config("line_security", foreground=resolve_color(AppConfig.COLOR_STATUS_ERROR))
 
     def _set_appearance_mode(self, mode_string):
         # CTk calls this on every widget when the theme flips; tag colors are
@@ -140,6 +141,8 @@ class ConsoleWidget(ctk.CTkTextbox):
 
     @staticmethod
     def _line_tag(message):
+        if "[Security]" in message:
+            return "line_security"
         if "ERROR" in message:
             return "line_error"
         if "WARN" in message:

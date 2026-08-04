@@ -96,6 +96,9 @@ class ServerOrchestrator:
             if not safe:
                 logger.warning("Blocked unsafe command: '%s' - Reason: %s", cmd, reason)
                 self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] Blocked unsafe command: {reason}")
+                self.manager.events.emit(ServerEvent.NOTIFICATION, {
+                    "msg": f"Blocked: {reason}", "type": "warning",
+                })
                 return
             self.manager.server_runner.send_command(cmd)
 

@@ -32,7 +32,6 @@ from app.ui.server_properties_editor import ServerPropertiesEditor
 from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
 from app.ui.modrinth_browser import ModrinthBrowser
-from app.services.sanitizer import is_safe_command
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
 from app.ui.players_dashboard import PlayersDashboard
@@ -412,12 +411,9 @@ class MCTunnelApp(ctk.CTk):
             return
         cmd = self.entry_console.get()
         if not cmd: return
-        safe, reason = is_safe_command(cmd)
-        if not safe:
-            self.server_console.log(f"[Security] Command blocked: {reason}")
-            logger.warning("Blocked command from user: %r (reason: %s)", cmd, reason)
-            self.entry_console.delete(0, "end")
-            return
+        # Safety check lives in ServerOrchestrator.send_command -- it owns
+        # the single source of truth for blocked-command feedback (console
+        # line + toast via EventBus), so this stays a thin passthrough.
         self.zbb_manager.send_command(cmd)
         self.entry_console.delete(0, "end")
 
