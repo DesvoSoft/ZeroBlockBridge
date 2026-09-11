@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Configurable data directory** — first-run dialog offers Standard (`%LOCALAPPDATA%`), Portable (next to the exe), or Custom location; choice persists via a marker file, resolved before any other module reads a path.
+- **Explainable command safety** — blocked console commands now surface a warning toast (not just a silent log line), `[Security]`-tagged console lines get a distinct red tint, and Settings → General lists the full allowlisted command set read-only.
+- **One-click pre-update snapshot + rollback** — mod updates (single or bulk) take a full-server backup before touching any files; a failed snapshot aborts the update instead of proceeding blind. Pre-update snapshots are labeled in the Backups tab and share the existing restore flow.
+
+### Changed
+- Removed a redundant, architecture-violating client-side command-safety check in `main.py`; `ServerOrchestrator.send_command` is now the single enforcement point.
+- Backups gained a `reason` tag (`manual` vs `pre_update`) with per-reason retention, so automated pre-update snapshots can never prune a user's manual/scheduled backups.
+
+---
+
 ## [2.0.0] — 2026-07-10
 
 ### Added

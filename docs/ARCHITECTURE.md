@@ -216,6 +216,15 @@ Subscribes to `CRASHED` event. On each crash:
 - **Character filter**: Rejects `;`, `|`, `&`, `` ` ``, `$()`, `${}`, `\n`. `%` is **allowed** (valid in MC commands like `op %USERNAME%`).
 - Unknown commands: allowed if they pass the character filter (forward-compatible).
 - Commands go to server stdin — not to a shell. `shell=True` is banned.
+- **Explainable Safety** (2026-08-03): `is_safe_command()` returns `(bool, reason)`. A blocked command emits both a `[Security]`-tagged `CONSOLE_LINE` (rendered with a distinct red tint) and a `NOTIFICATION` warning toast — no more silent no-op. Settings → General shows the full sorted allowlist read-only, so the claim is user-auditable. Single enforcement point: `ServerOrchestrator.send_command` (the UI no longer duplicates this check).
+
+### Pre-Update Snapshots
+
+**File:** `app/services/backup_manager.py`, `app/ui/modrinth_browser.py`
+
+- Mod updates (single-badge and bulk "Update Selected") trigger a full-server `BackupManager.create_backup(reason="pre_update")` before any file changes. Snapshot failure aborts the update rather than proceeding without a rollback point.
+- Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason` — pruning pre-update snapshots (default cap: 5) can never delete a user's manual/scheduled backups, and vice versa.
+- Rollback reuses the existing Backups tab restore flow (`server_properties_editor.py`), which now labels pre-update snapshots ("Pre-Update — ...") instead of introducing a second restore path.
 
 ### Notifications
 
@@ -273,9 +282,11 @@ ZeroBlockBridge/
 │   │   ├── modrinth_browser.py        # Modrinth mod browser (~730 LOC)
 │   │   ├── players_dashboard.py       # Player management: online list + whitelist (~222 LOC)
 │   │   ├── toast.py                   # Non-blocking notification overlay (~159 LOC)
+│   │   ├── first_run_dialog.py        # First-launch data directory picker: Standard/Portable/Custom (~174 LOC)
 │   │   └── ui_components.py           # ConsoleWidget, ServerListItem (right-click delete menu), ToolTip, Dialog, EulaDialog (~422 LOC)
 │   │
 │   ├── core/                          # Orchestration & Business Logic
+│   │   ├── bootstrap.py               # Resolves data dir before any other module reads a path; reads/writes location marker (~86 LOC)
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~527 LOC)
 │   │   ├── logic.py                   # ServerRunner, Scheduler, downloads, metadata, delete_server, port preflight (~876 LOC)
 │   │   ├── orchestrators.py           # ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator (~224 LOC)
@@ -433,6 +444,8 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
 | Tunnel integration | ✅ Playit.gg | ✅ Playit.gg | ❌ |
 | Discord webhook | ✅ | ✅ | ❌ |
 | Crash diagnostic JSON | ✅ unique | ❌ | ❌ |
+| Explainable command safety (visible allowlist + blocked-command toast) | ✅ unique | ❌ (arbitrary amscript) | n/a |
+| One-click pre-update snapshot + rollback | ✅ unique | ❌ | n/a |
 
 ### Pending High-Priority Gaps (CA-HIGH)
 
