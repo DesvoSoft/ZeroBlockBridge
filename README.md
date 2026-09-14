@@ -49,12 +49,13 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 
 - **Guided Server Creation** — 6-step wizard covering every major flavor (Vanilla/Fabric/Forge/Paper/Purpur), with templates, RAM allocation, and an integrated console with search and colored log lines.
 - **Zero-Config Tunneling** — Built-in Playit.gg integration gets you a persistent, shareable join URL — no port forwarding or router setup required.
-- **Auto-Healing** — Watchdog crash recovery with JSON crash reports, zombie detection, lag-spike monitoring, and command sanitization keep a server running unattended. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Auto-Healing** — Watchdog crash recovery with JSON crash reports, zombie detection, and lag-spike monitoring keep a server running unattended. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Visible Command Safety** — Console commands are checked before they reach the server; anything blocked shows a toast explaining exactly what was rejected and why, and the full list of allowed commands is viewable in Settings.
 - **One-Click Backups & Scheduling** — Scheduled restarts and backups with countdown warnings, plus `.zbbpack` export/import to move a server between machines.
-- **Integrated Mod Browser** — Search, install, and update mods/plugins straight from Modrinth, with automatic client-only filtering and a one-click Optimizer Bundle per loader.
-- **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching JDK — no manual installs, no version mismatches.
+- **Safe Mod Updates** — Search, install, and update mods/plugins straight from Modrinth, with dependency resolution, client-only filtering, and a one-click Optimizer Bundle per loader. Every update takes a full snapshot first, so a bad update is one restore away from undone.
+- **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching runtime — no manual installs, no version mismatches.
 
-*Also included: Discord notifications, light/dark/system theming, and experimental Linux support.*
+*Also included: player management (whitelist, ops, bans), Discord notifications, a choice of where your data lives (standard, portable, or custom folder), light/dark/system theming, and experimental Linux support.*
 
 ---
 
@@ -62,8 +63,9 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 
 ### Option A: Download the app
 
-1. Grab the latest build from the [Releases page](https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest) — `ZeroBlockBridge-windows.exe` (Linux build also available, experimental).
-2. Run it, then jump straight to [First Server](#first-server) below.
+1. Grab the latest build from the [Releases page](https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest) — `ZeroBlockBridge.exe` (`ZeroBlockBridge-linux` also available, experimental). Each file has a matching `.sha256` checksum.
+2. Run it. On first launch you'll pick where ZeroBlockBridge keeps your servers and backups: **Standard** (your user AppData folder, recommended), **Portable** (next to the app), or a **Custom** folder. You can see the location later in Settings → Storage.
+3. Jump straight to [First Server](#first-server) below.
 
 > **Windows SmartScreen warning?** That's expected. I'm a student and independent developer, and this executable isn't code-signed — signing certificates cost money I can't justify yet. Windows flags any unsigned `.exe` from an unrecognized publisher, regardless of whether it's safe. Click **"More info" → "Run anyway"** to proceed, or if you'd rather verify for yourself first, the full source is public — read it, or build it yourself with Option B below.
 
@@ -129,11 +131,11 @@ py --version
 
 ### First Server
 
-1. Click **"Create Server"** in the sidebar.
+1. Click **"Create New Server"** in the sidebar.
 2. Follow the 6-step wizard (identity, engine/version, resources, rules/security, world/network, summary) — optionally tick **"Start server after creation"** on the summary step.
 3. The wizard shows detailed progress (download, verify, scaffold, bytecode analysis, tunnel setup). This step needs internet access and can take a few minutes on the first run.
-4. If you didn't check "start after creation", click **"Start Now"** when prompted to launch your server.
-5. **Optional**: Click **"⚡ Link"** to enable tunneling via [Playit.gg](https://playit.gg), a third-party service. Skip this if you already forward ports yourself.
+4. If you didn't check "start after creation", click **"Start now"** when prompted to launch your server.
+5. **Optional**: Click **"Link"** (lightning icon, in the tunnel toolbar) to enable tunneling via [Playit.gg](https://playit.gg), a third-party service. Skip this if you already forward ports yourself.
    - First time only: this opens a browser to link a free Playit.gg account — takes under a minute, no server restart needed after.
    - Useful if you don't know how to safely open ports on your router/firewall — Playit tunnels the connection for you, no port forwarding required.
    - Gives you a shareable join URL that stays the same even when your server is offline, so friends can bookmark it once.
@@ -142,7 +144,8 @@ py --version
 
 - **`'py' is not recognized` / `'python' is not recognized`**: Python isn't on PATH. Reinstall Python and check "Add python.exe to PATH", or use the full path to `python.exe`.
 - **`pip install` fails on a package**: Upgrade pip first — `py -m pip install --upgrade pip` — then retry.
-- **Antivirus flags or deletes the downloaded JDK/server jar**: These are legitimate downloads from Adoptium/Mojang/Fabric/Forge; add an exclusion for the `.zbb_cache/` and `servers/` folders if this happens.
+- **Antivirus flags or deletes the downloaded JDK/server jar**: These are legitimate downloads from Adoptium/Mojang/Fabric/Forge; add an exclusion for the `.zbb_cache/` and `servers/` folders inside your data folder (Settings → Storage → Open Folder) if this happens.
+- **"Stop the server before updating mods"**: mod updates take a full snapshot first, and a running server locks files — stop it, update, then start it again.
 - **PowerShell blocks `Activate.ps1`**: See the execution-policy note above.
 
 ---
@@ -156,13 +159,13 @@ ZeroBlockBridge/
 │   ├── core/             # Orchestration & business logic (ZBBManager, EventBus, logic)
 │   └── services/         # Specialized services (watchdog, heartbeat, backups, API clients)
 ├── docs/                 # Documentation
-├── assets/               # App icon and logo
-├── servers/              # (Generated) per-server directories
-├── backups/              # (Generated) ZIP archives
-├── bin/                  # (Generated) playit agent binary
-├── .zbb_cache/           # (Generated) JDK cache
-└── config/               # (Generated) app configuration
+├── assets/               # App icon, logo, theme
+├── packaging/            # PyInstaller specs
+├── tools/                # Release and theme helper scripts
+└── tests/                # pytest suite
 ```
+
+Generated data (`servers/`, `backups/`, `bin/`, `.zbb_cache/`, `config/`) lives in the repo root when running from source, and in the folder you picked on first launch when running the downloaded app.
 
 ---
 
@@ -170,6 +173,7 @@ ZeroBlockBridge/
 
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Auto-healing system, technical details, architecture overview.
 - **[STANDARDS.md](docs/STANDARDS.md)** — Master technical standards and architecture guide.
+- **[changelog.md](docs/changelog.md)** — Release notes, including unreleased changes on `dev`.
 
 ---
 

@@ -2,7 +2,7 @@
 
 This document covers the internal architecture, auto-healing system, technical details, and design decisions of ZeroBlockBridge.
 
-> **Last updated:** 2026-07-05 — 463 tests, 100% pass. P0 complete, F5 (CrashReporter) + F6 (Discord Webhook) done. Playit agent migrated to v1.0.10 (playitd daemon); Paper API migrated to Fill v3.
+> **Last updated:** 2026-09-14 — 620 tests in 35 files, 100% pass. Since v2.0.0: configurable data directory, explainable command safety, pre-update snapshots routed through `BackupOrchestrator`.
 
 ---
 
@@ -19,13 +19,16 @@ This document covers the internal architecture, auto-healing system, technical d
    - [Lag Monitor](#lag-monitor)
    - [CrashReporter](#crashreporter)
    - [Command Sanitizer](#command-sanitizer)
+   - [Pre-Update Snapshots](#pre-update-snapshots)
    - [Notifications](#notifications)
 7. [Threading Model](#threading-model)
 8. [Key Invariants](#key-invariants)
-9. [Project Structure](#project-structure)
-10. [Technical Details](#technical-details)
-11. [Competitive Context](#competitive-context)
-12. [Privacy & Service Disclaimer](#privacy--service-disclaimer)
+9. [Data Directory](#data-directory)
+10. [Project Structure](#project-structure)
+11. [Technical Details](#technical-details)
+12. [Build & Release](#build--release)
+13. [Competitive Context](#competitive-context)
+14. [Privacy & Service Disclaimer](#privacy--service-disclaimer)
 
 ---
 
@@ -41,7 +44,9 @@ UI emits event → ZBBManager receives → delegates to orchestrator/service
 Rules:
 - Use `events.subscribe()` — never `.on()`.
 - UI updates only via `self.after(0, callback)` (Tkinter thread safety).
-- No service or core module imports from `app/ui/`.
+- No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the first-run dialog before any window exists).
+- Mutating flows (start/stop/backup/restart/snapshot) go through `ZBBManager`. When a UI widget needs one, it receives the manager method as an injected callback (e.g. `ModrinthBrowser(create_snapshot=zbb_manager.create_pre_update_snapshot)`) instead of importing the service.
+- Pragmatic exception: UI may import services for read-only/stateless helpers (load properties, list templates, disk usage).
 
 ---
 
@@ -59,52 +64,56 @@ Dependency direction is strictly one-way: `ui → core → services`. Never the 
 
 ## Central Orchestrator: ZBBManager
 
-**File:** `app/core/core.py` (~527 LOC)
+**File:** `app/core/core.py` (~656 LOC)
 
 Single source of truth for server lifecycle. Responsibilities:
 
 - Holds references to `ServerRunner`, `Watchdog`, `HeartbeatMonitor`, `LagMonitor`, `CrashReporter`, `PlayitManager`, `VersionManager`, `DiscordWebhookService`.
-- Delegates all operations to 4 sub-orchestrators (see below).
+- Delegates lifecycle, backup, tunnel, and scheduling work to 4 sub-orchestrators (see below). Java resolution (`_resolve_java_bin`, `_auto_install_java`) and process launch (`_launch_server`) stay on the manager and are called by `ServerOrchestrator.start_server()`.
 - Does **not** inherit Protocol classes (HAS-A, not IS-A — `ZBBManager` holds orchestrators as attributes).
-- `_start_lock` prevents concurrent `start_server()` calls.
-- `_restart_lock` prevents concurrent `_handle_restart_request()` calls.
-- `_discord_webhook` is None when no webhook URL is configured (zero overhead).
+- `_start_lock` prevents concurrent `start_server()` calls; `_restart_lock` and `_mod_install_lock` guard the `REQUEST_RESTART` / `REQUEST_MOD_INSTALL` handlers.
+- `_discord_webhook` is None when no webhook URL is configured (zero overhead); `reload_discord_webhook()` re-creates it after a settings change.
 
 ### Key methods
 
-| Method | Delegates to |
+| Method | Delegates to / does |
 |--------|-------------|
 | `start_server()` | `ServerOrchestrator.start_server()` |
-| `stop_server()` | `ServerOrchestrator.stop_server()` |
-| `restart_server()` | `ServerOrchestrator.restart_server()` |
-| `create_backup()` | `BackupOrchestrator.create_backup()` |
-| `restore_backup()` | `BackupOrchestrator.restore_backup()` |
-| `start_tunnel()` | `TunnelOrchestrator.start_tunnel()` |
-| `stop_tunnel()` | `TunnelOrchestrator.stop_tunnel()` |
-| `schedule_restart()` | `SchedulerOrchestrator._start_tick_loop()` |
+| `stop_server()` | `ServerOrchestrator.stop_server()` (full monitor teardown first) |
+| `send_command(cmd)` | `ServerOrchestrator.send_command()` — sanitizer gate |
+| `is_running()` | `ServerOrchestrator.is_running()` |
+| `create_pre_update_snapshot(name)` | `BackupOrchestrator.create_pre_update_snapshot()` — blocking, call from a worker |
+| `start_tunnel()` / `stop_tunnel()` / `reset_tunnel(mode)` | `TunnelOrchestrator` |
+| `create_tunnel_for_server(name)` / `get_tunnel_ip()` | `TunnelOrchestrator` |
+| `select_server(name)` / `load_server_manually(path)` | Active server selection / import via junction |
+| `list_managed_jdks()` / `purge_jdk(v)` / `purge_unused_jdks()` / `purge_crash_reports()` | Storage maintenance (Settings → Storage) |
+| `shutdown()` | App exit: stops tick loop, webhook, monitors; tunnel and server teardown in parallel |
+
+Scheduled restarts and mod-dependency installs arrive as `REQUEST_RESTART` / `REQUEST_MOD_INSTALL` events rather than direct calls.
 
 ---
 
 ## Sub-Orchestrators
 
-**File:** `app/core/orchestrators.py` (~224 LOC)
+**File:** `app/core/orchestrators.py` (~275 LOC)
 
 | Class | Responsibility |
 |-------|---------------|
-| `ServerOrchestrator` | start/stop/restart, Java resolution, monitor setup |
-| `BackupOrchestrator` | ZIP backup create/atomic restore, auto-backup check |
+| `ServerOrchestrator` | start/stop, disk-space preflight, command safety gate (`send_command`) |
+| `BackupOrchestrator` | Scheduled auto-backup check/run, pre-update snapshots (running-server guard, partial-snapshot discard) |
 | `TunnelOrchestrator` | Playit.gg agent lifecycle |
-| `SchedulerOrchestrator` | Restart/backup scheduling tick loop (50ms interval) |
+| `SchedulerOrchestrator` | Tick loop: player-count sync, heartbeat tick, restart/backup scheduling |
 
-Protocol classes in `app/core/protocols.py` define structural typing contracts (structural, not inheritance).
+Manual backup create/restore is done by `BackupManager` from the Backups tab (`server_properties_editor.py`). Protocol classes in `app/core/protocols.py` define structural typing contracts (structural, not inheritance).
 
 ### SchedulerOrchestrator tick loop
 
-Runs every 50ms while server is online:
-1. Emits `PLAYER_COUNT` (rate-limited to 1x/sec via `_last_player_emit` guard).
-2. Checks `Scheduler.get_status()` — if `is_due`, emits `REQUEST_RESTART`.
-3. If `status["missed"]` is True (daily-time restart window passed >120s ago), emits WARNING log + `NOTIFICATION` toast to user.
-4. Calls `backup_orchestrator._check_auto_backup()` every `SCHEDULER_CHECK_INTERVAL`.
+Runs every 100ms (`ServerTickThread`) while the app is open:
+1. Ticks `HeartbeatMonitor` (it decides on its own 60s cadence).
+2. Emits `PLAYER_COUNT` only when the count changes (checked 1x/sec — safety-net resync; join/leave already emit).
+3. Every `SCHEDULER_CHECK_INTERVAL` (30s): checks `Scheduler.get_status()` — if due, sends countdown warnings and emits `REQUEST_RESTART`.
+4. If `status["missed"]` is True (daily-time restart window passed >120s ago), logs WARNING + emits a `NOTIFICATION` toast once per day.
+5. Calls `backup_orchestrator._check_auto_backup()` on the same 30s cadence.
 
 ---
 
@@ -118,22 +127,25 @@ Runs every 50ms while server is online:
 
 | Event | Emitter | Subscribers |
 |-------|---------|------------|
-| `STARTING` | `ServerOrchestrator` | UI status bar |
-| `READY` | `ServerRunner` (stdout parse) | ZBBManager, UI, DiscordWebhook |
-| `STOPPED` | `ServerRunner` | ZBBManager, Watchdog, UI |
-| `CRASHED` | `Watchdog` | ZBBManager (`_on_server_crashed`), `CrashReporter`, `DiscordWebhook` |
-| `RESTARTED` | `Watchdog` | available for future UI subscribers |
-| `PLAYER_COUNT` | `SchedulerOrchestrator` tick | UI sidebar |
+| `STARTING` | `ServerRunner` / ZBBManager | Watchdog, UI status bar |
+| `READY` | `ServerRunner` (stdout parse) | ZBBManager, Watchdog (stability window), UI |
+| `STOPPED` | `ServerRunner` | Watchdog, UI |
+| `CRASHED` | `Watchdog` | ZBBManager (`_on_server_crashed`), `CrashReporter` |
+| `RESTARTED` | `Watchdog` | — (Discord only, opt-in) |
+| `PLAYER_COUNT` | `ServerRunner` join/leave, `SchedulerOrchestrator` resync | UI sidebar |
 | `PLAYER_LIST` | `ServerRunner` (stdout parse) | UI player dashboard |
 | `ZOMBIE_DETECTED` | `HeartbeatMonitor` | Watchdog |
 | `LAG_SPIKE` | `LagMonitor` | UI toast |
-| `CONSOLE_LINE` | `ServerRunner` | UI console, ZBBManager buffer |
-| `TUNNEL_CONSOLE_LINE` | `PlayitManager` | UI tunnel log, ZBBManager buffer |
-| `TUNNEL_STATUS` | `PlayitManager` | ZBBManager, UI tunnel panel |
+| `CONSOLE_LINE` | `ServerRunner`, orchestrators, monitors | UI console, ZBBManager buffer, Heartbeat, LagMonitor |
+| `TUNNEL_CONSOLE_LINE` | `PlayitManager` (via ZBBManager callback) | UI tunnel log, ZBBManager buffer |
+| `TUNNEL_STATUS` | ZBBManager (`_on_playit_status`) | UI tunnel panel |
 | `NOTIFICATION` | Multiple | UI toast system |
-| `REQUEST_RESTART` | `SchedulerOrchestrator`, Watchdog | ZBBManager |
-| `BACKUP_COMPLETED` | `BackupOrchestrator` | UI, DiscordWebhook |
-| `BACKUP_FAILED` | `BackupOrchestrator` | UI, DiscordWebhook |
+| `REQUEST_RESTART` | `SchedulerOrchestrator` | ZBBManager |
+| `REQUEST_MOD_INSTALL` | UI (missing-mod toast action) | ZBBManager (`_handle_mod_install_request`) |
+| `BACKUP_COMPLETED` | `BackupOrchestrator` (auto-backup, pre-update snapshot) | — (Discord only) |
+| `BACKUP_FAILED` | `BackupOrchestrator` | — (Discord only) |
+
+`DiscordWebhookService` additionally subscribes to whichever events the user enabled in Settings → Notifications (see [Discord Webhook](#discord-webhook)).
 
 **Removed:** `TPS_UPDATE` (fake value, removed commit `0b964fd`), `ERROR` (never emitted, removed commit `0b964fd`).
 
@@ -145,39 +157,43 @@ Four coordinated services detect, classify, and recover from server failures.
 
 ### Watchdog Service
 
-**File:** `app/services/watchdog.py` (~172 LOC)
+**File:** `app/services/watchdog.py` (~264 LOC)
 
-Monitors server process exit code and stderr to classify crashes:
+Classifies a non-zero exit (checked in this order) from exit code, stderr, and console tail:
 
-| Crash Type | Detection | Recovery |
-|---|---|---|
-| `jvm_config_error` | stderr: "UnsupportedClassVersionError", "Could not find main class" | Retry with backoff |
-| `out_of_memory` | stderr: "OutOfMemoryError", "GC overhead limit" | Retry with backoff |
-| `oom_kill` | Exit code 137 (Linux OOM kill) | Retry with backoff |
-| `boot_crash` | Exit code 1, uptime < 5s | Retry with backoff |
-| `runtime_crash` | Exit code 1, uptime ≥ 5s | Retry with backoff |
-| `signal_N` | Negative exit code (segfault = -11) | Retry with backoff |
+| Crash Type | Detection |
+|---|---|
+| `jvm_config_error` | stderr: "UnsupportedClassVersionError", "Could not find main class" |
+| `mod_dependency_error` | console: Fabric/Forge missing-dependency patterns — extracts detail + missing mod IDs |
+| `out_of_memory` | stderr: "OutOfMemoryError", "GC overhead limit" |
+| `oom_kill` | Exit code 137 / -9 |
+| `boot_crash` | Exit code 1, uptime < 5s |
+| `runtime_crash` | Exit code 1, uptime ≥ 5s |
+| `signal_N` | Other negative exit code (segfault = -11) |
+| `exit_N` | Any other exit code |
 
-- **Backoff**: `base × 2^(n-1)`, capped at **3600s** max.
+- **Recovery**: every type retries with backoff, up to `watchdog_max_retries` from the app config (default 3); then auto-restart stops.
+- **Backoff**: `base × 2^(n-1)` (base 5s), capped at **3600s** max.
 - **Stability reset**: Counter resets after 10 minutes of `READY` uptime.
-- **Intentional stop guard**: `stop_server()` sets a flag before stopping; Watchdog ignores STOPPED events when flag is set — prevents accidental restart on clean shutdown.
-- **Emits**: `CRASHED` (with payload `{"reason": str, "exit_code": int, "retry_attempt": int}`), `RESTARTED`.
-- **Does NOT emit NOTIFICATION** — only `ZBBManager._on_server_crashed` owns crash notifications (audit CA-01).
+- **Clean stop**: exit code 0 is logged and resets the counter — no restart. `stop_server()` also tears monitors down before stopping, so the watchdog never sees an intentional stop.
+- **Zombie handling**: `_do_restart(context="zombie")` kills the hung process via `runner.stop()` first; the resulting STOPPED is swallowed by `_zombie_kill_pending` (no double CRASHED/restart).
+- **Emits**: `CRASHED` (payload: `reason`, `exit_code`, `uptime`, `retry`, `detail`, `missing_mod_ids`), `RESTARTED`.
+- **Does NOT emit NOTIFICATION** — only `ZBBManager._on_server_crashed` owns crash notifications (audit CA-01). For `mod_dependency_error` with known IDs it adds `action="mod_dependency_fix"`, which the UI turns into a one-click `REQUEST_MOD_INSTALL`.
 
 ### Heartbeat Monitor
 
-**File:** `app/services/heartbeat.py` (~63 LOC)
+**File:** `app/services/heartbeat.py` (~95 LOC)
 
 Detects zombie servers (JVM alive but unresponsive to commands):
 
-- Watches console output. If silent for >5 minutes, sends a `list` command.
+- Ticked by the scheduler loop; checks every 60s (`check_interval`). If the console has been silent for 300s (`suspect_after`), sends a `list` probe.
 - `_last_probe` set **before** `send_command()` to avoid race condition (HA-02 fix).
-- If no console response within 15 seconds → emits `ZOMBIE_DETECTED`.
+- If no console response within 15s (`probe_timeout`) → emits `ZOMBIE_DETECTED`.
 - Watchdog subscribes to `ZOMBIE_DETECTED` and triggers auto-restart.
 
 ### Lag Monitor
 
-**File:** `app/services/lag_monitor.py` (~35 LOC)
+**File:** `app/services/lag_monitor.py` (~49 LOC)
 
 - Matches `"Can't keep up!"` in server console output.
 - Sliding window: 5 spikes within 5 minutes → emits `LAG_SPIKE`.
@@ -185,7 +201,7 @@ Detects zombie servers (JVM alive but unresponsive to commands):
 
 ### CrashReporter
 
-**File:** `app/services/crash_reporter.py` (~80 LOC)
+**File:** `app/services/crash_reporter.py` (~135 LOC)
 
 Subscribes to `CRASHED` event. On each crash:
 
@@ -210,7 +226,7 @@ Subscribes to `CRASHED` event. On each crash:
 
 ### Command Sanitizer
 
-**File:** `app/services/sanitizer.py` (~64 LOC)
+**File:** `app/services/sanitizer.py` (~101 LOC)
 
 - **Allowlist**: 80+ known-safe Minecraft commands (op, deop, say, gamemode, etc.).
 - **Character filter**: Rejects `;`, `|`, `&`, `` ` ``, `$()`, `${}`, `\n`. `%` is **allowed** (valid in MC commands like `op %USERNAME%`).
@@ -231,11 +247,12 @@ Subscribes to `CRASHED` event. On each crash:
 
 All auto-healing events surface via the **Toast** system (`app/ui/toast.py`):
 
-- Toast corner_radius = 0 (intentional design exception to the corner_radius=12 rule).
-- `NOTIFICATION` payload: always `{"msg": str, "type": "error"|"warning"|"info"}`. Never `color` key.
+- Toast `corner_radius=0` (intentional design exception to the `RADIUS_*` token scale).
+- `NOTIFICATION` payload: always `{"msg": str, "type": "error"|"warning"|"info"|"success"}`. Never `color` key. Only functional extension: `action` + `missing_mod_ids` (mod dependency fix flow).
 - `_on_server_crashed` in `core.py` is the single owner of crash notifications.
-- Scheduled restart missed window: `SchedulerOrchestrator` emits `NOTIFICATION` type="warning".
-- Discord Webhook: parallel notification channel for CRASHED, READY, BACKUP_COMPLETED, BACKUP_FAILED.
+- Scheduled restart missed window: `SchedulerOrchestrator` emits `NOTIFICATION` type="warning" (once per day).
+- Blocked console command / pre-update snapshot outcome: see sections above.
+- Discord Webhook: parallel, opt-in channel — see [Discord Webhook](#discord-webhook).
 
 ---
 
@@ -247,7 +264,8 @@ All auto-healing events surface via the **Toast** system (`app/ui/toast.py`):
 - `ServerRunner.connected_players`: all join/leave mutations inside `_players_lock`; cleared in `start()` to prevent stale player data after restart.
 - `EventBus`: `threading.RLock` for subscribe/emit.
 - `SettingsManager`: double-checked locking, debounced flush (500ms timer).
-- `BackupOrchestrator`: `_backup_lock` + `_backup_in_progress` flag prevents concurrent backups.
+- `BackupOrchestrator`: `_backup_lock` + `_backup_in_progress` flag prevents a scheduled auto-backup and a pre-update snapshot from running at the same time.
+- `ZBBManager.executor`: shared `ThreadPoolExecutor(max_workers=8)`. Work that must block on another job (e.g. the backup before a scheduled restart) uses a dedicated thread instead, to avoid pool starvation.
 - `DiscordWebhookService`: single `queue.Queue` worker thread, 2s rate-limit between POSTs.
 
 ---
@@ -258,14 +276,35 @@ These rules must never be violated:
 
 1. **`open()` → `encoding="utf-8"` always** for text files. MOTD with `§` corrupts on Windows without it.
 2. **`strptime` on user filenames** → always `try/except ValueError`. Users can drop arbitrary files.
-3. **`NOTIFICATION` payload** → always `{"msg": ..., "type": "error"|"warning"|"info"}`. Never `color` key.
+3. **`NOTIFICATION` payload** → always `{"msg": ..., "type": "error"|"warning"|"info"|"success"}`. Never `color` key.
 4. **Watchdog must not emit `NOTIFICATION`** → only `_on_server_crashed` in core.py owns crash notifications.
 5. **Fabric/Forge installers** → always receive resolved `java_bin` from ZBBManager, never assume `"java"` from PATH.
 6. **Atomic file ops** → before reading a file written by another thread, verify `os.path.exists` + `os.path.getsize > 0` with timeout (OS may not flush immediately).
 7. **`ServerState` enum lives in `constants.py`** — not in `core.py`, preventing circular imports.
 8. **Scheduler missed window** → if daily-time restart target passed >120s ago and `check_due()` returns False, `get_status()["missed"]` is True. Orchestrator logs WARNING + notifies user.
-9. **Every spawned child process (Minecraft server, playit agent) is assigned to a Windows Job Object** (`app/core/process_job.py`, `KILL_ON_JOB_CLOSE`) so the OS reaps it even on a hard parent death (crash, taskkill, closed console) that skips `atexit`. Children spawned by a job member inherit the job automatically — Fabric/Forge's inner java is covered too.
+9. **Every spawned child process (Minecraft server, playit agent) dies with ZBB** (`app/core/process_job.py`). Windows: assigned to a Job Object with `KILL_ON_JOB_CLOSE`, so the OS reaps it even on a hard parent death (crash, taskkill, closed console) that skips `atexit`; children of a job member inherit the job — Fabric/Forge's inner java is covered too. Linux: `linux_preexec()` sets `prctl(PR_SET_PDEATHSIG, SIGKILL)` at spawn.
 10. **Port preflight before server start** → `ServerRunner.start()` checks the configured port isn't already bound before spawning, failing with a clear toast instead of a Minecraft bind-crash.
+11. **Data directory resolved first** → `bootstrap.resolve_data_dir()` runs before `app.core.constants` is imported; nothing may compute `BASE_DIR`-derived paths at import time earlier than that.
+12. **Mod updates need a complete rollback point** → no mod file is touched unless `create_pre_update_snapshot` returned a path; partial snapshots are discarded.
+
+---
+
+## Data Directory
+
+**Files:** `app/core/bootstrap.py`, `app/core/constants.py`, `app/ui/first_run_dialog.py`
+
+`BASE_DIR` (parent of `servers/`, `backups/`, `config/`, `bin/`, `.zbb_cache/`) is resolved at startup:
+
+| Mode | `BASE_DIR` |
+|------|-----------|
+| Running from source | Repo root — no marker, no dialog |
+| Frozen build, marker present and writable | Path stored in the marker |
+| Frozen build, `servers/` or `config/` already next to the exe | Exe folder, adopted silently (pre-feature installs) |
+| Frozen build, first run | First-run dialog: **Standard** (`%LOCALAPPDATA%\ZeroBlockBridge`; Linux `~/ZeroBlockBridge`), **Portable** (next to the exe), or **Custom** |
+
+- The choice is persisted in `install.json` under `%LOCALAPPDATA%\ZeroBlockBridge\` (Linux: `~/.zeroblockbridge/`) and exported as `ZBB_DATA_DIR` before `constants` is imported, which honors that variable first.
+- Bundled read-only assets always come from the PyInstaller `_MEIPASS` dir, independent of `BASE_DIR`.
+- Settings → Storage shows the active location (with **Open Folder**) and disk usage for Servers, Backups, Java runtimes, Crash reports, and Versions cache, plus **Clear Crash Reports**. Managed JDK purge lives in Settings → Java.
 
 ---
 
@@ -274,88 +313,93 @@ These rules must never be violated:
 ```text
 ZeroBlockBridge/
 ├── app/
-│   ├── launcher.py                    # Entry point (9 LOC)
+│   ├── launcher.py                    # Entry point: resolve data dir, then start UI (~17 LOC)
 │   │
 │   ├── ui/                            # Presentation Layer — no business logic
-│   │   ├── main.py                    # MCTunnelApp: main window, layout, subscriptions (~1009 LOC)
-│   │   ├── server_wizard.py           # 3-step creation wizard (~630 LOC)
-│   │   ├── server_properties_editor.py# 7-tab properties editor (~754 LOC)
-│   │   ├── modrinth_browser.py        # Modrinth mod browser (~730 LOC)
-│   │   ├── players_dashboard.py       # Player management: online list + whitelist (~222 LOC)
-│   │   ├── toast.py                   # Non-blocking notification overlay (~159 LOC)
+│   │   ├── main.py                    # MCTunnelApp: main window, sidebar, hero status bar, console tabs (~1201 LOC)
+│   │   ├── server_wizard.py           # 6-step creation wizard (~826 LOC)
+│   │   ├── server_properties_editor.py# 7-tab editor: General/World/Network/Advanced/Backups/Automation/Launch (~1091 LOC)
+│   │   ├── modrinth_browser.py        # Modrinth browser: search, install, update badges, bulk ops (~1850 LOC)
+│   │   ├── players_dashboard.py       # Player management: Online/Whitelist/Operators/Bans tabs (~427 LOC)
+│   │   ├── app_settings.py            # Settings dialog: General/Notifications/Java/Storage/About (~754 LOC)
 │   │   ├── first_run_dialog.py        # First-launch data directory picker: Standard/Portable/Custom (~174 LOC)
-│   │   └── ui_components.py           # ConsoleWidget, ServerListItem (right-click delete menu), ToolTip, Dialog, EulaDialog (~422 LOC)
+│   │   ├── toast.py                   # Non-blocking notification overlay (~200 LOC)
+│   │   ├── icons.py                   # PIL-drawn, theme-tintable icon set — replaces emoji (~210 LOC)
+│   │   ├── win_effects.py             # Win11 DWM rounded corners + shadow, no-op elsewhere (~69 LOC)
+│   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, ZBBDialog, EulaDialog (~673 LOC)
 │   │
 │   ├── core/                          # Orchestration & Business Logic
-│   │   ├── bootstrap.py               # Resolves data dir before any other module reads a path; reads/writes location marker (~86 LOC)
-│   │   ├── core.py                    # ZBBManager — central orchestrator (~527 LOC)
-│   │   ├── logic.py                   # ServerRunner, Scheduler, downloads, metadata, delete_server, port preflight (~876 LOC)
-│   │   ├── orchestrators.py           # ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator (~224 LOC)
-│   │   ├── protocols.py               # Protocol classes for structural typing (~36 LOC)
-│   │   ├── process_job.py             # Windows Job Object helper — reaps children on hard parent death (~83 LOC)
-│   │   ├── playit_manager.py          # Playit.gg agent (v1.0.10 playitd daemon) lifecycle, DNS recovery (~790 LOC)
-│   │   ├── version_manager.py         # Dynamic version fetch (Fill API v3 for Paper), 24h cache (~420 LOC)
+│   │   ├── bootstrap.py               # Resolves data dir before any other module reads a path (~86 LOC)
+│   │   ├── core.py                    # ZBBManager — central orchestrator (~656 LOC)
+│   │   ├── logic.py                   # ServerRunner, Scheduler, BackupScheduler, downloads, metadata, port preflight (~948 LOC)
+│   │   ├── orchestrators.py           # Server/Backup/Tunnel/Scheduler orchestrators (~275 LOC)
+│   │   ├── protocols.py               # Protocol classes for structural typing (~41 LOC)
+│   │   ├── process_job.py             # Child-process reaping: Windows Job Object / Linux PDEATHSIG (~130 LOC)
+│   │   ├── playit_manager.py          # Playit.gg agent (v1.0.10 playitd daemon) lifecycle, DNS recovery (~821 LOC)
+│   │   ├── version_manager.py         # Dynamic version fetch (Fill API v3 for Paper), 24h cache (~445 LOC)
 │   │   ├── server_events.py           # EventBus + ServerEvent enum (~53 LOC)
-│   │   ├── statemanager.py            # Tunnel status debounce (module-level vars, Lock)
-│   │   ├── app_config.py              # UI tokens: colors, fonts, timeouts (~57 LOC)
-│   │   ├── constants.py               # Paths, URLs, ServerState enum (~48 LOC)
-│   │   └── single_instance.py         # PID lockfile — prevents duplicate instances (~71 LOC)
+│   │   ├── statemanager.py            # Tunnel status debounce (module-level vars, Lock) (~41 LOC)
+│   │   ├── app_config.py              # UI tokens: colors, fonts, radii, timeouts (~112 LOC)
+│   │   ├── constants.py               # Paths (BASE_DIR), URLs, ServerState enum (~114 LOC)
+│   │   └── single_instance.py         # PID lockfile — prevents duplicate instances (~81 LOC)
 │   │
 │   └── services/                      # Specialized Services & Auto-Healing
-│       ├── watchdog.py                # Crash detection & exponential backoff restart (~172 LOC)
-│       ├── heartbeat.py               # Zombie detection via /list probe (~63 LOC)
-│       ├── lag_monitor.py             # TPS lag detection via sliding window (~35 LOC)
-│       ├── crash_reporter.py          # JSON crash diagnostic reports, 50-report FIFO (~80 LOC)
-│       ├── discord_webhook.py         # Discord webhook notifications via queue worker (~80 LOC)
-│       ├── backup_manager.py          # ZIP backup create + atomic restore (~153 LOC)
-│       ├── sanitizer.py               # Command allowlist + injection char filter (~64 LOC)
-│       ├── java_detector.py           # System Java detection + portable JDK scan (~416 LOC)
-│       ├── java_installer.py          # JDK auto-download from Adoptium API (~322 LOC)
-│       ├── bytecode_analyzer.py       # JAR bytecode → required Java version (~119 LOC)
-│       ├── aikars_flags.py            # Optimal JVM flags by RAM tier (~103 LOC)
-│       ├── scaffolder.py              # Server directory + eula + server.properties scaffold (~152 LOC)
-│       ├── server_properties.py       # server.properties read/write (~59 LOC)
+│       ├── watchdog.py                # Crash classification & exponential backoff restart (~264 LOC)
+│       ├── heartbeat.py               # Zombie detection via /list probe (~95 LOC)
+│       ├── lag_monitor.py             # TPS lag detection via sliding window (~49 LOC)
+│       ├── crash_reporter.py          # JSON crash diagnostic reports, 50-report FIFO (~135 LOC)
+│       ├── discord_webhook.py         # Discord notifications: per-event opt-in, templates, queue worker (~398 LOC)
+│       ├── backup_manager.py          # ZIP backup create (reason tags) + atomic restore (~177 LOC)
+│       ├── sanitizer.py               # Command allowlist, injection filter, BlockedReason (~101 LOC)
+│       ├── java_detector.py           # System Java detection + portable JDK scan (~423 LOC)
+│       ├── java_installer.py          # Adoptium download: JRE with JDK fallback (~412 LOC)
+│       ├── bytecode_analyzer.py       # JAR bytecode → required Java version (~149 LOC)
+│       ├── aikars_flags.py            # Optimal JVM flags by RAM tier (~89 LOC)
+│       ├── scaffolder.py              # Server directory + eula + server.properties scaffold (~156 LOC)
+│       ├── server_properties.py       # server.properties read/write, world listing/switching (~80 LOC)
+│       ├── player_files.py            # ops/bans/whitelist JSON read/write (~47 LOC)
+│       ├── template_manager.py        # Wizard server templates (~69 LOC)
+│       ├── migration.py               # .zbbpack export/import (~90 LOC)
 │       ├── playit_api.py              # Playit.gg REST API v2 client (~466 LOC)
-│       ├── modrinth.py                # Modrinth API client + mod tracker (~329 LOC)
-│       ├── sha1_validator.py          # SHA1-verified download with retry (~117 LOC)
-│       ├── console_buffer.py          # Thread-safe console buffer (collections.deque)
-│       └── settings_manager.py        # App config singleton read/write, debounced flush
+│       ├── modrinth.py                # Modrinth API client, dependency resolution, updates (~508 LOC)
+│       ├── mrpack_installer.py        # Modrinth modpack (.mrpack) install (~215 LOC)
+│       ├── mod_install_tracker.py     # Installed Modrinth slugs per server (~73 LOC)
+│       ├── mod_id_resolver.py         # Crash-log mod IDs → Modrinth slugs (~26 LOC)
+│       ├── sha1_validator.py          # SHA1-verified download with retry (~113 LOC)
+│       ├── disk_usage.py              # Folder size helpers for Settings → Storage/Java (~38 LOC)
+│       ├── console_buffer.py          # Thread-safe console buffer (collections.deque) (~29 LOC)
+│       └── settings_manager.py        # App settings singleton, debounced flush (~94 LOC)
 │
-├── tests/                             # 24 test files, 463 tests, 100% pass
+├── tests/                             # 35 test files, 620 tests, 100% pass
 │   ├── conftest.py                    # FakeEmitter (EventBus stub), FakeRunner
-│   ├── test_orchestrators.py          # 26 tests — all 4 orchestrators
-│   ├── test_logic.py                  # ServerRunner, Scheduler, normalize, meta (~24 tests)
-│   ├── test_crash_reporter.py         # 11 tests
-│   ├── test_discord_webhook.py        # 10 tests
-│   ├── test_watchdog.py               # Watchdog + backoff
-│   ├── test_heartbeat.py              # HeartbeatMonitor
-│   ├── test_playit_manager.py         # PlayitManager lifecycle
-│   ├── test_version_manager.py        # VersionManager fetch + cache
-│   ├── test_java_installer.py         # JDK download + checksum
-│   ├── test_backup_scheduler.py       # BackupScheduler (12 tests)
-│   ├── test_backup_manager.py         # BackupManager create/restore/retention
-│   └── ... (10 more)
+│   ├── test_playit_manager.py         # PlayitManager lifecycle (59)
+│   ├── test_version_manager.py        # VersionManager fetch + cache (43)
+│   ├── test_java_installer.py         # JDK/JRE download, fallback, listing (42)
+│   ├── test_sanitizer.py              # Allowlist, injection, BlockedReason, describe_blocked (41)
+│   ├── test_orchestrators.py          # All 4 orchestrators incl. pre-update snapshot (33)
+│   ├── test_backup_manager.py         # Create/retention/reason tags/restore round-trip (14)
+│   └── ... (29 more)
 │
+├── packaging/                         # PyInstaller specs (Windows, Linux) + exe version metadata
+├── tools/                             # bump_version.py, extract_changelog_section.py, gen_theme.py
+├── .github/workflows/                 # tests.yml (Win+Linux matrix), build.yml (tag → release)
 ├── pyproject.toml                     # Project metadata, requires-python>=3.10, deps
 ├── requirements.txt                   # Pinned minimum versions (5 deps)
-├── docs/
-│   ├── ARCHITECTURE.md                # This file
-│   └── STANDARDS.md                   # Coding standards & quality criteria
-│
-├── servers/                           # (Generated) Per-server data
-│   └── <server-name>/
-│       ├── server.jar
-│       ├── server.properties
-│       ├── metadata.json              # {name, version, type, ram, ...}
-│       └── crash_reports/             # JSON crash diagnostics (max 50, FIFO)
-│
-├── backups/                           # (Generated) ZIP backups
-│   └── <server-name>/
-│       └── YYYY-MM-DD_HH-MM-SS.zip
-│
-├── app/bin/                           # (Generated) Playit.gg agent binary
-├── .zbb_cache/jdks/<version>/         # (Generated) Portable JDK cache (Adoptium)
-└── app/config/                        # (Generated) App configuration + version cache
+└── docs/
+    ├── ARCHITECTURE.md                # This file
+    ├── STANDARDS.md                   # Coding standards & quality criteria
+    └── changelog.md                   # Release notes (source for GitHub release bodies)
+```
+
+Generated at runtime under the [data directory](#data-directory):
+
+```text
+<BASE_DIR>/
+├── servers/<server-name>/             # server.jar, server.properties, metadata.json, crash_reports/ (max 50, FIFO)
+├── backups/<server-name>/             # YYYY-MM-DD_HH-MM-SS.zip (manual/scheduled), ..._HH-MM-SS__pre_update.zip
+├── bin/                               # playitd agent binary + playit.version marker
+├── .zbb_cache/jdks/<version>/         # Portable JDK/JRE cache (Adoptium)
+└── config/                            # config.json, versions_cache.json
 ```
 
 ---
@@ -371,7 +415,7 @@ ZeroBlockBridge/
 | Java 16 | MC 1.17 – 1.17.1 | |
 | Java 8 | MC < 1.17 | Legacy servers |
 
-JDK auto-downloaded from **Adoptium** to `.zbb_cache/jdks/{version}/` — never modifies system PATH. Bytecode analyzer (`bytecode_analyzer.py`) extracts required version from the server JAR class files, with a floor of `get_required_java(mc_version)` to prevent Forge shim misdetection.
+Java auto-downloaded from **Adoptium** to `.zbb_cache/jdks/{version}/` — never modifies system PATH. The installer requests a JRE first (`image_type=jre`, ~45 MB) and falls back to a full JDK (~300 MB) when no JRE exists for that version. Version-picker warnings: orange if detected > required, red block if detected > 21 or < required. Bytecode analyzer (`bytecode_analyzer.py`) extracts required version from the server JAR class files, with a floor of `get_required_java(mc_version)` to prevent Forge shim misdetection.
 
 ### Dynamic Version Fetching
 
@@ -382,21 +426,21 @@ JDK auto-downloaded from **Adoptium** to `.zbb_cache/jdks/{version}/` — never 
 | Vanilla | Mojang manifest |
 | Fabric | Fabric Meta API |
 | Forge | Forge Promotions API |
-| Paper | PaperMC API |
+| Paper | PaperMC Fill API v3 |
 | Purpur | PurpurMC API |
 
-- Cache: `config/versions_cache.json`, auto-refreshed every 24h in background.
-- Lazy init: `VersionManager` instantiated on first use (not in `ZBBManager.__init__`) to avoid blocking startup.
+- Cache: `config/versions_cache.json`, auto-refreshed every 24h in background. Falls back to built-in defaults when offline.
+- Singleton whose constructor does no I/O: starts from in-memory defaults and loads the disk cache lazily on the first `get_versions()` call, so startup never blocks on disk or network.
 - UI freeze fix: `get_versions()` does not block on `thread.join()` — uses callback path to notify when refresh completes.
 
 ### Discord Webhook
 
 `DiscordWebhookService` (`app/services/discord_webhook.py`):
-- Activated only when `discord_webhook_url` is set in `SettingsManager`.
-- Single `queue.Queue` worker thread, 2s rate-limit between POSTs.
-- Subscribes to: `CRASHED` (red embed), `READY` (green), `BACKUP_COMPLETED` (blue), `BACKUP_FAILED` (orange).
-- URL is never logged.
-- Configured via `SettingsManager().set("discord_webhook_url", "https://...")`.
+- Activated only when `discord_webhook_url` is set; configured in Settings → Notifications. `ZBBManager.reload_discord_webhook()` re-creates the service after a change.
+- Per-event opt-in via `webhook_events` (`SETTING_EVENT_KEYS`). Defaults on: crashed, ready, backup_completed, backup_failed. Opt-in: stopped, restarted, zombie_detected, lag_spike, tunnel_online, player_joins. Only enabled events are subscribed.
+- Optional per-event description templates with placeholders (`{server}` always available).
+- Single `queue.Queue` worker thread, 2s rate-limit between POSTs. `stop()` unsubscribes from the bus.
+- Server name resolved via getter (follows the active server). URL is never logged.
 
 ### Scheduled Restart Logic
 
@@ -410,7 +454,7 @@ Warning threshold messages emitted before restart: 1h, 30m, 15m, 1m.
 ### System Requirements
 
 - **OS**: Windows 10+ / Linux
-- **Python**: 3.10 or higher (tested on 3.14)
+- **Python**: 3.10 or higher (CI runs 3.11; developed on 3.14)
 - **Java**: Auto-managed (Adoptium, Java 8–21)
 - **RAM**: 2 GB minimum for ZBB + server (4 GB+ recommended for modded)
 - **Disk**: ~37 MB app + ~107 MB per vanilla server + world size
@@ -426,6 +470,15 @@ Defined in `pyproject.toml` and `requirements.txt`:
 | `Pillow>=12.2.0` | Server icon image processing |
 | `psutil>=7.2.2` | System resource monitoring |
 | `packaging>=26.0` | Version comparison utilities |
+
+---
+
+## Build & Release
+
+- **CI** (`.github/workflows/tests.yml`): blocking `flake8 --select=E9,F63,F7,F82`, non-blocking full lint, then the full test suite, on a Windows + Ubuntu matrix (Python 3.11).
+- **Release** (`.github/workflows/build.yml`): triggered by a `v*` tag. Reuses the tests workflow as a gate, writes the tag version into `packaging/version_info.txt` and `AppConfig.APP_VERSION`, builds with PyInstaller from `packaging/ZeroBlockBridge.spec` (Windows) and `packaging/linux.spec`, generates `.sha256` checksums, then publishes `ZeroBlockBridge.exe`, `ZeroBlockBridge-linux`, and their checksums in a GitHub release whose body is extracted from `docs/changelog.md` (`tools/extract_changelog_section.py --strict`).
+- Local helpers: `tools/bump_version.py X.Y.Z` (updates `APP_VERSION`, `version_info.txt`, inserts a changelog template — no commit/tag), `tools/gen_theme.py` (regenerates `assets/zbb_theme.json` from CTk's base theme recolored to the palette; keep in sync with `AppConfig`).
+- UPX packing is disabled on both specs (antivirus false positives). The Windows exe is not code-signed.
 
 ---
 
@@ -448,16 +501,14 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
 | Explainable command safety (visible allowlist + blocked-command toast) | ✅ unique | ❌ (arbitrary amscript) | n/a |
 | One-click pre-update snapshot + rollback | ✅ unique | ❌ | n/a |
 
-### Pending High-Priority Gaps (CA-HIGH)
+### High-Priority Gaps (CA-HIGH)
 
-| ID | Feature | Target file |
-|----|---------|------------|
-| CA-H01 | JVM args UI per-server | `logic.py`, `server_properties_editor.py` |
-| CA-H02 | Unified player management (ops+bans+whitelist) | `players_dashboard.py` |
-| CA-H03 | Console search/filter | `ui_components.py` (ConsoleWidget) |
-| CA-H04 | World switching UI | `server_properties_editor.py` |
-
-See `roadmap.md → COMPETITIVE-ANALYSIS` for full table, effort estimates, and execution order.
+| ID | Feature | Status |
+|----|---------|--------|
+| CA-H01 | JVM args UI per-server | Partial — Launch tab has per-server Java runtime + Aikar's flags toggle; no free-form JVM args override yet |
+| CA-H02 | Unified player management (ops+bans+whitelist) | Done — `players_dashboard.py` Online/Whitelist/Operators/Bans tabs |
+| CA-H03 | Console search/filter | Done — search bar on Console and Tunnel Log tabs (`main._build_console_search_bar`) |
+| CA-H04 | World switching UI | Done — World tab active-world picker (`server_properties.list_worlds` / `set_active_world`) |
 
 ---
 
