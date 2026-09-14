@@ -16,7 +16,8 @@ class ServerRunnerProtocol(Protocol):
 
 
 class BackupServiceProtocol(Protocol):
-    def create_backup(self, retention_count: Optional[int] = None) -> tuple[Optional[Any], Optional[str]]: ...
+    def create_backup(self, retention_count: Optional[int] = None,
+                      reason: str = "manual") -> tuple[Optional[Any], Optional[str]]: ...
 
 
 # Structural contracts for the 4 sub-orchestrators (used to type their instances,
@@ -26,6 +27,10 @@ class ServerOrchestratorProtocol(Protocol):
     def stop_server(self) -> None: ...
     def is_running(self) -> bool: ...
     def send_command(self, cmd: str) -> None: ...
+
+
+class BackupOrchestratorProtocol(Protocol):
+    def create_pre_update_snapshot(self, server_name: str) -> tuple[Optional[Any], Optional[str]]: ...
 
 
 class TunnelOrchestratorProtocol(Protocol):

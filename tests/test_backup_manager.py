@@ -131,3 +131,28 @@ class TestBackupManager:
             assert latest is not None
             assert latest["name"] == "2025-05-02_00-00-00__pre_update.zip"
             assert latest["date"] == "02 May 2025 00:00"
+
+    def test_pre_update_snapshot_restore_round_trip(self, tmp_path):
+        """Snapshot -> mod update -> restore brings back the exact pre-update mods."""
+        server = tmp_path / "servers" / "srv"
+        backups = tmp_path / "backups"
+        (server / "mods").mkdir(parents=True)
+        backups.mkdir()
+        (server / "mods" / "sodium-0.5.jar").write_text("old")
+        (server / "server.properties").write_text("motd=§aHello", encoding="utf-8")
+
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", backups), patch.object(bm, "server_path", server):
+            snapshot, error = bm.create_backup(reason="pre_update")
+            assert error is None
+
+            # Simulate the mod update replacing the jar.
+            (server / "mods" / "sodium-0.5.jar").unlink()
+            (server / "mods" / "sodium-0.6.jar").write_text("new")
+
+            assert bm.restore_backup(str(snapshot)) is True
+
+            assert sorted(p.name for p in (server / "mods").iterdir()) == ["sodium-0.5.jar"]
+            assert (server / "mods" / "sodium-0.5.jar").read_text() == "old"
+            assert (server / "server.properties").read_text(encoding="utf-8") == "motd=§aHello"
+            assert snapshot.exists()  # rollback must not destroy the snapshot itself

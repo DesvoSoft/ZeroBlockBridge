@@ -224,6 +224,86 @@ class TestBackupOrchestrator:
 
         assert mgr._backup_in_progress is False
 
+    def test_pre_update_snapshot_refused_while_server_running(self):
+        mgr = _make_manager()
+        mgr.is_running.return_value = True
+        orch = BackupOrchestrator(mgr)
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            path, error = orch.create_pre_update_snapshot("test_srv")
+
+        assert path is None
+        assert "Stop the server" in error
+        MockBM.assert_not_called()
+
+    def test_pre_update_snapshot_allowed_for_other_server_while_running(self, tmp_path):
+        mgr = _make_manager()
+        mgr.is_running.return_value = True
+        orch = BackupOrchestrator(mgr)
+        snap = tmp_path / "snap__pre_update.zip"
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.create_backup.return_value = (snap, None)
+            path, error = orch.create_pre_update_snapshot("other_srv")
+
+        assert path == snap and error is None
+        MockBM.return_value.create_backup.assert_called_once_with(reason="pre_update")
+
+    def test_pre_update_snapshot_refused_when_backup_in_progress(self):
+        mgr = _make_manager(_backup_in_progress=True)
+        mgr.is_running.return_value = False
+        orch = BackupOrchestrator(mgr)
+
+        path, error = orch.create_pre_update_snapshot("test_srv")
+
+        assert path is None
+        assert "in progress" in error
+        assert mgr._backup_in_progress is True  # flag owned by the other backup
+
+    def test_pre_update_snapshot_success_emits_completed(self, tmp_path):
+        mgr = _make_manager()
+        mgr.is_running.return_value = False
+        orch = BackupOrchestrator(mgr)
+        snap = tmp_path / "snap__pre_update.zip"
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.create_backup.return_value = (snap, None)
+            path, error = orch.create_pre_update_snapshot("test_srv")
+
+        assert path == snap and error is None
+        assert ServerEvent.BACKUP_COMPLETED in [e[0] for e in mgr.events.events]
+        assert mgr._backup_in_progress is False
+
+    def test_pre_update_snapshot_with_skipped_files_is_discarded(self, tmp_path):
+        mgr = _make_manager()
+        mgr.is_running.return_value = False
+        orch = BackupOrchestrator(mgr)
+        snap = tmp_path / "snap__pre_update.zip"
+        snap.write_bytes(b"partial")
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.create_backup.return_value = (
+                snap, "Backup created with warnings. Skipped 2 locked files.")
+            path, error = orch.create_pre_update_snapshot("test_srv")
+
+        assert path is None
+        assert "Skipped" in error
+        assert not snap.exists()
+        assert ServerEvent.BACKUP_FAILED in [e[0] for e in mgr.events.events]
+        assert mgr._backup_in_progress is False
+
+    def test_pre_update_snapshot_clears_flag_on_exception(self):
+        mgr = _make_manager()
+        mgr.is_running.return_value = False
+        orch = BackupOrchestrator(mgr)
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.create_backup.side_effect = RuntimeError("boom")
+            with pytest.raises(RuntimeError):
+                orch.create_pre_update_snapshot("test_srv")
+
+        assert mgr._backup_in_progress is False
+
 
 # ---------------------------------------------------------------------------
 # SchedulerOrchestrator

@@ -3,6 +3,7 @@ import logging
 import time
 import os
 import threading
+from pathlib import Path
 from app.core.server_events import ServerEvent
 from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
@@ -159,6 +160,41 @@ class BackupOrchestrator:
                 self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
                 self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.manager.current_server})
             BackupScheduler(self.manager.current_server).mark_run()
+        finally:
+            with self.manager._backup_lock:
+                self.manager._backup_in_progress = False
+
+    def create_pre_update_snapshot(self, server_name: str) -> tuple[Path | None, str | None]:
+        """Blocking full-server snapshot taken right before a mod update.
+
+        Returns (path, None) only for a complete snapshot. Anything less is
+        (None, error) so the caller aborts the update — a partial snapshot
+        would be a rollback point that silently can't roll back.
+        """
+        if server_name == self.manager.current_server and self.manager.is_running():
+            return None, "Stop the server before updating mods (running server locks files)."
+
+        with self.manager._backup_lock:
+            if self.manager._backup_in_progress:
+                return None, "Another backup is already in progress. Try again shortly."
+            self.manager._backup_in_progress = True
+        try:
+            path, error = BackupManager(server_name).create_backup(reason="pre_update")
+            if path and error:
+                # Locked files were skipped — discard the incomplete archive.
+                try:
+                    path.unlink()
+                except OSError as exc:
+                    logger.warning("Failed to discard incomplete snapshot %s: %s", path, exc)
+                path = None
+            if not path:
+                logger.warning("Pre-update snapshot failed for %s: %s", server_name, error)
+                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Pre-update snapshot failed: {error}")
+                self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": server_name})
+                return None, error
+            self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Pre-update snapshot created: {path.name}")
+            self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": server_name})
+            return path, None
         finally:
             with self.manager._backup_lock:
                 self.manager._backup_in_progress = False

@@ -370,6 +370,7 @@ class MCTunnelApp(ctk.CTk):
         self.modrinth_browser = ModrinthBrowser(
             self.console_tabs.tab("Mods"),
             get_server_info=self._get_current_server_info,
+            create_snapshot=self.zbb_manager.create_pre_update_snapshot,
         )
         self.modrinth_browser.pack(fill="both", expand=True)
         self._update_mods_tab_state()

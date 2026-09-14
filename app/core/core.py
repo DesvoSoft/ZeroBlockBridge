@@ -346,6 +346,10 @@ class ZBBManager:
     def is_running(self) -> bool:
         return self.server_orchestrator.is_running()
 
+    def create_pre_update_snapshot(self, server_name: str) -> tuple[Optional[Any], Optional[str]]:
+        """Blocking -- call from a worker thread, never the Tk main loop."""
+        return self.backup_orchestrator.create_pre_update_snapshot(server_name)
+
     # --- Maintenance (App Settings dialog) ---
     def list_managed_jdks(self) -> list:
         """Cached JDKs with size on disk. Walks dirs -- call from a thread."""
