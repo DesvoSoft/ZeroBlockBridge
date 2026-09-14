@@ -72,8 +72,24 @@ class TestMCJavaMapping:
     def test_mc_1_21_requires_java_21(self):
         assert get_required_java("1.21") == 21
 
-    def test_unknown_version_defaults_17(self):
-        assert get_required_java("99.99.99") == 17
+    def test_mc_1_21_11_requires_java_21(self):
+        assert get_required_java("1.21.11") == 21
+
+    def test_mc_26_1_requires_java_25(self):
+        assert get_required_java("26.1") == 25
+
+    def test_mc_26_2_requires_java_25(self):
+        assert get_required_java("26.2") == 25
+
+    def test_mc_26_prerelease_and_snapshot_require_java_25(self):
+        assert get_required_java("26.2-rc-2") == 25
+        assert get_required_java("26.1-snapshot-1") == 25
+
+    def test_version_newer_than_matrix_uses_newest_java(self):
+        assert get_required_java("99.99.99") == 25
+
+    def test_unparseable_version_defaults_17(self):
+        assert get_required_java("not-a-version") == 17
 
 
 

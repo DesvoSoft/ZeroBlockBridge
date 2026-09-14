@@ -55,7 +55,9 @@ _MC_JAVA_MAP: List[tuple] = [
     ("1.12",   "1.16.5", 8),
     ("1.17",   "1.17.1", 16),
     ("1.18",   "1.20.4", 17),
-    ("1.20.5", "1.99.0", 21),
+    ("1.20.5", "1.21.99", 21),
+    # Year-based versioning from 2026 (26.1, 26.2-rc-2, 26.1-snapshot-1).
+    ("26.1",   "26.99", 25),
 ]
 
 
@@ -78,13 +80,18 @@ def get_required_java(mc_version: str) -> int:
         mc_version: e.g. "1.20.1"
 
     Returns:
-        Java major version (8, 16, 17, 21) or 17 as default.
+        Java major version (8, 16, 17, 21, 25). Versions newer than the
+        matrix get the newest known requirement; unparseable ones get 17.
     """
     mc = _parse_mc_version(mc_version)
     for mc_min, mc_max, java_major in _MC_JAVA_MAP:
         if _parse_mc_version(mc_min) <= mc <= _parse_mc_version(mc_max):
             return java_major
-    # Default to Java 17 if unknown
+    # Minecraft only ever raises the Java floor, so a release newer than the
+    # matrix needs at least the newest entry -- never an older runtime.
+    newest_max, newest_java = _MC_JAVA_MAP[-1][1], _MC_JAVA_MAP[-1][2]
+    if mc > _parse_mc_version(newest_max):
+        return newest_java
     return 17
 
 

@@ -253,14 +253,14 @@ class ZBBManager:
 
         best = sorted(all_javas, key=lambda j: j.major, reverse=True)[0]
 
-        if best.major > required_java and best.major <= 21:
+        if best.major > required_java and best.major <= AppConfig.MAX_SUPPORTED_JAVA:
             self._jdk_source = "system"
             msg = f"Running with Java {best.major}. Recommended: Java {required_java}."
             self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "warning"})
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] {msg}")
             return (best.path, required_java)
 
-        if best.major > 21:
+        if best.major > AppConfig.MAX_SUPPORTED_JAVA:
             if not auto_install_jdk:
                 msg = f"Java {best.major} detected (experimental). Auto-install disabled. Install Java {required_java} manually."
                 self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
@@ -269,7 +269,7 @@ class ZBBManager:
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {best.major} detected but unstable. Attempting to auto-install JDK {required_java}...")
             java_bin = self._auto_install_java(required_java)
             if not java_bin:
-                msg = f"Java {best.major} detected (experimental). ZBB supports up to Java 21. Auto-install JDK {required_java} failed."
+                msg = f"Java {best.major} detected (experimental). This server needs Java {required_java}, and auto-install failed."
                 self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
                 self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
                 return None

@@ -969,7 +969,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._grid_help_icon(card, 0, (
             "Which Java runtime launches the server.\n"
             "Auto-Detect picks the version your Minecraft version requires\n"
-            "(Java 21 for 1.20.5+, 17 for 1.18-1.20.4, 8 for older) and\n"
+            "(Java 25 for 26.1+, 21 for 1.20.5-1.21.x, 17 for 1.18-1.20.4,\n"
+            "8 for older) and "
             "downloads it automatically if it's not installed."
         ))
         

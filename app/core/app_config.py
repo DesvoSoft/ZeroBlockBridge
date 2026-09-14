@@ -109,4 +109,7 @@ class AppConfig:
     DEFAULT_RAM_MB = 2048
     BACKUP_TIMEOUT = 300
     CONSOLE_BUFFER_SIZE = 1000
+    # Newest Java trusted to stand in for an *older* required version. A
+    # server that requires a newer Java (e.g. 25 for MC 26.x) still gets it
+    # through an exact match or auto-install.
     MAX_SUPPORTED_JAVA = 21
