@@ -43,7 +43,7 @@ ALLOWLISTED_COMMANDS = {
     "save-all", "save-off", "save-on",
     "stop", "restart",
     "help", "?", "version",
-    "reload", "datapack",
+    "reload",
     "advancement", "attribute", "bossbar",
     "damage", "data", "datapack", "defaultgamemode",
     "enchant", "execute", "experience",

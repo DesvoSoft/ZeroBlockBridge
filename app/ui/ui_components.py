@@ -141,7 +141,9 @@ class ConsoleWidget(ctk.CTkTextbox):
 
     @staticmethod
     def _line_tag(message):
-        if "[Security]" in message:
+        # Prefix match only: server output (player chat) can contain the
+        # literal text "[Security]" and must not pass as a ZBB alert.
+        if message.startswith("[Security]"):
             return "line_security"
         if "ERROR" in message:
             return "line_error"
