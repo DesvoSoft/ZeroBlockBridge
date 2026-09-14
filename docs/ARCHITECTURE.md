@@ -216,13 +216,14 @@ Subscribes to `CRASHED` event. On each crash:
 - **Character filter**: Rejects `;`, `|`, `&`, `` ` ``, `$()`, `${}`, `\n`. `%` is **allowed** (valid in MC commands like `op %USERNAME%`).
 - Unknown commands: allowed if they pass the character filter (forward-compatible).
 - Commands go to server stdin — not to a shell. `shell=True` is banned.
-- **Explainable Safety** (2026-08-03): `is_safe_command()` returns `(bool, reason)`. A blocked command emits both a `[Security]`-tagged `CONSOLE_LINE` (rendered with a distinct red tint) and a `NOTIFICATION` warning toast — no more silent no-op. Settings → General shows the full sorted allowlist read-only, so the claim is user-auditable. Single enforcement point: `ServerOrchestrator.send_command` (the UI no longer duplicates this check).
+- **Explainable Safety** (2026-08-03): `is_safe_command()` returns `(bool, BlockedReason | None)` — a `str`-mixin enum (`EMPTY`, `SHELL_METACHARACTERS`, `INJECTION_PATTERN`, `SUSPICIOUS_UNKNOWN`) whose values are the user-facing text. A blocked command emits both a `[Security]`-prefixed `CONSOLE_LINE` and a `NOTIFICATION` warning toast built by `describe_blocked()` (names the command, truncated to 40 chars, newlines collapsed) — no more silent no-op. The console red tint matches the `[Security]` **prefix only**, so player chat containing that text cannot spoof an alert. Settings → General shows the full sorted allowlist read-only, so the claim is user-auditable. Single enforcement point: `ServerOrchestrator.send_command` (the UI no longer duplicates this check).
 
 ### Pre-Update Snapshots
 
-**File:** `app/services/backup_manager.py`, `app/ui/modrinth_browser.py`
+**File:** `app/core/orchestrators.py` (`BackupOrchestrator.create_pre_update_snapshot`), `app/services/backup_manager.py`, `app/ui/modrinth_browser.py`
 
-- Mod updates (single-badge and bulk "Update Selected") trigger a full-server `BackupManager.create_backup(reason="pre_update")` before any file changes. Snapshot failure aborts the update rather than proceeding without a rollback point.
+- Mod updates (single-badge and bulk "Update Selected") call `ZBBManager.create_pre_update_snapshot(server_name)` — injected into `ModrinthBrowser` as the `create_snapshot` callback, so the UI never touches `BackupManager` — before any file changes. Ordering lives in the pure helper `_snapshot_then_apply`: snapshot failure aborts the update rather than proceeding without a rollback point.
+- The orchestrator refuses a snapshot when the target is the active, running server (locked files), when another backup holds `_backup_in_progress`, and **discards** a snapshot that skipped locked files instead of reporting it as a usable rollback point. Emits `BACKUP_COMPLETED` / `BACKUP_FAILED` like scheduled backups.
 - Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason` — pruning pre-update snapshots (default cap: 5) can never delete a user's manual/scheduled backups, and vice versa.
 - Rollback reuses the existing Backups tab restore flow (`server_properties_editor.py`), which now labels pre-update snapshots ("Pre-Update — ...") instead of introducing a second restore path.
 
