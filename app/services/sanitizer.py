@@ -18,6 +18,7 @@ class BlockedReason(str, Enum):
     def __str__(self) -> str:
         return self.value
 
+
 INJECTION_CHARS = set(';|&`$')
 INJECTION_PATTERNS = [
     re.compile(r'\$\(.*?\)'),
