@@ -116,6 +116,19 @@ class TestServerOrchestrator:
         notifs = [e[1] for e in mgr.events.events if e[0] == ServerEvent.NOTIFICATION]
         assert any(n["type"] == "warning" and "injection" in n["msg"] for n in notifs)
 
+    def test_send_command_blocked_message_names_command_and_reason(self):
+        runner = MagicMock(running=True)
+        mgr = _make_manager(server_runner=runner)
+        orch = ServerOrchestrator(mgr)
+
+        orch.send_command("op x; rm -rf /")
+
+        runner.send_command.assert_not_called()
+        lines = [e[1] for e in mgr.events.events if e[0] == ServerEvent.CONSOLE_LINE]
+        notifs = [e[1] for e in mgr.events.events if e[0] == ServerEvent.NOTIFICATION]
+        assert lines == ["[Security] Blocked `op x; rm -rf /`: contains shell metacharacters"]
+        assert notifs == [{"msg": "Blocked `op x; rm -rf /`: contains shell metacharacters", "type": "warning"}]
+
     def test_send_command_passes_safe_cmd(self):
         runner = MagicMock(running=True)
         mgr = _make_manager(server_runner=runner)

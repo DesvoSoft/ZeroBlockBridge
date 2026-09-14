@@ -1,11 +1,11 @@
-from app.services.sanitizer import is_safe_command
+from app.services.sanitizer import BlockedReason, describe_blocked, is_safe_command
 
 
 class TestSanitizerAllowlisted:
     def test_op_command(self):
         safe, reason = is_safe_command("op PlayerName")
         assert safe
-        assert reason == ""
+        assert reason is None
 
     def test_say_command(self):
         safe, _ = is_safe_command("say Hello world")
@@ -145,3 +145,37 @@ class TestSanitizerEdgeCases:
     def test_mixed_case(self):
         safe, _ = is_safe_command("GameMode creative PlayerName")
         assert safe
+
+
+class TestBlockedReason:
+    def test_typed_reasons(self):
+        assert is_safe_command("")[1] is BlockedReason.EMPTY
+        assert is_safe_command("op x; rm -rf /")[1] is BlockedReason.SHELL_METACHARACTERS
+        assert is_safe_command("say hi\nstop")[1] is BlockedReason.INJECTION_PATTERN
+        assert is_safe_command("foo <script>")[1] is BlockedReason.SUSPICIOUS_UNKNOWN
+
+    def test_unknown_safe_command_has_no_reason(self):
+        assert is_safe_command("myplugin:cmd arg") == (True, None)
+
+    def test_reason_renders_as_plain_text(self):
+        reason = BlockedReason.SHELL_METACHARACTERS
+        assert str(reason) == "contains shell metacharacters"
+        assert f"{reason}" == "contains shell metacharacters"
+
+
+class TestDescribeBlocked:
+    def test_includes_command_and_reason(self):
+        msg = describe_blocked("op x; rm -rf /", BlockedReason.SHELL_METACHARACTERS)
+        assert msg == "Blocked `op x; rm -rf /`: contains shell metacharacters"
+
+    def test_truncates_long_commands(self):
+        msg = describe_blocked("say " + "a" * 100, BlockedReason.SHELL_METACHARACTERS, max_len=20)
+        assert "`say aaaaaaaaaaaaaaa…`" in msg
+
+    def test_collapses_newlines(self):
+        msg = describe_blocked("say hi\nstop", BlockedReason.INJECTION_PATTERN)
+        assert "\n" not in msg
+        assert "`say hi stop`" in msg
+
+    def test_empty_command(self):
+        assert describe_blocked("", BlockedReason.EMPTY) == "Blocked: empty command"

@@ -10,7 +10,7 @@ from app.services.backup_manager import BackupManager
 from app.core.app_config import AppConfig
 from app.core.constants import check_disk_space, SERVERS_DIR, ServerState
 from app.services.scaffolder import pre_boot_scaffold
-from app.services.sanitizer import is_safe_command
+from app.services.sanitizer import describe_blocked, is_safe_command
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +95,10 @@ class ServerOrchestrator:
         if self.manager.server_runner and self.manager.server_runner.running:
             safe, reason = is_safe_command(cmd)
             if not safe:
-                logger.warning("Blocked unsafe command: '%s' - Reason: %s", cmd, reason)
-                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] Blocked unsafe command: {reason}")
-                self.manager.events.emit(ServerEvent.NOTIFICATION, {
-                    "msg": f"Blocked: {reason}", "type": "warning",
-                })
+                logger.warning("Blocked unsafe command: %r - Reason: %s", cmd, reason)
+                message = describe_blocked(cmd, reason)
+                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Security] {message}")
+                self.manager.events.emit(ServerEvent.NOTIFICATION, {"msg": message, "type": "warning"})
                 return
             self.manager.server_runner.send_command(cmd)
 
