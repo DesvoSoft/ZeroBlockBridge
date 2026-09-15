@@ -50,7 +50,7 @@ t["CTkCheckBox"].update({"corner_radius": 6, "border_width": 2, "fg_color": PRIM
                          "text_color_disabled": TEXT_DISABLED})
 
 t["CTkSwitch"].update({"fg_color": ["#cbd5e1", "#334155"], "progress_color": PRIMARY,
-                       "button_color": ["#ffffff", "#e2e8f0"], "button_hover_color": ["#f1f5f9", "#f8fafc"],
+                       "button_color": ["#334155", "#e2e8f0"], "button_hover_color": ["#1e293b", "#f8fafc"],
                        "text_color": TEXT, "text_color_disabled": TEXT_DISABLED})
 
 t["CTkRadioButton"].update({"fg_color": PRIMARY, "border_color": ["#94a3b8", "#475569"],

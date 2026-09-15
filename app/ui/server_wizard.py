@@ -14,6 +14,21 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+
+def summary_value(value) -> str:
+    """Display form of a wizard value on the Summary step (bools as Yes/No)."""
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    return str(value)
+
+
+def java_summary(java_path: str, mc_version: str) -> str:
+    """Summary text for the Java choice: a path, or what "auto" will fetch."""
+    if java_path == "auto":
+        return f"Auto (Java {get_required_java(mc_version)})"
+    return java_path
+
+
 class ServerWizard(ctk.CTkToplevel):
     def __init__(self, parent, on_complete_callback):
         super().__init__(parent)
@@ -83,9 +98,10 @@ class ServerWizard(ctk.CTkToplevel):
         self.footer_frame.grid(row=2, column=0, sticky="ew")
 
         self.btn_back = ctk.CTkButton(
-            self.footer_frame, text="← Back", command=self.go_back, state="disabled",
+            self.footer_frame, text="Back", command=self.go_back, state="disabled",
+            image=icon("chevron_left", 13, AppConfig.COLOR_TEXT_PRIMARY), compound="left",
             corner_radius=AppConfig.RADIUS_BTN, height=36,
-            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
         )
         self.btn_back.pack(side="left", padx=20, pady=12)
 
@@ -100,7 +116,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_save_template = ctk.CTkButton(
             self.footer_frame, text="Save as Template", command=self._save_as_template,
             corner_radius=AppConfig.RADIUS_BTN, height=36,
-            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
         )
         # packed/unpacked per-step in _update_nav()
 
@@ -180,7 +196,7 @@ class ServerWizard(ctk.CTkToplevel):
         
         btn_browse_loc = ctk.CTkButton(loc_frame, text="Browse...", command=self.browse_location,
                                         corner_radius=AppConfig.RADIUS_BTN, width=90, height=36,
-                                        fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
+                                        fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse_loc.pack(side="right")
             
         ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
@@ -194,7 +210,7 @@ class ServerWizard(ctk.CTkToplevel):
 
         btn_browse = ctk.CTkButton(self.content_frame, text="Select Image...", command=self.browse_icon,
                                     corner_radius=AppConfig.RADIUS_BTN, height=32,
-                                    fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
+                                    fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse.pack(pady=10)
 
     def browse_location(self):
@@ -264,7 +280,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_search.bind("<KeyRelease>", lambda e: self._render_versions())
         self.btn_refresh = ctk.CTkButton(search_row, text="Refresh", image=icon("refresh", 13), width=100, height=36, corner_radius=AppConfig.RADIUS_BTN,
-                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                         fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                                          command=self._force_refresh_versions)
         self.btn_refresh.pack(side="right")
 
@@ -330,7 +346,7 @@ class ServerWizard(ctk.CTkToplevel):
 
         self.java_choice_var = ctk.StringVar(value="auto" if self.wizard_data.get("java_path", "auto") == "auto" else "detected")
 
-        self.java_options_frame = ctk.CTkFrame(p, corner_radius=8,
+        self.java_options_frame = ctk.CTkFrame(p, corner_radius=AppConfig.RADIUS_CARD,
                                                 fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.java_options_frame.pack(fill="x", pady=(0, 5))
 
@@ -698,8 +714,8 @@ class ServerWizard(ctk.CTkToplevel):
             for label, value in rows:
                 row = ctk.CTkFrame(p, fg_color="transparent")
                 row.pack(fill="x", pady=1)
-                ctk.CTkLabel(row, text=label, text_color=AppConfig.COLOR_TEXT_MUTED).pack(side="left")
-                ctk.CTkLabel(row, text=str(value)).pack(side="right")
+                ctk.CTkLabel(row, text=label, text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left")
+                ctk.CTkLabel(row, text=summary_value(value)).pack(side="right")
 
         section("Identity", [
             ("Name", d["name"]),
@@ -711,7 +727,7 @@ class ServerWizard(ctk.CTkToplevel):
         ])
         section("Resources", [
             ("RAM", f"{d['ram']} MB ({d['ram'] // 1024} GB)"),
-            ("Java", d["java_path"]),
+            ("Java", java_summary(d["java_path"], d["version"])),
         ])
         section("Rules", [
             ("Game Mode", d["game_mode"]),
@@ -740,7 +756,7 @@ class ServerWizard(ctk.CTkToplevel):
             name = self.entry_name.get().strip()
             loc = self.entry_location.get().strip()
             if not name:
-                self.entry_name.configure(border_color="red")
+                self.entry_name.configure(border_color=AppConfig.COLOR_BTN_DANGER)
                 return
             self.wizard_data["name"] = name
             self.wizard_data["location"] = loc

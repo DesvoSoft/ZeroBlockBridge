@@ -10,6 +10,9 @@ class AppConfig:
     DEFAULT_HEIGHT = 700
     MIN_WIDTH = 900
     MIN_HEIGHT = 580
+    SIDEBAR_WIDTH = 300
+    SIDEBAR_WIDTH_COMPACT = 240
+    SIDEBAR_COMPACT_BELOW = 1000  # window width (logical px) that switches to compact
 
     # Colors - UI Theme ("Dirt Block" palette)
     # Backgrounds — slate propio, no gray genérico de CTK
@@ -68,6 +71,10 @@ class AppConfig:
     COLOR_BTN_INFO_HOVER = ("#10b981", "#10b981")
     COLOR_BTN_SECONDARY = COLOR_ACCENT_BROWN
     COLOR_BTN_SECONDARY_HOVER = COLOR_ACCENT_BROWN_HOVER
+
+    # Text drawn on saturated fills (buttons, badges, toasts) -- same in both modes.
+    COLOR_TEXT_ON_ACCENT = "#ffffff"   # on lime/green/amber/red/brown fills
+    COLOR_TEXT_ON_BRIGHT = "#0f172a"   # slate-950, on bright fills (lime-400 badges)
 
     # Fonts — familias nativas Win11 (Roboto no viene instalada en Windows;
     # Tk sustituía en silencio por la fuente fallback)

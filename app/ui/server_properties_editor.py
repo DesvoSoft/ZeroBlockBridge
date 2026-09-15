@@ -118,6 +118,22 @@ TAB_LAYOUTS = {
     }
 }
 
+_LABEL_WORDS = {
+    "npcs": "NPCs", "ip": "IP", "ips": "IPs", "rcon": "RCON", "pvp": "PvP",
+    "op": "Operator", "ops": "Operators", "to": "to",
+}
+_LABEL_OVERRIDES = {"white-list": "Whitelist"}
+
+
+def property_label(key: str) -> str:
+    """Human label for a server.properties key ("spawn-npcs" -> "Spawn NPCs")."""
+    if key in _LABEL_OVERRIDES:
+        return _LABEL_OVERRIDES[key]
+    words = [_LABEL_WORDS.get(w, w.capitalize()) for w in key.replace(".", "-").split("-")]
+    label = " ".join(words)
+    return label[0].upper() + label[1:]
+
+
 class ServerPropertiesEditor(ctk.CTkToplevel):
     def __init__(self, parent, server_name, logic_module, zbb_manager=None):
         super().__init__(parent)
@@ -224,7 +240,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=10)
         
         self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
-                                         fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                                         fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                                          corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_cancel.pack(side="right", padx=5)
 
@@ -276,11 +292,11 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                       fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
                       width=120).pack(side="left", padx=5)
         ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
-                      fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                      fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                       width=80).pack(side="right", padx=5)
         self.btn_export_pack = ctk.CTkButton(
             toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             width=150)
         self.btn_export_pack.pack(side="right", padx=5)
 
@@ -666,6 +682,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
     _BOOLEAN_KEY_OVERRIDES = {
         "pvp", "allow-flight", "allow-nether", "hide-online-players", "log-ips",
         "broadcast-console-to-ops", "broadcast-rcon-to-ops", "require-resource-pack",
+        "generate-structures", "sync-chunk-writes", "prevent-proxy-connections",
     }
 
     def _build_tab_from_config(self, parent_frame, tab_name):
@@ -675,8 +692,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         for section_title, keys in layout.items():
             card = self.create_section_frame(parent_frame, section_title)
             for key in keys:
-                # Get the display name from metadata or generate from key
-                label = key.replace("-", " ").replace(".", " ").title()
+                label = property_label(key)
 
                 # Determine widget type and options
                 widget_type = "entry"
@@ -788,7 +804,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             card_mrpack, text="Import .mrpack", image=icon("download", 13, "#ffffff"), width=150, height=28,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_ACCENT_BROWN, hover_color=AppConfig.COLOR_ACCENT_BROWN_HOVER,
-            text_color="white", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
             command=self._on_import_mrpack,
         )
         self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)
@@ -912,7 +928,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if self.entry_ram:
             ram_input = self.entry_ram.get()
             if not ram_input.isdigit():
-                self.entry_ram.configure(border_color="red")
+                self.entry_ram.configure(border_color=AppConfig.COLOR_BTN_DANGER)
                 self.tabview.set("General")
                 ZBBDialog.info(self, "Invalid Input", "RAM Allocation must be a whole number (MB).", kind="error")
                 return
@@ -928,7 +944,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         if self.var_auto_restart and self.var_auto_restart.get():
             interval_input = self.entry_interval.get()
             if not interval_input.isdigit():
-                self.entry_interval.configure(border_color="red")
+                self.entry_interval.configure(border_color=AppConfig.COLOR_BTN_DANGER)
                 self.tabview.set("Automation")
                 ZBBDialog.info(self, "Invalid Input", "Restart Interval must be a whole number (Hours).", kind="error")
                 return
@@ -1057,7 +1073,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             btn = ctk.CTkButton(
                 tools_row, text=label, image=icon(icon_name, 14),
                 command=lambda s=subpath: self.open_folder(s),
-                fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                 corner_radius=AppConfig.RADIUS_BTN, height=36,
             )
             btn.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 8, 0))

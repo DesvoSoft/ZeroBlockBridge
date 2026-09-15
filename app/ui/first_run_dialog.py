@@ -151,7 +151,7 @@ class _FirstRunDialog(ctk.CTk):
             self._error_label.configure(text="Pick a folder first.")
             return
         if not is_writable_dir(target):
-            self._error_label.configure(text=f"Can't write to {target} -- pick another folder.")
+            self._error_label.configure(text=f"Can't write to {target} — pick another folder.")
             return
         self.result = target
         self.destroy()

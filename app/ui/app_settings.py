@@ -108,7 +108,22 @@ class AppSettingsDialog(ctk.CTkToplevel):
                 text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", justify="left",
             )
             lbl_hint.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 4))
+            self._wrap_to_card(card, lbl_hint)
         return card
+
+    @staticmethod
+    def _wrap_to_card(card, label, padx: int = 15):
+        """Re-wrap a label to its card's width on every resize.
+
+        A fixed wraplength either wastes space or overflows (clipped text)
+        once the tab's scrollbar or DPI scaling eats into the width.
+        """
+        def _on_resize(event):
+            scaling = card._get_widget_scaling()
+            width = int(event.width / scaling) - 2 * padx
+            if width > 50:
+                label.configure(wraplength=width)
+        card.bind("<Configure>", _on_resize, add="+")
 
     def _ghost_button(self, parent, text, command, icon_name=None, width=110):
         return ctk.CTkButton(
@@ -154,11 +169,12 @@ class AppSettingsDialog(ctk.CTkToplevel):
             "than ZBB enumerates here.",
         )
         allowlist_text = ", ".join(sorted(ALLOWLISTED_COMMANDS))
-        ctk.CTkLabel(
+        lbl_allowlist = ctk.CTkLabel(
             card, text=allowlist_text, font=(AppConfig.FONT_FAMILY_MONO, 11),
             text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", justify="left",
-            wraplength=630,
-        ).grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 14))
+        )
+        lbl_allowlist.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 14))
+        self._wrap_to_card(card, lbl_allowlist)
 
     def _on_theme_selected(self, choice: str):
         self._settings.set("theme", choice)
@@ -425,7 +441,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
 
         card = self._card(
             scroll, "Downloaded Java runtimes",
-            "Runtimes ZBB downloaded automatically. Deleting one is safe --\n"
+            "Runtimes ZBB downloaded automatically. Deleting one is safe —\n"
             "it re-downloads on the next launch of a server that needs it.",
         )
         self._jdk_rows_frame = ctk.CTkFrame(card, fg_color="transparent")

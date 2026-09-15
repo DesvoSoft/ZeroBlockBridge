@@ -5,7 +5,6 @@ records the mapping at install time instead of trying to infer it later.
 """
 import json
 import logging
-import os
 from pathlib import Path
 
 from app.core.constants import SERVERS_DIR

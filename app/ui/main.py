@@ -7,7 +7,6 @@ import concurrent.futures
 import webbrowser
 import time
 import subprocess
-import tkinter.messagebox
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +57,24 @@ class MCTunnelApp(ctk.CTk):
         self.title(f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
         self.geometry(f"{AppConfig.DEFAULT_WIDTH}x{AppConfig.DEFAULT_HEIGHT}")
         self.minsize(AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT)
-        self.grid_columnconfigure(0, weight=0, minsize=300)
+        self.grid_columnconfigure(0, weight=0, minsize=AppConfig.SIDEBAR_WIDTH)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
+        self._sidebar_compact = False
+        self.bind("<Configure>", self._on_window_resize, add="+")
+
+    def _on_window_resize(self, event):
+        # Narrow windows: give the sidebar's spare width to the main area, where
+        # the mod browser's search bar and badge rows otherwise get clipped.
+        if event.widget is not self:
+            return
+        compact = event.width / self._get_window_scaling() < AppConfig.SIDEBAR_COMPACT_BELOW
+        if compact == self._sidebar_compact:
+            return
+        self._sidebar_compact = compact
+        width = AppConfig.SIDEBAR_WIDTH_COMPACT if compact else AppConfig.SIDEBAR_WIDTH
+        self.grid_columnconfigure(0, minsize=width)
+        self.sidebar_frame.configure(width=width)
 
     def _init_state_variables(self):
         self.claim_url = None
@@ -89,7 +103,7 @@ class MCTunnelApp(ctk.CTk):
         self._build_main_area()
 
     def _build_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=300, corner_radius=0, fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
+        self.sidebar_frame = ctk.CTkFrame(self, width=AppConfig.SIDEBAR_WIDTH, corner_radius=0, fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(4, weight=1) # List frame should expand, NOT the label
         self.sidebar_frame.grid_columnconfigure(0, weight=1)

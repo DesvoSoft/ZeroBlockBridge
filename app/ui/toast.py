@@ -83,7 +83,7 @@ class ToastNotification:
         else:
             badge = ctk.CTkLabel(
                 inner, text=icon_char, width=24, height=24,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color="white",
+                font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
                 fg_color=border_color, corner_radius=12,
             )
         badge.pack(side="left", padx=(0, 10))
