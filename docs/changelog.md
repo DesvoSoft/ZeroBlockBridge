@@ -21,6 +21,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Player chat containing `[Security]` could render as a red ZBB security alert in the console; only lines emitted by ZBB with that prefix are highlighted now.
+- **Minecraft 26.x now requires Java 25.** Year-based versions (26.1, 26.2, …) fell through to a Java 17 default, so the wizard announced the wrong Java and Fabric/Forge setup pre-downloaded an unneeded Java 17 runtime.
+- Light mode: Cancel, Back, Refresh, Export, Browse and other secondary buttons rendered white-on-white; switches had an invisible knob.
+- Settings → General: the Console Command Safety description and allowlist were cut off instead of wrapping.
+- Server properties: `generate-structures`, `sync-chunk-writes` and `prevent-proxy-connections` showed a raw `true` text field instead of a switch; labels now read "Spawn NPCs", "Server IP", "PvP", "RCON" instead of "Spawn Npcs", "Server Ip", "Pvp", "Rcon".
+- Wizard summary shows `Yes`/`No` and "Auto (Java 25)" instead of `True`/`False`/`auto`; Back uses the same chevron icon as Next.
+- Mods tab at minimum window size: the sidebar narrows to give the browser room, and the "Installed" badge is no longer the first thing clipped.
 
 ---
 

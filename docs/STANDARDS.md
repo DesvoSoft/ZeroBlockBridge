@@ -147,8 +147,12 @@ Use `AppConfig` constants only. Hardcoded color literals (`"green"`, `"white"`, 
 | `COLOR_BTN_GHOST` | slate-100 / slate-800 | Low-emphasis actions |
 | `COLOR_ACCENT_AMBER` | `#d97706` amber-600 | Highlights, warnings |
 | `COLOR_STATUS_ONLINE` / `_STARTING` / `_ERROR` | lime-400 / amber-400 / red-400 | Status dots, console tags |
+| `COLOR_TEXT_ON_ACCENT` | `#ffffff` | Text/icons on saturated fills (buttons, toasts) |
+| `COLOR_TEXT_ON_BRIGHT` | `#0f172a` | Text/icons on bright fills (lime-400 badges) |
 
-Elevation comes from background contrast, not borders — cards use `border_width=0`.
+Elevation comes from background contrast, not borders — cards use `border_width=0`. Borders are reserved for outline buttons, selection rings (selected server row), and the toast accent edge.
+
+**Always check both modes.** The theme's default button `text_color` is white in light *and* dark, so any button on a light-in-light-mode fill (`COLOR_BTN_GHOST`, `"transparent"`) must set `text_color=AppConfig.COLOR_TEXT_PRIMARY` — otherwise it renders white-on-white in light mode.
 
 ### 3.4 Typography
 
@@ -171,7 +175,14 @@ Roboto is not installed on stock Windows — never use it.
 - Confirmations/info: `ZBBDialog.confirm()` / `ZBBDialog.info()` from `ui_components.py`. Never `tkinter.messagebox` (native gray dialog clashes with the dark theme). Only exception: the single-instance warning shown before the app window exists.
 - Every `CTkToplevel`: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (Win11 native corners + shadow; no-op elsewhere).
 
-### 3.7 UI Thread Safety
+### 3.7 Layout
+
+- Long descriptive text must wrap to its container's live width (bind `<Configure>` and update `wraplength`, e.g. `AppSettingsDialog._wrap_to_card`) — a fixed `wraplength` clips once a scrollbar or DPI scaling eats into the width.
+- Check the minimum window size (`AppConfig.MIN_WIDTH` × `MIN_HEIGHT`, 900×580). Below `SIDEBAR_COMPACT_BELOW` the sidebar shrinks to `SIDEBAR_WIDTH_COMPACT`.
+- In rows that can clip from the right (badge rows), put status before decoration.
+- Show values the way users think about them: `Yes`/`No`, not `True`/`False`; server.properties keys via `property_label()` ("Spawn NPCs", not "Spawn Npcs").
+
+### 3.8 UI Thread Safety
 
 Never read widgets from a background thread. Always `self.after(0, lambda: self.widget.configure(...))`.
 
@@ -307,4 +318,8 @@ grep -rn "messagebox" app/
 
 # 6. Full test suite
 pytest tests/ -q
+
+# 7. Visual pass: screenshot every window/tab in Dark AND Light, plus the main window at 900x580
 ```
+
+**Current score (2026-09-14): 97/100** — F401 clean, no banned patterns, no color/radius literals outside documented exceptions. Known deduction: `_kill_orphan_processes` (`main.py`) swallows `Exception` without logging on app exit (commented as intentional, but still breaks §2.2).

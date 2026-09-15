@@ -505,7 +505,7 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
 
 | ID | Feature | Status |
 |----|---------|--------|
-| CA-H01 | JVM args UI per-server | Partial — Launch tab has per-server Java runtime + Aikar's flags toggle; no free-form JVM args override yet |
+| CA-H01 | JVM args UI per-server | Done — Launch tab: per-server Java runtime, Aikar's flags toggle, and Custom JVM Flags (`jvm_custom_flags`, applied by `ServerRunner`) |
 | CA-H02 | Unified player management (ops+bans+whitelist) | Done — `players_dashboard.py` Online/Whitelist/Operators/Bans tabs |
 | CA-H03 | Console search/filter | Done — search bar on Console and Tunnel Log tabs (`main._build_console_search_bar`) |
 | CA-H04 | World switching UI | Done — World tab active-world picker (`server_properties.list_worlds` / `set_active_world`) |
