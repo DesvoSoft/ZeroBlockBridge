@@ -3,7 +3,7 @@
 This document defines the coding standards, architectural philosophy, and quality criteria for ZeroBlockBridge.
 All contributors (human or AI) must adhere to these rules.
 
-> **Last updated:** 2026-09-14 — 620 tests in 35 files, 100% pass.
+> **Last updated:** 2026-09-14 — 633 tests in 36 files, 100% pass.
 
 ---
 
@@ -218,7 +218,7 @@ main        ← Production releases only
 
 Release process: `python tools/bump_version.py X.Y.Z`, fill in the changelog section, merge `dev` → `main`, tag `vX.Y.Z` — the build workflow gates on tests and publishes binaries with release notes taken from the changelog.
 
-**Current dev state:** v2.0.0 + unreleased features above. 620 tests.
+**Current dev state:** v2.0.0 + unreleased features above. 633 tests.
 
 ---
 

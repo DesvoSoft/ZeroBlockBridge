@@ -2,7 +2,7 @@
 
 This document covers the internal architecture, auto-healing system, technical details, and design decisions of ZeroBlockBridge.
 
-> **Last updated:** 2026-09-14 — 620 tests in 35 files, 100% pass. Since v2.0.0: configurable data directory, explainable command safety, pre-update snapshots routed through `BackupOrchestrator`.
+> **Last updated:** 2026-09-14 — 633 tests in 36 files, 100% pass. Since v2.0.0: configurable data directory, explainable command safety, pre-update snapshots routed through `BackupOrchestrator`, Java 25 for MC 26.x, light-mode GUI fixes.
 
 ---
 
@@ -370,7 +370,7 @@ ZeroBlockBridge/
 │       ├── console_buffer.py          # Thread-safe console buffer (collections.deque) (~29 LOC)
 │       └── settings_manager.py        # App settings singleton, debounced flush (~94 LOC)
 │
-├── tests/                             # 35 test files, 620 tests, 100% pass
+├── tests/                             # 36 test files, 633 tests, 100% pass
 │   ├── conftest.py                    # FakeEmitter (EventBus stub), FakeRunner
 │   ├── test_playit_manager.py         # PlayitManager lifecycle (59)
 │   ├── test_version_manager.py        # VersionManager fetch + cache (43)
@@ -378,7 +378,7 @@ ZeroBlockBridge/
 │   ├── test_sanitizer.py              # Allowlist, injection, BlockedReason, describe_blocked (41)
 │   ├── test_orchestrators.py          # All 4 orchestrators incl. pre-update snapshot (33)
 │   ├── test_backup_manager.py         # Create/retention/reason tags/restore round-trip (14)
-│   └── ... (29 more)
+│   └── ... (30 more)
 │
 ├── packaging/                         # PyInstaller specs (Windows, Linux) + exe version metadata
 ├── tools/                             # bump_version.py, extract_changelog_section.py, gen_theme.py
@@ -410,7 +410,8 @@ Generated at runtime under the [data directory](#data-directory):
 
 | Java Version | MC Range | Notes |
 |---|---|---|
-| Java 21 | MC ≥ 1.20.5 | Also required by Fabric 0.15+ on newer MC |
+| Java 25 | MC 26.x (year-based versions) | Versions newer than the matrix also get the newest entry |
+| Java 21 | MC 1.20.5 – 1.21.x | Also required by Fabric 0.15+ on newer MC |
 | Java 17 | MC 1.18 – 1.20.4 | Most common modern range |
 | Java 16 | MC 1.17 – 1.17.1 | |
 | Java 8 | MC < 1.17 | Legacy servers |
@@ -455,7 +456,7 @@ Warning threshold messages emitted before restart: 1h, 30m, 15m, 1m.
 
 - **OS**: Windows 10+ / Linux
 - **Python**: 3.10 or higher (CI runs 3.11; developed on 3.14)
-- **Java**: Auto-managed (Adoptium, Java 8–21)
+- **Java**: Auto-managed (Adoptium, Java 8–25)
 - **RAM**: 2 GB minimum for ZBB + server (4 GB+ recommended for modded)
 - **Disk**: ~37 MB app + ~107 MB per vanilla server + world size
 
