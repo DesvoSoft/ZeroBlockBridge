@@ -63,6 +63,8 @@ class AppConfig:
     COLOR_BADGE_NEUTRAL_TEXT = ("#334155", "#cbd5e1")  # slate-700 / slate-300
     COLOR_BADGE_DANGER_BG = ("#fee2e2", "#450a0a")     # red-100 / red-950
     COLOR_BADGE_DANGER_TEXT = ("#b91c1c", "#fca5a5")   # red-700 / red-300
+    COLOR_BADGE_WARNING_BG = ("#fef3c7", "#3b2a0a")    # amber-100 / deep amber
+    COLOR_BADGE_WARNING_TEXT = ("#92400e", "#fcd34d")  # amber-800 / amber-300
 
     # Third-party brand (Modrinth browser only)
     COLOR_MODRINTH_BRAND = "#1bd96a"

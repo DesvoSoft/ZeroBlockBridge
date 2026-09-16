@@ -297,12 +297,16 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         toolbar.pack(fill="x", pady=(0, 8))
         _btn = dict(corner_radius=AppConfig.RADIUS_BTN, height=32)
 
-        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup,
-                      fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-                      width=120, **_btn).pack(side="left")
-        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup,
-                      fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-                      width=130, **_btn).pack(side="left", padx=(8, 0))
+        self.btn_create_backup = ctk.CTkButton(
+            toolbar, text="Create Backup", command=self.create_backup,
+            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+            width=120, **_btn)
+        self.btn_create_backup.pack(side="left")
+        btn_folder = ctk.CTkButton(
+            toolbar, text="Open Folder", image=icon("folder", 14), command=self._open_backups_folder,
+            fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            width=120, **_btn)
+        btn_folder.pack(side="left", padx=(8, 0))
         ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups,
                       fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                       width=80, **_btn).pack(side="right")
@@ -316,7 +320,6 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
         self.backup_list_frame.pack(fill="both", expand=True)
         
-        self.backup_var = ctk.StringVar()
         self.backup_manager = BackupManager(self.server_name)
         self._backup_scheduler_ui = BackupScheduler(self.server_name)
         self._next_backup_lbl = ctk.CTkLabel(
@@ -362,15 +365,69 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             return
             
         for backup in backups:
-            row = ctk.CTkFrame(self.backup_list_frame,
-                               fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-            row.pack(fill="x", padx=2, pady=2)
+            self._backup_row(backup)
 
-            label = f"{backup['date']} ({backup['size']})"
-            if backup.get("reason") == "pre_update":
-                label = f"Pre-Update — {label}"
-            rb = ctk.CTkRadioButton(row, text=label, variable=self.backup_var, value=backup['path'])
-            rb.pack(side="left", padx=12, pady=8)
+    # reason -> (chip label, bg, text)
+    _BACKUP_REASONS = {
+        "manual": ("Manual", AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT),
+        "auto": ("Auto", AppConfig.COLOR_BADGE_BG, AppConfig.COLOR_BADGE_TEXT),
+        "pre_update": ("Pre-update", AppConfig.COLOR_BADGE_WARNING_BG, AppConfig.COLOR_BADGE_WARNING_TEXT),
+    }
+
+    def _backup_row(self, backup: dict):
+        row = ctk.CTkFrame(self.backup_list_frame, corner_radius=AppConfig.RADIUS_CARD,
+                           fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_DARK))
+        row.pack(fill="x", padx=2, pady=3)
+        row.grid_columnconfigure(3, weight=1)
+
+        ctk.CTkLabel(row, text=backup["date"], font=AppConfig.FONT_LABEL, anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(12, 10), pady=10)
+        reason = backup.get("reason", "manual")
+        text, bg, fg = self._BACKUP_REASONS.get(
+            reason, (reason.replace("_", " ").title(), AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT))
+        for col, (chip, chip_bg, chip_fg) in enumerate(
+                ((text, bg, fg), (backup["size"], AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT)), start=1):
+            ctk.CTkLabel(row, text=chip, font=AppConfig.FONT_MICRO, fg_color=chip_bg, text_color=chip_fg,
+                         corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2).grid(
+                row=0, column=col, sticky="w", padx=(0, 6))
+
+        btn_delete = ctk.CTkButton(
+            row, text="", image=icon("trash", 14, AppConfig.COLOR_TEXT_ON_ACCENT), width=32, height=28,
+            corner_radius=AppConfig.RADIUS_BTN,
+            fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+            command=lambda p=backup["path"], n=backup["date"]: self.delete_backup(p, n),
+            state="normal" if self.zbb_manager else "disabled",
+        )
+        btn_delete.grid(row=0, column=5, padx=(0, 12), pady=10)
+        ToolTip(btn_delete, "Delete this backup")
+        ctk.CTkButton(
+            row, text="Restore", width=90, height=28, corner_radius=AppConfig.RADIUS_BTN,
+            fg_color="transparent", border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_ACCENT_AMBER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_WARNING_GHOST_HOVER,
+            command=lambda p=backup["path"]: self.restore_backup(p),
+        ).grid(row=0, column=4, padx=(0, 8), pady=10)
+
+    def _open_backups_folder(self):
+        self._open_path(str(self.backup_manager.backup_dir))
+
+    def delete_backup(self, path: str, label: str):
+        if not self.zbb_manager:
+            return
+        if not ZBBDialog.confirm(self, "Delete Backup", f"Delete the backup from {label}?\n\nThis can't be undone.",
+                                 confirm_text="Delete", danger=True):
+            return
+
+        def worker():
+            ok, error = self.zbb_manager.delete_backup(self.server_name, path)
+            if self.winfo_exists():
+                self.after(0, lambda: self._on_backup_deleted(ok, error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_backup_deleted(self, ok: bool, error):
+        if not ok:
+            ZBBDialog.info(self, "Error", f"Failed to delete backup.\n\n{error}", kind="error")
+        self.refresh_backups()
 
     def create_backup(self):
         def worker():
@@ -421,10 +478,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
         return bool(runner and runner.running)
 
-    def restore_backup(self):
-        path = self.backup_var.get()
-        if not path:
-            return
+    def restore_backup(self, path: str):
 
         if self._server_is_running():
             ZBBDialog.info(
@@ -1079,6 +1133,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         server_path = os.path.join(str(SERVERS_DIR), self.server_name)
         if subpath:
             server_path = os.path.join(server_path, subpath)
+        self._open_path(server_path)
+
+    def _open_path(self, server_path: str):
         if not os.path.exists(server_path):
             ZBBDialog.info(self, "Nothing Here Yet",
                            "That folder does not exist yet - it is created the first time it is needed.",
