@@ -336,11 +336,19 @@ class PlayersDashboard(ctk.CTkToplevel):
         if not ZBBDialog.confirm(self, "Ban Player", f"Ban {player} from this server?", danger=True):
             return
         server_name = self.server_name
-        if server_name:
-            add_entry(server_name, BANNED_PLAYERS_FILE, {"uuid": "", "name": player, "reason": "Banned by an operator"})
-            self.banned_players = load_json_list(server_name, BANNED_PLAYERS_FILE)
+        if not server_name:
+            return
+        entry = {"uuid": "", "name": player, "reason": "Banned by an operator"}
         if self.zbb_manager.is_running():
+            # Server owns banned-players.json while it's running — it rewrites
+            # the whole file from its own in-memory list when it processes this
+            # command. Writing it here too would race that rewrite and could
+            # lose the change. Optimistic in-memory update only, for the UI.
             self.zbb_manager.send_command(f"ban {player}")
+            self.banned_players.append(entry)
+        else:
+            add_entry(server_name, BANNED_PLAYERS_FILE, entry)
+            self.banned_players = load_json_list(server_name, BANNED_PLAYERS_FILE)
         logger.info("Banning player: %s", player)
         self.refresh_ui()
 
@@ -353,10 +361,13 @@ class PlayersDashboard(ctk.CTkToplevel):
             return
         if any(e.get("name") == player for e in self.whitelisted_players):
             return
-        add_entry(server_name, WHITELIST_FILE, {"uuid": "", "name": player})
-        self.whitelisted_players = load_json_list(server_name, WHITELIST_FILE)
         if self.zbb_manager.is_running():
+            # Server owns whitelist.json while running — see _ban_player.
             self.zbb_manager.send_command(f"whitelist add {player}")
+            self.whitelisted_players.append({"uuid": "", "name": player})
+        else:
+            add_entry(server_name, WHITELIST_FILE, {"uuid": "", "name": player})
+            self.whitelisted_players = load_json_list(server_name, WHITELIST_FILE)
         self.entry_whitelist_add.delete(0, "end")
         self.refresh_ui()
 
@@ -366,10 +377,12 @@ class PlayersDashboard(ctk.CTkToplevel):
             return
         if not ZBBDialog.confirm(self, "Remove from Whitelist", f"Remove {player} from the whitelist?", danger=True):
             return
-        remove_entry(server_name, WHITELIST_FILE, player)
-        self.whitelisted_players = load_json_list(server_name, WHITELIST_FILE)
         if self.zbb_manager.is_running():
             self.zbb_manager.send_command(f"whitelist remove {player}")
+            self.whitelisted_players = [e for e in self.whitelisted_players if e.get("name") != player]
+        else:
+            remove_entry(server_name, WHITELIST_FILE, player)
+            self.whitelisted_players = load_json_list(server_name, WHITELIST_FILE)
         self.refresh_ui()
 
     def _toggle_whitelist(self):
@@ -392,12 +405,17 @@ class PlayersDashboard(ctk.CTkToplevel):
         if any(e.get("name") == player for e in self.operators):
             return
         level = int(self.op_level_var.get())
-        add_entry(server_name, OPS_FILE, {
-            "uuid": "", "name": player, "level": level, "bypassesPlayerLimit": False
-        })
-        self.operators = load_json_list(server_name, OPS_FILE)
         if self.zbb_manager.is_running():
+            # Server owns ops.json while running — see _ban_player.
             self.zbb_manager.send_command(f"op {player}")
+            self.operators.append({
+                "uuid": "", "name": player, "level": level, "bypassesPlayerLimit": False
+            })
+        else:
+            add_entry(server_name, OPS_FILE, {
+                "uuid": "", "name": player, "level": level, "bypassesPlayerLimit": False
+            })
+            self.operators = load_json_list(server_name, OPS_FILE)
         self.entry_op_add.delete(0, "end")
         self.refresh_ui()
 
@@ -407,10 +425,12 @@ class PlayersDashboard(ctk.CTkToplevel):
             return
         if not ZBBDialog.confirm(self, "Remove Operator", f"Revoke operator status for {player}?", danger=True):
             return
-        remove_entry(server_name, OPS_FILE, player)
-        self.operators = load_json_list(server_name, OPS_FILE)
         if self.zbb_manager.is_running():
             self.zbb_manager.send_command(f"deop {player}")
+            self.operators = [e for e in self.operators if e.get("name") != player]
+        else:
+            remove_entry(server_name, OPS_FILE, player)
+            self.operators = load_json_list(server_name, OPS_FILE)
         self.refresh_ui()
 
     # --- Actions: bans ---
@@ -419,9 +439,11 @@ class PlayersDashboard(ctk.CTkToplevel):
         server_name = self.server_name
         if not server_name:
             return
-        remove_entry(server_name, BANNED_PLAYERS_FILE, player)
-        self.banned_players = load_json_list(server_name, BANNED_PLAYERS_FILE)
         if self.zbb_manager.is_running():
             self.zbb_manager.send_command(f"pardon {player}")
+            self.banned_players = [e for e in self.banned_players if e.get("name") != player]
+        else:
+            remove_entry(server_name, BANNED_PLAYERS_FILE, player)
+            self.banned_players = load_json_list(server_name, BANNED_PLAYERS_FILE)
         logger.info("Pardoning player: %s", player)
         self.refresh_ui()
