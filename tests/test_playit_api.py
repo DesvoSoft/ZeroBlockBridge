@@ -111,3 +111,64 @@ def test_link_account_payload(client):
 def test_client_id_is_persistent(client):
     assert client.client_id is not None
     assert len(client.client_id) == 36  # UUID4 format
+
+
+def _response(status, json_body=None, text=""):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.text = text
+    if json_body is None:
+        resp.json.side_effect = ValueError("no json")
+    else:
+        resp.json.return_value = json_body
+    return resp
+
+
+def test_http_error_carries_status_code(client):
+    with patch.object(client.session, "request", return_value=_response(404, {"error": "missing"})):
+        with pytest.raises(PlayitApiException) as exc:
+            client._request("tunnels/list")
+    assert exc.value.status_code == 404
+    assert not exc.value.is_auth_error
+
+
+def test_auth_failure_counted_even_without_json_body(client):
+    # A 401 with an HTML/empty body used to fail JSON parsing first, so the
+    # dead-secret counter never moved.
+    with patch.object(client.session, "request", return_value=_response(401, None, "<html>Unauthorized</html>")):
+        with pytest.raises(PlayitApiException) as exc:
+            client._request("agents/rundata")
+    assert exc.value.is_auth_error
+    assert client.consecutive_auth_failures == 1
+
+
+def test_success_resets_auth_failure_counter(client):
+    client.consecutive_auth_failures = 2
+    with patch.object(client.session, "request", return_value=_response(200, {"status": "success"})):
+        client._request("agents/rundata")
+    assert client.consecutive_auth_failures == 0
+
+
+def test_invalid_json_on_success_raises(client):
+    with patch.object(client.session, "request", return_value=_response(200, None, "not json")):
+        with pytest.raises(PlayitApiException) as exc:
+            client._request("agents/rundata")
+    assert "Invalid JSON" in str(exc.value)
+
+
+def test_delete_tunnel_treats_401_as_already_gone(client):
+    # Decided by status code, not by "401" appearing in the message text.
+    with patch.object(client, "_request", side_effect=PlayitApiException("unauthorized", 401)):
+        assert client.delete_tunnel("t-1") is True
+
+
+def test_delete_tunnel_reraises_other_errors_even_if_message_mentions_401(client):
+    with patch.object(client, "_request", side_effect=PlayitApiException("quota 401 exceeded", 429)):
+        with pytest.raises(PlayitApiException):
+            client.delete_tunnel("t-1")
+
+
+def test_delete_agent_returns_false_on_401(client):
+    client._agent_id = "agent-1"
+    with patch.object(client, "_request", side_effect=PlayitApiException("unauthorized", 401)):
+        assert client.delete_agent() is False

@@ -10,8 +10,19 @@ from app.core.constants import CONFIG_DIR
 logger = logging.getLogger(__name__)
 
 class PlayitApiException(Exception):
-    """Exception raised for API errors from Playit.gg"""
-    pass
+    """Exception raised for API errors from Playit.gg.
+
+    `status_code` is the HTTP status when the API answered (None for network
+    or local errors), so callers branch on it instead of parsing the message.
+    """
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+    @property
+    def is_auth_error(self) -> bool:
+        return self.status_code in (401, 403)
 
 class PlayitApiClient:
     def __init__(self):
@@ -71,42 +82,32 @@ class PlayitApiClient:
         except requests.RequestException as e:
             raise PlayitApiException(f"Network error communicating with Playit API: {e}")
 
+        status = response.status_code
         try:
             data = response.json()
         except ValueError:
-            raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {response.status_code})")
+            data = None
 
-        if response.status_code >= 400:
-            if response.status_code in (401, 403):
+        if status >= 400:
+            # Count auth failures before anything else: a 401 with an HTML or
+            # empty body used to fail JSON parsing first and never counted.
+            if status in (401, 403):
                 self.consecutive_auth_failures += 1
             if "AgentDisabledOverLimit" in response.text:
-                raise PlayitApiException("AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard")
+                raise PlayitApiException(
+                    "AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard", status)
             if "NotAllowedWithReadOnly" in response.text:
                 self.is_read_only = True
-                raise PlayitApiException("NotAllowedWithReadOnly: Account is in Guest mode (Read-Only). Use CLI for tunnel management.")
-            error_detail = data.get("error") or data.get("message") or data.get("detail") or response.text or "Unknown API error"
-            raise PlayitApiException(f"Playit API returned HTTP {response.status_code}: {error_detail}")
+                raise PlayitApiException(
+                    "NotAllowedWithReadOnly: Account is in Guest mode (Read-Only). Use CLI for tunnel management.", status)
+            body = data if isinstance(data, dict) else {}
+            error_detail = body.get("error") or body.get("message") or body.get("detail") or response.text or "Unknown API error"
+            raise PlayitApiException(f"Playit API returned HTTP {status}: {error_detail}", status)
 
+        if not isinstance(data, dict):
+            raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {status})", status)
         self.consecutive_auth_failures = 0
         return data
-
-    def verify_secret_key(self) -> bool:
-        """Ping the API to validate the secret key without creating/registering.
-        Returns True if the key is valid, False otherwise."""
-        if not self._secret_key:
-            self.load_secret_key()
-        if not self._secret_key:
-            return False
-        try:
-            resp = self.session.get(
-                f"{self.api_base}/agents/rundata",
-                headers={"Authorization": f"agent-key {self._secret_key}"},
-                timeout=5,
-            )
-            return resp.status_code == 200
-        except Exception as e:
-            logger.debug("Failed checking agent status: %s", e)
-            return False
 
     def secret_rejected(self) -> bool:
         """True only when the API definitively rejects the stored secret (401/403).
@@ -127,9 +128,8 @@ class PlayitApiClient:
             return False
 
     def _get_platform_variant(self) -> str:
-        """Variante segÃºn nomenclatura de GitHub para v0.17.1.
-        Windows â†’ windows-x86_64, Linux â†’ linux-amd64.
-        """
+        """Agent platform variant reported at registration
+        (windows-x86_64, linux-amd64, linux-aarch64, macos-*)."""
         machine = platform.machine().lower()
         sys_name = platform.system().lower()
 
@@ -175,11 +175,11 @@ class PlayitApiClient:
         except requests.RequestException as e:
             raise PlayitApiException(f"Failed to connect to bridge: {e}")
         except ValueError:
-            raise PlayitApiException(f"Invalid JSON from bridge (HTTP {response.status_code}): {response.text[:500]}")
+            raise PlayitApiException(f"Invalid JSON from bridge (HTTP {response.status_code}): {response.text[:500]}", response.status_code)
 
         if response.status_code >= 400 or data.get("status") == "fail":
             logger.error("Bridge returned HTTP %d: %s", response.status_code, response.text)
-            raise PlayitApiException(f"Bridge exchange failed (HTTP {response.status_code}): {response.text[:500]}")
+            raise PlayitApiException(f"Bridge exchange failed (HTTP {response.status_code}): {response.text[:500]}", response.status_code)
 
         # Extract credentials
         result = data.get("data", data)
@@ -354,8 +354,8 @@ class PlayitApiClient:
             return f"{domain}:{port_start}"
         return domain
     def get_tunnels(self) -> List[str]:
-        """Obtiene todas las direcciones pÃºblicas de los tÃºneles vÃ­a API.
-        Devuelve lista de strings 'domain:port'. VacÃ­a si no hay tÃºneles asignados."""
+        """Public addresses of all assigned tunnels as 'domain:port' strings;
+        empty when none are assigned or the API call fails."""
         try:
             tunnels = self.list_tunnels()
             addresses = []
@@ -435,10 +435,10 @@ class PlayitApiClient:
                 return True
             return False
         except PlayitApiException as e:
-            if "401" in str(e):
+            if e.status_code == 401:
                 logger.warning("Tunnel %s already inaccessible (401).", tunnel_id)
                 return True
-            raise e
+            raise
 
     def delete_agent(self) -> bool:
         """Deletes the current agent from the account using v2 API."""
@@ -459,7 +459,7 @@ class PlayitApiClient:
                 return True
             return False
         except PlayitApiException as e:
-            if "401" in str(e):
+            if e.status_code == 401:
                 logger.warning("Agent deletion failed with 401. Your key might be read-only or revoked.")
                 return False
             logger.error("Error during agent deletion: %s", e)
