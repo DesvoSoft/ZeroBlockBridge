@@ -558,7 +558,7 @@ class ServerListItem(ctk.CTkFrame):
                 fg_color=tile, corner_radius=AppConfig.RADIUS_BTN,
                 font=AppConfig.FONT_HEADING_SMALL, text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
             )
-        self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5)
+        self.lbl_icon.grid(row=0, column=0, rowspan=2, padx=(10, 8), pady=8)
         
         # Truncate by rendered pixel width, not char count (proportional font)
         display_name = server_name
@@ -581,17 +581,23 @@ class ServerListItem(ctk.CTkFrame):
             font=AppConfig.FONT_HEADING_SMALL,
             anchor="w"
         )
-        self.lbl_name.grid(row=0, column=1, padx=(5, 10), pady=5, sticky="ew")
+        self.lbl_name.grid(row=0, column=1, padx=(0, 10), pady=(8, 0), sticky="sew")
 
-        self.status_dot = ctk.CTkLabel(
-            self, text="", width=12, height=12,
-            image=icon("dot", 12, AppConfig.COLOR_STATUS_OFFLINE),
-        )
-        self.status_dot.grid(row=0, column=2, padx=(0, 8), pady=5)
+        # Subtitle: engine + version in gray, then the live state in color.
+        subtitle = ctk.CTkFrame(self, fg_color="transparent")
+        subtitle.grid(row=1, column=1, padx=(0, 10), pady=(0, 8), sticky="nw")
+        self.lbl_engine = ctk.CTkLabel(subtitle, text=self._engine_text(server_name), height=16,
+                                       font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_GRAY)
+        self.lbl_engine.pack(side="left")
+        self.lbl_state = ctk.CTkLabel(subtitle, text="", height=16, font=AppConfig.FONT_BODY_SMALL)
+        self.lbl_state.pack(side="left", padx=(6, 0))
+        self.set_status("offline")
 
         self.bind_events(self)
         self.bind_events(self.lbl_name)
         self.bind_events(self.lbl_icon)
+        for widget in (subtitle, self.lbl_engine, self.lbl_state):
+            self.bind_events(widget)
         self.set_cursor("hand2")
 
         # Add ToolTip if truncated
@@ -612,13 +618,22 @@ class ServerListItem(ctk.CTkFrame):
         else:
             self.configure(fg_color=self._fg_idle, border_color=self._fg_idle)
 
+    _STATES = {
+        "online": ("● Running", AppConfig.COLOR_STATUS_ONLINE),
+        "starting": ("● Starting", AppConfig.COLOR_STATUS_STARTING),
+        "offline": ("● Offline", AppConfig.COLOR_STATUS_OFFLINE),
+    }
+
+    @staticmethod
+    def _engine_text(server_name: str) -> str:
+        from app.core.logic import get_server_meta
+        meta = get_server_meta(server_name) or {}
+        engine = str(meta.get("type") or "vanilla").title()
+        return f"{engine} {meta.get('version', '')}".strip()
+
     def set_status(self, status: str):
-        color = {
-            "online": AppConfig.COLOR_STATUS_ONLINE,
-            "starting": AppConfig.COLOR_STATUS_STARTING,
-            "offline": AppConfig.COLOR_STATUS_OFFLINE,
-        }.get(status, AppConfig.COLOR_STATUS_OFFLINE)
-        self.status_dot.configure(image=icon("dot", 12, color))
+        text, color = self._STATES.get(status, self._STATES["offline"])
+        self.lbl_state.configure(text=text, text_color=color)
 
     def bind_events(self, widget):
         widget.bind("<Button-1>", lambda e: self._on_select())
