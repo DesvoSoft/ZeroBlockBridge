@@ -190,27 +190,22 @@ class MCTunnelApp(ctk.CTk):
         self.sidebar_frame.grid_rowconfigure(4, weight=1) # List frame should expand, NOT the label
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        # Compact brand header: small logo + name/version (the old 150x100
-        # logo alone took ~130px of the sidebar's height).
+        # Brand header: centered logo with the app name under it — smaller
+        # than the old 150x100 logo alone (~130px) but still the focal point.
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
+        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 2))
         self.logo_image = None
         try:
             from PIL import Image
             logo_path = ASSETS_DIR / "logo.png"
             if logo_path.exists():
                 pil_image = Image.open(logo_path)
-                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(60, 40))
+                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(108, 72))
         except OSError as e:
             logger.error("Error loading logo: %s", e)
         if self.logo_image is not None:
-            ctk.CTkLabel(brand, text="", image=self.logo_image).pack(side="left", padx=(0, 10))
-        brand_text = ctk.CTkFrame(brand, fg_color="transparent")
-        brand_text.pack(side="left", fill="x")
-        ctk.CTkLabel(brand_text, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING_SMALL,
-                     anchor="w").pack(anchor="w")
-        ctk.CTkLabel(brand_text, text=f"v{AppConfig.APP_VERSION}", font=AppConfig.FONT_MICRO,
-                     text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w").pack(anchor="w")
+            ctk.CTkLabel(brand, text="", image=self.logo_image).pack()
+        ctk.CTkLabel(brand, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING).pack(pady=(2, 0))
 
         # --- Actions Group ---
         self.actions_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
