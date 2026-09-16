@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from app.core.core import ZBBManager
+from app.core.constants import ServerState
+from app.core.logic import ServerStartError
 from app.core.server_events import EventBus, ServerEvent
 
 @pytest.fixture
@@ -162,6 +164,31 @@ def test_start_no_java_found_auto_install_fails(mock_config, manager):
 @patch("app.core.core.load_config", return_value={})
 def test_start_no_server_selected(mock_config, manager):
     assert manager.start_server() is False
+
+
+@patch("app.core.core.load_config", return_value={})
+@patch("app.core.core.ServerRunner")
+@patch("app.core.core.ZBBManager._setup_monitors")
+def test_start_resets_state_when_runner_raises(mock_monitors, mock_runner_class, mock_config, manager):
+    """ServerRunner.start() failing (missing jar / port busy) must not leave
+    ZBBManager stuck in STARTING forever — it used to, since start() only
+    logged+returned on these paths and _launch_server always returned True."""
+    manager.select_server("test_server")
+    mock_runner = MagicMock(running=False)
+    mock_runner.start.side_effect = ServerStartError("Server jar not found: server.jar")
+    mock_runner_class.return_value = mock_runner
+
+    with patch("app.services.scaffolder.pre_boot_scaffold"), \
+         patch("app.core.core.analyze_jar_bytecode", return_value=17), \
+         patch("app.core.core.JavaDetector") as mock_det_cls, \
+         patch("app.core.core.get_required_java", return_value=17), \
+         patch("app.core.core.ZBBManager.get_server_port", return_value=25565), \
+         patch("os.path.exists", return_value=False):
+
+        mock_det_cls.return_value.detect_all.return_value = [_mock_java(17)]
+        assert manager.start_server() is False
+
+    assert manager.state == ServerState.OFFLINE
 
 def test_stop_server(manager):
     manager.server_runner = MagicMock()

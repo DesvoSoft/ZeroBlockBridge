@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from app.core.server_events import ServerEvent
+from app.core.logic import ServerStartError
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,15 @@ class Watchdog:
                 return
         if not self._listening:
             return
-        self._runner.start()
+        try:
+            self._runner.start()
+        except ServerStartError as e:
+            # start() already emitted CONSOLE_LINE + NOTIFICATION with the
+            # specific reason. Without this catch, the exception would just
+            # kill this daemon thread silently (uncaught exception in a
+            # thread) and RESTARTED would never fire either way.
+            logger.warning("Watchdog: restart aborted, server did not start: %s", e)
+            return
         self._events.emit(ServerEvent.RESTARTED, {"retry": self.retry_count, "context": context})
 
     def _classify_crash(self, exit_code, uptime, stderr="", console=""):

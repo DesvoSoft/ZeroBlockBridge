@@ -1,4 +1,5 @@
 from app.services.watchdog import Watchdog, _make_crash_payload
+from app.core.logic import ServerStartError
 from app.core.server_events import ServerEvent
 from conftest import FakeRunner, FakeEmitter
 
@@ -202,6 +203,20 @@ class TestWatchdogRetryLogic:
         w._do_restart("crash", backoff=0)
         assert not runner.stopped
         assert not runner.started
+
+    def test_restart_aborted_when_start_raises(self):
+        # runner.start() raising ServerStartError (missing jar / port busy)
+        # must not kill this daemon thread nor emit a bogus RESTARTED —
+        # it used to propagate uncaught before _do_restart wrapped the call.
+        w, runner, emitter = self._make_watchdog()
+        runner.running = False
+
+        def _raise():
+            raise ServerStartError("Server jar not found: server.jar")
+        runner.start = _raise
+
+        w._do_restart("crash", backoff=0)
+        assert not any(e[0] == ServerEvent.RESTARTED for e in emitter.events)
 
     def test_zombie_kill_stopped_event_swallowed(self):
         # The STOPPED caused by our own zombie kill must not be classified as

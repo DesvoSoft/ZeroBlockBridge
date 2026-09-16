@@ -11,7 +11,7 @@ from app.services.backup_manager import BackupManager
 import datetime
 
 from app.core.logic import (
-    ServerRunner, load_config, save_config, Scheduler,
+    ServerRunner, ServerStartError, load_config, save_config, Scheduler,
     get_server_meta, update_server_meta, migrate_legacy_metadata,
     invalidate_meta_cache, create_junction,
 )
@@ -188,7 +188,16 @@ class ZBBManager:
     def _launch_server(self, ram: str, java_bin: str, use_aikars: bool, required_java: int, config: dict) -> bool:
         self.server_runner = ServerRunner(self.current_server, ram, self.events, java_bin=java_bin, use_aikars=use_aikars)
         self._setup_monitors(config)
-        self.server_runner.start()
+        try:
+            self.server_runner.start()
+        except ServerStartError as e:
+            # start() already emitted CONSOLE_LINE + NOTIFICATION with the
+            # specific reason — without this, state stayed STARTING forever
+            # since the process never spawned and nothing else flips it back.
+            logger.warning("Server start aborted: %s", e)
+            self.state = ServerState.OFFLINE
+            self._stop_monitors()
+            return False
         self._save_jdk_metadata(required_java, self._jdk_source)
         self.events.emit(ServerEvent.STARTING, {"jdk_source": self._jdk_source, "required_java": required_java})
         return True

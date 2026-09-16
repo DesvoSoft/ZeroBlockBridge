@@ -40,6 +40,13 @@ def create_junction(source: str, dest: str) -> None:
 
 logger = logging.getLogger(__name__)
 
+
+class ServerStartError(Exception):
+    """Raised by ServerRunner.start() when the process never spawns
+    (missing jar, port already in use). Callers must catch this and reset
+    any STARTING state — start() used to just log+return on these paths,
+    leaving ZBBManager stuck in STARTING forever."""
+
 def load_config() -> dict:
     """Loads the configuration from config.json."""
     default_config = {
@@ -545,8 +552,10 @@ class ServerRunner:
                     break
         
         if not is_forge_modern and not os.path.exists(os.path.join(server_path, jar_file)):
-            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Server jar not found: {jar_file}")
-            return
+            msg = f"Server jar not found: {jar_file}"
+            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+            raise ServerStartError(msg)
 
         # Parse RAM in MB for flags calculator
         ram_str = self.ram_allocation.rstrip("MmGg")
@@ -604,7 +613,7 @@ class ServerRunner:
             msg = f"Port {port} is already in use by another process. Close it and try again."
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
             self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-            return
+            raise ServerStartError(msg)
 
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
         self.events.emit(ServerEvent.STARTING)
