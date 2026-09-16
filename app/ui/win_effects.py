@@ -89,6 +89,36 @@ def apply_titlebar_brand_color(window, bg_hex: str, text_hex: str) -> None:
         logger.debug("DWM titlebar brand color unavailable: %s", e)
 
 
+_WTA_NONCLIENT = 1
+_WTNCA_NODRAWCAPTION = 0x1
+_WTNCA_NODRAWICON = 0x2
+
+
+def hide_titlebar_caption(window) -> None:
+    """Minimal titlebar: don't draw the icon or the title text in it.
+
+    SetWindowThemeAttribute only affects what the non-client area paints — the
+    window keeps its title and icon for the taskbar, Alt-Tab and the system
+    menu. Every window shows its own title in its body instead.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _WtaOptions(ctypes.Structure):
+            _fields_ = [("dwFlags", wintypes.DWORD), ("dwMask", wintypes.DWORD)]
+
+        flags = _WTNCA_NODRAWCAPTION | _WTNCA_NODRAWICON
+        opts = _WtaOptions(flags, flags)
+        window.update_idletasks()
+        ctypes.windll.uxtheme.SetWindowThemeAttribute(
+            _hwnd(window), _WTA_NONCLIENT, ctypes.byref(opts), ctypes.sizeof(opts))
+    except (OSError, AttributeError) as e:
+        logger.debug("Titlebar caption hiding unavailable: %s", e)
+
+
 def _apply_app_icon(window) -> None:
     """Give a dialog the app's titlebar icon.
 
@@ -131,7 +161,8 @@ def _brand_titlebar(window, caption_color=None) -> None:
     def _on_mode_change(_mode):
         # Let CTk's own withdraw/deiconify titlebar refresh finish first.
         if window.winfo_exists():
-            window.after(150, lambda: window.winfo_exists() and _brand_titlebar(window))
+            window.after(150, lambda: window.winfo_exists() and (
+                _brand_titlebar(window), hide_titlebar_caption(window)))
 
     ctk.AppearanceModeTracker.add(_on_mode_change)
     window.bind("<Destroy>", lambda e: e.widget is window and ctk.AppearanceModeTracker.remove(_on_mode_change),
@@ -142,11 +173,23 @@ def apply_rounded_corners(window, small: bool = False, caption_color=None) -> No
     """Round a Tk toplevel's corners via DWM. Win11 only; no-op elsewhere.
 
     Also themes and tints the titlebar to match the app (following live
-    Dark/Light switches) and sets the app icon — every window calls this,
-    so it is the one shared hook.
+    Dark/Light switches), keeps it minimal (no icon/title drawn in it) and
+    sets the app icon for the taskbar — every window calls this, so it is the
+    one shared hook.
     """
     if sys.platform != "win32":
         return
+    if not window.winfo_ismapped() and not getattr(window, "_zbb_effects_on_map", False):
+        # The native frame window only exists once Tk maps the toplevel; before
+        # that the DWM/theme calls land on the inner child window and do
+        # nothing (untinted bar, caption still drawn). Apply again on first map.
+        window._zbb_effects_on_map = True
+
+        def _on_map(event):
+            if event.widget is window:
+                window.unbind("<Map>", map_bind)
+                apply_rounded_corners(window, small, caption_color)
+        map_bind = window.bind("<Map>", _on_map, add="+")
     try:
         import ctypes
         window.update_idletasks()
@@ -160,3 +203,7 @@ def apply_rounded_corners(window, small: bool = False, caption_color=None) -> No
     apply_titlebar_theme(window)
     _brand_titlebar(window, caption_color)
     _apply_app_icon(window)
+    hide_titlebar_caption(window)
+    # CTkToplevel re-shows itself ~after creation to set its titlebar color,
+    # which repaints the non-client area without the attribute.
+    window.after(300, lambda: window.winfo_exists() and hide_titlebar_caption(window))
