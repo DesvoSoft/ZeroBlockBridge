@@ -22,7 +22,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
-from app.ui.win_effects import apply_rounded_corners, apply_titlebar_brand_color
+from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
 import app.core.logic as logic
@@ -97,11 +97,9 @@ class MCTunnelApp(ctk.CTk):
         """Round the corners + brand the native titlebar (Win11 22000+, no-op
         elsewhere). Keeps the OS-native titlebar — deliberately not a frameless
         custom one, see win_effects.apply_titlebar_brand_color's docstring."""
-        apply_rounded_corners(self)
-        light = ctk.get_appearance_mode() == "Light"
-        bg = AppConfig.COLOR_BG_SIDEBAR_LIGHT if light else AppConfig.COLOR_BG_SIDEBAR_DARK
-        text = AppConfig.COLOR_TEXT_PRIMARY[0] if light else AppConfig.COLOR_TEXT_PRIMARY[1]
-        apply_titlebar_brand_color(self, bg, text)
+        # Titlebar takes the sidebar color (it sits right above it).
+        apply_rounded_corners(
+            self, caption_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK))
 
     def _on_window_resize(self, event):
         # Narrow windows: give the sidebar's spare width to the main area, where

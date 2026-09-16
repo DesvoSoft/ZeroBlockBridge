@@ -103,11 +103,47 @@ def _apply_app_icon(window) -> None:
         logger.debug("Window icon unavailable: %s", e)
 
 
-def apply_rounded_corners(window, small: bool = False) -> None:
+def _brand_titlebar(window, caption_color=None) -> None:
+    """Tint the titlebar like the window body and keep it in sync with
+    Dark/Light switches (CTk only flips immersive dark mode, which leaves a
+    default gray bar — or a stale brand color — behind).
+
+    caption_color: (light, dark) hex pair; defaults to the window's fg_color.
+    """
+    import customtkinter as ctk
+    from app.core.app_config import AppConfig
+
+    if caption_color is None:
+        caption_color = getattr(window, "_zbb_caption_color", None) or window.cget("fg_color")
+    window._zbb_caption_color = caption_color
+    light = ctk.get_appearance_mode() == "Light"
+    if isinstance(caption_color, str):
+        bg = caption_color
+    else:
+        bg = caption_color[0] if light else caption_color[1]
+    text = AppConfig.COLOR_TEXT_PRIMARY[0] if light else AppConfig.COLOR_TEXT_PRIMARY[1]
+    apply_titlebar_brand_color(window, bg, text)
+
+    if getattr(window, "_zbb_caption_tracked", False):
+        return
+    window._zbb_caption_tracked = True
+
+    def _on_mode_change(_mode):
+        # Let CTk's own withdraw/deiconify titlebar refresh finish first.
+        if window.winfo_exists():
+            window.after(150, lambda: window.winfo_exists() and _brand_titlebar(window))
+
+    ctk.AppearanceModeTracker.add(_on_mode_change)
+    window.bind("<Destroy>", lambda e: e.widget is window and ctk.AppearanceModeTracker.remove(_on_mode_change),
+                add="+")
+
+
+def apply_rounded_corners(window, small: bool = False, caption_color=None) -> None:
     """Round a Tk toplevel's corners via DWM. Win11 only; no-op elsewhere.
 
-    Also themes the titlebar (dark/light) to match the app and sets the app
-    icon (every dialog calls this, so it is the one shared hook).
+    Also themes and tints the titlebar to match the app (following live
+    Dark/Light switches) and sets the app icon — every window calls this,
+    so it is the one shared hook.
     """
     if sys.platform != "win32":
         return
@@ -122,4 +158,5 @@ def apply_rounded_corners(window, small: bool = False) -> None:
     except (OSError, AttributeError) as e:
         logger.debug("DWM rounded corners unavailable: %s", e)
     apply_titlebar_theme(window)
+    _brand_titlebar(window, caption_color)
     _apply_app_icon(window)
