@@ -193,7 +193,9 @@ class MCTunnelApp(ctk.CTk):
         # Brand header: app name with the centered logo under it — smaller
         # than the old 150x100 logo alone (~130px) but still the focal point.
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
+        # Title glyphs line up with the top of the main area's first card
+        # (status bar pady=10, minus the font's internal leading).
+        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(4, 0))
         self.logo_image = None
         try:
             from PIL import Image
@@ -203,7 +205,7 @@ class MCTunnelApp(ctk.CTk):
                 self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(108, 72))
         except OSError as e:
             logger.error("Error loading logo: %s", e)
-        ctk.CTkLabel(brand, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING).pack()
+        ctk.CTkLabel(brand, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING, height=22).pack()
         if self.logo_image is not None:
             ctk.CTkLabel(brand, text="", image=self.logo_image).pack(pady=(2, 0))
 
