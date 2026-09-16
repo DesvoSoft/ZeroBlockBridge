@@ -1133,6 +1133,12 @@ class MCTunnelApp(ctk.CTk):
     def on_close(self):
         self.withdraw()
 
+        # SettingsManager debounces writes 500ms — a change right before
+        # close (e.g. toggling a webhook event in Settings) could otherwise
+        # never reach disk since nothing was waiting for that timer to fire.
+        from app.services.settings_manager import SettingsManager
+        SettingsManager().save()
+
         # Cancel in-flight UI tasks immediately (downloads, link checks, etc.)
         self.executor.shutdown(wait=False, cancel_futures=True)
         MODRINTH_ICON_EXECUTOR.shutdown(wait=False, cancel_futures=True)
