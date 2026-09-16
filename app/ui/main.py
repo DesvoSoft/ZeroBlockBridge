@@ -442,6 +442,9 @@ class MCTunnelApp(ctk.CTk):
         )
         self.modrinth_browser.pack(fill="both", expand=True)
         self.modrinth_browser.refresh_server_context()
+        # Lay out + draw the whole panel before returning to the event loop,
+        # so the first paint isn't a half-built search bar.
+        self.modrinth_browser.update_idletasks()
 
     def _init_background_services(self):
         self.check_java_startup()

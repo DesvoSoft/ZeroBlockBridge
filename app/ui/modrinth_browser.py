@@ -59,7 +59,7 @@ def _store_icon(icon_url: str, ctk_img: "ctk.CTkImage") -> None:
             del _ICON_CACHE[stale_key]
 
 _PAGE_SIZE = 20
-_RENDER_BATCH_SIZE = 8
+_RENDER_BATCH_SIZE = 2
 
 
 def _filter_updates_for_selection(updates: list, selected_filenames: set) -> list:
@@ -172,6 +172,12 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Render generation — invalidates stale chunked-render callbacks
         self._render_gen = 0
+        # Rendered search cards: [card, row, hit, installed] — lets install/
+        # uninstall swap just the affected cards instead of rebuilding the page.
+        self._cards: list = []
+        # True while _current_hits hasn't been fully rendered (e.g. a search
+        # landed while the Installed view was open).
+        self._results_stale = False
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -415,31 +421,29 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._results_container = results_container
         results_container.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         results_container.grid_columnconfigure(0, weight=1)
-        results_container.grid_rowconfigure(1, weight=1)
+        results_container.grid_rowconfigure(0, weight=1)
 
-        # Pinned action bar for the "Installed" view — sibling of the scrollable
-        # frame so bulk-action buttons stay visible while the list scrolls.
-        self.installed_action_bar = ctk.CTkFrame(results_container, fg_color="transparent")
-        self.installed_action_bar.grid(row=0, column=0, sticky="ew", padx=8, pady=(0, 4))
-        self.installed_action_bar.grid_remove()
-
-        self.results_frame = ctk.CTkScrollableFrame(
-            results_container, corner_radius=AppConfig.RADIUS_CARD,
+        list_style = dict(
+            corner_radius=AppConfig.RADIUS_CARD,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
         )
-        self.results_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        # Search results and the Installed list are stacked in the same cell and
+        # switching views raises one over the other. Both stay mapped and laid
+        # out, so a switch is a plain repaint — re-mapping (grid_remove/grid)
+        # makes every CTk widget redraw itself visibly, one after another.
+        self.installed_frame = ctk.CTkScrollableFrame(results_container, **list_style)
+        self.installed_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        self.installed_frame.grid_columnconfigure(0, weight=1)
+
+        self.results_frame = ctk.CTkScrollableFrame(results_container, **list_style)
+        self.results_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         self.results_frame.grid_columnconfigure(0, weight=1)
 
-        # Opaque overlay covering the results area while a page renders,
-        # so cards never pop in one batch at a time.
-        self._loading_overlay = ctk.CTkFrame(
-            results_container, corner_radius=AppConfig.RADIUS_CARD,
-            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
-            border_width=1,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-        )
+        # Cover styled like an empty list: hides a page while it is fetched and
+        # built, so cards never pop in one batch (or one widget) at a time.
+        self._loading_overlay = ctk.CTkFrame(results_container, **list_style)
         self._loading_lbl = ctk.CTkLabel(
             self._loading_overlay, text="",
             text_color=AppConfig.COLOR_TEXT_NOTE, font=AppConfig.FONT_BODY,
@@ -454,9 +458,21 @@ class ModrinthBrowser(ctk.CTkFrame):
         results_container.bind("<Configure>", self._on_results_resize)
 
         self._show_placeholder("Search for mods on Modrinth to get started.\nResults will appear here.")
+        # Popular mods load as soon as the tab is shown: start covered so the
+        # placeholder never flashes before the list.
+        self._show_loading("Loading mods")
 
-    def _show_loading(self, text: str):
+    # Local re-renders (Installed list refresh) usually finish before this, so
+    # they show no "Loading…" flash; network loads show the spinner at once.
+    _SPINNER_DELAY_MS = 250
+
+    def _show_loading(self, text: str, delay_spinner: bool = False):
+        if self._loading_overlay.winfo_manager() == "place" and self._spinner_job is not None:
+            # Already covering (fetch -> render): keep the spinner going.
+            self._loading_overlay.lift()
+            return
         self._stop_spinner()
+        self._loading_lbl.configure(text="")
         # Anchor to the fixed container, NOT the scrollable frame: the scroll
         # frame's inner widget follows content height and scroll offset, so an
         # overlay placed in_ it lands off-viewport (or collapses to ~0px once
@@ -464,11 +480,37 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._loading_overlay.place(in_=self._results_container, relx=0, rely=0,
                                     relwidth=1, relheight=1)
         self._loading_overlay.lift()
-        self._animate_spinner(self._loading_lbl, text)
+        if delay_spinner:
+            self._spinner_job = self.after(
+                self._SPINNER_DELAY_MS, lambda: self._animate_spinner(self._loading_lbl, text))
+        else:
+            self._animate_spinner(self._loading_lbl, text)
 
     def _hide_loading(self):
         self._stop_spinner()
         self._loading_overlay.place_forget()
+
+    @staticmethod
+    def _raise_list(frame) -> None:
+        frame._parent_frame.tkraise()
+
+    def _reveal_when_drawn(self, gen: int, frame=None):
+        """Show freshly built rows only once they are laid out and drawn.
+
+        CTk widgets draw themselves from <Configure>, i.e. after geometry is
+        computed; revealing earlier showed an empty list, then every row
+        popping in. Rows built beneath the visible list (or the cover) are
+        drawn without being seen, and the swap is a single repaint.
+        """
+        self.update_idletasks()
+
+        def _reveal():
+            if gen != self._render_gen:
+                return
+            if frame is not None:
+                self._raise_list(frame)
+            self._hide_loading()
+        self.after(0, _reveal)
 
     def _on_results_resize(self, event):
         if self._resize_job is not None:
@@ -489,6 +531,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _show_placeholder(self, text: str, spinner: bool = False):
         self._hide_loading()
+        self._cards = []
         for w in self.results_frame.winfo_children():
             w.destroy()
         lbl = ctk.CTkLabel(
@@ -511,6 +554,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _show_retry_ui(self):
         self._hide_loading()
+        self._cards = []
         for w in self.results_frame.winfo_children():
             w.destroy()
         ctk.CTkLabel(
@@ -539,59 +583,85 @@ class ModrinthBrowser(ctk.CTkFrame):
     # Layout: Pagination bar (classic Prev/Next)
     # ------------------------------------------------------------------
     def _build_pagination_bar(self):
-        # Single persistent footer: status/count always visible, pagination
-        # controls show/hide inline as an inner group (no separate status row).
-        self.pagination_bar = ctk.CTkFrame(self, height=30, corner_radius=AppConfig.RADIUS_CARD,
-                                            fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
-        self.pagination_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(4, 0))
+        # Single persistent footer shared by both views: status line always
+        # visible; the search view shows paging + Install Selected, the
+        # Installed view its bulk actions, in the same slot and height so the
+        # list above never changes size when switching.
+        self.pagination_bar = ctk.CTkFrame(self, corner_radius=AppConfig.RADIUS_CARD,
+                                           fg_color=(AppConfig.COLOR_BG_LIGHT, AppConfig.COLOR_BG_DARK))
+        self.pagination_bar.grid(row=2, column=0, sticky="ew", padx=0, pady=(8, 0))
+
+        _btn = dict(height=28, corner_radius=AppConfig.RADIUS_BTN, font=AppConfig.FONT_LABEL_SMALL)
 
         self._pagination_controls = ctk.CTkFrame(self.pagination_bar, fg_color="transparent")
-        self._pagination_controls.pack(side="left", padx=(12, 0), pady=2)
 
         self.btn_prev = ctk.CTkButton(
-            self._pagination_controls, text="Prev", image=icon("chevron_left", 12), width=84, height=28,
-            corner_radius=AppConfig.RADIUS_BTN,
+            self._pagination_controls, text="Prev", image=icon("chevron_left", 12), width=84,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-            font=AppConfig.FONT_LABEL_SMALL,
-            command=self._on_prev_page,
-            state="disabled",
+            command=self._on_prev_page, state="disabled", **_btn,
         )
-        self.btn_prev.pack(side="left", padx=(0, 6))
+        self.btn_prev.pack(side="left")
 
         self.lbl_page = ctk.CTkLabel(
-            self._pagination_controls, text="",
+            self._pagination_controls, text="", width=120,
             font=AppConfig.FONT_SUBHEADING,
             text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_page.pack(side="left", padx=8)
 
         self.btn_next = ctk.CTkButton(
-            self._pagination_controls, text="Next", image=icon("chevron_right", 12), compound="right", width=84, height=28,
-            corner_radius=AppConfig.RADIUS_BTN,
+            self._pagination_controls, text="Next", image=icon("chevron_right", 12), compound="right", width=84,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-            font=AppConfig.FONT_LABEL_SMALL,
-            command=self._on_next_page,
-            state="disabled",
+            command=self._on_next_page, state="disabled", **_btn,
         )
-        self.btn_next.pack(side="left", padx=(6, 0))
-
+        self.btn_next.pack(side="left")
 
         self.btn_install_selected = ctk.CTkButton(
-            self.pagination_bar, text="Install Selected (0)", width=150, height=26,
-            corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_BRIGHT, font=AppConfig.FONT_LABEL_SMALL, state="disabled",
-            command=self._on_install_selected,
+            self.pagination_bar, text="Install Selected (0)", width=150,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, state="disabled",
+            command=self._on_install_selected, **_btn,
         )
-        self.btn_install_selected.pack(side="right", padx=(4, 8), pady=4)
+        self.btn_install_selected.pack(side="right", padx=8, pady=6)
+
+        # Installed-view bulk actions (swapped in by _toggle_installed_view)
+        self._btn_select_all = ctk.CTkButton(
+            self.pagination_bar, text="Select All", width=90,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY,
+            command=lambda: self._select_all_installed(self._installed_files), **_btn,
+        )
+        self._installed_actions = ctk.CTkFrame(self.pagination_bar, fg_color="transparent")
+        self._btn_check_updates = ctk.CTkButton(
+            self._installed_actions, text="Check Updates", width=120,
+            fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
+            command=self._on_check_updates, **_btn,
+        )
+        self._btn_check_updates.pack(side="left")
+        self._btn_update_selected = ctk.CTkButton(
+            self._installed_actions, text="Update (0)", width=100,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, state="disabled",
+            command=self._on_update_selected, **_btn,
+        )
+        self._btn_update_selected.pack(side="left", padx=(6, 0))
+        self._btn_delete_selected = ctk.CTkButton(
+            self._installed_actions, text="Delete (0)", width=100,
+            fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, state="disabled",
+            command=self._on_delete_selected, **_btn,
+        )
+        self._btn_delete_selected.pack(side="left", padx=(6, 0))
+        self._installed_files: list = []
 
         self.lbl_status = ctk.CTkLabel(
             self.pagination_bar, text="", anchor="w",
             font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_GRAY,
         )
-        self.lbl_status.pack(side="left", fill="x", expand=True, padx=12, pady=2)
+        self.lbl_status.pack(side="left", fill="x", expand=True, padx=8, pady=6)
         self._status_tooltip = ToolTip(self.lbl_status, "")
 
         self.progress_status = ctk.CTkProgressBar(
@@ -599,8 +669,6 @@ class ModrinthBrowser(ctk.CTkFrame):
             width=90, corner_radius=AppConfig.RADIUS_BADGE,
             progress_color=AppConfig.COLOR_MODRINTH_BRAND,
         )
-
-        self._pagination_controls.pack_forget()  # hidden until first search
 
     # ------------------------------------------------------------------
     # Search logic
@@ -643,6 +711,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
         self._selected_hits.clear()
         self._update_install_selected_bar()
+        self._results_stale = True
 
         # Cards render immediately with initial-letter badges; icons stream
         # in asynchronously via _queue_icon_fetch (disk-cached after first use).
@@ -699,7 +768,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         # before= restores the original pack order: when the bar is short on
         # space Tk shrinks later-packed widgets first, so a long status line
         # must be the one that gets clipped, not the page controls.
-        self._pagination_controls.pack(side="left", padx=(12, 0), pady=2, before=self.lbl_status)
+        self._pagination_controls.pack(side="left", padx=(8, 0), pady=6, before=self.lbl_status)
         page_num = self._current_page + 1
         self.lbl_page.configure(text=f"Page {page_num} of {self._total_pages}")
         _ghost = AppConfig.COLOR_BTN_GHOST
@@ -770,7 +839,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                                       image=image, compound="left" if image else "center")
         if self.progress_status.winfo_exists():
             if busy:
-                self.progress_status.pack(side="left", padx=(0, 12), pady=2)
+                self.progress_status.pack(side="left", padx=(0, 8), pady=6, after=self.lbl_status)
                 self.progress_status.start()
             else:
                 self.progress_status.stop()
@@ -841,7 +910,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 if total > 1:
                     Toast.show(self.winfo_toplevel(), f"Installed {total} mods",
                                toast_type="success")
-            self._render_results()
+            self._refresh_installed_state()
         else:
             self._set_status(f"Installing… {done}/{total}", busy=True)
 
@@ -851,21 +920,23 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _render_results(self):
         if self._view != "search":
             # Async search response landed while the Installed view is open —
-            # keep the hits (restored on toggle back) but don't clobber the UI.
+            # keep the hits (rendered on toggle back) but don't clobber the UI.
             return
-        # Keep the spinner animating: the overlay stays up while cards render
-        # in batches below; _hide_loading (end of last batch) stops it.
-        self._desc_labels.clear()
-        for w in self.results_frame.winfo_children():
-            w.destroy()
-        self.results_frame._parent_canvas.yview_moveto(0)
-
         self._render_gen += 1
         gen = self._render_gen
 
         if not self._current_hits:
+            self._results_stale = False
             self._show_placeholder("No results found.\nTry a different search term.")
             return
+
+        # Cards are built under the overlay; it lifts once they are drawn.
+        self._show_loading("Loading mods")
+        self._desc_labels.clear()
+        self._cards = []
+        for w in self.results_frame.winfo_children():
+            w.destroy()
+        self.results_frame._parent_canvas.yview_moveto(0)
 
         ctx = self._resolve_server_context()
         self._installed_slugs_cache = (
@@ -878,13 +949,36 @@ class ModrinthBrowser(ctk.CTkFrame):
             return
         chunk, rest = remaining[:_RENDER_BATCH_SIZE], remaining[_RENDER_BATCH_SIZE:]
         for idx, hit in chunk:
-            card = self._create_mod_card(hit)
-            card.grid(row=idx, column=0, sticky="ew", padx=6, pady=3)
+            self._place_card(hit, idx)
+        # Lay out each small batch as it lands: one big layout pass at the end
+        # froze the loading spinner for most of a second.
+        self.update_idletasks()
         if rest:
             self.after(1, lambda: self._render_cards_batch(rest, gen))
         else:
-            self._hide_loading()
+            self._results_stale = False
             self._update_pagination()
+            self._reveal_when_drawn(gen)
+
+    def _place_card(self, hit: dict, row: int):
+        card = self._create_mod_card(hit)
+        card.grid(row=row, column=0, sticky="ew", padx=6, pady=3)
+        key = hit.get("slug") or hit.get("project_id", "")
+        self._cards.append([card, row, hit, key in self._installed_slugs_cache])
+
+    def _refresh_installed_state(self):
+        """Rebuild only the cards whose installed state changed (install,
+        uninstall, delete) — the rest of the page stays put, no flicker."""
+        if self._view != "search" or self._results_stale:
+            return
+        for entry in list(self._cards):
+            card, row, hit, was_installed = entry
+            key = hit.get("slug") or hit.get("project_id", "")
+            if (key in self._installed_slugs_cache) == was_installed or not card.winfo_exists():
+                continue
+            self._cards.remove(entry)
+            self._place_card(hit, row)  # new card covers the old one before it goes
+            card.destroy()
 
     def _create_mod_card(self, hit: dict) -> ctk.CTkFrame:
         title = hit.get("title", "Unknown")
@@ -928,8 +1022,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         lbl_initial.place(relx=0.5, rely=0.5, anchor="center")
 
         if icon_url:
-            if icon_url in _ICON_CACHE:
-                self._apply_icon(icon_frame, lbl_initial, _ICON_CACHE[icon_url])
+            # Disk-cached icons apply synchronously: no letter-then-icon pop.
+            cached = _ICON_CACHE.get(icon_url) or self._icon_from_disk(icon_url)
+            if cached:
+                self._apply_icon(icon_frame, lbl_initial, cached)
             else:
                 self._queue_icon_fetch(icon_url, icon_frame, lbl_initial)
 
@@ -1047,120 +1143,103 @@ class ModrinthBrowser(ctk.CTkFrame):
                 fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
                 text="Explore", text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
             )
-            self.pagination_bar.grid_remove()
-            self._render_installed()
+            self._hide_loading()
+            self._pagination_controls.pack_forget()
+            self.btn_install_selected.pack_forget()
+            self._btn_select_all.pack(side="left", padx=(8, 0), pady=6, before=self.lbl_status)
+            self._installed_actions.pack(side="right", padx=8, pady=6)
+            self._set_status("")
+            # Built beneath the search list; raised once drawn.
+            self._render_installed(behind=True)
         else:
             self._view = "search"
             self.btn_installed.configure(
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                 text="Installed", text_color=AppConfig.COLOR_TEXT_PRIMARY,
             )
-            self.installed_action_bar.grid_remove()
-            self.pagination_bar.grid()
-            if self._current_hits:
+            self._render_gen += 1  # abandon an in-flight Installed render
+            self._hide_loading()
+            self._btn_select_all.pack_forget()
+            self._installed_actions.pack_forget()
+            self.btn_install_selected.pack(side="right", padx=8, pady=6)
+            self._set_status("")
+            self._raise_list(self.results_frame)
+            if self._results_stale:
                 self._render_results()
-                self._update_pagination()
             else:
-                self._show_placeholder("Search for mods on Modrinth to get started.\nResults will appear here.")
+                self._update_pagination()
+                # Cards stayed alive underneath; only files deleted from the
+                # Installed view can have changed their state.
+                ctx = self._resolve_server_context()
+                self._installed_slugs_cache = (
+                    mod_install_tracker.get_installed_slugs(ctx[0]) if ctx else set()
+                )
+                self._refresh_installed_state()
 
-    def _render_installed(self):
-        self._hide_loading()
-        for w in self.results_frame.winfo_children():
-            w.destroy()
-        for w in self.installed_action_bar.winfo_children():
-            w.destroy()
-        self.installed_action_bar.grid_remove()
+    def _render_installed(self, behind: bool = False):
+        """(Re)build the Installed list.
+
+        behind=True builds it under the still-visible search list and raises
+        it when done; otherwise (refresh after delete/update) the list is
+        covered while it rebuilds.
+        """
+        self._render_gen += 1
+        gen = self._render_gen
         self._selected_files.clear()
+        self._installed_files = []
+        self._update_installed_action_bar()
+        if not behind:
+            self._show_loading("Loading installed mods", delay_spinner=True)
+        for w in self.installed_frame.winfo_children():
+            w.destroy()
+        self.installed_frame._parent_canvas.yview_moveto(0)
 
         ctx = self._resolve_server_context()
-        if not ctx:
-            self._show_placeholder("Select a server to view installed mods.")
-            return
-        server_name = ctx[0]
-
-        mods_dir = os.path.join(SERVERS_DIR, server_name, "mods")
-        plugins_dir = os.path.join(SERVERS_DIR, server_name, "plugins")
         files = []
-        for d in [mods_dir, plugins_dir]:
-            if os.path.isdir(d):
-                for fname in sorted(os.listdir(d)):
-                    if fname.endswith(".jar"):
-                        files.append(os.path.join(d, fname))
+        if ctx:
+            for d in (os.path.join(SERVERS_DIR, ctx[0], "mods"), os.path.join(SERVERS_DIR, ctx[0], "plugins")):
+                if os.path.isdir(d):
+                    files.extend(os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".jar"))
+        self._installed_files = files
+        has_files = bool(files)
+        self._btn_select_all.configure(state="normal" if has_files else "disabled")
+        self._btn_check_updates.configure(state="normal" if has_files else "disabled")
 
-        action_bar = self.installed_action_bar
-        action_bar.grid()
+        if not ctx:
+            ctk.CTkLabel(
+                self.installed_frame, text="Select a server to view installed mods.",
+                text_color=AppConfig.COLOR_TEXT_NOTE, font=AppConfig.FONT_BODY, justify="center",
+            ).grid(row=0, column=0, pady=60, padx=20)
+            self._reveal_when_drawn(gen, self.installed_frame)
+            return
 
-        header = ctk.CTkLabel(
-            action_bar,
-            text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
-            font=AppConfig.FONT_SUBHEADING,
-            text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            anchor="w",
-        )
-        header.pack(side="left")
-
-        if files:
-            self._btn_delete_selected = ctk.CTkButton(
-                action_bar, text="Delete Selected (0)", width=140, height=28,
-                corner_radius=AppConfig.RADIUS_BTN,
-                fg_color=AppConfig.COLOR_BTN_GHOST,
-                hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                font=AppConfig.FONT_BADGE, state="disabled",
-                command=self._on_delete_selected,
-            )
-            self._btn_delete_selected.pack(side="right", padx=(6, 0))
-
-            self._btn_update_selected = ctk.CTkButton(
-                action_bar, text="Update Selected (0)", width=140, height=28,
-                corner_radius=AppConfig.RADIUS_BTN,
-                fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
-                font=AppConfig.FONT_BADGE, state="disabled",
-                command=self._on_update_selected,
-            )
-            self._btn_update_selected.pack(side="right", padx=(6, 0))
-
-            ctk.CTkButton(
-                action_bar, text="Check Updates", width=120, height=28,
-                corner_radius=AppConfig.RADIUS_BTN,
-                fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-                text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_BADGE,
-                command=self._on_check_updates,
-            ).pack(side="right", padx=(6, 0))
-
-            ctk.CTkButton(
-                action_bar, text="Select All", width=90, height=28,
-                corner_radius=AppConfig.RADIUS_BTN,
-                fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                font=AppConfig.FONT_BADGE,
-                command=lambda: self._select_all_installed(files),
-            ).pack(side="right", padx=(6, 0))
+        count = len(files)
+        self._set_status(f"{count} file{'s' if count != 1 else ''} installed on {ctx[0]}")
 
         if not files:
             ctk.CTkLabel(
-                self.results_frame, text="", image=icon("package", 36, AppConfig.COLOR_TEXT_MUTED),
+                self.installed_frame, text="", image=icon("package", 36, AppConfig.COLOR_TEXT_MUTED),
             ).grid(row=1, column=0, pady=(24, 4))
             ctk.CTkLabel(
-                self.results_frame,
+                self.installed_frame,
                 text="No mods or plugins installed.",
                 font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_NOTE,
             ).grid(row=2, column=0, pady=(0, 10))
             ctk.CTkButton(
-                self.results_frame, text="Browse Popular Mods",
+                self.installed_frame, text="Browse Popular Mods",
                 command=self._toggle_installed_view,
                 fg_color=AppConfig.COLOR_BTN_PRIMARY,
                 hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
+                text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_LABEL_SMALL,
                 corner_radius=AppConfig.RADIUS_BTN, height=32,
             ).grid(row=3, column=0, pady=(0, 24))
+            self._reveal_when_drawn(gen, self.installed_frame)
             return
 
         self._installed_checkboxes = {}
         self._installed_row_frames = {}
-        self._render_gen += 1
-        gen = self._render_gen
         self._render_installed_rows(list(enumerate(files)), gen)
-        self._check_updates_for_badges(server_name, ctx[1], ctx[2], gen)
+        self._check_updates_for_badges(ctx[0], ctx[1], ctx[2], gen)
 
     def _check_updates_for_badges(self, server_name: str, mc_version: str, loader: str, gen: int):
         def _worker():
@@ -1193,7 +1272,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_MICRO_BOLD,
             command=lambda: self._apply_single_update(fpath, update, badge),
         )
-        badge.grid(row=0, column=2, sticky="e", padx=(4, 4))
+        badge.grid(row=0, column=2, sticky="e", padx=4)
         ToolTip(badge, f"Update available: {update.get('latest_version', '?')}")
 
     def _apply_single_update(self, fpath: str, update: dict, badge=None):
@@ -1237,11 +1316,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         chunk, rest = remaining[:15], remaining[15:]
         for i, fpath in chunk:
             fname = os.path.basename(fpath)
-            row_frame = ctk.CTkFrame(self.results_frame, corner_radius=AppConfig.RADIUS_BTN,
+            row_frame = ctk.CTkFrame(self.installed_frame, corner_radius=AppConfig.RADIUS_BTN,
                                      fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
                                      border_width=1,
                                      border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
-            row_frame.grid(row=i + 1, column=0, sticky="ew", padx=6, pady=2)
+            row_frame.grid(row=i, column=0, sticky="ew", padx=6, pady=3)
             row_frame.grid_columnconfigure(1, weight=1)
 
             var = ctk.BooleanVar(value=fpath in self._selected_files)
@@ -1254,23 +1333,25 @@ class ModrinthBrowser(ctk.CTkFrame):
                 variable=var,
                 command=lambda fp=fpath, v=var: self._on_toggle_installed_selection(fp, v),
             )
-            chk.grid(row=0, column=0, padx=(10, 4), pady=6)
+            chk.grid(row=0, column=0, padx=(12, 4), pady=8)
             self._installed_checkboxes[fpath] = var
 
             ctk.CTkLabel(row_frame, text=fname, font=AppConfig.FONT_CAPTION, anchor="w").grid(
-                row=0, column=1, sticky="w", padx=4, pady=6)
+                row=0, column=1, sticky="w", padx=4, pady=8)
 
             btn_del = ctk.CTkButton(
                 row_frame, text="Delete", width=64, height=28,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                font=AppConfig.FONT_BADGE,
+                text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_BADGE,
                 command=lambda fp=fpath: self._confirm_delete_mod(fp),
             )
-            btn_del.grid(row=0, column=3, padx=(0, 6), pady=4)
+            btn_del.grid(row=0, column=3, padx=(4, 12), pady=8)
             self._installed_row_frames[fpath] = row_frame
         if rest:
             self.after(1, lambda: self._render_installed_rows(rest, gen))
+        else:
+            self._reveal_when_drawn(gen, self.installed_frame)
 
     def _on_toggle_installed_selection(self, filepath: str, var):
         if var.get():
@@ -1296,12 +1377,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         _ghost = AppConfig.COLOR_BTN_GHOST
         if hasattr(self, "_btn_delete_selected"):
             self._btn_delete_selected.configure(
-                text=f"Delete Selected ({n})", state="normal" if n else "disabled",
+                text=f"Delete ({n})", state="normal" if n else "disabled",
                 fg_color=AppConfig.COLOR_BTN_DANGER if n else _ghost,
                 text_color=AppConfig.COLOR_TEXT_ON_ACCENT if n else AppConfig.COLOR_TEXT_PRIMARY)
         if hasattr(self, "_btn_update_selected"):
             self._btn_update_selected.configure(
-                text=f"Update Selected ({n})", state="normal" if n else "disabled",
+                text=f"Update ({n})", state="normal" if n else "disabled",
                 fg_color=AppConfig.COLOR_MODRINTH_BRAND if n else _ghost,
                 text_color=AppConfig.COLOR_TEXT_ON_BRIGHT if n else AppConfig.COLOR_TEXT_PRIMARY)
 
@@ -1331,7 +1412,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             mod_install_tracker.remove_install(server_name, slug)
             self._set_status(f"Uninstalled {title}", kind="success")
             self._installed_slugs_cache.discard(slug)
-            self._render_results()
+            self._refresh_installed_state()
         except OSError as exc:
             self._set_status(f"Failed to uninstall {title}: {exc}", kind="error")
 
@@ -1387,7 +1468,6 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         self._set_status(f"Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""), kind="success")
         self._render_installed()
-        self._render_results()
 
     def _on_update_selected(self):
         ctx = self._resolve_server_context()
@@ -1505,7 +1585,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                         version, server_name, loader, mc_version, title)
 
                 if batch is None:
-                    self.after(0, self._render_results)
+                    self.after(0, self._refresh_installed_state)
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"Install failed: {e}", kind="error"))
@@ -1827,27 +1907,34 @@ class ModrinthBrowser(ctk.CTkFrame):
             _ICONS_IN_FLIGHT.add(icon_url)
         _ICON_EXECUTOR.submit(self._load_icon, icon_url, icon_frame, lbl_initial)
 
+    @staticmethod
+    def _icon_from_disk(icon_url: str) -> Optional[ctk.CTkImage]:
+        disk_path = _icon_disk_path(icon_url)
+        if not disk_path.exists():
+            return None
+        try:
+            img = Image.open(disk_path)
+            img.load()
+        except OSError:
+            return None
+        ctk_img = ctk.CTkImage(img, size=(48, 48))
+        _store_icon(icon_url, ctk_img)
+        return ctk_img
+
     def _load_icon(self, icon_url: str, icon_frame, lbl_initial):
         try:
-            img = None
-            disk_path = _icon_disk_path(icon_url)
-            if disk_path.exists():
-                try:
-                    img = Image.open(disk_path)
-                    img.load()
-                except OSError:
-                    img = None
-            if img is None:
+            ctk_img = self._icon_from_disk(icon_url)
+            if ctk_img is None:
                 resp = self.client.session.get(icon_url, timeout=8)
                 resp.raise_for_status()
                 img = Image.open(io.BytesIO(resp.content)).resize((48, 48), Image.LANCZOS)
                 try:
                     _ICON_DISK_DIR.mkdir(parents=True, exist_ok=True)
-                    img.save(disk_path)
+                    img.save(_icon_disk_path(icon_url))
                 except OSError as exc:
                     logger.debug("Icon disk cache write failed: %s", exc)
-            ctk_img = ctk.CTkImage(img, size=(48, 48))
-            _store_icon(icon_url, ctk_img)
+                ctk_img = ctk.CTkImage(img, size=(48, 48))
+                _store_icon(icon_url, ctk_img)
             self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
         except Exception as exc:
             logger.debug("Image fetch error: %s", exc)
