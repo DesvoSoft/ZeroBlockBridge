@@ -253,3 +253,22 @@ class TestMaintenanceApi:
     def test_purge_crash_reports_missing_servers_dir(self, manager, tmp_path):
         with patch("app.core.constants.SERVERS_DIR", tmp_path / "nope"):
             assert manager.purge_crash_reports() == 0
+
+
+def test_provision_server_routes_log_to_console_events(manager):
+    """provision_server wires the provisioner's log to CONSOLE_LINE so the
+    UI console shows progress without the UI owning the pipeline."""
+    from app.core.provisioning import ProvisionResult
+
+    lines = []
+    manager.events.subscribe(ServerEvent.CONSOLE_LINE, lines.append)
+
+    def fake_provision(self, config, progress=None):
+        self._log("[System] hello from provisioner")
+        return ProvisionResult(True, config["name"])
+
+    with patch("app.core.provisioning.ServerProvisioner.provision", fake_provision):
+        result = manager.provision_server({"name": "new_srv"})
+
+    assert result.ok and result.name == "new_srv"
+    assert "[System] hello from provisioner" in lines

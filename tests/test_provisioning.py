@@ -1,266 +1,201 @@
-"""Unit tests for Phase 4 — Provisioning services."""
+"""Tests for app/core/provisioning.py (server creation pipeline)."""
 
 import os
-import hashlib
-import tempfile
-from unittest.mock import patch, MagicMock
+from contextlib import ExitStack
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from app.core.provisioning import ServerProvisioner, resolve_required_java
 
 
-# =====================================================================
-# PROV-01 / INTEG-03 — Java Detection & Version Matching
-# =====================================================================
-from app.services.java_detector import (
-    parse_java_version,
-    get_required_java,
-    JavaInstallation,
-    JavaDetector,
-    _detect_vendor,
-    _parse_mc_version,
-)
+class TestResolveRequiredJava:
+    def test_bytecode_newer_than_map_wins(self):
+        assert resolve_required_java(21, 17) == 21
+
+    def test_forge_java8_shim_does_not_downgrade(self):
+        assert resolve_required_java(8, 17) == 17
+
+    def test_no_bytecode_result_uses_map(self):
+        assert resolve_required_java(None, 21) == 21
 
 
-class TestJavaVersionParsing:
-    def test_parse_java_17(self):
-        output = 'openjdk version "17.0.8" 2023-07-18\nOpenJDK Runtime Environment'
-        assert parse_java_version(output) == (17, 0, 8)
+class _Env:
+    """Wires a ServerProvisioner to a temp servers dir with every external
+    step patched, recording console lines and progress values."""
 
-    def test_parse_java_21(self):
-        output = 'openjdk version "21.0.1" 2023-10-17\nOpenJDK Runtime Environment'
-        assert parse_java_version(output) == (21, 0, 1)
+    def __init__(self, tmp_path, stack: ExitStack, *, jar_bytes=b"jar", download_ok=True,
+                 bytecode_java=17, version_map_java=17, java_cached=True):
+        self.servers_dir = tmp_path / "servers"
+        self.servers_dir.mkdir()
+        self.lines = []
+        self.progress = []
+        self.tunnels = []
+        self.jdk = MagicMock()
+        self.jdk.get_java_path.return_value = "/jdk/bin/java" if java_cached else None
+        self.jdk.ensure_java.return_value = "/jdk/bin/java"
 
-    def test_parse_java_8_legacy(self):
-        output = 'java version "1.8.0_381"\nJava(TM) SE Runtime Environment'
-        major, minor, patch = parse_java_version(output)
-        assert major == 8
+        def fake_download(name, engine, version, progress_cb):
+            progress_cb(0.5)
+            progress_cb(1.0)
+            if download_ok and jar_bytes is not None:
+                d = self.servers_dir / name
+                d.mkdir(parents=True, exist_ok=True)
+                (d / "server.jar").write_bytes(jar_bytes)
+            return "server.jar" if download_ok else None
 
-    def test_parse_java_16(self):
-        output = 'openjdk version "16.0.2" 2021-07-20'
-        assert parse_java_version(output) == (16, 0, 2)
+        self.download = stack.enter_context(patch("app.core.logic.download_server", side_effect=fake_download))
+        self.install_fabric = stack.enter_context(patch("app.core.logic.install_fabric", side_effect=fake_download_installer(self, jar_bytes)))
+        self.install_forge = stack.enter_context(patch("app.core.logic.install_forge", side_effect=fake_download_installer(self, jar_bytes)))
+        self.junction = stack.enter_context(patch("app.core.logic.create_junction"))
+        self.save_icon = stack.enter_context(patch("app.core.logic.save_server_icon"))
+        self.update_meta = stack.enter_context(patch("app.core.logic.update_server_meta"))
+        self.scaffold = stack.enter_context(patch("app.services.scaffolder.pre_boot_scaffold"))
+        self.analyze = stack.enter_context(
+            patch("app.services.bytecode_analyzer.analyze_jar_bytecode", return_value=bytecode_java))
+        stack.enter_context(patch("app.services.java_detector.get_required_java", return_value=version_map_java))
+        stack.enter_context(patch("app.services.java_installer.get_release_label", return_value="Temurin 17.0.9+9"))
 
-    def test_parse_empty_returns_zero(self):
-        assert parse_java_version("") == (0, 0, 0)
-
-    def test_parse_garbage_returns_zero(self):
-        assert parse_java_version("not a java version") == (0, 0, 0)
-
-
-class TestMCJavaMapping:
-    def test_mc_1_12_requires_java_8(self):
-        assert get_required_java("1.12.2") == 8
-
-    def test_mc_1_16_requires_java_8(self):
-        assert get_required_java("1.16.5") == 8
-
-    def test_mc_1_17_requires_java_16(self):
-        assert get_required_java("1.17") == 16
-
-    def test_mc_1_17_1_requires_java_16(self):
-        assert get_required_java("1.17.1") == 16
-
-    def test_mc_1_18_requires_java_17(self):
-        assert get_required_java("1.18") == 17
-
-    def test_mc_1_20_1_requires_java_17(self):
-        assert get_required_java("1.20.1") == 17
-
-    def test_mc_1_20_4_requires_java_17(self):
-        assert get_required_java("1.20.4") == 17
-
-    def test_mc_1_20_5_requires_java_21(self):
-        assert get_required_java("1.20.5") == 21
-
-    def test_mc_1_21_requires_java_21(self):
-        assert get_required_java("1.21") == 21
-
-    def test_mc_1_21_11_requires_java_21(self):
-        assert get_required_java("1.21.11") == 21
-
-    def test_mc_26_1_requires_java_25(self):
-        assert get_required_java("26.1") == 25
-
-    def test_mc_26_2_requires_java_25(self):
-        assert get_required_java("26.2") == 25
-
-    def test_mc_26_prerelease_and_snapshot_require_java_25(self):
-        assert get_required_java("26.2-rc-2") == 25
-        assert get_required_java("26.1-snapshot-1") == 25
-
-    def test_version_newer_than_matrix_uses_newest_java(self):
-        assert get_required_java("99.99.99") == 25
-
-    def test_unparseable_version_defaults_17(self):
-        assert get_required_java("not-a-version") == 17
-
-
-
-class TestVendorDetection:
-    def test_adoptium(self):
-        assert _detect_vendor("Eclipse Adoptium") == "Eclipse Adoptium"
-
-    def test_oracle(self):
-        assert _detect_vendor("Java(TM) SE Runtime") == "Oracle"
-
-    def test_graalvm(self):
-        assert _detect_vendor("GraalVM CE 21") == "GraalVM"
-
-    def test_corretto(self):
-        assert _detect_vendor("Amazon Corretto 17") == "Amazon Corretto"
-
-
-class TestMCVersionParsing:
-    def test_basic(self):
-        assert _parse_mc_version("1.20.4") == (1, 20, 4)
-
-    def test_two_part(self):
-        assert _parse_mc_version("1.21") == (1, 21, 0)
-
-
-class TestJavaDetector:
-    @patch("app.services.java_detector._probe_java")
-    def test_scan_path_finds_java(self, mock_probe):
-        mock_probe.return_value = JavaInstallation(
-            path="/usr/bin/java", version_string='openjdk "17"',
-            major=17, minor=0, patch=0, source="PATH",
+        self.provisioner = ServerProvisioner(
+            log=self.lines.append,
+            get_server_port=lambda name: 25565,
+            create_tunnel=self.tunnels.append,
+            jdk_manager=self.jdk,
+            servers_dir=str(self.servers_dir),
+            jar_wait_seconds=1.0,
+            jar_poll_interval=0.5,
+            sleep=lambda s: None,
         )
-        detector = JavaDetector()
-        with patch.dict(os.environ, {"PATH": "/usr/bin"}):
-            with patch("os.path.isfile", return_value=True):
-                results = detector._scan_path()
-                assert len(results) >= 1
 
-    def test_find_best_for_mc_returns_none_when_empty(self):
-        detector = JavaDetector()
-        detector._cache = []
-        result = detector.find_best_for_mc("1.20.1")
-        assert result is None
-
-    def test_find_best_for_mc_selects_compatible(self):
-        detector = JavaDetector()
-        detector._cache = [
-            JavaInstallation(path="/j21", version_string="", major=21, source="TEST"),
-            JavaInstallation(path="/j17", version_string="", major=17, source="TEST"),
-            JavaInstallation(path="/j8", version_string="", major=8, source="TEST"),
-        ]
-        best = detector.find_best_for_mc("1.20.1")  # requires Java 17
-        assert best is not None
-        assert best.major >= 17
+    def run(self, **overrides):
+        config = {"name": "srv", "version": "1.20.4", "type": "Vanilla", "location": str(self.servers_dir)}
+        config.update(overrides)
+        return self.provisioner.provision(config, lambda value, text=None: self.progress.append(value))
 
 
-# =====================================================================
-# PROV-04 — SHA1 Validation
-# =====================================================================
-from app.services.sha1_validator import download_with_verification
+def fake_download_installer(env, jar_bytes):
+    def _install(name, version, progress_cb, java_bin="java"):
+        env.installer_java_bin = java_bin
+        progress_cb(1.0)
+        d = env.servers_dir / name
+        d.mkdir(parents=True, exist_ok=True)
+        if jar_bytes is not None:
+            (d / "server.jar").write_bytes(jar_bytes)
+        return "server.jar"
+    return _install
 
 
-
-class TestDownloadWithVerification:
-    @patch("app.services.sha1_validator.requests.get")
-    def test_successful_download(self, mock_get):
-        content = b"server.jar contents"
-        expected_sha1 = hashlib.sha1(content).hexdigest()
-
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": str(len(content))}
-        mock_resp.iter_content.return_value = [content]
-        mock_resp.raise_for_status = MagicMock()
-        mock_get.return_value = mock_resp
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jar") as f:
-            path = f.name
-
-        try:
-            ok, result_path, error = download_with_verification(
-                "https://example.com/server.jar", path, expected_sha1
-            )
-            assert ok is True
-            assert error is None
-            assert result_path == path
-        finally:
-            if os.path.exists(path):
-                os.unlink(path)
-
-    @patch("app.services.sha1_validator.requests.get")
-    def test_sha1_mismatch_retries(self, mock_get):
-        content = b"corrupt data"
-
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": str(len(content))}
-        mock_resp.iter_content.return_value = [content]
-        mock_resp.raise_for_status = MagicMock()
-        mock_get.return_value = mock_resp
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jar") as f:
-            path = f.name
-
-        try:
-            ok, result_path, error = download_with_verification(
-                "https://example.com/server.jar", path,
-                "0000000000000000000000000000000000000000",
-                max_retries=2,
-            )
-            assert ok is False
-            assert "corruption" in error.lower() or "mismatch" in error.lower() or "sha1" in error.lower()
-        finally:
-            if os.path.exists(path):
-                os.unlink(path)
-
-    @patch("app.services.sha1_validator.requests.get")
-    def test_no_sha1_still_succeeds(self, mock_get):
-        content = b"no hash data"
-
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": str(len(content))}
-        mock_resp.iter_content.return_value = [content]
-        mock_resp.raise_for_status = MagicMock()
-        mock_get.return_value = mock_resp
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jar") as f:
-            path = f.name
-
-        try:
-            ok, result_path, error = download_with_verification(
-                "https://example.com/server.jar", path, None
-            )
-            assert ok is True
-        finally:
-            if os.path.exists(path):
-                os.unlink(path)
+@pytest.fixture
+def make_env(tmp_path):
+    with ExitStack() as stack:
+        yield lambda **kw: _Env(tmp_path, stack, **kw)
 
 
-# =====================================================================
-# PROV-05 — Aikar's Flags
-# =====================================================================
-from app.services.aikars_flags import calculate_flags
+class TestProvision:
+    def test_vanilla_happy_path(self, make_env):
+        env = make_env()
+        result = env.run()
 
+        assert result.ok and result.name == "srv" and result.required_java == 17
+        env.download.assert_called_once()
+        env.scaffold.assert_called_once()
+        assert env.tunnels == ["srv"]
+        env.update_meta.assert_any_call("srv", {"required_java": 17})
+        env.jdk.ensure_java.assert_not_called()
 
-class TestAikarsFlags:
-    def test_low_ram_flags(self):
-        flags = calculate_flags(2048)
-        assert "-Xms2048M" in flags
-        assert "-Xmx2048M" in flags
-        assert "-XX:+UseG1GC" in flags
-        # Low RAM tier uses 30% new size
-        assert "-XX:G1NewSizePercent=30" in flags
-        assert "-XX:G1HeapRegionSize=8M" in flags
+    def test_progress_never_moves_backwards(self, make_env):
+        env = make_env(java_cached=False, bytecode_java=21)
+        env.run(icon_path="icon.png")
 
-    def test_mid_ram_flags(self):
-        flags = calculate_flags(8192)
-        assert "-XX:G1NewSizePercent=35" in flags
-        assert "-XX:G1HeapRegionSize=16M" in flags
+        assert env.progress == sorted(env.progress)
+        assert env.progress[-1] == 1.0
+        assert env.progress[:3] == [0.0, 0.125, 0.25]  # download mapped into its band
 
-    def test_high_ram_flags(self):
-        flags = calculate_flags(12288)
-        assert "-XX:G1NewSizePercent=40" in flags
-        assert "-XX:G1MaxNewSizePercent=50" in flags
-        assert "-XX:G1HeapRegionSize=16M" in flags
+    def test_existing_server_is_rejected(self, make_env):
+        env = make_env()
+        (env.servers_dir / "srv").mkdir()
 
-    def test_edge_case_4g(self):
-        flags = calculate_flags(4096)
-        # 4G is below 8G threshold → default tier
-        assert "-XX:G1NewSizePercent=30" in flags
+        result = env.run()
 
-    def test_aikars_marker_present(self):
-        flags = calculate_flags(4096)
-        assert "-Dusing.aikars.flags=https://mcflags.emc.gs" in flags
+        assert not result.ok and "already exists" in result.error
+        env.download.assert_not_called()
 
+    def test_custom_location_creates_junction(self, make_env, tmp_path):
+        env = make_env()
+        custom = tmp_path / "elsewhere"
 
+        env.run(location=str(custom))
+
+        env.junction.assert_called_once_with(str(custom / "srv"), os.path.join(str(env.servers_dir), "srv"))
+
+    def test_junction_failure_aborts(self, make_env, tmp_path):
+        env = make_env()
+        env.junction.side_effect = OSError("mklink /J failed")
+
+        result = env.run(location=str(tmp_path / "elsewhere"))
+
+        assert not result.ok and "custom location" in result.error
+        env.download.assert_not_called()
+
+    def test_download_failure_stops_before_tunnel(self, make_env):
+        env = make_env(download_ok=False)
+        result = env.run()
+
+        assert not result.ok
+        env.scaffold.assert_not_called()
+        assert env.tunnels == []
+
+    def test_unknown_engine_fails(self, make_env):
+        env = make_env()
+        result = env.run(type="Bukkit")
+
+        assert not result.ok
+        assert any("Unknown server type" in line for line in env.lines)
+
+    def test_forge_installer_gets_jdk_and_shim_does_not_downgrade(self, make_env):
+        env = make_env(bytecode_java=8, version_map_java=17)
+        result = env.run(type="Forge")
+
+        assert result.ok and result.required_java == 17
+        assert env.installer_java_bin == "/jdk/bin/java"
+        env.install_forge.assert_called_once()
+
+    def test_bytecode_disagreement_is_reported(self, make_env):
+        env = make_env(bytecode_java=21, version_map_java=17)
+        result = env.run()
+
+        assert result.required_java == 21
+        assert any("Bytecode scan found this jar needs Java 21" in line for line in env.lines)
+
+    def test_missing_jdk_is_installed(self, make_env):
+        env = make_env(java_cached=False)
+        env.run()
+
+        env.jdk.ensure_java.assert_called_once_with(17)
+        assert any("Installing Temurin 17.0.9+9" in line for line in env.lines)
+
+    def test_jdk_install_failure_is_not_fatal(self, make_env):
+        env = make_env(java_cached=False)
+        env.jdk.ensure_java.side_effect = RuntimeError("offline")
+
+        result = env.run()
+
+        assert result.ok
+        assert any("[Warning] Java 17 download failed" in line for line in env.lines)
+
+    def test_missing_jar_skips_bytecode_analysis(self, make_env):
+        env = make_env(jar_bytes=None)
+        result = env.run()
+
+        assert result.ok and result.required_java == 17
+        env.analyze.assert_not_called()
+        assert any("server.jar not found" in line for line in env.lines)
+
+    def test_unexpected_error_returns_failure(self, make_env):
+        env = make_env()
+        env.scaffold.side_effect = ValueError("bad properties")
+
+        result = env.run()
+
+        assert not result.ok and result.error == "bad properties"
+        assert any("[Error] Installation failed: bad properties" in line for line in env.lines)

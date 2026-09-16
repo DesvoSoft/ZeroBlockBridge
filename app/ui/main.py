@@ -879,144 +879,17 @@ class MCTunnelApp(ctk.CTk):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
-        if os.path.exists(os.path.join(SERVERS_DIR, config["name"])):
-            self.server_console.log(f"[Error] Server '{config['name']}' already exists.")
-            return
-            
-        custom_loc = config.get("location", str(SERVERS_DIR))
-        if custom_loc and os.path.normpath(custom_loc) != os.path.normpath(str(SERVERS_DIR)):
-            from app.core.logic import create_junction
-            target_path = os.path.join(custom_loc, config["name"])
-            link_path = os.path.join(SERVERS_DIR, config["name"])
-            try:
-                os.makedirs(target_path, exist_ok=True)
-                create_junction(target_path, link_path)
-                self.server_console.log(f"[System] Created link for custom location: {target_path}")
-            except Exception as e:
-                self.server_console.log(f"[Error] Failed to map custom location: {e}")
-                return
-
-        self.executor.submit(self.start_download_process, config)
-
-    def start_download_process(self, config):
-        self.after(0, lambda: self.show_progress_dialog(config))
-
-    def show_progress_dialog(self, config):
         dialog = DownloadProgressDialog(self, title=f"Installing {config['name']}...")
-        
-        def run_install():
-            try:
-                name = config["name"]
-                version = config["version"]
-                engine = config["type"]
-                dialog.update_progress(0.0, f"Downloading {engine} {version} server jar...")
-                if engine == "Vanilla":
-                    self.server_console.log(f"[System] Downloading Vanilla {version}...")
-                    success = logic.download_server(name, engine, version, dialog.update_progress)
-                elif engine == "Paper":
-                    self.server_console.log(f"[System] Downloading Paper {version}...")
-                    success = logic.download_server(name, engine, version, dialog.update_progress)
-                elif engine == "Purpur":
-                    self.server_console.log(f"[System] Downloading Purpur {version}...")
-                    success = logic.download_server(name, engine, version, dialog.update_progress)
-                elif engine == "Fabric":
-                    self.server_console.log(f"[System] Installing Fabric {version}...")
-                    from app.services.java_installer import JdkManagerInstance
-                    from app.services.java_detector import get_required_java
-                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
-                    success = logic.install_fabric(name, version, dialog.update_progress, java_bin=_java_bin)
-                elif engine == "Forge":
-                    self.server_console.log(f"[System] Installing Forge {version}...")
-                    from app.services.java_installer import JdkManagerInstance
-                    from app.services.java_detector import get_required_java
-                    _java_bin = JdkManagerInstance.ensure_java(get_required_java(version)) or "java"
-                    success = logic.install_forge(name, version, dialog.update_progress, java_bin=_java_bin)
-                else:
-                    self.server_console.log(f"[Error] Unknown server type: {engine}")
-                    success = False
-                
-                if success:
-                    self.server_console.log(f"[System] Installation success. Applying settings...")
-                    dialog.update_progress(0.25, "Verifying file integrity...")
-                    if config.get("icon_path"):
-                        dialog.update_progress(0.30, "Applying server icon...")
-                        logic.save_server_icon(name, config["icon_path"])
 
-                    # --- PROV-02: Pre-Boot Scaffolding ---
-                    dialog.update_progress(0.35, "Configuring server environment...")
-                    self.server_console.log("[System] Scaffolding server environment...")
-                    from app.services.scaffolder import pre_boot_scaffold
-                    server_dir = os.path.join(SERVERS_DIR, name)
-                    port_str = config.get("playit_port")
-                    port = int(port_str) if port_str and str(port_str).isdigit() else self.zbb_manager.get_server_port(name)
-                    pre_boot_scaffold(server_dir, port=port, eula_accepted=True, config=config)
-                    self.server_console.log("[System] Environment ready (eula.txt, server.properties, directories).")
-                    if "auto_install_jdk" in config:
-                        logic.update_server_meta(name, {"auto_install_jdk": config["auto_install_jdk"]})
-
-                    # --- PROV-03: Bytecode Analysis ---
-                    dialog.update_progress(0.50, "Analyzing Java requirements from server jar...")
-                    self.server_console.log("[System] Analyzing Java requirements from server jar...")
-                    from app.services.bytecode_analyzer import analyze_jar_bytecode
-                    jar_path = os.path.join(server_dir, "server.jar")
-                    # Sync guarantee: wait until server.jar exists and size > 0 (handles Forge normalization race)
-                    self.server_console.log("[System] Waiting for server.jar normalization...")
-                    dialog.update_progress(0.55, "Waiting for server.jar normalization...")
-                    import time
-                    required_java = None
-                    for _ in range(20):
-                        if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                            break
-                        time.sleep(0.5)
-                    else:
-                        self.server_console.log("[Warning] server.jar not found after 10s. Aborting bytecode analysis.")
-                    
-                    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
-                        try:
-                            required_java = analyze_jar_bytecode(jar_path)
-                        except Exception as e:
-                            self.server_console.log(f"[Warning] Bytecode analysis crashed: {e}")
-
-                    from app.services.java_installer import JdkManagerInstance, get_release_label
-                    from app.services.java_detector import get_required_java
-                    version_map_java = get_required_java(version)
-                    # Floor bytecode result against version-map to avoid Forge shim (Java 8) overriding correct version
-                    bytecode_wins = bool(required_java and required_java >= version_map_java)
-                    final_java = required_java if bytecode_wins else version_map_java
-                    self.server_console.log(f"[System] Detected Minecraft {version} → requires Java {final_java}.")
-                    if required_java and required_java != version_map_java:
-                        # The strongest proof this isn't just a lookup table: the exact
-                        # .class bytecode version disagreed with the naive MC-version
-                        # mapping (modded/shaded jars bundling a newer/older major).
-                        self.server_console.log(
-                            f"[System] Bytecode scan found this jar needs Java {required_java} "
-                            f"(standard mapping for MC {version} would be Java {version_map_java})."
-                        )
-                    logic.update_server_meta(name, {"required_java": final_java})
-                    if not JdkManagerInstance.get_java_path(final_java):
-                        label = get_release_label(final_java) or f"Java {final_java}"
-                        dialog.update_progress(0.65, f"Installing {label}...")
-                        self.server_console.log(f"[System] Installing {label}...")
-                        try:
-                            JdkManagerInstance.ensure_java(final_java)
-                            self.server_console.log(f"[System] {label} ready.")
-                        except Exception as jde:
-                            self.server_console.log(f"[Warning] Java {final_java} download failed: {jde}")
-
-                    dialog.update_progress(0.70, "Setting up Playit tunnel...")
-                    self.server_console.log(f"[System] Server '{name}' created successfully.")
-                    self.zbb_manager.create_tunnel_for_server(name)
-                    dialog.update_progress(1.0, "Server ready!")
-                    self.after(0, lambda: self._on_download_complete(dialog, name, config.get("start_after_creation", False)))
-                else:
-                    self.server_console.log(f"[Error] Failed to create server '{name}'. Check terminal for details.")
-                    self.after(0, dialog.close)
-            except Exception as e:
-                self.server_console.log(f"[Error] Installation failed: {e}")
-                import traceback
-                logger.error("Installation failed:\n%s", traceback.format_exc())
+        def _provision():
+            result = self.zbb_manager.provision_server(config, dialog.update_progress)
+            if result.ok:
+                self.after(0, lambda: self._on_download_complete(
+                    dialog, result.name, config.get("start_after_creation", False)))
+            else:
                 self.after(0, dialog.close)
-        self.executor.submit(run_install)
+
+        self.executor.submit(_provision)
 
     def _on_download_complete(self, dialog, name, start_after_creation=False):
         self.load_servers()
