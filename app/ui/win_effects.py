@@ -89,10 +89,25 @@ def apply_titlebar_brand_color(window, bg_hex: str, text_hex: str) -> None:
         logger.debug("DWM titlebar brand color unavailable: %s", e)
 
 
+def _apply_app_icon(window) -> None:
+    """Give a dialog the app's titlebar icon.
+
+    CTkToplevel replaces the inherited default icon with CustomTkinter's own
+    blue logo ~200ms after creation unless iconbitmap() was called on it.
+    """
+    import tkinter
+    from app.core.constants import ASSETS_DIR
+    try:
+        window.iconbitmap(str(ASSETS_DIR / "logo.ico"))
+    except tkinter.TclError as e:
+        logger.debug("Window icon unavailable: %s", e)
+
+
 def apply_rounded_corners(window, small: bool = False) -> None:
     """Round a Tk toplevel's corners via DWM. Win11 only; no-op elsewhere.
 
-    Also themes the titlebar (dark/light) to match the app.
+    Also themes the titlebar (dark/light) to match the app and sets the app
+    icon (every dialog calls this, so it is the one shared hook).
     """
     if sys.platform != "win32":
         return
@@ -107,3 +122,4 @@ def apply_rounded_corners(window, small: bool = False) -> None:
     except (OSError, AttributeError) as e:
         logger.debug("DWM rounded corners unavailable: %s", e)
     apply_titlebar_theme(window)
+    _apply_app_icon(window)
