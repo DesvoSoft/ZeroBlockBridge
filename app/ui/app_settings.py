@@ -24,7 +24,7 @@ from app.services.sanitizer import ALLOWLISTED_COMMANDS
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners, apply_titlebar_theme
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: General
     # ------------------------------------------------------------------
     def _build_general_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
+        scroll = ScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         card = self._card(
@@ -204,7 +204,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Notifications
     # ------------------------------------------------------------------
     def _build_notifications_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
+        scroll = ScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True, padx=0, pady=0)
 
         card = self._card(
@@ -445,7 +445,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Java
     # ------------------------------------------------------------------
     def _build_java_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
+        scroll = ScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         card = self._card(
@@ -622,7 +622,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Storage
     # ------------------------------------------------------------------
     def _build_storage_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
+        scroll = ScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         loc_card = self._card(

@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
@@ -219,25 +219,25 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.tabview.configure(command=self._on_tab_changed)
         
         # Scrollable frames for tabs
-        self.frame_general = ctk.CTkScrollableFrame(self.tab_general)
+        self.frame_general = ScrollableFrame(self.tab_general)
         self.frame_general.pack(fill="both", expand=True)
         
-        self.frame_world = ctk.CTkScrollableFrame(self.tab_world)
+        self.frame_world = ScrollableFrame(self.tab_world)
         self.frame_world.pack(fill="both", expand=True)
         
-        self.frame_network = ctk.CTkScrollableFrame(self.tab_network)
+        self.frame_network = ScrollableFrame(self.tab_network)
         self.frame_network.pack(fill="both", expand=True)
         
-        self.frame_advanced = ctk.CTkScrollableFrame(self.tab_advanced)
+        self.frame_advanced = ScrollableFrame(self.tab_advanced)
         self.frame_advanced.pack(fill="both", expand=True)
 
         self.frame_backups = ctk.CTkFrame(self.tab_backups, fg_color="transparent")
         self.frame_backups.pack(fill="both", expand=True)
 
-        self.frame_automation = ctk.CTkScrollableFrame(self.tab_automation)
+        self.frame_automation = ScrollableFrame(self.tab_automation)
         self.frame_automation.pack(fill="both", expand=True)
 
-        self.frame_launch = ctk.CTkScrollableFrame(self.tab_launch)
+        self.frame_launch = ScrollableFrame(self.tab_launch)
         self.frame_launch.pack(fill="both", expand=True)
         
         # Tracking
@@ -316,7 +316,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.btn_export_pack.pack(side="right", padx=(0, 8))
 
         # List
-        self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
+        self.backup_list_frame = ScrollableFrame(self.frame_backups)
         self.backup_list_frame.pack(fill="both", expand=True)
         
         self.backup_manager = BackupManager(self.server_name)

@@ -21,7 +21,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import format_duration, format_memory, memory_tooltip
@@ -258,7 +258,7 @@ class MCTunnelApp(ctk.CTk):
         )
         self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="ew")
 
-        self.server_list_frame = ctk.CTkScrollableFrame(
+        self.server_list_frame = ScrollableFrame(
             self.sidebar_frame, label_text="", corner_radius=AppConfig.RADIUS_CARD,
             border_width=0,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)

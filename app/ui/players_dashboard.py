@@ -8,7 +8,7 @@ from app.core.server_events import ServerEvent
 from app.services.player_files import add_entry, load_json_list, remove_entry
 from app.services.server_properties import load_server_properties, save_server_properties
 from app.ui.icons import icon
-from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ class PlayersDashboard(ctk.CTkToplevel):
     def _build_online_tab(self):
         self.tab_online.grid_rowconfigure(0, weight=1)
         self.tab_online.grid_columnconfigure(0, weight=1)
-        self.scroll_players = ctk.CTkScrollableFrame(self.tab_online, fg_color="transparent", corner_radius=0)
+        self.scroll_players = ScrollableFrame(self.tab_online, fg_color="transparent", corner_radius=0)
         self.scroll_players.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
     def _build_whitelist_tab(self):
@@ -137,7 +137,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         lbl_list_title = ctk.CTkLabel(self.tab_whitelist, text="Whitelisted players:", font=AppConfig.FONT_BODY_SMALL)
         lbl_list_title.grid(row=2, column=0, sticky="w", padx=10, pady=(10, 0))
 
-        self.scroll_whitelist = ctk.CTkScrollableFrame(self.tab_whitelist, fg_color="transparent", corner_radius=0)
+        self.scroll_whitelist = ScrollableFrame(self.tab_whitelist, fg_color="transparent", corner_radius=0)
         self.scroll_whitelist.grid(row=3, column=0, sticky="nsew", padx=10, pady=(4, 10))
 
     def _build_operators_tab(self):
@@ -175,13 +175,13 @@ class PlayersDashboard(ctk.CTkToplevel):
                                  command=self._add_operator)
         btn_add.grid(row=0, column=3)
 
-        self.scroll_operators = ctk.CTkScrollableFrame(self.tab_operators, fg_color="transparent", corner_radius=0)
+        self.scroll_operators = ScrollableFrame(self.tab_operators, fg_color="transparent", corner_radius=0)
         self.scroll_operators.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
     def _build_bans_tab(self):
         self.tab_bans.grid_rowconfigure(0, weight=1)
         self.tab_bans.grid_columnconfigure(0, weight=1)
-        self.scroll_bans = ctk.CTkScrollableFrame(self.tab_bans, fg_color="transparent", corner_radius=0)
+        self.scroll_bans = ScrollableFrame(self.tab_bans, fg_color="transparent", corner_radius=0)
         self.scroll_bans.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
     # --- Rendering ---

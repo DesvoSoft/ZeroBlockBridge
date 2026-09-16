@@ -26,7 +26,7 @@ from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityErr
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons, dialog_header
+from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
@@ -470,11 +470,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         # switching views raises one over the other. Both stay mapped and laid
         # out, so a switch is a plain repaint — re-mapping (grid_remove/grid)
         # makes every CTk widget redraw itself visibly, one after another.
-        self.installed_frame = ctk.CTkScrollableFrame(results_container, **list_style)
+        self.installed_frame = ScrollableFrame(results_container, **list_style)
         self.installed_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         self.installed_frame.grid_columnconfigure(0, weight=1)
 
-        self.results_frame = ctk.CTkScrollableFrame(results_container, **list_style)
+        self.results_frame = ScrollableFrame(results_container, **list_style)
         self.results_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         self.results_frame.grid_columnconfigure(0, weight=1)
 
@@ -1838,7 +1838,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         header, _, _ = dialog_header(dialog, "Choose Version", title)
         header.pack(fill="x", padx=16, pady=(14, 8))
-        frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
+        frame = ScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
         frame.pack(fill="both", expand=True, padx=12, pady=(0, 0))
 
         var = ctk.StringVar(value=versions[0].get("id", ""))
@@ -1956,7 +1956,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         count = len(updates)
         header, _, _ = dialog_header(dialog, "Mod Updates", f"{count} update{'s' if count != 1 else ''} available")
         header.pack(fill="x", padx=16, pady=(14, 8))
-        frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
+        frame = ScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
         frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
         for i, u in enumerate(updates):

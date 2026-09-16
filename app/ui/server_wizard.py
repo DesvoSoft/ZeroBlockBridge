@@ -7,7 +7,7 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.template_manager import list_templates, load_template, save_template
-from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header
+from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from PIL import Image
@@ -280,7 +280,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.btn_refresh.pack(side="right")
 
         # Versions List
-        self.scroll_versions = ctk.CTkScrollableFrame(p, corner_radius=AppConfig.RADIUS_CARD,
+        self.scroll_versions = ScrollableFrame(p, corner_radius=AppConfig.RADIUS_CARD,
                                                        fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.scroll_versions.pack(fill="both", expand=True, pady=(0, 5))
 
@@ -567,7 +567,7 @@ class ServerWizard(ctk.CTkToplevel):
     def _scroll_body(self):
         # corner_radius=0: a rounded scrollable frame insets its content by the
         # radius, which shifted steps 4-6 right of steps 1-3.
-        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent", corner_radius=0)
+        scroll = ScrollableFrame(self.content_frame, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
         return scroll
 

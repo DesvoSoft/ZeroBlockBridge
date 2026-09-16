@@ -27,6 +27,39 @@ def resolve_color(color):
     return color
 
 
+class ScrollableFrame(ctk.CTkScrollableFrame):
+    """CTkScrollableFrame whose scrollbar only shows while the content
+    overflows (CTk always shows it, even for a two-row list)."""
+
+    _CHECK_DELAY_MS = 50
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._scrollbar_shown = True
+        self._scrollbar_job = None
+        # add="+": CTk already binds both for its own scrollregion/fit logic.
+        self.bind("<Configure>", self._schedule_scrollbar_check, add="+")
+        self._parent_canvas.bind("<Configure>", self._schedule_scrollbar_check, add="+")
+
+    def _schedule_scrollbar_check(self, _event=None):
+        if self._scrollbar_job is not None:
+            self.after_cancel(self._scrollbar_job)
+        self._scrollbar_job = self.after(self._CHECK_DELAY_MS, self._update_scrollbar)
+
+    def _update_scrollbar(self):
+        self._scrollbar_job = None
+        if not self.winfo_exists():
+            return
+        needed = self.winfo_reqheight() > self._parent_canvas.winfo_height() + 1
+        if needed == self._scrollbar_shown:
+            return
+        self._scrollbar_shown = needed
+        if needed:
+            self._scrollbar.grid()
+        else:
+            self._scrollbar.grid_remove()
+            self._parent_canvas.yview_moveto(0)
+
 def center_on_parent(toplevel, parent, width, height):
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
