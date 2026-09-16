@@ -20,7 +20,14 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds between retries
 
 
-
+def _safe_remove(path: str) -> None:
+    """Best-effort cleanup of a partial/corrupt download — a locked file
+    (e.g. antivirus scanning it) must not crash the caller, which is
+    supposed to always return a tuple, never raise."""
+    try:
+        os.remove(path)
+    except OSError as exc:
+        logger.warning("Could not remove %s: %s", path, exc)
 
 
 def download_with_verification(
@@ -46,28 +53,31 @@ def download_with_verification(
     for attempt in range(1, max_retries + 1):
         try:
             resp = requests.get(url, stream=True, timeout=60)
-            resp.raise_for_status()
-
-            total = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            sha1 = hashlib.sha1()
-
             try:
-                with open(dest_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            sha1.update(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback and total > 0:
-                                progress_callback(downloaded / total)
-            except PermissionError as exc:
-                return False, None, (
-                    f"Permission denied writing to {dest_path}. Close any program "
-                    f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
-                )
-            except OSError as exc:
-                return False, None, f"Failed to write {dest_path}: {exc}"
+                resp.raise_for_status()
+
+                total = int(resp.headers.get("content-length", 0))
+                downloaded = 0
+                sha1 = hashlib.sha1()
+
+                try:
+                    with open(dest_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                sha1.update(chunk)
+                                downloaded += len(chunk)
+                                if progress_callback and total > 0:
+                                    progress_callback(downloaded / total)
+                except PermissionError as exc:
+                    return False, None, (
+                        f"Permission denied writing to {dest_path}. Close any program "
+                        f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
+                    )
+                except OSError as exc:
+                    return False, None, f"Failed to write {dest_path}: {exc}"
+            finally:
+                resp.close()
 
             if progress_callback:
                 progress_callback(1.0)
@@ -82,11 +92,11 @@ def download_with_verification(
                         expected_sha1, actual,
                     )
                     if attempt < max_retries:
-                        os.remove(dest_path)
+                        _safe_remove(dest_path)
                         time.sleep(RETRY_DELAY)
                         continue
                     else:
-                        os.remove(dest_path)
+                        _safe_remove(dest_path)
                         return False, None, (
                             f"Download corruption persisted after {max_retries} attempts. "
                             f"Expected SHA1: {expected_sha1}, got: {actual}"
@@ -104,7 +114,7 @@ def download_with_verification(
         except requests.RequestException as exc:
             logger.error("Download failed (attempt %d/%d): %s", attempt, max_retries, exc)
             if os.path.exists(dest_path):
-                os.remove(dest_path)
+                _safe_remove(dest_path)
             if attempt < max_retries:
                 time.sleep(RETRY_DELAY)
             else:
