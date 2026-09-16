@@ -531,15 +531,22 @@ class MCTunnelApp(ctk.CTk):
         )
         if not confirmed:
             return
-        try:
-            logic.delete_server(server_name)
-        except OSError as e:
-            Toast.show(self, f"Delete failed: {e}", toast_type="error")
-            return
+
+        def _delete():
+            try:
+                logic.delete_server(server_name)
+            except OSError as e:
+                self.after(0, lambda e=e: Toast.show(self, f"Delete failed: {e}", toast_type="error"))
+                return
+            self.after(0, lambda: self._on_server_deleted(server_name))
+
+        threading.Thread(target=_delete, daemon=True).start()
+
+    def _on_server_deleted(self, server_name):
         if self.zbb_manager.current_server == server_name:
             self.zbb_manager.current_server = None
             self.lbl_dash_title.configure(text="Select a server")
-            self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_BADGE_TEXT)
+            self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY)
             self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
             self._update_mods_tab_state()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
