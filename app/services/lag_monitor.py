@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from collections import deque
 
@@ -21,6 +22,11 @@ class LagMonitor:
         self._threshold = threshold
         self._window = window_minutes * 60.0
         self._spikes = deque()
+        # CONSOLE_LINE is emitted synchronously from whatever thread calls
+        # EventBus.emit (reader thread, watchdog restart thread, tick thread's
+        # send_command echo) — no thread affinity, so this deque needs the
+        # same lock CircularBuffer already has for the identical reason.
+        self._spikes_lock = threading.Lock()
 
         self._events.subscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
 
@@ -33,17 +39,20 @@ class LagMonitor:
 
     def _record_spike(self):
         now = time.time()
-        self._spikes.append(now)
-        cutoff = now - self._window
-        while self._spikes and self._spikes[0] <= cutoff:
-            self._spikes.popleft()
-        if len(self._spikes) >= self._threshold:
-            logger.warning("Lag threshold exceeded: %d spikes in %.0fs", len(self._spikes), self._window)
+        with self._spikes_lock:
+            self._spikes.append(now)
+            cutoff = now - self._window
+            while self._spikes and self._spikes[0] <= cutoff:
+                self._spikes.popleft()
+            count = len(self._spikes)
+            if count >= self._threshold:
+                self._spikes.clear()
+        if count >= self._threshold:
+            logger.warning("Lag threshold exceeded: %d spikes in %.0fs", count, self._window)
             self._events.emit(ServerEvent.LAG_SPIKE, {
-                "count": len(self._spikes),
+                "count": count,
                 "window_seconds": self._window,
             })
-            self._spikes.clear()
 
     def stop(self) -> None:
         self._events.unsubscribe(ServerEvent.CONSOLE_LINE, self.observe_line)
