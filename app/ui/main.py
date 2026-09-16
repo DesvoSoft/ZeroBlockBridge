@@ -190,10 +190,10 @@ class MCTunnelApp(ctk.CTk):
         self.sidebar_frame.grid_rowconfigure(4, weight=1) # List frame should expand, NOT the label
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        # Brand header: centered logo with the app name under it — smaller
+        # Brand header: app name with the centered logo under it — smaller
         # than the old 150x100 logo alone (~130px) but still the focal point.
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 2))
+        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
         self.logo_image = None
         try:
             from PIL import Image
@@ -203,9 +203,9 @@ class MCTunnelApp(ctk.CTk):
                 self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(108, 72))
         except OSError as e:
             logger.error("Error loading logo: %s", e)
+        ctk.CTkLabel(brand, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING).pack()
         if self.logo_image is not None:
-            ctk.CTkLabel(brand, text="", image=self.logo_image).pack()
-        ctk.CTkLabel(brand, text=AppConfig.WINDOW_TITLE, font=AppConfig.FONT_HEADING).pack(pady=(2, 0))
+            ctk.CTkLabel(brand, text="", image=self.logo_image).pack(pady=(2, 0))
 
         # --- Actions Group ---
         self.actions_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
