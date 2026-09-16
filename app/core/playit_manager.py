@@ -125,31 +125,19 @@ class PlayitManager:
                     pass
 
     def ensure_binary(self) -> bool:
+        """Make sure the pinned playitd version is installed; download,
+        verify and atomically install it otherwise."""
         if not BIN_DIR.exists():
             BIN_DIR.mkdir(parents=True, exist_ok=True)
 
         self._clean_stale_binaries()
 
         if self.binary_path.exists():
-            installed = ""
-            if self.version_marker_path.exists():
-                try:
-                    installed = self.version_marker_path.read_text(encoding="utf-8").strip()
-                except OSError:
-                    installed = ""
-            if installed == PLAYIT_VERSION:
+            if self._installed_version() == PLAYIT_VERSION:
                 return True
             self.console_callback(f"[Playit] Found old version. Updating to {PLAYIT_VERSION}...")
-            try:
-                os.remove(self.binary_path)
-            except OSError:
-                self.stop(force=True)
-                time.sleep(0.5)
-                try:
-                    os.remove(self.binary_path)
-                except Exception as e2:
-                    self.console_callback(f"[Playit] Could not remove old binary: {e2}")
-                    return False
+            if not self._remove_old_binary():
+                return False
 
         url = PLAYIT_URL_WINDOWS if platform.system() == "Windows" else PLAYIT_URL_LINUX
         self.console_callback(f"[Playit] Downloading agent v{PLAYIT_VERSION} from {url}...")
@@ -162,37 +150,8 @@ class PlayitManager:
         tmp_path = BIN_DIR / "agent_download.tmp"
         try:
             stream_to_file(url, tmp_path, timeout=30)
-
-            size = tmp_path.stat().st_size
-            if size < 1_000_000:
-                self.console_callback(f"[Playit] Download truncated ({size} bytes). Aborting install.")
+            if not self._verify_downloaded_agent(tmp_path):
                 return False
-
-            if platform.system() != "Windows":
-                tmp_path.chmod(0o755)
-
-            # playitd has no "version" subcommand; "--help" exits 0 and proves
-            # the binary executes on this machine.
-            try:
-                result = subprocess.run(
-                    [str(tmp_path), "--help"],
-                    capture_output=True, text=True, check=False, timeout=15,
-                    **subprocess_flags(),
-                )
-            except OSError as e:
-                if getattr(e, "winerror", None) == 216:
-                    self.console_callback(
-                        "[Playit] Downloaded agent is not compatible with this Windows "
-                        "(CPU architecture mismatch?). Not installing it."
-                    )
-                else:
-                    self.console_callback(f"[Playit] Downloaded agent failed to run ({e}). Not installing it.")
-                return False
-
-            if result.returncode != 0 or not (result.stdout + result.stderr).strip():
-                self.console_callback("[Playit] Downloaded agent failed smoke test. Not installing it.")
-                return False
-
             os.replace(tmp_path, self.binary_path)
             self.version_marker_path.write_text(PLAYIT_VERSION, encoding="utf-8")
             self.console_callback("[Playit] Download complete.")
@@ -206,6 +165,61 @@ class PlayitManager:
                     tmp_path.unlink()
                 except OSError:
                     pass
+
+    def _installed_version(self) -> str:
+        try:
+            return self.version_marker_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
+    def _remove_old_binary(self) -> bool:
+        try:
+            os.remove(self.binary_path)
+            return True
+        except OSError:
+            # Probably still running: stop it and retry once.
+            self.stop(force=True)
+            time.sleep(0.5)
+        try:
+            os.remove(self.binary_path)
+            return True
+        except OSError as e:
+            self.console_callback(f"[Playit] Could not remove old binary: {e}")
+            return False
+
+    def _verify_downloaded_agent(self, tmp_path) -> bool:
+        """Size check + `--help` smoke test before the binary replaces the
+        installed one."""
+        size = tmp_path.stat().st_size
+        if size < 1_000_000:
+            self.console_callback(f"[Playit] Download truncated ({size} bytes). Aborting install.")
+            return False
+
+        if platform.system() != "Windows":
+            tmp_path.chmod(0o755)
+
+        # playitd has no "version" subcommand; "--help" exits 0 and proves
+        # the binary executes on this machine.
+        try:
+            result = subprocess.run(
+                [str(tmp_path), "--help"],
+                capture_output=True, text=True, check=False, timeout=15,
+                **subprocess_flags(),
+            )
+        except OSError as e:
+            if getattr(e, "winerror", None) == 216:
+                self.console_callback(
+                    "[Playit] Downloaded agent is not compatible with this Windows "
+                    "(CPU architecture mismatch?). Not installing it."
+                )
+            else:
+                self.console_callback(f"[Playit] Downloaded agent failed to run ({e}). Not installing it.")
+            return False
+
+        if result.returncode != 0 or not (result.stdout + result.stderr).strip():
+            self.console_callback("[Playit] Downloaded agent failed smoke test. Not installing it.")
+            return False
+        return True
 
     def get_or_create_tunnel(self, port: int) -> Optional[str]:
         if not self.api_client.load_secret_key():
