@@ -75,7 +75,9 @@ class AppSettingsDialog(ctk.CTkToplevel):
         header = ctk.CTkLabel(self, text="Application Settings", font=AppConfig.FONT_HEADING, anchor="w")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
 
-        self.tabview = ctk.CTkTabview(self, corner_radius=AppConfig.RADIUS_CARD)
+        # Transparent: the section cards are the elevated surfaces. A card-colored
+        # tab view made every card indistinguishable from its background.
+        self.tabview = ctk.CTkTabview(self, corner_radius=AppConfig.RADIUS_CARD, fg_color="transparent")
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
         for name in ("General", "Notifications", "Java", "Storage", "About"):
             self.tabview.add(name)
@@ -140,7 +142,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: General
     # ------------------------------------------------------------------
     def _build_general_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         card = self._card(
@@ -202,7 +204,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Notifications
     # ------------------------------------------------------------------
     def _build_notifications_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True, padx=0, pady=0)
 
         card = self._card(
@@ -313,7 +315,9 @@ class AppSettingsDialog(ctk.CTkToplevel):
             self.entry_webhook_role.insert(0, role)
 
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
-        btn_row.pack(fill="x", padx=8, pady=(6, 4))
+        # Right inset also clears the scrollbar column, so the buttons end
+        # where the cards above them end.
+        btn_row.pack(fill="x", padx=(8, 26), pady=(6, 4))
 
         self.btn_test = self._ghost_button(btn_row, "Send Test", self._send_test, icon_name="bolt")
         self.btn_test.pack(side="left")
@@ -441,7 +445,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Java
     # ------------------------------------------------------------------
     def _build_java_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         card = self._card(
@@ -618,7 +622,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
     # Tab: Storage
     # ------------------------------------------------------------------
     def _build_storage_tab(self, tab):
-        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        scroll = ctk.CTkScrollableFrame(tab, fg_color="transparent", corner_radius=0)
         scroll.pack(fill="both", expand=True)
 
         loc_card = self._card(
