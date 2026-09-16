@@ -26,7 +26,10 @@ from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityErr
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame
+from app.ui.ui_components import (
+    ToolTip, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, themed_menu, add_danger_command,
+)
+from app.ui.formatting import clamp_lines
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
@@ -184,6 +187,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._context_key = None
         self._installed_count = 0
         self._update_count = 0
+        self._updates_by_project: dict = {}  # project_id -> check_updates() entry
+        self._desc_font = None
         self._search_context_dirty = False
 
         self.grid_columnconfigure(0, weight=1)
@@ -258,6 +263,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         first = self._context_key is None and not self._popular_loaded
         self._context_key = ctx
         self._installed_count, self._update_count = 0, 0
+        self._updates_by_project = {}
         self._refresh_installed_counter(check_updates=True)
         if first:
             return
@@ -562,7 +568,16 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._desc_wraplength = wl
         self._desc_labels = [lbl for lbl in self._desc_labels if lbl.winfo_exists()]
         for lbl in self._desc_labels:
-            lbl.configure(wraplength=wl)
+            lbl.configure(wraplength=wl, text=self._clamp_description(getattr(lbl, "full_text", ""), wl))
+
+    def _clamp_description(self, text: str, wraplength: int) -> str:
+        """At most 2 lines, so every card has the same height budget."""
+        if self._desc_font is None:
+            import tkinter.font as tkfont
+            family, size = AppConfig.FONT_BODY_SMALL[0], AppConfig.FONT_BODY_SMALL[1]
+            # Negative size = pixels, the unit CTk uses for its scaled fonts.
+            self._desc_font = tkfont.Font(family=family, size=-size)
+        return clamp_lines(text, self._desc_font.measure, wraplength, max_lines=2)
 
     _SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -1001,19 +1016,26 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _place_card(self, hit: dict, row: int):
         card = self._create_mod_card(hit)
         card.grid(row=row, column=0, sticky="ew", padx=6, pady=3)
+        self._cards.append([card, row, hit, self._card_state(hit)])
+
+    def _card_state(self, hit: dict) -> tuple:
+        """What a card's action button depends on: installed + known update."""
         key = hit.get("slug") or hit.get("project_id", "")
-        self._cards.append([card, row, hit, key in self._installed_slugs_cache])
+        update = self._updates_by_project.get(hit.get("project_id"))
+        return key in self._installed_slugs_cache, (update or {}).get("latest_version")
 
     def _refresh_installed_state(self):
         """Rebuild only the cards whose installed state changed (install,
         uninstall, delete) — the rest of the page stays put, no flicker."""
         self._refresh_installed_counter()
+        self._refresh_card_states()
+
+    def _refresh_card_states(self):
         if self._view != "search" or self._results_stale:
             return
         for entry in list(self._cards):
-            card, row, hit, was_installed = entry
-            key = hit.get("slug") or hit.get("project_id", "")
-            if (key in self._installed_slugs_cache) == was_installed or not card.winfo_exists():
+            card, row, hit, state = entry
+            if self._card_state(hit) == state or not card.winfo_exists():
                 continue
             self._cards.remove(entry)
             self._place_card(hit, row)  # new card covers the old one before it goes
@@ -1087,14 +1109,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             anchor="w",
         ).pack(side="left", padx=(8, 0))
 
-        desc = hit.get("description", "")
-        if len(desc) > 160:
-            desc = desc[:160].rsplit(" ", 1)[0] + "…"
+        full_desc = hit.get("description", "")
+        desc = self._clamp_description(full_desc, self._desc_wraplength)
         lbl_desc = ctk.CTkLabel(info_frame, text=desc,
                                 text_color=AppConfig.COLOR_TEXT_GRAY,
                                 font=AppConfig.FONT_BODY_SMALL,
                                 anchor="w", wraplength=self._desc_wraplength, justify="left")
         lbl_desc.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        lbl_desc.full_text = full_desc
         self._desc_labels.append(lbl_desc)
 
         # Badges row
@@ -1111,17 +1133,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         lbl_dl.pack(side="left", padx=(0, 10))
 
         # Most important first: on narrow cards the row clips from the right,
-        # so categories are what gets cut -- never "Installed" or the
-        # client/server compatibility badge.
-        if hit_key in self._installed_slugs_cache:
-            installed_badge = ctk.CTkLabel(
-                badge_frame, text="Installed",
-                image=icon("check", 10, AppConfig.COLOR_TEXT_ON_BRIGHT), compound="left", padx=8, pady=2,
-                font=AppConfig.FONT_MICRO_BOLD, text_color=AppConfig.COLOR_TEXT_ON_BRIGHT,
-                fg_color=AppConfig.COLOR_MODRINTH_BRAND,
-                corner_radius=AppConfig.RADIUS_BADGE,
-            )
-            installed_badge.pack(side="left", padx=(0, 4))
+        # so categories are what gets cut -- never the client/server badge.
 
         server_side = hit.get("server_side", "unknown")
         if client_only:
@@ -1131,23 +1143,29 @@ class ModrinthBrowser(ctk.CTkFrame):
         elif server_side == "optional":
             self._pill(badge_frame, "Client + Server", AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT)
 
+        # Categories are decoration: neutral pills, so the colored compatibility
+        # badge is the one that stands out (lime-on-green categories were low
+        # contrast in dark mode, too).
         for cat in hit.get("categories", [])[:3]:
-            self._pill(badge_frame, cat, AppConfig.COLOR_BADGE_BG, AppConfig.COLOR_BADGE_TEXT)
+            self._pill(badge_frame, cat, AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT)
 
         is_modpack = hit.get("project_type") == "modpack"
         install_cmd = self._on_install_modpack if is_modpack else self._on_install
         unsupported = server_side == "unsupported" and not is_modpack
         already_installed = hit_key in self._installed_slugs_cache and not is_modpack
         if already_installed:
+            update = self._updates_by_project.get(hit.get("project_id"))
             btn_install = ctk.CTkButton(
-                card, text="Uninstall", width=90, height=32,
+                card, text="Installed", width=100, height=32, compound="right",
+                image=icon("dot", 10, AppConfig.COLOR_ACCENT_AMBER) if update else icon(
+                    "chevron_down", 12, AppConfig.COLOR_MODRINTH_TEXT),
                 corner_radius=AppConfig.RADIUS_BTN,
-                fg_color="transparent", border_width=AppConfig.BORDER_BTN,
-                border_color=AppConfig.COLOR_BTN_DANGER,
-                hover_color=AppConfig.COLOR_BADGE_DANGER_BG,
-                text_color=AppConfig.COLOR_BADGE_DANGER_TEXT, font=AppConfig.FONT_LABEL_SMALL,
-                command=lambda k=hit_key, t=hit.get("title", hit_key): self._confirm_uninstall_mod(k, t),
+                fg_color=AppConfig.COLOR_BADGE_BG, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                text_color=AppConfig.COLOR_MODRINTH_TEXT, font=AppConfig.FONT_LABEL_SMALL,
             )
+            btn_install.configure(command=lambda b=btn_install, h=hit, u=update: self._open_installed_menu(b, h, u))
+            ToolTip(btn_install, f"Update available: {update.get('latest_version', '?')}" if update
+                    else "Installed on this server")
         else:
             btn_install = ctk.CTkButton(
                 card, text="Client-only" if unsupported else "Install", width=90, height=32,
@@ -1163,6 +1181,33 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_install.grid(row=0, column=3, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
         return card
+
+    def _open_installed_menu(self, button, hit: dict, update: Optional[dict]):
+        """Actions for an installed mod: update (when one is known) and uninstall."""
+        key = hit.get("slug") or hit.get("project_id", "")
+        title = hit.get("title", key)
+        menu = themed_menu(self)
+        if update:
+            menu.add_command(label=f"  Update to {update.get('latest_version', 'latest')}",
+                             command=lambda: self._update_from_card(update))
+            menu.add_separator()
+        add_danger_command(menu, "  Uninstall", lambda: self._confirm_uninstall_mod(key, title))
+        try:
+            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def _update_from_card(self, update: dict):
+        ctx = self._resolve_server_context()
+        if not ctx:
+            return
+        if self._server_is_running():
+            self._warn_server_running()
+            return
+        fname = update.get("filename", "")
+        fpath = next((f for f in self._installed_jar_files(ctx[0]) if os.path.basename(f) == fname), None)
+        if fpath:
+            self._apply_single_update(fpath, update)
 
     @staticmethod
     def _pill(parent, text: str, fg_color, text_color) -> None:
@@ -1240,15 +1285,17 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _worker():
             try:
-                count = len(self.client.check_updates(ctx[0], ctx[1], ctx[2]))
+                updates = self.client.check_updates(ctx[0], ctx[1], ctx[2])
             except Exception as exc:
                 logger.debug("Background update count failed: %s", exc)
                 return
 
             def _apply():
                 if self.winfo_exists() and self._context_key == key:
-                    self._update_count = count
+                    self._update_count = len(updates)
+                    self._updates_by_project = {u["project_id"]: u for u in updates if u.get("project_id")}
                     self._update_installed_button()
+                    self._refresh_card_states()
             self.after(0, _apply)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1392,9 +1439,15 @@ class ModrinthBrowser(ctk.CTkFrame):
                 self.after(0, lambda: self._set_status(f"Updated {fname} — snapshot saved (rollback in Backups tab)", kind="success"))
             else:
                 self.after(0, lambda: self._set_status(f"Update failed for {fname} — restore snapshot from Backups tab", kind="error"))
-            self.after(0, self._render_installed)
+            self.after(0, self._after_update_applied)
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _after_update_applied(self):
+        if self._view == "installed":
+            self._render_installed()
+        else:
+            self._refresh_installed_counter(check_updates=True)
 
     def _render_installed_rows(self, remaining: list, gen: int):
         if gen != self._render_gen or not self.winfo_exists():

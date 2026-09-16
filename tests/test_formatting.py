@@ -27,3 +27,23 @@ def test_format_memory():
 
 def test_memory_tooltip_names_heap_cap():
     assert "2.0 GB" in memory_tooltip(2048)
+
+
+def _measure(text):
+    return len(text) * 10  # 10px per character
+
+
+def test_clamp_lines_short_text_untouched():
+    from app.ui.formatting import clamp_lines
+    assert clamp_lines("fits on one line", _measure, 200) == "fits on one line"
+
+
+def test_clamp_lines_cuts_to_two_lines_with_ellipsis():
+    from app.ui.formatting import clamp_lines
+    text = "aaaa bbbb cccc dddd eeee ffff"  # 3 lines at 100px (two words per line)
+    result = clamp_lines(text, _measure, 100, max_lines=2)
+    assert result.endswith("…")
+    assert result.startswith("aaaa bbbb cccc")
+    assert "eeee" not in result
+    # the last kept line plus the ellipsis still fits the width
+    assert _measure(result.split("bbbb ")[1]) <= 100

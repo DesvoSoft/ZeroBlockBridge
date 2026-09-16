@@ -16,6 +16,33 @@ def format_duration(seconds: float) -> str:
     return f"{days}d {hours}h"
 
 
+def clamp_lines(text: str, measure, width: int, max_lines: int = 2, ellipsis: str = "…") -> str:
+    """Trim text so a greedy word wrap at `width` px fits in max_lines.
+
+    measure(str) -> px width in the label's font. Mirrors how Tk wraps a label
+    at its wraplength (break at spaces), so the label never grows a 3rd line.
+    """
+    words = text.split()
+    lines, current = [], []
+    for word in words:
+        candidate = " ".join(current + [word])
+        if current and measure(candidate) > width:
+            lines.append(current)
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines.append(current)
+    if len(lines) <= max_lines:
+        return text
+    kept = lines[:max_lines]
+    last = kept[-1]
+    while last and measure(" ".join(last) + ellipsis) > width:
+        last = last[:-1]
+    kept[-1] = last
+    return " ".join(w for line in kept for w in line) + ellipsis
+
+
 def format_memory(used_bytes: int) -> str:
     """'RAM 2.3 GB' — resident memory of the server process."""
     return f"RAM {used_bytes / (1024 ** 3):.1f} GB"

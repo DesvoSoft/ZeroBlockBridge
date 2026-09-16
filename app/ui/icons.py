@@ -176,6 +176,11 @@ class _Painters:
                fill=c, width=w, joint="curve")
 
     @staticmethod
+    def chevron_down(d, s, c, w):
+        d.line([(0.18 * s, 0.38 * s), (0.50 * s, 0.66 * s), (0.82 * s, 0.38 * s)],
+               fill=c, width=w, joint="curve")
+
+    @staticmethod
     def download(d, s, c, w):
         d.line([(0.5 * s, 0.10 * s), (0.5 * s, 0.60 * s)], fill=c, width=w)
         d.line([(0.28 * s, 0.42 * s), (0.5 * s, 0.64 * s), (0.72 * s, 0.42 * s)],

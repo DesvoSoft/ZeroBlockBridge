@@ -67,6 +67,32 @@ def center_on_parent(toplevel, parent, width, height):
     toplevel.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
 
+def themed_menu(parent):
+    """tk.Menu styled to the current theme (CTk has no dropdown menu widget)."""
+    import tkinter as tk
+    return tk.Menu(
+        parent, tearoff=0,
+        bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
+        fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+        activebackground=resolve_color(AppConfig.COLOR_ACCENT_GREEN),
+        activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+        activeborderwidth=0,
+        borderwidth=1,
+        relief="flat",
+        font=AppConfig.FONT_BODY_SMALL,
+    )
+
+
+def add_danger_command(menu, label, command):
+    menu.add_command(
+        label=label,
+        foreground=resolve_color(AppConfig.COLOR_BTN_DANGER),
+        activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
+        activebackground=resolve_color(AppConfig.COLOR_BTN_DANGER),
+        command=command,
+    )
+
+
 def dialog_header(parent, title, subtitle=None):
     """Title (+ optional subtitle, e.g. the server it applies to) at the top of
     a dialog body. Titlebars draw no caption, so every dialog names itself
@@ -492,18 +518,7 @@ class ServerListItem(ctk.CTkFrame):
     def _on_right_click(self, event):
         if not self.on_delete and not self.on_export:
             return
-        import tkinter as tk
-        menu = tk.Menu(
-            self, tearoff=0,
-            bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
-            fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-            activebackground=resolve_color(AppConfig.COLOR_ACCENT_GREEN),
-            activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-            activeborderwidth=0,
-            borderwidth=1,
-            relief="flat",
-            font=AppConfig.FONT_BODY_SMALL,
-        )
+        menu = themed_menu(self)
         if self.on_export:
             menu.add_command(
                 label="  Export as .zbbpack",
@@ -512,13 +527,8 @@ class ServerListItem(ctk.CTkFrame):
         if self.on_delete:
             if self.on_export:
                 menu.add_separator()
-            menu.add_command(
-                label=f"  Delete '{self.full_name}'",
-                foreground=resolve_color(AppConfig.COLOR_BTN_DANGER),
-                activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-                activebackground=resolve_color(AppConfig.COLOR_BTN_DANGER),
-                command=lambda: self.on_delete(self.server_name),
-            )
+            add_danger_command(menu, f"  Delete '{self.full_name}'",
+                               lambda: self.on_delete(self.server_name))
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
