@@ -106,6 +106,10 @@ class ZBBManager:
         self.backup_orchestrator = BackupOrchestrator(self)
         self.tunnel_orchestrator = TunnelOrchestrator(self)
         self.scheduler_orchestrator = SchedulerOrchestrator(self)
+        # Player management (whitelist/ops/bans/kick + roster). Blocking calls —
+        # the UI uses it from worker threads.
+        from app.core.players import PlayerOrchestrator
+        self.players = PlayerOrchestrator(self)
 
     def _init_discord_webhook(self) -> None:
         from app.services.settings_manager import SettingsManager
