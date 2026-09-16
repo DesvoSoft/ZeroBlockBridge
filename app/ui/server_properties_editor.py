@@ -125,6 +125,24 @@ _LABEL_WORDS = {
 _LABEL_OVERRIDES = {"white-list": "Whitelist"}
 
 
+# Control column: every settings row right-aligns its control in a column of
+# this width, so help icons, impact dots and controls line up across cards.
+_CONTROL_WIDTH = 200
+_CONTROL_PADX = 12
+
+
+def _bare_switch(parent, **kwargs) -> ctk.CTkSwitch:
+    """Text-less switch whose toggle sits flush with its right edge.
+
+    CTkSwitch keeps a label column (plus a 6px spacer) even with text="",
+    which left the toggle ~10px short of the entries above and below it.
+    """
+    switch = ctk.CTkSwitch(parent, text="", width=0, **kwargs)
+    switch._text_label.grid_remove()
+    switch.grid_columnconfigure(1, minsize=0)
+    return switch
+
+
 def property_label(key: str) -> str:
     """Human label for a server.properties key ("spawn-npcs" -> "Spawn NPCs")."""
     if key in _LABEL_OVERRIDES:
@@ -217,7 +235,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.frame_backups = ctk.CTkFrame(self.tab_backups, fg_color="transparent")
         self.frame_backups.pack(fill="both", expand=True)
 
-        self.frame_automation = ctk.CTkFrame(self.tab_automation, fg_color="transparent")
+        self.frame_automation = ctk.CTkScrollableFrame(self.tab_automation)
         self.frame_automation.pack(fill="both", expand=True)
 
         self.frame_launch = ctk.CTkScrollableFrame(self.tab_launch)
@@ -237,17 +255,17 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         # Footer Buttons
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=10)
+        self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=(0, 10))
         
         self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
                                          fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                                          corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_cancel.pack(side="right", padx=5)
+        self.btn_cancel.pack(side="right")
 
         self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties,
                                       fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
                                       corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_save.pack(side="right", padx=5)
+        self.btn_save.pack(side="right", padx=(0, 8))
         
         apply_rounded_corners(self)
 
@@ -281,28 +299,29 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.loaded_tabs.add(tab)
 
     def setup_backups_tab(self):
-        # Toolbar
-        toolbar = ctk.CTkFrame(self.frame_backups)
-        toolbar.pack(fill="x", pady=5)
-        
-        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup, corner_radius=AppConfig.RADIUS_BTN,
+        # Toolbar — flush with the list's edges, one button height
+        toolbar = ctk.CTkFrame(self.frame_backups, fg_color="transparent")
+        toolbar.pack(fill="x", pady=(0, 8))
+        _btn = dict(corner_radius=AppConfig.RADIUS_BTN, height=32)
+
+        ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup,
                       fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
-                      width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup, corner_radius=AppConfig.RADIUS_BTN,
+                      width=120, **_btn).pack(side="left")
+        ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup,
                       fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-                      width=120).pack(side="left", padx=5)
-        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups, corner_radius=AppConfig.RADIUS_BTN,
+                      width=130, **_btn).pack(side="left", padx=(8, 0))
+        ctk.CTkButton(toolbar, text="Refresh", command=self.refresh_backups,
                       fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                      width=80).pack(side="right", padx=5)
+                      width=80, **_btn).pack(side="right")
         self.btn_export_pack = ctk.CTkButton(
-            toolbar, text="Export as .zbbpack", command=self.export_zbbpack, corner_radius=AppConfig.RADIUS_BTN,
+            toolbar, text="Export as .zbbpack", command=self.export_zbbpack,
             fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            width=150)
-        self.btn_export_pack.pack(side="right", padx=5)
+            width=150, **_btn)
+        self.btn_export_pack.pack(side="right", padx=(0, 8))
 
         # List
         self.backup_list_frame = ctk.CTkScrollableFrame(self.frame_backups)
-        self.backup_list_frame.pack(fill="both", expand=True, pady=5)
+        self.backup_list_frame.pack(fill="both", expand=True)
         
         self.backup_var = ctk.StringVar()
         self.backup_manager = BackupManager(self.server_name)
@@ -311,7 +330,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             self.frame_backups, text="", anchor="w",
             text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_CAPTION
         )
-        self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
+        self._next_backup_lbl.pack(fill="x", padx=12, pady=(6, 0))
         self._refresh_backup_countdown()
 
     def refresh_backups(self):
@@ -350,14 +369,15 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             return
             
         for backup in backups:
-            row = ctk.CTkFrame(self.backup_list_frame)
-            row.pack(fill="x", pady=2)
+            row = ctk.CTkFrame(self.backup_list_frame,
+                               fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+            row.pack(fill="x", padx=2, pady=2)
 
             label = f"{backup['date']} ({backup['size']})"
             if backup.get("reason") == "pre_update":
                 label = f"Pre-Update — {label}"
             rb = ctk.CTkRadioButton(row, text=label, variable=self.backup_var, value=backup['path'])
-            rb.pack(side="left", padx=10, pady=5)
+            rb.pack(side="left", padx=12, pady=8)
 
     def create_backup(self):
         def worker():
@@ -461,46 +481,36 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         schedule = self.scheduler.get_schedule()
         
         card = self.create_section_frame(self.frame_automation, "Automated Restarts")
-        
-        # Enable Toggle
-        self.var_auto_restart = ctk.BooleanVar(value=bool(schedule))
-        self.chk_auto_restart = ctk.CTkSwitch(card, text="Enable Automated Restarts", 
-                                                variable=self.var_auto_restart, command=self.toggle_automation_inputs)
-        self.chk_auto_restart.grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=10)
-        
-        # Backup on Restart Toggle
-        self.var_backup_restart = ctk.BooleanVar(value=schedule.get("backup_on_restart", False) if schedule else False)
-        self.chk_backup_restart = ctk.CTkSwitch(card, text="Backup before Restart", variable=self.var_backup_restart)
-        self.chk_backup_restart.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
 
-        # Separator
-        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=5)
-        
-        # Mode Selection
-        ctk.CTkLabel(card, text="Schedule Mode:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=8)
+        self.var_auto_restart = ctk.BooleanVar(value=bool(schedule))
+        self._start_row(card, "Enable Automated Restarts")
+        self.chk_auto_restart = _bare_switch(card, variable=self.var_auto_restart,
+                                             command=self.toggle_automation_inputs)
+        self._grid_control(card, self.chk_auto_restart)
+
+        self.var_backup_restart = ctk.BooleanVar(value=schedule.get("backup_on_restart", False) if schedule else False)
+        _, self.lbl_backup_restart = self._start_row(card, "Backup before Restart")
+        self.chk_backup_restart = _bare_switch(card, variable=self.var_backup_restart)
+        self._grid_control(card, self.chk_backup_restart)
+
         self.var_schedule_mode = ctk.StringVar(value="Interval")
         if schedule and schedule.get("type") == "time":
             self.var_schedule_mode.set("Daily Time")
-            
-        self.combo_mode = ctk.CTkOptionMenu(card, values=["Interval", "Daily Time"], variable=self.var_schedule_mode, command=self.toggle_automation_inputs, height=28)
-        self.combo_mode.grid(row=3, column=2, sticky="e", padx=12, pady=5)
+        _, self.lbl_schedule_mode = self._start_row(card, "Schedule Mode")
+        self.combo_mode = ctk.CTkOptionMenu(card, values=["Interval", "Daily Time"], variable=self.var_schedule_mode,
+                                            command=self.toggle_automation_inputs, height=28, width=_CONTROL_WIDTH)
+        self._grid_control(card, self.combo_mode)
 
-        # Interval Input
-        self.lbl_interval = ctk.CTkLabel(card, text="Interval (Hours):", font=self.font_bold, anchor="w")
-        self.lbl_interval.grid(row=4, column=0, sticky="w", padx=(12, 5), pady=8)
-        
         vcmd = (self.register(self.validate_int), '%P')
-        self.entry_interval = ctk.CTkEntry(card, height=28, validate="key", validatecommand=vcmd, width=100)
-        self.entry_interval.grid(row=4, column=2, sticky="e", padx=12, pady=5)
+        _, self.lbl_interval = self._start_row(card, "Interval (hours)")
+        self.entry_interval = ctk.CTkEntry(card, height=28, width=_CONTROL_WIDTH, validate="key", validatecommand=vcmd)
         self.entry_interval.insert(0, str(schedule.get("interval_hours", 6)) if schedule else "6")
-        
-        # Time Input
-        self.lbl_time = ctk.CTkLabel(card, text="Daily Time (HH:MM):", font=self.font_bold, anchor="w")
-        self.lbl_time.grid(row=5, column=0, sticky="w", padx=(12, 5), pady=8)
-        
-        self.entry_time = ctk.CTkEntry(card, height=28, width=100)
-        self.entry_time.grid(row=5, column=2, sticky="e", padx=12, pady=5)
+        self._grid_control(card, self.entry_interval)
+
+        _, self.lbl_time = self._start_row(card, "Daily Time (HH:MM)")
+        self.entry_time = ctk.CTkEntry(card, height=28, width=_CONTROL_WIDTH)
         self.entry_time.insert(0, schedule.get("restart_time", "03:00") if schedule else "03:00")
+        self._grid_control(card, self.entry_time)
 
         # Auto-Backups card (P0.2)
         backup_sched = BackupScheduler(self.server_name)
@@ -509,52 +519,34 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         card_bk = self.create_section_frame(self.frame_automation, "Auto-Backups")
 
         self.var_auto_backup = ctk.BooleanVar(value=bk_cfg.get("enabled", False))
-        ctk.CTkSwitch(card_bk, text="Enable Auto-Backups", variable=self.var_auto_backup).grid(
-            row=0, column=0, columnspan=4, sticky="w", padx=15, pady=10
-        )
+        self._start_row(card_bk, "Enable Auto-Backups")
+        self._grid_control(card_bk, _bare_switch(card_bk, variable=self.var_auto_backup))
 
-        ctk.CTkFrame(card_bk, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(
-            row=1, column=0, columnspan=4, sticky="ew", padx=15, pady=2
-        )
-
-        ctk.CTkLabel(card_bk, text="Interval (Hours):", font=self.font_bold, anchor="w").grid(
-            row=2, column=0, sticky="w", padx=(12, 5), pady=8
-        )
         vcmd2 = (self.register(self.validate_int), '%P')
-        self.entry_bk_interval = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self._start_row(card_bk, "Interval (hours)")
+        self.entry_bk_interval = ctk.CTkEntry(card_bk, height=28, width=_CONTROL_WIDTH, validate="key", validatecommand=vcmd2)
         self.entry_bk_interval.insert(0, str(bk_cfg.get("interval_hours", 24)))
-        self.entry_bk_interval.grid(row=2, column=3, sticky="e", padx=12, pady=5)
+        self._grid_control(card_bk, self.entry_bk_interval)
 
-        ctk.CTkLabel(card_bk, text="Keep (last N backups):", font=self.font_bold, anchor="w").grid(
-            row=3, column=0, sticky="w", padx=(12, 5), pady=8
-        )
-        self.entry_bk_retention = ctk.CTkEntry(card_bk, height=28, width=80, validate="key", validatecommand=vcmd2)
+        self._start_row(card_bk, "Keep (last N backups)")
+        self.entry_bk_retention = ctk.CTkEntry(card_bk, height=28, width=_CONTROL_WIDTH, validate="key", validatecommand=vcmd2)
         self.entry_bk_retention.insert(0, str(bk_cfg.get("retention_count", 10)))
-        self.entry_bk_retention.grid(row=3, column=3, sticky="e", padx=12, pady=5)
+        self._grid_control(card_bk, self.entry_bk_retention)
 
         self.toggle_automation_inputs()
 
     def toggle_automation_inputs(self, *args):
-        if self.var_auto_restart.get():
-            self.combo_mode.configure(state="normal")
-            self.chk_backup_restart.configure(state="normal")
-            if self.var_schedule_mode.get() == "Interval":
-                self.entry_interval.configure(state="normal")
-                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
-                self.entry_time.configure(state="disabled")
-                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
-            else:
-                self.entry_interval.configure(state="disabled")
-                self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
-                self.entry_time.configure(state="normal")
-                self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_PRIMARY)
-        else:
-            self.combo_mode.configure(state="disabled")
-            self.chk_backup_restart.configure(state="disabled")
-            self.entry_interval.configure(state="disabled")
-            self.lbl_interval.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
-            self.entry_time.configure(state="disabled")
-            self.lbl_time.configure(text_color=AppConfig.COLOR_TEXT_GRAY)
+        enabled = self.var_auto_restart.get()
+        interval = self.var_schedule_mode.get() == "Interval"
+        on, off = AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_GRAY
+        self.combo_mode.configure(state="normal" if enabled else "disabled")
+        self.chk_backup_restart.configure(state="normal" if enabled else "disabled")
+        self.entry_interval.configure(state="normal" if enabled and interval else "disabled")
+        self.entry_time.configure(state="normal" if enabled and not interval else "disabled")
+        self.lbl_backup_restart.configure(text_color=on if enabled else off)
+        self.lbl_schedule_mode.configure(text_color=on if enabled else off)
+        self.lbl_interval.configure(text_color=on if enabled and interval else off)
+        self.lbl_time.configure(text_color=on if enabled and not interval else off)
 
     def save_automation(self):
         if not self.var_auto_restart: return
@@ -604,7 +596,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             widget.insert(0, str(val))
             widget.pack(fill="x", expand=True, pady=0)
         elif widget_type == "checkbox":
-            widget = ctk.CTkSwitch(parent, text="", height=compact_height, width=50)
+            widget = _bare_switch(parent, height=compact_height)
             if str(val).lower() == "true":
                 widget.select()
             widget.pack(anchor="e", pady=0)
@@ -625,12 +617,34 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         card = ctk.CTkFrame(parent, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK), corner_radius=AppConfig.RADIUS_CARD)
         card.pack(fill="x", padx=10, pady=(0, 5))
         
+        # Fixed widths for the help/impact/control columns: every card lines
+        # them up at the same x, whether or not a card has any "?" or dot.
         card.grid_columnconfigure(0, weight=1) # Label
-        card.grid_columnconfigure(1, weight=0) # Help Icon
-        card.grid_columnconfigure(2, weight=0) # Impact Dot
-        card.grid_columnconfigure(3, weight=0) # Control
-        
+        card.grid_columnconfigure(1, weight=0, minsize=22) # Help Icon
+        card.grid_columnconfigure(2, weight=0, minsize=12) # Impact Dot
+        card.grid_columnconfigure(3, weight=0, minsize=_CONTROL_WIDTH + 2 * _CONTROL_PADX) # Control
+
         return card
+
+    def _start_row(self, card, label_text: str, sticky: str = "w"):
+        """Separator (after the first row) + label; returns (row, label)."""
+        row = card.grid_size()[1]
+        if row > 0:
+            sep = ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
+            sep.grid(row=row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
+            row += 1
+        lbl = ctk.CTkLabel(card, text=label_text, font=self.font_bold, anchor="w")
+        lbl.grid(row=row, column=0, sticky=sticky, padx=(12, 5), pady=8)
+        return row, lbl
+
+    @staticmethod
+    def _grid_control(card, widget, row=None, **grid_kwargs):
+        """Right-align a control in the shared control column of the last row."""
+        if row is None:
+            row = card.grid_size()[1] - 1
+        opts = dict(row=row, column=3, sticky="e", padx=_CONTROL_PADX, pady=5)
+        opts.update(grid_kwargs)
+        widget.grid(**opts)
 
     def add_field_to_section(self, parent_card, key, label_text, widget_type="entry", options=None, default_val=None):
         """Adds a row to an existing section card using Grid."""
@@ -638,18 +652,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         description = meta.get("desc")
         impact = meta.get("impact")
         
-        current_row = parent_card.grid_size()[1]
-        
-        # 1. Separator
-        if current_row > 0:
-            sep = ctk.CTkFrame(parent_card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
-            sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
-            current_row += 1
+        # 1-2. Separator + label
+        current_row, _ = self._start_row(parent_card, label_text)
 
-        # 2. Label
-        lbl = ctk.CTkLabel(parent_card, text=label_text, font=self.font_bold, anchor="w")
-        lbl.grid(row=current_row, column=0, sticky="w", padx=(12, 5), pady=8)
-        
         # 3. Help Icon (?)
         if description:
             help_icon = ctk.CTkLabel(parent_card, text="?", font=self.font_small, 
@@ -666,8 +671,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             dot.tooltip_ref = ToolTip(dot, f"Impact: {impact}")
 
         # 5. Control Frame (for alignment)
-        ctrl_frame = ctk.CTkFrame(parent_card, fg_color="transparent", width=200, height=28)
-        ctrl_frame.grid(row=current_row, column=3, sticky="e", padx=12, pady=3)
+        ctrl_frame = ctk.CTkFrame(parent_card, fg_color="transparent", width=_CONTROL_WIDTH, height=28)
+        self._grid_control(parent_card, ctrl_frame, row=current_row, pady=3)
         ctrl_frame.pack_propagate(False)
         
         val = self.properties.get(key)
@@ -723,31 +728,26 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # 1. Identity Section
         card_identity = self.create_section_frame(self.frame_general, "Identity & Appearance")
         
-        ctk.CTkLabel(card_identity, text="Server Icon", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._start_row(card_identity, "Server Icon")
         btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
                             width=100, height=28, fg_color="transparent", border_width=1,
                             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
                             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                            text_color=AppConfig.COLOR_TEXT_GRAY)
-        btn.grid(row=0, column=2, sticky="e", padx=12, pady=8)
-        
-        current_row = card_identity.grid_size()[1]
-        sep = ctk.CTkFrame(card_identity, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
-        sep.grid(row=current_row, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
-        current_row += 1
+                            text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        self._grid_control(card_identity, btn)
 
-        ctk.CTkLabel(card_identity, text="Message of the Day", font=self.font_bold, anchor="w").grid(row=current_row, column=0, sticky="nw", padx=(12, 5), pady=8)
+        current_row, _ = self._start_row(card_identity, "Message of the Day", sticky="nw")
 
         motd_help_icon = ctk.CTkLabel(card_identity, text="?", font=self.font_small,
                                  width=18, height=18, corner_radius=9,
                                  fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_GRAY)
-        motd_help_icon.grid(row=current_row, column=1, sticky="nw", padx=2, pady=8)
+        motd_help_icon.grid(row=current_row, column=1, sticky="nw", padx=2, pady=13)
         motd_help_icon.tooltip_ref = ToolTip(motd_help_icon, text="Message shown in the multiplayer server list. Supports § color codes - the preview below shows the result.")
 
         motd_frame = ctk.CTkFrame(card_identity, fg_color="transparent")
-        motd_frame.grid(row=current_row, column=2, columnspan=2, sticky="e", padx=12, pady=5)
-        
-        self.entry_motd = ctk.CTkEntry(motd_frame, width=200, height=28)
+        self._grid_control(card_identity, motd_frame, row=current_row)
+
+        self.entry_motd = ctk.CTkEntry(motd_frame, width=_CONTROL_WIDTH, height=28)
         self.entry_motd.pack(fill="x", pady=(0, 5))
         self.entry_motd.insert(0, self.properties.get("motd", "A Minecraft Server"))
         self.entry_motd.bind("<KeyRelease>", self._update_motd_preview)
@@ -755,7 +755,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.preview_motd_frame = ctk.CTkFrame(motd_frame, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), corner_radius=0, border_width=2, border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK))
         self.preview_motd_frame.pack(fill="x", pady=(0, 0))
         
-        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=200, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_MONO, wrap="word")
+        self.motd_preview = ctk.CTkTextbox(self.preview_motd_frame, height=45, width=_CONTROL_WIDTH - 4, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK), text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_MONO, wrap="word")
         self.motd_preview.pack(fill="both", expand=True, padx=2, pady=2)
         
         mc_colors = {
@@ -774,10 +774,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         # 2. Resources Section
         card_res = self.create_section_frame(self.frame_general, "Resources")
         
-        ctk.CTkLabel(card_res, text="RAM Allocation", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
-        
-        ram_ctrl = ctk.CTkFrame(card_res, fg_color="transparent", width=200, height=28)
-        ram_ctrl.grid(row=0, column=2, sticky="e", padx=12, pady=3)
+        self._start_row(card_res, "RAM Allocation")
+        ram_ctrl = ctk.CTkFrame(card_res, fg_color="transparent", width=_CONTROL_WIDTH, height=28)
+        self._grid_control(card_res, ram_ctrl, pady=3)
         ram_ctrl.pack_propagate(False)
         
         vcmd = (self.register(self.validate_int), '%P')
@@ -796,9 +795,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
 
         # 4. Modpack Import Section
         card_mrpack = self.create_section_frame(self.frame_general, "Modpack Import")
-        ctk.CTkLabel(
-            card_mrpack, text="Import from .mrpack", font=self.font_bold, anchor="w",
-        ).grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._start_row(card_mrpack, "Import from .mrpack")
 
         self.btn_mrpack = ctk.CTkButton(
             card_mrpack, text="Import .mrpack", image=icon("download", 13, AppConfig.COLOR_TEXT_ON_ACCENT), width=150, height=28,
@@ -807,13 +804,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_BADGE,
             command=self._on_import_mrpack,
         )
-        self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)
+        self._grid_control(card_mrpack, self.btn_mrpack, row=0)
 
         self.lbl_mrpack_status = ctk.CTkLabel(
             card_mrpack, text="", font=self.font_small, anchor="w",
             text_color=AppConfig.COLOR_TEXT_GRAY,
         )
-        self.lbl_mrpack_status.grid(row=1, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 8))
+        self.lbl_mrpack_status.grid(row=1, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 8))
 
     def _set_mrpack_status(self, text: str, kind: str = "info"):
         colors = {
@@ -884,8 +881,8 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ctk.CTkLabel(
             self.frame_world,
             text="Changing the active world requires the server to be stopped for the change to take effect.",
-            font=self.font_small, text_color=AppConfig.COLOR_TEXT_MUTED, anchor="w", wraplength=600,
-        ).pack(fill="x", padx=12, pady=(4, 8))
+            font=self.font_small, text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", wraplength=600,
+        ).pack(fill="x", padx=15, pady=(4, 0))
         self._build_tab_from_config(self.frame_world, "World")
 
     def setup_network_tab(self):
@@ -988,7 +985,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         card = self.create_section_frame(self.frame_launch, "Java & Runtime")
 
         # Java Path
-        ctk.CTkLabel(card, text="Java Version:", font=self.font_bold, anchor="w").grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
+        self._start_row(card, "Java Version")
         self._grid_help_icon(card, 0, (
             "Which Java runtime launches the server.\n"
             "Auto-Detect picks the version your Minecraft version requires\n"
@@ -1011,8 +1008,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.var_java_path = ctk.StringVar(value=self._java_path_to_label.get(saved_path, "Auto-Detect"))
 
         self.combo_java = ctk.CTkOptionMenu(card, values=list(self._java_label_to_path.keys()),
-                                            variable=self.var_java_path, height=28)
-        self.combo_java.grid(row=0, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+                                            variable=self.var_java_path, height=28, width=_CONTROL_WIDTH,
+                                            dynamic_resizing=False)
+        self._grid_control(card, self.combo_java, row=0)
 
         # detect_all() scans registry + filesystem — keep it off the UI thread
         def _load_javas():
@@ -1036,37 +1034,35 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         threading.Thread(target=_load_javas, daemon=True).start()
 
         # Aikar's Flags
-        ctk.CTkFrame(card, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=2)
-        
-        ctk.CTkLabel(card, text="Use Aikar's Flags:", font=self.font_bold, anchor="w").grid(row=2, column=0, sticky="w", padx=(12, 5), pady=8)
-        self._grid_help_icon(card, 2, (
+        row, _ = self._start_row(card, "Use Aikar's Flags")
+        self._grid_help_icon(card, row, (
             "Community-tuned JVM garbage collector flags (from PaperMC)\n"
             "that reduce lag spikes on Minecraft servers. Recommended: on.\n"
             "When off, only the basic memory flags (-Xms/-Xmx) are used."
         ))
         self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
-        self.chk_aikars = ctk.CTkSwitch(card, text="", variable=self.var_use_aikars)
-        self.chk_aikars.grid(row=2, column=2, columnspan=2, sticky="e", padx=12, pady=5)
+        self.chk_aikars = _bare_switch(card, variable=self.var_use_aikars)
+        self._grid_control(card, self.chk_aikars, row=row)
 
         # Custom JVM Flags
-        ctk.CTkLabel(card, text="Custom JVM Flags:", font=self.font_bold, anchor="w").grid(row=3, column=0, sticky="w", padx=(12, 5), pady=(8, 0))
-        self._grid_help_icon(card, 3, (
+        row, _ = self._start_row(card, "Custom JVM Flags")
+        self._grid_help_icon(card, row, (
             "Extra arguments appended to the Java command line, after the\n"
             "memory and GC flags. Space-separated. Leave empty unless a mod\n"
             "or guide asks for a specific flag - a wrong flag can prevent\n"
             "the server from starting."
         ))
-        self.entry_jvm_flags = ctk.CTkEntry(card, height=28)
+        self.entry_jvm_flags = ctk.CTkEntry(card, height=28, width=_CONTROL_WIDTH)
         self.entry_jvm_flags.insert(0, meta.get("jvm_custom_flags", ""))
-        self.entry_jvm_flags.grid(row=3, column=2, columnspan=2, sticky="e", padx=12, pady=(8, 0))
+        self._grid_control(card, self.entry_jvm_flags, row=row)
         ctk.CTkLabel(card, text="e.g. -XX:+UseG1GC -Dfoo=bar", font=self.font_small,
-                     text_color=AppConfig.COLOR_TEXT_MUTED,
-                     anchor="e").grid(row=4, column=2, columnspan=2, sticky="e", padx=12, pady=(0, 8))
+                     text_color=AppConfig.COLOR_TEXT_GRAY,
+                     anchor="e").grid(row=row + 1, column=3, sticky="e", padx=_CONTROL_PADX, pady=(0, 8))
 
         # Tools
         card_tools = self.create_section_frame(self.frame_launch, "Utilities")
         tools_row = ctk.CTkFrame(card_tools, fg_color="transparent")
-        tools_row.pack(fill="x", padx=15, pady=10)
+        tools_row.pack(fill="x", padx=12, pady=12)
         tools_row.grid_columnconfigure((0, 1, 2), weight=1, uniform="tools")
         buttons = (
             ("Open Server Folder", "folder", None,
