@@ -15,6 +15,10 @@ _RATE_LIMIT_SECONDS = 2
 _POST_TIMEOUT = 10
 _MAX_429_WAIT = 30
 _PLAYER_FLUSH_DELAY = 3.0
+# Worker drains one post per _RATE_LIMIT_SECONDS; a crash/restart loop or a
+# dead webhook would otherwise grow the queue without bound. 50 posts is
+# ~100s of backlog — anything older is stale news.
+_MAX_QUEUE = 50
 
 # Internal queue sentinel for the coalesced player join/leave message.
 _PLAYERS_FLUSH = "_players_flush"
@@ -126,7 +130,7 @@ class DiscordWebhookService:
         if enabled_events is None:
             enabled_events = set(_EVENT_LABELS)
         self._enabled = {e for e in enabled_events if e in _EVENT_LABELS}
-        self._queue: queue.Queue = queue.Queue()
+        self._queue: queue.Queue = queue.Queue(maxsize=_MAX_QUEUE)
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run, daemon=True, name="DiscordWebhook")
         self._worker.start()
@@ -167,7 +171,19 @@ class DiscordWebhookService:
         self._enqueue(event_type, data)
 
     def _enqueue(self, event_type: str, data) -> None:
-        self._queue.put((event_type, data))
+        # Drop-oldest when full: never block the EventBus thread, and the
+        # newest event is the most relevant one. Loop because the worker or
+        # the player-flush timer thread may race us between get and put.
+        while True:
+            try:
+                self._queue.put_nowait((event_type, data))
+                return
+            except queue.Full:
+                try:
+                    dropped_type, _ = self._queue.get_nowait()
+                except queue.Empty:
+                    continue
+                logger.warning("Discord webhook queue full, dropped oldest event %s", dropped_type)
 
     # ------------------------------------------------------------------
     # Player join/leave coalescing

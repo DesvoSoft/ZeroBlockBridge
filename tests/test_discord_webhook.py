@@ -193,6 +193,24 @@ class TestDiscordWebhookStop:
         assert svc._queue.empty()
 
 
+class TestDiscordWebhookQueueBound:
+    def test_full_queue_drops_oldest(self, bus):
+        from app.services.discord_webhook import _MAX_QUEUE
+
+        with patch("app.services.discord_webhook.requests.post"):
+            svc = DiscordWebhookService("http://example.com/hook", bus)
+        # Stop the worker so nothing drains while we overfill.
+        svc.stop()
+        svc._worker.join(timeout=3)
+
+        for i in range(_MAX_QUEUE + 10):
+            svc._enqueue(ServerEvent.CRASHED, {"retry": i})
+
+        assert svc._queue.qsize() == _MAX_QUEUE
+        _, first = svc._queue.get_nowait()
+        assert first["retry"] == 10
+
+
 class TestDiscordWebhookEventFilter:
     def test_enabled_events_limits_subscriptions(self, bus):
         with patch("app.services.discord_webhook.requests.post"):
