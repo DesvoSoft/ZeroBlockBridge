@@ -311,6 +311,31 @@ class TestStart:
                             # Agent launched — address resolved via _parse_line or dns poll, not in start()
                             assert m.running is True
 
+    def test_start_ignores_duplicate_while_inflight(self, manager):
+        # TOCTOU guard: a manual start racing the heartbeat's auto-restart
+        # must not both pass the "not running yet" check and both spawn a
+        # process — the second call bails immediately instead.
+        m, _, _ = manager
+        m.running = False
+        m._starting_inflight = True
+        with patch.object(m, "ensure_binary") as mock_ensure:
+            m.start(25565)
+            mock_ensure.assert_not_called()
+            m.console_callback.assert_any_call(
+                "[Playit] Agent is already starting — ignoring duplicate request.")
+
+    def test_starting_inflight_cleared_after_start(self, manager):
+        m, _, _ = manager
+        m.is_linked = True
+        with patch.object(m, "ensure_binary", return_value=True):
+            with patch.object(m, "_current_port", 25565, create=True):
+                with patch("os.path.exists", return_value=True):
+                    with patch("subprocess.Popen") as mock_popen:
+                        mock_popen.return_value = FakeProcess()
+                        with patch("threading.Thread", side_effect=lambda target=None, daemon=False, **kw: MagicMock(start=MagicMock())):
+                            m.start(25565)
+        assert m._starting_inflight is False
+
     def test_oserror_handling(self, manager):
         m, _, _ = manager
         m.is_linked = True

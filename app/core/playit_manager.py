@@ -55,6 +55,12 @@ class PlayitManager:
         # Guards against concurrent tunnel creation when the agent repeats
         # its "0 tunnels" line across reconnect attempts
         self._tunnel_create_inflight = False
+        # Guards against a manual "Start Tunnel" click racing the heartbeat's
+        # auto-restart thread — both could otherwise pass the already_running
+        # check, both download to the same fixed temp path, and both spawn
+        # a playitd process (TOCTOU: process/running used to be set outside
+        # any lock).
+        self._starting_inflight = False
 
         self._shutdown_done = False
         import atexit
@@ -295,16 +301,24 @@ class PlayitManager:
                 self._tunnel_create_inflight = False
 
     def start(self, port: int = 25565) -> None:
-        # Read state under the lock; run callbacks outside it.
+        # Read-and-claim under the lock so two near-simultaneous callers
+        # (manual click + heartbeat auto-restart) can't both see "not
+        # running yet" and both proceed to spawn a process.
         with self._lock:
             already_running = self.running
+            already_starting = self._starting_inflight
             api_dns = self._api_dns
             if already_running and api_dns:
                 self.current_address = api_dns
+            if not already_running and not already_starting:
+                self._starting_inflight = True
         if already_running:
             self.console_callback("[Playit] Agent already running.")
             if api_dns:
                 self.status_callback("Online", api_dns)
+            return
+        if already_starting:
+            self.console_callback("[Playit] Agent is already starting — ignoring duplicate request.")
             return
 
         try:
@@ -313,6 +327,9 @@ class PlayitManager:
             logger.error("[PlayitManager] Fatal error in start thread: %s", e)
             self.console_callback(f"[Playit] Internal start failure: {e}")
             self.status_callback("Error", None)
+        finally:
+            with self._lock:
+                self._starting_inflight = False
 
     def _start_internal(self, port: int) -> None:
         with self._lock:
@@ -378,7 +395,7 @@ class PlayitManager:
                     os.setsid()
                 kwargs["preexec_fn"] = _linux_preexec
 
-            self.process = subprocess.Popen(
+            process = subprocess.Popen(
                 cmd,
                 cwd=os.path.abspath(CONFIG_DIR),
                 stdin=subprocess.DEVNULL,
@@ -387,8 +404,10 @@ class PlayitManager:
                 env=env,
                 **kwargs,
             )
-            assign_to_job(self.process.pid)
-            self.running = True
+            assign_to_job(process.pid)
+            with self._lock:
+                self.process = process
+                self.running = True
             if not self.current_address:
                 self.status_callback("Starting...", None)
 
@@ -622,51 +641,56 @@ class PlayitManager:
                 if not self.running:
                     return
             time.sleep(5)
-            polls += 1
-            with self._lock:
-                if not self.running:
-                    return
-                if self._api_dns or self._stdout_dns:
-                    return
-            # playitd (v1.0+) never prints "agent has 0 tunnels" like the old
-            # CLI did, so the stdout create-trigger no longer fires. If the
-            # agent has been up for a few polls with no tunnel, ensure one
-            # exists via the API (inflight guard prevents duplicate creates).
-            if polls == 3:
-                with self._lock:
-                    already_running = self._tunnel_create_inflight or self._api_dns
-                    if not already_running:
-                        self._tunnel_create_inflight = True
-                if not already_running:
-                    self.console_callback("[Playit] No public address yet. Ensuring tunnel exists via API...")
-                    threading.Thread(
-                        target=self._create_tunnel_from_stdout,
-                        args=(self._current_port,), daemon=True,
-                    ).start()
             try:
-                addresses = self.api_client.get_tunnels()
-                if addresses:
-                    address = addresses[0]
+                polls += 1
+                with self._lock:
+                    if not self.running:
+                        return
+                    if self._api_dns or self._stdout_dns:
+                        return
+                # playitd (v1.0+) never prints "agent has 0 tunnels" like the old
+                # CLI did, so the stdout create-trigger no longer fires. If the
+                # agent has been up for a few polls with no tunnel, ensure one
+                # exists via the API (inflight guard prevents duplicate creates).
+                if polls == 3:
                     with self._lock:
-                        if address == self.current_address:
-                            continue
-                        self.current_address = address
-                        self._api_dns = address
-                    self.status_callback("Online", address)
-                    self.console_callback(f"[Playit] Public address: {address}")
-                    if self.notification_callback:
-                        self.notification_callback(f"Tunnel online: {address}", "success")
-                    if self.on_ready_callback:
-                        self.on_ready_callback()
+                        already_running = self._tunnel_create_inflight or self._api_dns
+                        if not already_running:
+                            self._tunnel_create_inflight = True
+                    if not already_running:
+                        self.console_callback("[Playit] No public address yet. Ensuring tunnel exists via API...")
+                        threading.Thread(
+                            target=self._create_tunnel_from_stdout,
+                            args=(self._current_port,), daemon=True,
+                        ).start()
+                try:
+                    addresses = self.api_client.get_tunnels()
+                    if addresses:
+                        address = addresses[0]
+                        with self._lock:
+                            if address == self.current_address:
+                                continue
+                            self.current_address = address
+                            self._api_dns = address
+                        self.status_callback("Online", address)
+                        self.console_callback(f"[Playit] Public address: {address}")
+                        if self.notification_callback:
+                            self.notification_callback(f"Tunnel online: {address}", "success")
+                        if self.on_ready_callback:
+                            self.on_ready_callback()
+                        return
+                except Exception as e:
+                    logger.warning("[Playit] DNS polling error: %s", e)
+                # get_tunnels() swallows API exceptions, so a dead secret surfaces
+                # here only as the client's consecutive 401 count — stop polling
+                # instead of hammering the API every 5s forever.
+                if self.api_client.consecutive_auth_failures >= 3:
+                    self._handle_auth_failure("API rejected the agent secret repeatedly")
                     return
-            except Exception as e:
-                logger.warning("[Playit] DNS polling error: %s", e)
-            # get_tunnels() swallows API exceptions, so a dead secret surfaces
-            # here only as the client's consecutive 401 count — stop polling
-            # instead of hammering the API every 5s forever.
-            if self.api_client.consecutive_auth_failures >= 3:
-                self._handle_auth_failure("API rejected the agent secret repeatedly")
-                return
+            except Exception:
+                # Must never let an unexpected error kill this daemon thread —
+                # that would silently stop DNS resolution for the rest of the session.
+                logger.exception("[Playit] DNS polling loop: unhandled error in iteration")
 
     def _heartbeat_loop(self) -> None:
         max_attempts = 10
@@ -678,34 +702,39 @@ class PlayitManager:
                 if not self.running:
                     break
             time.sleep(15)
-            with self._lock:
-                if not self.running:
-                    break
-                
-                is_dead = (self.process is None or self.process.poll() is not None)
-            
-            if is_dead:
-                # Auth failures are not recoverable by restart — user must re-link
-                if self._auth_failed:
-                    logger.warning("[Playit] Heartbeat: agent exited due to auth failure — not restarting.")
-                    break
+            try:
+                with self._lock:
+                    if not self.running:
+                        break
 
-                attempt_count += 1
-                logger.warning("[Playit] Heartbeat #%d: process not running.", attempt_count)
-                if attempt_count >= max_attempts:
-                    self.console_callback("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
-                    if self.notification_callback:
-                        self.notification_callback("Playit agent failed to start after multiple attempts.", "error")
-                    break
+                    is_dead = (self.process is None or self.process.poll() is not None)
+
+                if is_dead:
+                    # Auth failures are not recoverable by restart — user must re-link
+                    if self._auth_failed:
+                        logger.warning("[Playit] Heartbeat: agent exited due to auth failure — not restarting.")
+                        break
+
+                    attempt_count += 1
+                    logger.warning("[Playit] Heartbeat #%d: process not running.", attempt_count)
+                    if attempt_count >= max_attempts:
+                        self.console_callback("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
+                        if self.notification_callback:
+                            self.notification_callback("Playit agent failed to start after multiple attempts.", "error")
+                        break
+                    else:
+                        self.console_callback(f"[Playit] Agent dead. Restarting in {backoff}s (Attempt {attempt_count}/{max_attempts})...")
+                        time.sleep(backoff)
+                        backoff = min(backoff * 2, 300)
+                        port = getattr(self, '_current_port', 25565)
+                        threading.Thread(target=self.start, args=(port,), daemon=True).start()
                 else:
-                    self.console_callback(f"[Playit] Agent dead. Restarting in {backoff}s (Attempt {attempt_count}/{max_attempts})...")
-                    time.sleep(backoff)
-                    backoff = min(backoff * 2, 300)
-                    port = getattr(self, '_current_port', 25565)
-                    threading.Thread(target=self.start, args=(port,), daemon=True).start()
-            else:
-                attempt_count = 0
-                backoff = 1
+                    attempt_count = 0
+                    backoff = 1
+            except Exception:
+                # Must never let an unexpected error kill this daemon thread —
+                # that would silently stop crash-auto-restart for the rest of the session.
+                logger.exception("[Playit] Heartbeat loop: unhandled error in iteration")
 
     SPAM_LOGS = [
         "tunnel running", "udp channel requires auth", "udp session details received",
