@@ -278,10 +278,13 @@ class MCTunnelApp(ctk.CTk):
         self.status_hero_row = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_hero_row.pack(fill="x", padx=15, pady=(6, 6))
 
-        self.lbl_status = ctk.CTkLabel(self.status_hero_row, text="Server: ● Offline",
+        # "Server:" stays gray; only the state after it is colored (mirrors the tunnel row).
+        ctk.CTkLabel(self.status_hero_row, text="Server:", font=AppConfig.FONT_BODY,
+                     text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left", padx=(5, 4))
+        self.lbl_status = ctk.CTkLabel(self.status_hero_row, text="● Offline",
                                        font=AppConfig.FONT_BODY,
                                        text_color=AppConfig.COLOR_STATUS_OFFLINE, anchor="w")
-        self.lbl_status.pack(side="left", padx=(5, 5))
+        self.lbl_status.pack(side="left", padx=(0, 5))
 
         self.lbl_dash_title = ctk.CTkLabel(self.status_hero_row, text="Select a server",
                                             font=AppConfig.FONT_HEADING_SMALL, anchor="w")
@@ -366,21 +369,23 @@ class MCTunnelApp(ctk.CTk):
         self._build_tunnel_controls()
 
     def _build_tunnel_controls(self):
-        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
-        self.lbl_tunnel_status.pack(side="left", padx=(5, 5))
+        ctk.CTkLabel(self.tunnel_frame, text="Tunnel:", font=AppConfig.FONT_BODY,
+                     text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left", padx=(5, 4))
+        self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE, font=AppConfig.FONT_BODY)
+        self.lbl_tunnel_status.pack(side="left", padx=(0, 5))
 
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
 
-        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=AppConfig.FONT_SUBHEADING, text_color=AppConfig.COLOR_LINK)
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=AppConfig.FONT_SUBHEADING, text_color=AppConfig.COLOR_ADDRESS)
         self.lbl_dns_display.pack(side="left", padx=(5, 0))
 
         self.btn_copy_ip = ctk.CTkButton(
-            self.ip_frame, text="", image=icon("copy", 14, AppConfig.COLOR_LINK),
+            self.ip_frame, text="", image=icon("copy", 14, AppConfig.COLOR_ADDRESS),
             command=self._copy_ip_to_clipboard,
             fg_color="transparent",
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_LINK,
+            border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_ADDRESS,
             width=36, corner_radius=AppConfig.RADIUS_BTN, height=28,
         )
         ToolTip(self.btn_copy_ip, "Copy address")
@@ -932,7 +937,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self._set_console_input(True))
-        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
@@ -944,7 +949,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
         self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
@@ -968,7 +973,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self._set_console_input(False))
-        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
@@ -1056,7 +1061,7 @@ class MCTunnelApp(ctk.CTk):
             elif status == "Error": color = AppConfig.COLOR_STATUS_ERROR
             elif status == "Starting...": color = AppConfig.COLOR_STATUS_STARTING
 
-            self.lbl_tunnel_status.configure(text=f"Tunnel: ● {status}", text_color=color)
+            self.lbl_tunnel_status.configure(text=f"● {status}", text_color=color)
 
             is_linked = self.zbb_manager.playit_manager.is_linked
 
@@ -1073,7 +1078,7 @@ class MCTunnelApp(ctk.CTk):
             if status == "Online" and display_dns:
                 self._last_full_ip = display_dns
                 host = display_dns.split(":")[0] if ":" in display_dns else display_dns
-                self.lbl_dns_display.configure(text=host, text_color=AppConfig.COLOR_LINK)
+                self.lbl_dns_display.configure(text=host, text_color=AppConfig.COLOR_ADDRESS)
                 self.lbl_dns_display.pack(side="left", padx=5)
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))

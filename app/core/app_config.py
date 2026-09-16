@@ -51,6 +51,9 @@ class AppConfig:
 
     # Colors - Link/highlight (verde pasto vivo — reemplaza el azul #3b82f6)
     COLOR_LINK = ("#4d7c0f", "#a3e635")  # lime-800 light / lime-400 dark
+    # The one blue in the palette (user choice): the tunnel join address, so it
+    # stands out from the lime UI as "the thing to share".
+    COLOR_ADDRESS = ("#2563eb", "#60a5fa")  # blue-600 light / blue-400 dark
 
     # Colors - Badges/pills (shared across status bar, mods browser)
     COLOR_BADGE_BG = ("#ecfccb", "#26331c")    # lime-100 / verde oscuro
