@@ -305,11 +305,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         bar.grid_columnconfigure(1, weight=1)  # search entry soaks up leftover width
 
         lbl_icon = ctk.CTkLabel(bar, text="", image=icon("search", 15))
-        lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=6)
+        lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=(8, 6))
 
         self.entry_search = ctk.CTkEntry(
             bar,
-            placeholder_text="Search mods, plugins, shaders…",
+            placeholder_text="Search Modrinth…",
             corner_radius=AppConfig.RADIUS_INPUT,
             height=28,
             width=220,
@@ -317,7 +317,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             border_width=0,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
         )
-        self.entry_search.grid(row=0, column=1, sticky="ew", padx=4, pady=6)
+        self.entry_search.grid(row=0, column=1, sticky="ew", padx=4, pady=(8, 6))
         self.entry_search.bind("<Return>", self._on_search)
 
         _combo_style = dict(
@@ -342,7 +342,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             **_combo_style,
         )
         self.combo_type.set("mod")
-        self.combo_type.grid(row=0, column=2, padx=4, pady=6)
+        self.combo_type.grid(row=0, column=2, padx=4, pady=(8, 6))
         self.combo_type._entry.bind("<Button-1>", lambda e: self.combo_type._open_dropdown_menu())
         self.combo_type._entry.configure(cursor="arrow")
         self._type_tooltip = ToolTip(self.combo_type._entry, "Select a server to enable all content types.")
@@ -356,7 +356,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             **_combo_style,
         )
         self.combo_sort.set("Relevance")
-        self.combo_sort.grid(row=0, column=3, padx=4, pady=6)
+        self.combo_sort.grid(row=0, column=3, padx=4, pady=(8, 6))
         self.combo_sort._entry.bind("<Button-1>", lambda e: self.combo_sort._open_dropdown_menu())
         self.combo_sort._entry.configure(cursor="arrow")
 
@@ -368,7 +368,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_search,
         )
-        self.btn_search.grid(row=0, column=4, padx=(4, 8), pady=6)
+        self.btn_search.grid(row=0, column=4, padx=4, pady=(8, 6))
 
         # Installed toggle button (M.6) — most frequently used, same row as search
         self.btn_installed = ctk.CTkButton(
@@ -378,7 +378,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             text_color=AppConfig.COLOR_TEXT_PRIMARY, font=AppConfig.FONT_BADGE,
             command=self._toggle_installed_view,
         )
-        self.btn_installed.grid(row=0, column=5, padx=(4, 16), pady=6)
+        self.btn_installed.grid(row=0, column=5, padx=(4, 12), pady=(8, 6))
 
         # Thin separator between search row and context/actions row
         separator = ctk.CTkFrame(
@@ -388,7 +388,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Row 2: server context + secondary action
         actions_row = ctk.CTkFrame(bar, fg_color="transparent")
-        actions_row.grid(row=2, column=0, columnspan=6, sticky="ew", padx=12, pady=(1, 3))
+        actions_row.grid(row=2, column=0, columnspan=6, sticky="ew", padx=12, pady=(6, 8))
 
         # Server context banner — which server/engine installs will target
         self.lbl_context = ctk.CTkLabel(
@@ -400,13 +400,13 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Optimizer bundle button
         self.btn_opt = ctk.CTkButton(
-            actions_row, text="Optimizers", image=icon("bolt", 12, AppConfig.COLOR_TEXT_ON_ACCENT), width=90, height=26,
+            actions_row, text="Optimizers", image=icon("bolt", 12, AppConfig.COLOR_TEXT_ON_ACCENT), width=90, height=28,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_install_optimizers,
         )
-        self.btn_opt.pack(side="right", padx=(0, 4))
+        self.btn_opt.pack(side="right")
         self._opt_tooltip = ToolTip(
             self.btn_opt,
             "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark\n"
@@ -425,7 +425,8 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         list_style = dict(
             corner_radius=AppConfig.RADIUS_CARD,
-            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
+            # Light: white cards on a tinted list (white-on-white hid every card).
+            fg_color=(AppConfig.COLOR_BG_SIDEBAR_LIGHT, AppConfig.COLOR_BG_SIDEBAR_DARK),
             border_width=1,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
         )
