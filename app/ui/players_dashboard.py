@@ -104,8 +104,8 @@ class PlayersDashboard(ctk.CTkToplevel):
     def _build_online_tab(self):
         self.tab_online.grid_rowconfigure(0, weight=1)
         self.tab_online.grid_columnconfigure(0, weight=1)
-        self.scroll_players = ctk.CTkScrollableFrame(self.tab_online, fg_color="transparent")
-        self.scroll_players.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.scroll_players = ctk.CTkScrollableFrame(self.tab_online, fg_color="transparent", corner_radius=0)
+        self.scroll_players.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
     def _build_whitelist_tab(self):
         self.tab_whitelist.grid_rowconfigure(3, weight=1)
@@ -118,7 +118,8 @@ class PlayersDashboard(ctk.CTkToplevel):
         lbl_title = ctk.CTkLabel(header_frame, text="Whitelist enforcement", font=AppConfig.FONT_LABEL)
         lbl_title.grid(row=0, column=0, sticky="w")
 
-        self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", command=self._toggle_whitelist)
+        # width=0: the default 100px switch ended short of the Add button below.
+        self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", width=0, command=self._toggle_whitelist)
         self.switch_whitelist.grid(row=0, column=1, sticky="e")
 
         add_frame = ctk.CTkFrame(self.tab_whitelist, fg_color="transparent")
@@ -136,8 +137,8 @@ class PlayersDashboard(ctk.CTkToplevel):
         lbl_list_title = ctk.CTkLabel(self.tab_whitelist, text="Whitelisted players:", font=AppConfig.FONT_BODY_SMALL)
         lbl_list_title.grid(row=2, column=0, sticky="w", padx=10, pady=(10, 0))
 
-        self.scroll_whitelist = ctk.CTkScrollableFrame(self.tab_whitelist, fg_color="transparent")
-        self.scroll_whitelist.grid(row=3, column=0, sticky="nsew", padx=5, pady=(0, 10))
+        self.scroll_whitelist = ctk.CTkScrollableFrame(self.tab_whitelist, fg_color="transparent", corner_radius=0)
+        self.scroll_whitelist.grid(row=3, column=0, sticky="nsew", padx=10, pady=(4, 10))
 
     def _build_operators_tab(self):
         self.tab_operators.grid_rowconfigure(1, weight=1)
@@ -174,14 +175,14 @@ class PlayersDashboard(ctk.CTkToplevel):
                                  command=self._add_operator)
         btn_add.grid(row=0, column=3)
 
-        self.scroll_operators = ctk.CTkScrollableFrame(self.tab_operators, fg_color="transparent")
-        self.scroll_operators.grid(row=1, column=0, sticky="nsew", padx=5, pady=(0, 10))
+        self.scroll_operators = ctk.CTkScrollableFrame(self.tab_operators, fg_color="transparent", corner_radius=0)
+        self.scroll_operators.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
     def _build_bans_tab(self):
         self.tab_bans.grid_rowconfigure(0, weight=1)
         self.tab_bans.grid_columnconfigure(0, weight=1)
-        self.scroll_bans = ctk.CTkScrollableFrame(self.tab_bans, fg_color="transparent")
-        self.scroll_bans.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.scroll_bans = ctk.CTkScrollableFrame(self.tab_bans, fg_color="transparent", corner_radius=0)
+        self.scroll_bans.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
     # --- Rendering ---
 
@@ -215,7 +216,7 @@ class PlayersDashboard(ctk.CTkToplevel):
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
             corner_radius=AppConfig.RADIUS_CARD,
         )
-        frame.pack(fill="x", pady=2, padx=5)
+        frame.pack(fill="x", pady=2)
         return frame
 
     def _populate_connected_players(self):
