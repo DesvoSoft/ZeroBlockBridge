@@ -382,15 +382,14 @@ class MCTunnelApp(ctk.CTk):
     def _toggle_setup_section(self):
         self._setup_expanded = not self._setup_expanded
         if self._setup_expanded:
-            import webbrowser
             webbrowser.open(AppConfig.PLAYIT_WIZARD_URL)
-            self.tunnel_console.log(f"[UI] Opening Playit Setup Wizard...")
+            self.tunnel_console.log("[UI] Opening Playit Setup Wizard...")
         self.on_tunnel_status({"status": "Offline", "skip_debounce": True})
 
     def _build_console_tabs(self):
         self.console_tabs = ctk.CTkTabview(self.main_frame, command=self._on_console_tab_changed)
         self.console_tabs.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="nsew")
-        
+
         self.console_tabs.add("Console")
         self.console_tabs.add("Tunnel Log")
 
