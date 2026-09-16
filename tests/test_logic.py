@@ -7,6 +7,10 @@ import tempfile
 import shutil
 from unittest.mock import patch, MagicMock, mock_open
 
+import pytest
+
+from app.core.server_events import ServerEvent
+
 TMP = tempfile.gettempdir()
 
 from app.core.logic import (
@@ -441,6 +445,99 @@ class TestServerRunnerJvmCustomFlags:
         assert mock_popen.called
         cmd = mock_popen.call_args.args[0]
         assert "server.jar" in cmd
+
+
+class TestServerRunnerLaunch:
+    """Characterizes how ServerRunner.start() picks the launch target and
+    fails before spawning a process."""
+
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.server_dir = os.path.join(self.tmpdir, "srv")
+        os.makedirs(self.server_dir)
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _touch(self, rel, content=""):
+        path = os.path.join(self.server_dir, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return path
+
+    def _start(self, ram="1024M", use_aikars=False, port_busy=False, popen_error=None):
+        events = MagicMock()
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir),              patch("app.core.logic.check_eula", return_value=True),              patch("app.core.logic.probe_java", return_value=None),              patch("app.core.logic._port_in_use", return_value=port_busy),              patch("app.core.logic.subprocess.Popen") as mock_popen,              patch("app.core.process_job.assign_to_job"):
+            if popen_error:
+                mock_popen.side_effect = popen_error
+            else:
+                mock_popen.return_value = MagicMock(stdout=iter([]), stderr=iter([]), pid=1)
+            runner = ServerRunner("srv", ram, events, use_aikars=use_aikars)
+            try:
+                runner.start()
+            finally:
+                self.events = events
+                self.popen = mock_popen
+        return runner
+
+    def _cmd(self):
+        return self.popen.call_args.args[0]
+
+    def test_fabric_launch_jar_preferred(self):
+        self._touch("fabric-server-launch.jar")
+        self._touch("server.jar")
+        self._start()
+        assert self._cmd()[-2:] == ["fabric-server-launch.jar", "nogui"]
+
+    def test_forge_legacy_jar_used(self):
+        self._touch("forge-1.12.2-14.23.5.jar")
+        self._touch("forge-installer.jar")
+        self._start()
+        assert "forge-1.12.2-14.23.5.jar" in self._cmd()
+
+    def test_forge_modern_uses_args_file(self):
+        self._touch("run.bat")
+        args_name = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+        self._touch(os.path.join("libraries", "net", "minecraftforge", args_name), "forge.jar")
+        self._start()
+        cmd = self._cmd()
+        assert any(part.startswith("@libraries") and part.endswith(args_name) for part in cmd)
+        assert "-jar" not in cmd
+
+    def test_gigabyte_ram_converted_without_aikars(self):
+        self._touch("server.jar")
+        self._start(ram="2G")
+        assert "-Xmx2048M" in self._cmd() and "-Xms2048M" in self._cmd()
+
+    def test_unparseable_ram_falls_back_to_2048(self):
+        self._touch("server.jar")
+        self._start(ram="lots")
+        assert "-Xmx2048M" in self._cmd()
+
+    def test_missing_jar_raises_before_spawn(self):
+        from app.core.logic import ServerStartError
+        with pytest.raises(ServerStartError, match="Server jar not found"):
+            self._start()
+        self.popen.assert_not_called()
+
+    def test_busy_port_raises_before_spawn(self):
+        from app.core.logic import ServerStartError
+        self._touch("server.jar")
+        with pytest.raises(ServerStartError, match="already in use"):
+            self._start(port_busy=True)
+        self.popen.assert_not_called()
+
+    def test_spawn_failure_raises_server_start_error(self):
+        # Popen failing (e.g. java binary missing) must surface like the other
+        # pre-launch failures, or ZBBManager stays in STARTING.
+        from app.core.logic import ServerStartError
+        self._touch("server.jar")
+        with pytest.raises(ServerStartError, match="Failed to start server"):
+            self._start(popen_error=FileNotFoundError("java not found"))
+        notifications = [c.args[1] for c in self.events.emit.call_args_list
+                         if c.args and c.args[0] == ServerEvent.NOTIFICATION]
+        assert any(n["type"] == "error" for n in notifications)
 
 
 class TestDeleteServer:

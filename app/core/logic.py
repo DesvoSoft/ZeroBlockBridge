@@ -230,6 +230,16 @@ def download_server(server_name: str, server_type: str, version: str, progress_c
     normalize_server_jar(server_path)
     return jar_path
 
+def parse_ram_mb(ram_allocation: str, default: int = 2048) -> int:
+    """'2048M' / '2048' -> 2048, '4G' -> 4096; unparseable -> default."""
+    text = (ram_allocation or "").strip()
+    try:
+        value = int(text.rstrip("MmGg"))
+    except ValueError:
+        return default
+    return value * 1024 if text.upper().endswith("G") else value
+
+
 def _port_in_use(port: int) -> bool:
     """True if a TCP listener already holds the port (any interface)."""
     import socket
@@ -520,56 +530,55 @@ class ServerRunner:
             self._running = value
 
     def start(self):
+        """Spawn the server process. Raises ServerStartError (after emitting a
+        console line and an error notification) when it cannot be launched."""
         if self.running:
             return
-        
+
         if not check_eula(self.server_name):
             accept_eula(self.server_name)
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] EULA auto-accepted.")
 
         server_path = os.path.join(SERVERS_DIR, self.server_name)
+        jar_file, forge_args_file = self._resolve_launch_target(server_path)
+        cmd = self._build_command(jar_file, forge_args_file)
+        self._preflight_port()
 
-        # Determine startup method
-        jar_file = "server.jar"
-        is_forge_modern = False
-        forge_args_file = None
-        
-        # Check for Fabric
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
+        self.events.emit(ServerEvent.STARTING)
+        self._spawn(cmd, server_path)
+
+    def _fail_start(self, msg: str):
+        self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
+        self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
+        raise ServerStartError(msg)
+
+    def _resolve_launch_target(self, server_path: str) -> tuple[str, Optional[str]]:
+        """(jar_file, forge_args_file). Modern Forge (1.17+, run.bat/run.sh)
+        launches from an @args file under libraries/ instead of a jar."""
         if os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
-            jar_file = "fabric-server-launch.jar"
-        
-        # Check for Forge (Modern 1.17+)
-        elif os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
-            is_forge_modern = True
-            args_pattern = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
-            for root, dirs, files in os.walk(os.path.join(server_path, "libraries")):
-                if args_pattern in files:
-                    forge_args_file = os.path.relpath(os.path.join(root, args_pattern), server_path)
-                    break
-        
-        # Check for Forge (Legacy)
-        else:
-            for file in os.listdir(server_path):
-                if file.startswith("forge-") and file.endswith(".jar") and "installer" not in file:
-                    jar_file = file
-                    break
-        
-        if not is_forge_modern and not os.path.exists(os.path.join(server_path, jar_file)):
-            msg = f"Server jar not found: {jar_file}"
-            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-            raise ServerStartError(msg)
+            return "fabric-server-launch.jar", None
 
-        # Parse RAM in MB for flags calculator
-        ram_str = self.ram_allocation.rstrip("MmGg")
-        try:
-            ram_mb = int(ram_str)
-            if self.ram_allocation.upper().endswith("G"):
-                ram_mb *= 1024
-        except ValueError:
-            ram_mb = 2048
+        if os.path.exists(os.path.join(server_path, "run.bat")) or os.path.exists(os.path.join(server_path, "run.sh")):
+            args_name = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+            for root, _dirs, files in os.walk(os.path.join(server_path, "libraries")):
+                if args_name in files:
+                    return "server.jar", os.path.relpath(os.path.join(root, args_name), server_path)
+            # No args file found: fall back to server.jar without the
+            # existence check, matching how the Forge run scripts behave.
+            return "server.jar", None
 
-        # Find Java major version
+        jar_file = next(
+            (f for f in os.listdir(server_path)
+             if f.startswith("forge-") and f.endswith(".jar") and "installer" not in f),
+            "server.jar",
+        )
+        if not os.path.exists(os.path.join(server_path, jar_file)):
+            self._fail_start(f"Server jar not found: {jar_file}")
+        return jar_file, None
+
+    def _build_command(self, jar_file: str, forge_args_file: Optional[str]) -> list[str]:
+        ram_mb = parse_ram_mb(self.ram_allocation)
         java_major = 17
         try:
             inst = probe_java(self.java_bin, "PROBE")
@@ -579,7 +588,8 @@ class ServerRunner:
             logger.debug("Failed to probe java version: %s", e)
 
         from app.services.aikars_flags import calculate_flags
-        aikars = calculate_flags(ram_mb, java_major=java_major) if self.use_aikars else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"]
+        memory_flags = (calculate_flags(ram_mb, java_major=java_major) if self.use_aikars
+                        else [f"-Xms{ram_mb}M", f"-Xmx{ram_mb}M"])
 
         custom_flags = []
         raw_flags = get_server_meta(self.server_name).get("jvm_custom_flags", "")
@@ -589,45 +599,36 @@ class ServerRunner:
             except ValueError as e:
                 logger.warning("Invalid jvm_custom_flags for %s: %s", self.server_name, e)
 
-        if is_forge_modern and forge_args_file:
-            cmd = [self.java_bin] + aikars + custom_flags + [
+        base = [self.java_bin] + memory_flags + custom_flags
+        if forge_args_file:
+            return base + [
                 "--enable-native-access=ALL-UNNAMED",
                 "-Dorg.lwjgl.util.NoChecks=true",
                 f"@{forge_args_file}",
                 "nogui",
             ]
-        else:
-            cmd = [self.java_bin] + aikars + custom_flags + [
-                "-jar",
-                jar_file,
-                "nogui",
-            ]
-        
-        # Preflight: a leftover process (e.g. an orphaned java from a
-        # previous session) holding the port produces a cryptic
-        # "FAILED TO BIND TO PORT" crash 30s into startup — fail fast
-        # with a clear message instead.
+        return base + ["-jar", jar_file, "nogui"]
+
+    def _preflight_port(self) -> None:
+        """A leftover process (e.g. an orphaned java from a previous session)
+        holding the port produces a cryptic "FAILED TO BIND TO PORT" crash 30s
+        into startup; fail fast with a clear message instead."""
         try:
             from app.services.server_properties import load_server_properties
             port = int(load_server_properties(self.server_name).get("server-port", 25565))
         except Exception:
             port = 25565
         if _port_in_use(port):
-            msg = f"Port {port} is already in use by another process. Close it and try again."
-            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] {msg}")
-            self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "error"})
-            raise ServerStartError(msg)
+            self._fail_start(f"Port {port} is already in use by another process. Close it and try again.")
 
-        self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Starting server with: {' '.join(cmd)}")
-        self.events.emit(ServerEvent.STARTING)
-        
+    def _spawn(self, cmd: list[str], server_path: str) -> None:
+        with self._buffers_lock:
+            self._stderr_buffer.clear()
+            self._console_buffer.clear()
+        with self._players_lock:
+            self.connected_players.clear()
+            self.player_count = 0
         try:
-            with self._buffers_lock:
-                self._stderr_buffer.clear()
-                self._console_buffer.clear()
-            with self._players_lock:
-                self.connected_players.clear()
-                self.player_count = 0
             self.process = subprocess.Popen(
                 cmd,
                 cwd=server_path,
@@ -638,15 +639,16 @@ class ServerRunner:
                 bufsize=1,
                 **self._popen_kwargs(),
             )
-            from app.core.process_job import assign_to_job
-            assign_to_job(self.process.pid)
-            self.running = True
-            threading.Thread(target=self._read_output, daemon=True).start()
-            self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
-            self._stderr_thread.start()
-        except Exception as e:
-            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Failed to start server: {e}")
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            # Used to log and return, leaving ZBBManager in STARTING forever.
             self.running = False
+            self._fail_start(f"Failed to start server: {e}")
+        from app.core.process_job import assign_to_job
+        assign_to_job(self.process.pid)
+        self.running = True
+        threading.Thread(target=self._read_output, daemon=True).start()
+        self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
+        self._stderr_thread.start()
 
     def stop(self):
         if not self.running or not self.process:
