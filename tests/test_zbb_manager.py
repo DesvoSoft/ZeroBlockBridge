@@ -9,6 +9,12 @@ from app.core.server_events import EventBus, ServerEvent
 def event_bus():
     return EventBus()
 
+@pytest.fixture(autouse=True)
+def no_jar_wait(monkeypatch):
+    # start_server polls for server.jar; the tests patch os.path.exists to
+    # False, so without this each launch test sleeps the full wait.
+    monkeypatch.setattr("app.core.core._JAR_WAIT_INTERVAL", 0)
+
 @pytest.fixture
 def manager(event_bus):
     with patch("app.core.playit_manager.PlayitManager"):
@@ -272,3 +278,17 @@ def test_provision_server_routes_log_to_console_events(manager):
 
     assert result.ok and result.name == "new_srv"
     assert "[System] hello from provisioner" in lines
+
+
+def test_bytecode_java_requirement_is_cached(manager):
+    """A bytecode result newer than the version map must be written to
+    metadata too, not only the version-map fallback (it was skipped, so the
+    jar was re-scanned on every launch)."""
+    manager.current_server = "test_server"
+    with patch("os.path.exists", return_value=True),          patch("os.path.getsize", return_value=1024),          patch("app.core.core.analyze_jar_bytecode", return_value=21),          patch("app.core.core.get_required_java", return_value=17),          patch("app.core.core.update_server_meta") as mock_meta,          patch("app.core.core.JavaDetector") as mock_det_cls:
+        mock_det_cls.return_value.detect_all.return_value = [_mock_java(21)]
+        result = manager._resolve_java_bin("servers/test_server", "1.20.4", None, True)
+
+    assert result is not None and result[1] == 21
+    mock_meta.assert_any_call("test_server", {"required_java": 21})
+

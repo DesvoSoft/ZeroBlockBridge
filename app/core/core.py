@@ -30,6 +30,12 @@ from app.services.bytecode_analyzer import analyze_jar_bytecode
 logger = logging.getLogger(__name__)
 
 from app.core.orchestrators import ServerOrchestrator, BackupOrchestrator, TunnelOrchestrator, SchedulerOrchestrator
+from app.core.provisioning import resolve_required_java
+
+# server.jar may still be renamed by the Forge installer when a launch
+# starts; poll briefly before the bytecode scan.
+_JAR_WAIT_POLLS = 10
+_JAR_WAIT_INTERVAL = 0.5
 
 
 class ServerExistsError(Exception):
@@ -213,10 +219,10 @@ class ZBBManager:
             self.events.emit(ServerEvent.CONSOLE_LINE, "[System] Analyzing Java requirements from server jar...")
             jar_path = os.path.join(server_dir, "server.jar")
             bytecode_java = None
-            for _ in range(10):
+            for _ in range(_JAR_WAIT_POLLS):
                 if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                     break
-                time.sleep(0.5)
+                time.sleep(_JAR_WAIT_INTERVAL)
 
             if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
                 try:
@@ -224,14 +230,11 @@ class ZBBManager:
                 except Exception as e:
                     self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] Bytecode analysis crashed: {e}")
 
-            if bytecode_java and bytecode_java >= version_map_java:
-                required_java = bytecode_java
-                source = "bytecode"
-            else:
-                required_java = version_map_java
-                source = "version-map"
-
-                update_server_meta(self.current_server, {"required_java": required_java})
+            required_java = resolve_required_java(bytecode_java, version_map_java)
+            source = "bytecode" if required_java == bytecode_java else "version-map"
+            # Cache whichever source won; the bytecode result used to be skipped
+            # here, so jars needing a newer Java were re-scanned on every start.
+            update_server_meta(self.current_server, {"required_java": required_java})
 
         self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Java {required_java} required (source: {source})")
 
