@@ -435,6 +435,23 @@ class MCTunnelApp(ctk.CTk):
                                   hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, command=do_next)
         btn_next.pack(side="right")
 
+        filter_labels = ["All", "Errors", "Warnings", "Security", "Players", "Server"]
+        filter_values = {
+            "All": None, "Errors": "errors", "Warnings": "warnings",
+            "Security": "security", "Players": "players", "Server": "server",
+        }
+
+        def on_filter_change(choice):
+            getattr(self, console_attr).set_category_filter(filter_values.get(choice))
+
+        filter_menu = ctk.CTkOptionMenu(
+            bar, values=filter_labels, width=110, height=30,
+            corner_radius=AppConfig.RADIUS_INPUT, command=on_filter_change,
+        )
+        filter_menu.set("All")
+        filter_menu.pack(side="right", padx=(0, 5))
+        ToolTip(filter_menu, "Show only lines in this category (join/leave, errors, etc.)")
+
     def send_server_command(self, event=None):
         if not self.zbb_manager.is_running():
             self.server_console.log("[UI] Server is not running.")

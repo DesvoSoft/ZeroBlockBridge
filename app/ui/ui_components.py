@@ -104,6 +104,18 @@ class ToolTip:
             self.tooltip = None
 
 class ConsoleWidget(ctk.CTkTextbox):
+    # Category filter groups — a filter hides every tag not in the selected
+    # group by setting Tk's own `elide` option (hides tagged text without
+    # deleting it, so switching back to "All" is instant, no re-render).
+    _FILTER_GROUPS = {
+        "errors": ("line_error",),
+        "warnings": ("line_warn",),
+        "security": ("line_security",),
+        "players": ("line_join", "line_leave"),
+        "server": ("line_server",),
+    }
+    _ALL_TAGS = ("line_error", "line_warn", "line_join", "line_leave", "line_server", "line_security", "line_plain")
+
     def __init__(self, master, max_lines=1000, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(
@@ -117,6 +129,7 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.max_lines = max_lines
         self._buffer = []
         self._is_paused = False
+        self._active_filter = None
 
         self._apply_tag_colors()
 
@@ -143,6 +156,8 @@ class ConsoleWidget(ctk.CTkTextbox):
     def _line_tag(message):
         # Prefix match only: server output (player chat) can contain the
         # literal text "[Security]" and must not pass as a ZBB alert.
+        # Always returns a tag (never None) — "line_plain" for everything
+        # else — so the category filter can also hide/show untagged lines.
         if message.startswith("[Security]"):
             return "line_security"
         if "ERROR" in message:
@@ -155,7 +170,26 @@ class ConsoleWidget(ctk.CTkTextbox):
             return "line_leave"
         if "[Server]" in message:
             return "line_server"
-        return None
+        return "line_plain"
+
+    @classmethod
+    def _elide_map(cls, category: str | None) -> dict:
+        """Pure logic behind set_category_filter: {tag: should_be_hidden}.
+        Kept Tk-free (same reasoning as _line_tag being a @staticmethod) so
+        it's unit-testable without a live display. Unknown/None/"all" all
+        mean "show everything".
+        """
+        visible_tags = cls._FILTER_GROUPS.get(category) if category else None
+        return {tag: (visible_tags is not None and tag not in visible_tags) for tag in cls._ALL_TAGS}
+
+    def set_category_filter(self, category: str | None):
+        """Show only lines in `category` (a key of _FILTER_GROUPS), or
+        everything when `category` is None/"all"/unrecognized. Hiding uses
+        Tk's `elide` tag option — lines stay in the buffer, so switching
+        back to "All" is instant and loses nothing."""
+        self._active_filter = category
+        for tag, hidden in self._elide_map(category).items():
+            self.tag_config(tag, elide=hidden)
 
     def _on_unmap(self, event):
         if event.widget == self.winfo_toplevel():
