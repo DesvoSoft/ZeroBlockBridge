@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import hashlib
 import logging
 import threading
 import tkinter as tk
@@ -325,8 +326,19 @@ class ServerListItem(ctk.CTkFrame):
             except Exception as e:
                 logger.error("Error loading icon: %s", e)
         
-        self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image, width=40, height=40)
-        self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5) 
+        if self.icon_image is not None:
+            self.lbl_icon = ctk.CTkLabel(self, text="", image=self.icon_image, width=40, height=40)
+        else:
+            # Initial-letter tile (same scheme as mod cards): without it, rows
+            # for icon-less servers showed an empty gap beside the name.
+            tile = AppConfig.ICON_PLACEHOLDER_COLORS[
+                int(hashlib.md5(server_name.encode()).hexdigest(), 16) % len(AppConfig.ICON_PLACEHOLDER_COLORS)]
+            self.lbl_icon = ctk.CTkLabel(
+                self, text=(server_name[:1] or "?").upper(), width=40, height=40,
+                fg_color=tile, corner_radius=AppConfig.RADIUS_BTN,
+                font=AppConfig.FONT_HEADING_SMALL, text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
+            )
+        self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=5)
         
         # Truncate by rendered pixel width, not char count (proportional font)
         display_name = server_name
