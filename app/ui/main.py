@@ -407,9 +407,13 @@ class MCTunnelApp(ctk.CTk):
         self.console_input_frame = ctk.CTkFrame(self.console_tabs.tab("Console"), height=40, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_CONSOLE_LIGHT, AppConfig.COLOR_CONSOLE_DARK))
         self.console_input_frame.pack(fill="x", pady=(5, 0))
 
-        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands...", corner_radius=AppConfig.RADIUS_INPUT, height=36, state="disabled")
+        self.entry_console = ctk.CTkEntry(self.console_input_frame, placeholder_text="Select a server to send commands", corner_radius=AppConfig.RADIUS_INPUT, height=36, state="disabled")
         self.entry_console.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         self.entry_console.bind("<Return>", self.send_server_command)
+        self.entry_console.bind("<Up>", lambda e: self._recall_command(-1))
+        self.entry_console.bind("<Down>", lambda e: self._recall_command(1))
+        self._command_history: list[str] = []
+        self._history_index = 0
 
         self.btn_send = ctk.CTkButton(self.console_input_frame, text="Send", width=80, command=self.send_server_command, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER, state="disabled")
         self.btn_send.pack(side="right", padx=10, pady=5)
@@ -426,6 +430,7 @@ class MCTunnelApp(ctk.CTk):
         # deferred internally (bound to <Visibility>), just not the widgets.
         self.console_tabs.add("Mods")
         self._update_mods_tab_state()
+        self._set_console_input(False)
 
     def _on_console_tab_changed(self):
         if self.console_tabs.get() == "Mods":
@@ -504,7 +509,44 @@ class MCTunnelApp(ctk.CTk):
         # the single source of truth for blocked-command feedback (console
         # line + toast via EventBus), so this stays a thin passthrough.
         self.zbb_manager.send_command(cmd)
+        if not self._command_history or self._command_history[-1] != cmd:
+            self._command_history.append(cmd)
+            del self._command_history[:-self._COMMAND_HISTORY_MAX]
+        self._history_index = len(self._command_history)
         self.entry_console.delete(0, "end")
+
+    _COMMAND_HISTORY_MAX = 50
+
+    def _recall_command(self, step: int):
+        """Up/Down in the console input walks previously sent commands;
+        stepping past the newest one clears the input."""
+        if not self._command_history or str(self.entry_console.cget("state")) == "disabled":
+            return "break"
+        self._history_index = max(0, min(len(self._command_history), self._history_index + step))
+        self.entry_console.delete(0, "end")
+        if self._history_index < len(self._command_history):
+            self.entry_console.insert(0, self._command_history[self._history_index])
+        return "break"
+
+    def _set_console_input(self, running: bool):
+        """Commands only reach a running server: keep the input disabled
+        otherwise, with a placeholder that says why."""
+        if running:
+            placeholder = "Type a command (Up/Down: history)"
+        elif self.zbb_manager.current_server:
+            placeholder = "Start the server to send commands"
+        else:
+            placeholder = "Select a server to send commands"
+        # CTkEntry can't draw its placeholder into a disabled entry, so set it
+        # while enabled and only then disable.
+        self.entry_console.configure(state="normal")
+        if not running:
+            self.entry_console.delete(0, "end")
+        self.entry_console.configure(placeholder_text=placeholder)
+        if not running:
+            self.entry_console.configure(state="disabled")
+        self.btn_send.configure(state="normal" if running else "disabled",
+                                fg_color=AppConfig.COLOR_BTN_PRIMARY if running else AppConfig.COLOR_BTN_GHOST)
 
     def check_java_startup(self):
         def _check():
@@ -608,6 +650,7 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY)
             self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
             self._update_mods_tab_state()
+            self._set_console_input(False)
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
         self.load_servers()
 
@@ -729,8 +772,7 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_config.configure(state="normal")
         self.btn_open_folder.configure(state="normal")
-        self.entry_console.configure(state="normal", placeholder_text="Type command here...")
-        self.btn_send.configure(state="normal")
+        self._set_console_input(is_running)
         self.server_console.log(f"[UI] Selected server: {server_name}")
 
     def _open_in_file_manager(self, path) -> None:
@@ -832,6 +874,7 @@ class MCTunnelApp(ctk.CTk):
             item.set_status(status)
 
     def on_server_starting(self, data=None):
+        self.after(0, lambda: self._set_console_input(True))
         self.after(0, lambda: self.lbl_status.configure(text="Server: ● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
@@ -867,6 +910,7 @@ class MCTunnelApp(ctk.CTk):
             self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
+        self.after(0, lambda: self._set_console_input(False))
         self.after(0, lambda: self.lbl_status.configure(text="Server: ● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
