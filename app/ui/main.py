@@ -237,7 +237,7 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_status_bar(self):
         self.status_frame = ctk.CTkFrame(self.main_frame, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 4))
+        self.status_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 0))
 
         # --- Single row: status + title (left, flexible) | badges -> config/folder -> start/stop (right, fixed) ---
         # Sizing/spacing mirrors _build_tunnel_controls below (same row height, same button size).
@@ -322,16 +322,18 @@ class MCTunnelApp(ctk.CTk):
 
     def _build_dashboard(self):
         self.dashboard_frame = ctk.CTkFrame(self.main_frame, corner_radius=AppConfig.RADIUS_CARD, fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
-        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(2, 10))
+        self.dashboard_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=8)
  
         # --- Tunnel ---
+        # Same insets as status_hero_row, so the tunnel buttons line up
+        # under the server ones and both cards are the same height.
         self.tunnel_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        self.tunnel_frame.pack(fill="x", padx=15, pady=(4, 4))
+        self.tunnel_frame.pack(fill="x", padx=15, pady=6)
         self._build_tunnel_controls()
 
     def _build_tunnel_controls(self):
         self.lbl_tunnel_status = ctk.CTkLabel(self.tunnel_frame, text="Tunnel: Offline", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_BODY)
-        self.lbl_tunnel_status.pack(side="left", padx=(20, 5))
+        self.lbl_tunnel_status.pack(side="left", padx=(5, 5))
 
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
@@ -350,7 +352,7 @@ class MCTunnelApp(ctk.CTk):
         ToolTip(self.btn_copy_ip, "Copy address")
 
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
-        self.tunnel_toolbar.pack(side="right", padx=10)
+        self.tunnel_toolbar.pack(side="right")
 
         self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         ToolTip(self.btn_tunnel_start, "Start tunnel")
