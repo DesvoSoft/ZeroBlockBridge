@@ -5,13 +5,30 @@ records the mapping at install time instead of trying to infer it later.
 """
 import json
 import logging
+import threading
 from pathlib import Path
 
-from app.core.constants import SERVERS_DIR
+from app.core.constants import SERVERS_DIR, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
 _METADATA_FILENAME = "installed_mods.json"
+
+# Per-server lock: record_install/remove_install's read-modify-write span
+# must be atomic, or two near-simultaneous calls for the same server (e.g.
+# a batch install submitting several mods to the icon/install executor at
+# once) can race and drop one entry.
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _lock_for(server_name: str) -> threading.Lock:
+    with _locks_guard:
+        lock = _locks.get(server_name)
+        if lock is None:
+            lock = threading.Lock()
+            _locks[server_name] = lock
+        return lock
 
 
 def _metadata_path(server_name: str) -> Path:
@@ -21,15 +38,14 @@ def _metadata_path(server_name: str) -> Path:
 def record_install(server_name: str, slug: str, filename: str) -> None:
     if not slug:
         return
-    path = _metadata_path(server_name)
-    data = _read(path)
-    data[slug] = filename
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except OSError as exc:
-        logger.warning("Failed to record install metadata for %s: %s", slug, exc)
+    with _lock_for(server_name):
+        path = _metadata_path(server_name)
+        data = _read(path)
+        data[slug] = filename
+        try:
+            atomic_write_json(path, data, indent=2)
+        except OSError as exc:
+            logger.warning("Failed to record install metadata for %s: %s", slug, exc)
 
 
 def get_installed_slugs(server_name: str) -> set:
@@ -41,16 +57,16 @@ def get_installed_filename(server_name: str, slug: str) -> str:
 
 
 def remove_install(server_name: str, slug: str) -> None:
-    path = _metadata_path(server_name)
-    data = _read(path)
-    if slug not in data:
-        return
-    del data[slug]
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except OSError as exc:
-        logger.warning("Failed to remove install metadata for %s: %s", slug, exc)
+    with _lock_for(server_name):
+        path = _metadata_path(server_name)
+        data = _read(path)
+        if slug not in data:
+            return
+        del data[slug]
+        try:
+            atomic_write_json(path, data, indent=2)
+        except OSError as exc:
+            logger.warning("Failed to remove install metadata for %s: %s", slug, exc)
 
 
 def remove_install_by_filename(server_name: str, filename: str) -> None:

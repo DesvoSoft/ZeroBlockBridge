@@ -1,7 +1,7 @@
 import logging
 import os
 
-from app.core.constants import SERVERS_DIR
+from app.core.constants import SERVERS_DIR, atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,9 @@ def save_server_properties(server_name: str | None = None, server_dir: str | Non
     if new_properties is None:
         new_properties = {}
     props_path = _props_path(server_name, server_dir)
-    os.makedirs(os.path.dirname(props_path), exist_ok=True)
     if not os.path.exists(props_path):
-        with open(props_path, "w", encoding="utf-8") as f:
-            for k, v in new_properties.items():
-                f.write(f"{k}={v}\n")
+        new_lines = [f"{k}={v}\n" for k, v in new_properties.items()]
+        atomic_write_text(props_path, lambda f: f.writelines(new_lines))
         return
     with open(props_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -55,8 +53,7 @@ def save_server_properties(server_name: str | None = None, server_dir: str | Non
     for k, v in new_properties.items():
         if k not in updated_keys:
             new_lines.append(f"{k}={v}\n")
-    with open(props_path, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
+    atomic_write_text(props_path, lambda f: f.writelines(new_lines))
 
 
 def list_worlds(server_name: str | None = None, server_dir: str | None = None) -> list[str]:

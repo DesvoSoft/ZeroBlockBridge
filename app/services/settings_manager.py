@@ -4,7 +4,7 @@ import threading
 import logging
 from typing import Any
 
-from app.core.constants import CONFIG_DIR
+from app.core.constants import CONFIG_DIR, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +80,9 @@ class SettingsManager:
             if not self._dirty:
                 return
             try:
-                with open(self._settings_path, "w", encoding="utf-8") as f:
-                    json.dump(self._settings, f, indent=4)
+                atomic_write_json(self._settings_path, self._settings)
                 self._dirty = False
-            except Exception as e:
+            except OSError as e:
                 logger.error("Error saving settings: %s", e)
 
     def load(self):

@@ -2,7 +2,7 @@ import json
 import logging
 import os
 
-from app.core.constants import CONFIG_DIR
+from app.core.constants import CONFIG_DIR, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +54,9 @@ def load_template(name: str) -> dict | None:
 
 
 def save_template(name: str, wizard_data: dict, description: str = "") -> None:
-    os.makedirs(TEMPLATES_DIR, exist_ok=True)
     data = {key: wizard_data[key] for key in _TEMPLATE_FIELDS if key in wizard_data}
     data["_description"] = description
-    with open(_template_path(name), "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    atomic_write_json(_template_path(name), data, indent=2)
     logger.info("Saved template: %s", name)
 
 
