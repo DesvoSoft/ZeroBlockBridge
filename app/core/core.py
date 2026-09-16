@@ -97,6 +97,10 @@ class ZBBManager:
         self._discord_webhook = None
         self._init_discord_webhook()
 
+        # First/last seen + playtime per server; closes open sessions on STOPPED.
+        from app.services.player_history import PlayerHistoryTracker
+        self._player_history = PlayerHistoryTracker(self.events, lambda: self.current_server)
+
         # Orchestrators
         self.server_orchestrator = ServerOrchestrator(self)
         self.backup_orchestrator = BackupOrchestrator(self)
