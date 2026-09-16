@@ -1,4 +1,4 @@
-from app.ui.formatting import format_duration, format_memory
+from app.ui.formatting import format_duration, format_memory, memory_tooltip
 
 
 def test_format_duration_seconds():
@@ -22,4 +22,8 @@ def test_format_duration_negative_clamps_to_zero():
 
 
 def test_format_memory():
-    assert format_memory(int(1.25 * 1024 ** 3), 2048) == "RAM 1.2 / 2.0 GB"
+    assert format_memory(int(2.34 * 1024 ** 3)) == "RAM 2.3 GB"
+
+
+def test_memory_tooltip_names_heap_cap():
+    assert "2.0 GB" in memory_tooltip(2048)

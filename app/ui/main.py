@@ -24,7 +24,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
-from app.ui.formatting import format_duration, format_memory
+from app.ui.formatting import format_duration, format_memory, memory_tooltip
 from app.services.server_properties import load_server_properties
 
 import app.core.logic as logic
@@ -365,6 +365,7 @@ class MCTunnelApp(ctk.CTk):
         self.lbl_ram = ctk.CTkLabel(self.status_hero_row, text="", font=AppConfig.FONT_BODY_SMALL,
                                     text_color=AppConfig.COLOR_TEXT_GRAY, anchor="e")
         self.lbl_ram.pack(side="right", padx=(5, 5))  # hidden in compact width, see _on_window_resize
+        self._ram_tooltip = ToolTip(self.lbl_ram, "")
         self._server_phase = None       # None | "starting" | "running"
         self._phase_since = 0.0
         self._status_tick_job = None
@@ -1035,7 +1036,8 @@ class MCTunnelApp(ctk.CTk):
         def _apply():
             if self._server_phase is None:
                 return
-            self.lbl_ram.configure(text=format_memory(used, limit) if used and limit else "")
+            self.lbl_ram.configure(text=format_memory(used) if used else "")
+            self._ram_tooltip.text = memory_tooltip(limit) if used and limit else ""
         self.after(0, _apply)
 
     def open_players_dashboard(self):

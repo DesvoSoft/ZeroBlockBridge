@@ -16,8 +16,13 @@ def format_duration(seconds: float) -> str:
     return f"{days}d {hours}h"
 
 
-def format_memory(used_bytes: int, limit_mb: int) -> str:
-    """'RAM 1.2 / 2.0 GB' — used resident memory against the configured -Xmx."""
-    used_gb = used_bytes / (1024 ** 3)
-    limit_gb = limit_mb / 1024
-    return f"RAM {used_gb:.1f} / {limit_gb:.1f} GB"
+def format_memory(used_bytes: int) -> str:
+    """'RAM 2.3 GB' — resident memory of the server process."""
+    return f"RAM {used_bytes / (1024 ** 3):.1f} GB"
+
+
+def memory_tooltip(limit_mb: int) -> str:
+    """Why the readout can exceed the allocation: -Xmx only caps the Java heap."""
+    return (f"Memory used by the server process.\n"
+            f"Java heap is capped at {limit_mb / 1024:.1f} GB (the server's RAM setting); "
+            f"total usage runs higher because Java also needs memory outside the heap.")
