@@ -20,6 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Players tab** (replaces the Player Management window) — one list of every player the server knows (online, joined before, whitelisted, operators, banned) with skin heads, status chips, last seen and playtime, search and filters. Each player has an actions menu: kick or ban with a reason, make operator with a described permission level, whitelist, unban, copy UUID. Players can also be added by name.
 - **Player history** — ZBB records when each player was first and last seen and how long they have played, per server.
 - Main tabs show icons plus the online player count and the installed mod count.
+- **Tunnel Log categories** — the Tunnel Log filter has its own categories (All / Errors / Warnings / Tunnel / Agent) instead of the server console's Security/Players/Server, which never matched tunnel output; raw playitd agent lines are dimmed.
 
 ### Changed
 - Dependencies are pinned to the exact tested versions (`requirements.txt`, new `requirements-dev.txt`), so CI and release builds install the same packages; Dependabot proposes weekly updates.
@@ -36,6 +37,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Every dialog shows the app icon and a titlebar tinted to match its background, and titlebars follow live Dark/Light switches.
 - **Minimal titlebars** — the titlebar no longer draws the app icon or window title (both stay in the taskbar and Alt-Tab); every dialog names itself with a title and subtitle at the top of its body instead.
 - Scrollbars only appear when a list or page actually overflows.
+- The Mods tab is disabled (with a tooltip) for vanilla servers, which can't load mods or plugins.
 - Mod cards: installed mods show an "Installed" button with a menu (update to the newer version when one exists, uninstall) instead of a red Uninstall button; descriptions are limited to two lines; category tags are neutral so the client/server badge stands out.
 - The header RAM readout shows memory used ("RAM 2.3 GB"), with a tooltip explaining that the server's RAM setting caps Java's heap, so total usage can be higher.
 
@@ -58,6 +60,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - The operator level chosen while the server was running was shown but not applied (`/op` always uses the server's `op-permission-level`); the running-server menu now offers that level and says so.
 - Bedrock players joining through Geyser/Floodgate (names starting with ".") were never counted as online.
 - Dialogs opened before their window was shown (Server Properties, confirmations) missed the titlebar tint.
+- Windows flashed white when opening (the Server Properties editor showed a mostly white frame) before their content drew in; windows now stay invisible until drawn and fade in.
 
 ## [2.1.0] — 2026-09-16
 
