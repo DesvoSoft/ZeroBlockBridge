@@ -242,7 +242,7 @@ class MCTunnelApp(ctk.CTk):
         self.status_hero_row = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_hero_row.pack(fill="x", padx=15, pady=(6, 6))
 
-        self.lbl_status = ctk.CTkLabel(self.status_hero_row, text="● Offline",
+        self.lbl_status = ctk.CTkLabel(self.status_hero_row, text="Server: ● Offline",
                                        font=AppConfig.FONT_BODY,
                                        text_color=AppConfig.COLOR_STATUS_OFFLINE, anchor="w")
         self.lbl_status.pack(side="left", padx=(5, 5))
@@ -832,7 +832,7 @@ class MCTunnelApp(ctk.CTk):
             item.set_status(status)
 
     def on_server_starting(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
@@ -844,7 +844,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
         self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
@@ -867,7 +867,7 @@ class MCTunnelApp(ctk.CTk):
             self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
+        self.after(0, lambda: self.lbl_status.configure(text="Server: ● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
