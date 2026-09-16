@@ -67,6 +67,7 @@ else:
 SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
+LOGS_DIR = BASE_DIR / "logs"
 ASSETS_DIR = _RESOURCE_DIR / "assets"
 APP_CONFIG_PATH = CONFIG_DIR / "config.json" # Path to main config.json
 

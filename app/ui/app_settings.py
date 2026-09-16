@@ -17,7 +17,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from app.core.app_config import AppConfig
-from app.core.constants import BASE_DIR, JDK_CACHE_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
+from app.core.constants import BASE_DIR, JDK_CACHE_DIR, LOGS_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
 from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
 from app.services.disk_usage import dir_size, format_size
 from app.services.sanitizer import ALLOWLISTED_COMMANDS
@@ -656,8 +656,15 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self.btn_clear_reports.pack(side="left", padx=(8, 0))
 
     def _open_data_dir(self):
-        BASE_DIR.mkdir(parents=True, exist_ok=True)
-        path = str(BASE_DIR)
+        self._open_dir(BASE_DIR)
+
+    def _open_logs_dir(self):
+        self._open_dir(LOGS_DIR)
+
+    @staticmethod
+    def _open_dir(directory: Path):
+        directory.mkdir(parents=True, exist_ok=True)
+        path = str(directory)
         if sys.platform == "win32":
             subprocess.run(["explorer", path], check=False)
         elif sys.platform == "darwin":
@@ -679,6 +686,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             ("Backups", dir_size(backups_dir)),
             ("Java runtimes", dir_size(JDK_CACHE_DIR)),
             ("Crash reports", crash_total),
+            ("Logs", dir_size(LOGS_DIR)),
             ("Versions cache", versions_size),
         ]
 
@@ -771,5 +779,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
             wrap, text=repo_url,
             font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_LINK, cursor="hand2",
         )
-        lbl_repo.pack(pady=(0, 24))
+        lbl_repo.pack(pady=(0, 12))
+
+        btn_logs = self._ghost_button(
+            wrap, "Open Logs Folder", self._open_logs_dir, icon_name="folder", width=150,
+        )
+        btn_logs.pack(pady=(0, 24))
+        ToolTip(btn_logs, "Application logs (zbb.log) -- attach these when reporting a bug")
         lbl_repo.bind("<Button-1>", lambda e: webbrowser.open(repo_url))

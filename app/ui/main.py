@@ -26,7 +26,8 @@ from app.ui.win_effects import apply_rounded_corners, apply_titlebar_brand_color
 from app.ui.icons import icon
 
 import app.core.logic as logic
-from app.core.constants import SERVERS_DIR, ASSETS_DIR
+from app.core.constants import SERVERS_DIR, ASSETS_DIR, LOGS_DIR
+from app.core.logging_setup import configure_logging, log_tk_callback_exception
 from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
 from app.core.server_events import ServerEvent, EventBus
@@ -53,6 +54,12 @@ class MCTunnelApp(ctk.CTk):
         self._init_state_variables()
         self._build_layout()
         self._init_background_services()
+
+    def report_callback_exception(self, exc, val, tb):
+        # Tk calls this for exceptions raised inside widget callbacks (for
+        # every toplevel sharing this interpreter); the default prints to
+        # stderr, which does not exist in the windowed build.
+        log_tk_callback_exception(exc, val, tb)
 
     def _init_window_config(self):
         self.title(f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
@@ -1250,12 +1257,8 @@ class MCTunnelApp(ctk.CTk):
         self.after(100, lambda: self._poll_shutdown(deadline))
 
 def main():
-    # --- CONV-01: Structured Logging Configuration ---
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    log_path = configure_logging(LOGS_DIR)
+    logger.info("ZeroBlockBridge %s starting (log file: %s)", AppConfig.APP_VERSION, log_path)
 
     # Single-instance lock: prevent multiple app instances
     from app.core.single_instance import SingleInstanceLock
