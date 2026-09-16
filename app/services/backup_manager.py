@@ -148,11 +148,19 @@ class BackupManager:
         if not backup_path.exists():
             return False
 
-        tmp_extract = Path(tempfile.mkdtemp(prefix="zbb_restore_"))
+        # dir= pins the temp dir to the same volume as server_path — mkdtemp()'s
+        # default (system TEMP) can be a different drive, which makes the
+        # rename() below raise OSError (cross-device rename) on every restore.
+        tmp_extract = Path(tempfile.mkdtemp(prefix="zbb_restore_", dir=self.server_path.parent))
         bak_path = self.server_path.with_name(self.server_path.name + "_bak")
         try:
             # Extract to temp dir first — server_path untouched until this succeeds
+            tmp_extract_real = os.path.realpath(tmp_extract)
             with zipfile.ZipFile(backup_path, 'r') as zipf:
+                for member in zipf.namelist():
+                    member_path = os.path.realpath(os.path.join(tmp_extract, member))
+                    if not member_path.startswith(tmp_extract_real + os.sep):
+                        raise ValueError(f"Unsafe path in backup archive: {member}")
                 zipf.extractall(tmp_extract)
 
             # Atomic swap: rename current → _bak, extracted → server_path
