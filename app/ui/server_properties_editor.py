@@ -148,9 +148,9 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.properties = load_server_properties(server_name)
         
         # Shared Fonts
-        self.font_bold = ctk.CTkFont(family=AppConfig.FONT_BODY[0], size=13, weight="bold")
-        self.font_small = ctk.CTkFont(family=AppConfig.FONT_BODY[0], size=11)
-        self.font_header = ctk.CTkFont(family=AppConfig.FONT_BODY[0], size=14, weight="bold")
+        self.font_bold = AppConfig.FONT_LABEL
+        self.font_small = AppConfig.FONT_BODY_SMALL
+        self.font_header = AppConfig.FONT_HEADING_SMALL
         
         # Layout
         self.grid_columnconfigure(0, weight=1)
@@ -309,7 +309,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._backup_scheduler_ui = BackupScheduler(self.server_name)
         self._next_backup_lbl = ctk.CTkLabel(
             self.frame_backups, text="", anchor="w",
-            text_color=AppConfig.COLOR_TEXT_GRAY, font=(AppConfig.FONT_FAMILY, 12)
+            text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_CAPTION
         )
         self._next_backup_lbl.pack(fill="x", padx=15, pady=(0, 4))
         self._refresh_backup_countdown()
@@ -801,10 +801,10 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         ).grid(row=0, column=0, sticky="w", padx=(12, 5), pady=8)
 
         self.btn_mrpack = ctk.CTkButton(
-            card_mrpack, text="Import .mrpack", image=icon("download", 13, "#ffffff"), width=150, height=28,
+            card_mrpack, text="Import .mrpack", image=icon("download", 13, AppConfig.COLOR_TEXT_ON_ACCENT), width=150, height=28,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_ACCENT_BROWN, hover_color=AppConfig.COLOR_ACCENT_BROWN_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_BADGE,
             command=self._on_import_mrpack,
         )
         self.btn_mrpack.grid(row=0, column=2, sticky="e", padx=12, pady=8)

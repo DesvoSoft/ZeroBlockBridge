@@ -133,7 +133,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
-            font=(AppConfig.FONT_FAMILY, 12),
+            font=AppConfig.FONT_CAPTION,
         )
 
     # ------------------------------------------------------------------
@@ -150,7 +150,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self._theme_selector = ctk.CTkSegmentedButton(
             card, values=["Dark", "Light", "System"],
             command=self._on_theme_selected, height=32,
-            font=(AppConfig.FONT_FAMILY, 12),
+            font=AppConfig.FONT_CAPTION,
         )
         self._theme_selector.set(self._settings.get("theme", "Dark"))
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
@@ -170,7 +170,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
         )
         allowlist_text = ", ".join(sorted(ALLOWLISTED_COMMANDS))
         lbl_allowlist = ctk.CTkLabel(
-            card, text=allowlist_text, font=(AppConfig.FONT_FAMILY_MONO, 11),
+            card, text=allowlist_text, font=AppConfig.FONT_MONO_SMALL,
             text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w", justify="left",
         )
         lbl_allowlist.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 14))
@@ -229,7 +229,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
             self._event_vars[key] = var
             chk = ctk.CTkCheckBox(
                 checks_row, text=label, variable=var,
-                font=(AppConfig.FONT_FAMILY, 12), checkbox_width=18, checkbox_height=18,
+                font=AppConfig.FONT_CAPTION, checkbox_width=18, checkbox_height=18,
                 corner_radius=AppConfig.RADIUS_BADGE,
             )
             chk.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 24), pady=3)
@@ -319,11 +319,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self.btn_test.pack(side="left")
 
         self.btn_save = ctk.CTkButton(
-            btn_row, text="Save", image=icon("check", 13, "#ffffff"),
+            btn_row, text="Save", image=icon("check", 13, AppConfig.COLOR_TEXT_ON_ACCENT),
             command=self._save_notifications, corner_radius=AppConfig.RADIUS_BTN,
             height=30, width=110,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            font=AppConfig.FONT_LABEL_SMALL,
         )
         self.btn_save.pack(side="right")
 

@@ -82,10 +82,10 @@ class ServerWizard(ctk.CTkToplevel):
                                          fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.header_frame.grid(row=0, column=0, sticky="ew")
         self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 3",
-                                     font=ctk.CTkFont(size=13), text_color=AppConfig.COLOR_TEXT_GRAY)
+                                     font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_step.pack(side="left", padx=20, pady=10)
         self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity",
-                                      font=ctk.CTkFont(size=16, weight="bold"))
+                                      font=AppConfig.FONT_HEADING)
         self.lbl_title.pack(side="right", padx=20, pady=10)
 
         # Content Frame
@@ -107,7 +107,7 @@ class ServerWizard(ctk.CTkToplevel):
 
         self.btn_next = ctk.CTkButton(
             self.footer_frame, text="Next", command=self.go_next,
-            image=icon("chevron_right", 13, "#ffffff"), compound="right",
+            image=icon("chevron_right", 13, AppConfig.COLOR_TEXT_ON_ACCENT), compound="right",
             corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
         )
@@ -144,11 +144,11 @@ class ServerWizard(ctk.CTkToplevel):
             self.btn_back.configure(state="normal")
             
         if self.current_step == self.total_steps:
-            self.btn_next.configure(text="Create Server", image=icon("check", 13, "#ffffff"),
+            self.btn_next.configure(text="Create Server", image=icon("check", 13, AppConfig.COLOR_TEXT_ON_ACCENT),
                                     fg_color=AppConfig.COLOR_BTN_SUCCESS,
                                     hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         else:
-            self.btn_next.configure(text="Next", image=icon("chevron_right", 13, "#ffffff"),
+            self.btn_next.configure(text="Next", image=icon("chevron_right", 13, AppConfig.COLOR_TEXT_ON_ACCENT),
                                     fg_color=AppConfig.COLOR_BTN_PRIMARY,
                                     hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
 
@@ -180,13 +180,13 @@ class ServerWizard(ctk.CTkToplevel):
         self.clear_content()
         self.update_header("Server Identity")
         
-        ctk.CTkLabel(self.content_frame, text="Server Name:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Server Name:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.entry_name = ctk.CTkEntry(self.content_frame, placeholder_text="my-awesome-server", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_name.pack(fill="x", pady=(0, 15))
         if self.wizard_data["name"]:
             self.entry_name.insert(0, self.wizard_data["name"])
             
-        ctk.CTkLabel(self.content_frame, text="Custom Location:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(self.content_frame, text="Custom Location:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         loc_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         loc_frame.pack(fill="x", pady=(0, 15))
         
@@ -199,7 +199,7 @@ class ServerWizard(ctk.CTkToplevel):
                                         fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER)
         btn_browse_loc.pack(side="right")
             
-        ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 10))
+        ctk.CTkLabel(self.content_frame, text="Server Icon (Optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 10))
         
         self.icon_preview = ctk.CTkLabel(self.content_frame, text="No Icon", width=100, height=100,
                                           fg_color=AppConfig.COLOR_BTN_GHOST, corner_radius=AppConfig.RADIUS_CARD)
@@ -246,7 +246,7 @@ class ServerWizard(ctk.CTkToplevel):
         # Start from template
         templates = list_templates()
         if templates:
-            ctk.CTkLabel(p, text="Start from template (optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+            ctk.CTkLabel(p, text="Start from template (optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
             template_row = ctk.CTkFrame(p, fg_color="transparent")
             template_row.pack(fill="x", pady=(0, 15))
             template_names = ["None"] + [t["name"] for t in templates]
@@ -256,7 +256,7 @@ class ServerWizard(ctk.CTkToplevel):
             template_menu.pack(side="left")
 
         # Engine Selection
-        ctk.CTkLabel(p, text="Server Engine:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Server Engine:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
 
         self.engine_var = ctk.StringVar(value=self.wizard_data["type"])
         engines = [("Vanilla", "Vanilla"), ("Paper", "Paper"), ("Purpur", "Purpur"), ("Fabric", "Fabric"), ("Forge", "Forge")]
@@ -265,15 +265,15 @@ class ServerWizard(ctk.CTkToplevel):
         engine_row.pack(fill="x", pady=(0, 15))
 
         for val, name in engines:
-            rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=ctk.CTkFont(size=14))
+            rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=AppConfig.FONT_BODY)
             rb.pack(side="left", padx=(0, 12))
 
-        self.lbl_ram_hint = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=ctk.CTkFont(size=12))
+        self.lbl_ram_hint = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_CAPTION)
         self.lbl_ram_hint.pack(anchor="w", pady=(0, 5))
         self._update_ram_hint()
 
         # Version Search
-        ctk.CTkLabel(p, text="Version:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Version:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         search_row = ctk.CTkFrame(p, fg_color="transparent")
         search_row.pack(fill="x", pady=(0, 10))
         self.entry_search = ctk.CTkEntry(search_row, placeholder_text="e.g. 1.20.1", corner_radius=AppConfig.RADIUS_BTN, height=36)
@@ -315,8 +315,8 @@ class ServerWizard(ctk.CTkToplevel):
         ram_label_frame = ctk.CTkFrame(p, fg_color="transparent")
         ram_label_frame.pack(fill="x", pady=(0, 5))
 
-        ctk.CTkLabel(ram_label_frame, text="RAM:", font=ctk.CTkFont(weight="bold")).pack(side="left")
-        self.lbl_ram_value = ctk.CTkLabel(ram_label_frame, text=f"{self.wizard_data['ram']} MB ({self.wizard_data['ram']//1024} GB)", font=ctk.CTkFont(size=13))
+        ctk.CTkLabel(ram_label_frame, text="RAM:", font=AppConfig.FONT_LABEL).pack(side="left")
+        self.lbl_ram_value = ctk.CTkLabel(ram_label_frame, text=f"{self.wizard_data['ram']} MB ({self.wizard_data['ram']//1024} GB)", font=AppConfig.FONT_BODY)
         self.lbl_ram_value.pack(side="left", padx=(10, 0))
 
         ram_input_frame = ctk.CTkFrame(p, fg_color="transparent")
@@ -333,16 +333,16 @@ class ServerWizard(ctk.CTkToplevel):
 
         slider_range = ctk.CTkFrame(p, fg_color="transparent")
         slider_range.pack(fill="x")
-        ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left")
-        self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=ctk.CTkFont(size=10), text_color=AppConfig.COLOR_TEXT_GRAY)
+        ctk.CTkLabel(slider_range, text=f"{min_ram} MB", font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="left")
+        self.lbl_ram_util = ctk.CTkLabel(slider_range, text="", font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_TEXT_GRAY)
         self.lbl_ram_util.pack(side="right")
 
-        self.lbl_ram_error = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_STATUS_ERROR, font=ctk.CTkFont(size=12))
+        self.lbl_ram_error = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_STATUS_ERROR, font=AppConfig.FONT_CAPTION)
         self.lbl_ram_error.pack(anchor="w")
         self.update_ram_label(self.wizard_data["ram"])
 
         # --- Java Selection ---
-        ctk.CTkLabel(p, text="Java:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(20, 5))
+        ctk.CTkLabel(p, text="Java:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(20, 5))
 
         self.java_choice_var = ctk.StringVar(value="auto" if self.wizard_data.get("java_path", "auto") == "auto" else "detected")
 
@@ -366,7 +366,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.java_detected_menu = ctk.CTkOptionMenu(self.java_options_frame, values=["Detecting..."], width=280)
         self.java_detected_menu.pack(anchor="w", padx=(30, 10), pady=(0, 10))
 
-        self.lbl_java_status = ctk.CTkLabel(p, text="Detecting Java...", font=ctk.CTkFont(size=12),
+        self.lbl_java_status = ctk.CTkLabel(p, text="Detecting Java...", font=AppConfig.FONT_CAPTION,
                                              text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w")
         self.lbl_java_status.pack(fill="x", pady=(4, 0))
 
@@ -578,13 +578,13 @@ class ServerWizard(ctk.CTkToplevel):
         p = scroll
 
         # Game Mode
-        ctk.CTkLabel(p, text="Game Mode:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Game Mode:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.combo_gamemode = ctk.CTkOptionMenu(p, values=["survival", "creative", "adventure", "spectator"], corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.combo_gamemode.pack(fill="x", pady=(0, 10))
         self.combo_gamemode.set(self.wizard_data["game_mode"])
         
         # Difficulty
-        ctk.CTkLabel(p, text="Difficulty:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Difficulty:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.combo_difficulty = ctk.CTkOptionMenu(p, values=["peaceful", "easy", "normal", "hard"], corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
@@ -609,7 +609,7 @@ class ServerWizard(ctk.CTkToplevel):
         sec_frame = ctk.CTkFrame(p, fg_color="transparent")
         sec_frame.pack(fill="x", pady=(10, 10))
 
-        ctk.CTkLabel(sec_frame, text="Security:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(sec_frame, text="Security:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
 
         sec_row1 = ctk.CTkFrame(sec_frame, fg_color="transparent")
         sec_row1.pack(fill="x", pady=(0, 6))
@@ -640,12 +640,12 @@ class ServerWizard(ctk.CTkToplevel):
         sec_row2 = ctk.CTkFrame(p, fg_color="transparent")
         sec_row2.pack(fill="x", pady=(0, 10))
 
-        ctk.CTkLabel(sec_row2, text="Max Players:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(sec_row2, text="Max Players:", font=AppConfig.FONT_LABEL).pack(side="left", padx=(0, 10))
         self.entry_max_players = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
         self.entry_max_players.pack(side="left", padx=(0, 20))
         self.entry_max_players.insert(0, str(self.wizard_data["max_players"]))
 
-        ctk.CTkLabel(sec_row2, text="Spawn Protection:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(sec_row2, text="Spawn Protection:", font=AppConfig.FONT_LABEL).pack(side="left", padx=(0, 10))
         self.entry_spawn_protection = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
         self.entry_spawn_protection.pack(side="left", padx=(0, 20))
         self.entry_spawn_protection.insert(0, str(self.wizard_data["spawn_protection"]))
@@ -663,14 +663,14 @@ class ServerWizard(ctk.CTkToplevel):
         p = scroll
 
         # Seed
-        ctk.CTkLabel(p, text="Seed (Optional):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Seed (Optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_seed.pack(fill="x", pady=(0, 10))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
 
         # Playit.gg Port
-        ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.entry_port = ctk.CTkEntry(p, placeholder_text="25565", corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.entry_port.pack(fill="x", pady=(0, 10))
         if self.wizard_data.get("playit_port"):
@@ -682,7 +682,7 @@ class ServerWizard(ctk.CTkToplevel):
         dist_frame.grid_columnconfigure(0, weight=1)
 
         # View Distance
-        ctk.CTkLabel(dist_frame, text="View Distance:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ctk.CTkLabel(dist_frame, text="View Distance:", font=AppConfig.FONT_LABEL).grid(row=0, column=0, sticky="w", pady=(0, 5))
         self.lbl_view_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["view_distance"]))
         self.lbl_view_val.grid(row=0, column=1, sticky="w", padx=(10, 20))
 
@@ -691,7 +691,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.slider_view.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 20))
 
         # Simulation Distance
-        ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=ctk.CTkFont(weight="bold")).grid(row=2, column=0, sticky="w", pady=(10, 5))
+        ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=AppConfig.FONT_LABEL).grid(row=2, column=0, sticky="w", pady=(10, 5))
         self.lbl_sim_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["simulation_distance"]))
         self.lbl_sim_val.grid(row=2, column=1, sticky="w", padx=10)
 
@@ -719,7 +719,7 @@ class ServerWizard(ctk.CTkToplevel):
         d = self.wizard_data
 
         def section(title, rows):
-            ctk.CTkLabel(p, text=title, font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
+            ctk.CTkLabel(p, text=title, font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(10, 5))
             for label, value in rows:
                 row = ctk.CTkFrame(p, fg_color="transparent")
                 row.pack(fill="x", pady=1)

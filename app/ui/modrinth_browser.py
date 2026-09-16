@@ -32,20 +32,6 @@ from app.ui.icons import icon
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Design tokens — Modrinth-specific (non-duplicates of AppConfig)
-# ---------------------------------------------------------------------------
-_MODRINTH_GREEN = "#1bd96a"
-_MODRINTH_GREEN_HOVER = "#15b858"
-_BADGE_BG_LIGHT, _BADGE_BG_DARK = AppConfig.COLOR_BADGE_BG
-_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK = AppConfig.COLOR_BADGE_TEXT
-# Soft badge palettes: tinted bg + colored text (replaces white-on-saturated chips)
-_BADGE_NEUTRAL_BG = ("#e2e8f0", "#334155")    # slate-200 / slate-700
-_BADGE_NEUTRAL_TEXT = ("#334155", "#cbd5e1")  # slate-700 / slate-300
-_BADGE_RED_BG = ("#fee2e2", "#450a0a")        # red-100 / red-950
-_BADGE_RED_TEXT = ("#b91c1c", "#fca5a5")      # red-700 / red-300
-_MODRINTH_TEXT = ("#15803d", "#1bd96a")       # readable Modrinth green per mode
-_ICON_COLORS = ["#65a30d", "#d97706", "#16a34a", "#92400e", "#0d9488", "#ca8a04"]
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
 # Unbounded growth over a long browsing session (many search pages, each mod
 # icon cached forever) — cap it. Plain FIFO eviction (dicts preserve
@@ -372,7 +358,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Search", width=80, height=28,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_search,
         )
         self.btn_search.grid(row=0, column=4, padx=(4, 8), pady=6)
@@ -382,7 +368,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             bar, text="Installed", width=90, height=28,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, font=AppConfig.FONT_BADGE,
             command=self._toggle_installed_view,
         )
         self.btn_installed.grid(row=0, column=5, padx=(4, 16), pady=6)
@@ -407,10 +393,10 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Optimizer bundle button
         self.btn_opt = ctk.CTkButton(
-            actions_row, text="Optimizers", image=icon("bolt", 12, "#ffffff"), width=90, height=26,
+            actions_row, text="Optimizers", image=icon("bolt", 12, AppConfig.COLOR_TEXT_ON_ACCENT), width=90, height=26,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_install_optimizers,
         )
         self.btn_opt.pack(side="right", padx=(0, 4))
@@ -537,7 +523,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             corner_radius=AppConfig.RADIUS_BTN, height=32,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            font=AppConfig.FONT_LABEL_SMALL,
             command=self._load_popular_mods,
         )
         btn.grid(row=1, column=0)
@@ -566,7 +552,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_prev_page,
             state="disabled",
         )
@@ -574,7 +560,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         self.lbl_page = ctk.CTkLabel(
             self._pagination_controls, text="",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
+            font=AppConfig.FONT_SUBHEADING,
             text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_page.pack(side="left", padx=8)
@@ -584,7 +570,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
             text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+            font=AppConfig.FONT_LABEL_SMALL,
             command=self._on_next_page,
             state="disabled",
         )
@@ -594,8 +580,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.btn_install_selected = ctk.CTkButton(
             self.pagination_bar, text="Install Selected (0)", width=150, height=26,
             corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_BRIGHT, font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), state="disabled",
+            fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
+            text_color=AppConfig.COLOR_TEXT_ON_BRIGHT, font=AppConfig.FONT_LABEL_SMALL, state="disabled",
             command=self._on_install_selected,
         )
         self.btn_install_selected.pack(side="right", padx=(4, 8), pady=4)
@@ -609,7 +595,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.progress_status = ctk.CTkProgressBar(
             self.pagination_bar, mode="indeterminate", height=4,
             width=90, corner_radius=AppConfig.RADIUS_BADGE,
-            progress_color=_MODRINTH_GREEN,
+            progress_color=AppConfig.COLOR_MODRINTH_BRAND,
         )
 
         self._pagination_controls.pack_forget()  # hidden until first search
@@ -788,7 +774,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if card is not None:
             card.configure(
                 border_width=2 if selected else 0,
-                border_color=_MODRINTH_GREEN,
+                border_color=AppConfig.COLOR_MODRINTH_BRAND,
             )
         self._update_install_selected_bar()
 
@@ -797,7 +783,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hasattr(self, "btn_install_selected"):
             self.btn_install_selected.configure(
                 text=f"Install Selected ({n})", state="normal" if n else "disabled",
-                fg_color=_MODRINTH_GREEN if n else AppConfig.COLOR_BTN_GHOST,
+                fg_color=AppConfig.COLOR_MODRINTH_BRAND if n else AppConfig.COLOR_BTN_GHOST,
                 text_color=AppConfig.COLOR_TEXT_ON_BRIGHT if n else AppConfig.COLOR_TEXT_PRIMARY)
 
     def _on_install_selected(self):
@@ -893,7 +879,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         title = hit.get("title", "Unknown")
         initial = title[0].upper() if title else "?"
         icon_url = hit.get("icon_url", "")
-        color = _ICON_COLORS[int(hashlib.md5(title.encode()).hexdigest(), 16) % len(_ICON_COLORS)]
+        color = AppConfig.ICON_PLACEHOLDER_COLORS[int(hashlib.md5(title.encode()).hexdigest(), 16) % len(AppConfig.ICON_PLACEHOLDER_COLORS)]
 
         hit_key = hit.get("slug") or hit.get("project_id", "")
         is_selected = hit_key in self._selected_hits
@@ -903,7 +889,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             corner_radius=AppConfig.RADIUS_CARD,
             fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
             border_width=2 if is_selected else 0,
-            border_color=_MODRINTH_GREEN,
+            border_color=AppConfig.COLOR_MODRINTH_BRAND,
         )
         card.grid_columnconfigure(2, weight=1)
         card.grid_rowconfigure(0, weight=1)
@@ -915,7 +901,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             card, text="", width=24, height=24,
             checkbox_width=20, checkbox_height=20,
             corner_radius=AppConfig.RADIUS_BADGE, border_width=2,
-            fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+            fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             variable=select_var,
             state="disabled" if client_only else "normal",
@@ -926,7 +912,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         icon_frame = ctk.CTkFrame(card, width=48, height=48, corner_radius=AppConfig.RADIUS_CARD, fg_color=color)
         icon_frame.grid(row=0, column=1, rowspan=2, padx=(0, 8), pady=12)
         icon_frame.grid_propagate(False)
-        lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=(AppConfig.FONT_FAMILY_DISPLAY, 20, "bold"),
+        lbl_initial = ctk.CTkLabel(icon_frame, text=initial, font=AppConfig.FONT_TITLE,
                                    text_color=AppConfig.COLOR_TEXT_ON_ACCENT)
         lbl_initial.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -946,7 +932,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         title_row.grid(row=0, column=0, sticky="ew")
         lbl_title = ctk.CTkLabel(
             title_row, text=title,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 14, "bold"), anchor="w",
+            font=AppConfig.FONT_HEADING_SMALL, anchor="w",
         )
         lbl_title.pack(side="left")
         ctk.CTkLabel(
@@ -984,8 +970,8 @@ class ModrinthBrowser(ctk.CTkFrame):
             installed_badge = ctk.CTkLabel(
                 badge_frame, text="Installed",
                 image=icon("check", 10, AppConfig.COLOR_TEXT_ON_BRIGHT), compound="left", padx=8, pady=2,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"), text_color=AppConfig.COLOR_TEXT_ON_BRIGHT,
-                fg_color=_MODRINTH_GREEN,
+                font=AppConfig.FONT_MICRO_BOLD, text_color=AppConfig.COLOR_TEXT_ON_BRIGHT,
+                fg_color=AppConfig.COLOR_MODRINTH_BRAND,
                 corner_radius=AppConfig.RADIUS_BADGE,
             )
             installed_badge.pack(side="left", padx=(0, 4))
@@ -994,9 +980,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         for cat in categories:
             badge = ctk.CTkLabel(
                 badge_frame, text=cat,
-                font=(AppConfig.FONT_FAMILY, 10),
-                text_color=(_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK),
-                fg_color=(_BADGE_BG_LIGHT, _BADGE_BG_DARK),
+                font=AppConfig.FONT_MICRO,
+                text_color=AppConfig.COLOR_BADGE_TEXT,
+                fg_color=AppConfig.COLOR_BADGE_BG,
                 corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             badge.pack(side="left", padx=(0, 4))
@@ -1005,25 +991,25 @@ class ModrinthBrowser(ctk.CTkFrame):
         if client_only:
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Client-only",
-                font=(AppConfig.FONT_FAMILY, 10), text_color=_BADGE_RED_TEXT,
-                fg_color=_BADGE_RED_BG,
+                font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_BADGE_DANGER_TEXT,
+                fg_color=AppConfig.COLOR_BADGE_DANGER_BG,
                 corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
         elif server_side == "required":
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Server",
-                font=(AppConfig.FONT_FAMILY, 10),
-                text_color=(_BADGE_TEXT_LIGHT, _BADGE_TEXT_DARK),
-                fg_color=(_BADGE_BG_LIGHT, _BADGE_BG_DARK),
+                font=AppConfig.FONT_MICRO,
+                text_color=AppConfig.COLOR_BADGE_TEXT,
+                fg_color=AppConfig.COLOR_BADGE_BG,
                 corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
         elif server_side == "optional":
             side_badge = ctk.CTkLabel(
                 badge_frame, text="Client + Server",
-                font=(AppConfig.FONT_FAMILY, 10), text_color=_BADGE_NEUTRAL_TEXT,
-                fg_color=_BADGE_NEUTRAL_BG,
+                font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_BADGE_NEUTRAL_TEXT,
+                fg_color=AppConfig.COLOR_BADGE_NEUTRAL_BG,
                 corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
             )
             side_badge.pack(side="left", padx=(0, 4))
@@ -1038,8 +1024,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color="transparent", border_width=1,
                 border_color=AppConfig.COLOR_BTN_DANGER,
-                hover_color=_BADGE_RED_BG,
-                text_color=_BADGE_RED_TEXT, font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+                hover_color=AppConfig.COLOR_BADGE_DANGER_BG,
+                text_color=AppConfig.COLOR_BADGE_DANGER_TEXT, font=AppConfig.FONT_LABEL_SMALL,
                 command=lambda k=hit_key, t=hit.get("title", hit_key): self._confirm_uninstall_mod(k, t),
             )
         else:
@@ -1047,10 +1033,10 @@ class ModrinthBrowser(ctk.CTkFrame):
                 card, text="Client-only" if unsupported else "Install", width=90, height=32,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color="transparent", border_width=1,
-                border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK) if unsupported else _MODRINTH_GREEN,
+                border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK) if unsupported else AppConfig.COLOR_MODRINTH_BRAND,
                 hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else AppConfig.COLOR_BADGE_BG,
-                text_color=AppConfig.COLOR_TEXT_MUTED if unsupported else _MODRINTH_TEXT,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"),
+                text_color=AppConfig.COLOR_TEXT_MUTED if unsupported else AppConfig.COLOR_MODRINTH_TEXT,
+                font=AppConfig.FONT_LABEL_SMALL,
                 state="disabled" if unsupported else "normal",
                 command=None if unsupported else lambda h=hit, fn=install_cmd: fn(h),
             )
@@ -1114,7 +1100,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         header = ctk.CTkLabel(
             action_bar,
             text=f"Installed mods/plugins — {server_name}  ({len(files)} files)",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"),
+            font=AppConfig.FONT_SUBHEADING,
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             anchor="w",
         )
@@ -1127,7 +1113,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 fg_color=AppConfig.COLOR_BTN_GHOST,
                 hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
                 text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
+                font=AppConfig.FONT_BADGE, state="disabled",
                 command=self._on_delete_selected,
             )
             self._btn_delete_selected.pack(side="right", padx=(6, 0))
@@ -1136,8 +1122,8 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Update Selected (0)", width=140, height=28,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                hover_color=_MODRINTH_GREEN_HOVER,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), state="disabled",
+                hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
+                font=AppConfig.FONT_BADGE, state="disabled",
                 command=self._on_update_selected,
             )
             self._btn_update_selected.pack(side="right", padx=(6, 0))
@@ -1146,7 +1132,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Check Updates", width=120, height=28,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-                text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+                text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_BADGE,
                 command=self._on_check_updates,
             ).pack(side="right", padx=(6, 0))
 
@@ -1154,7 +1140,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 action_bar, text="Select All", width=90, height=28,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+                font=AppConfig.FONT_BADGE,
                 command=lambda: self._select_all_installed(files),
             ).pack(side="right", padx=(6, 0))
 
@@ -1211,7 +1197,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             row_frame, text=f"● Update {update.get('latest_version', '')}".strip(),
             width=0, height=22, corner_radius=AppConfig.RADIUS_BADGE,
             fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
-            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=(AppConfig.FONT_FAMILY_DISPLAY, 10, "bold"),
+            text_color=AppConfig.COLOR_TEXT_ON_ACCENT, font=AppConfig.FONT_MICRO_BOLD,
             command=lambda: self._apply_single_update(fpath, update, badge),
         )
         badge.grid(row=0, column=2, sticky="e", padx=(4, 4))
@@ -1270,7 +1256,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 row_frame, text="", width=24, height=24,
                 checkbox_width=20, checkbox_height=20,
                 corner_radius=AppConfig.RADIUS_BADGE, border_width=2,
-                fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
                 border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
                 variable=var,
                 command=lambda fp=fpath, v=var: self._on_toggle_installed_selection(fp, v),
@@ -1278,14 +1264,14 @@ class ModrinthBrowser(ctk.CTkFrame):
             chk.grid(row=0, column=0, padx=(10, 4), pady=6)
             self._installed_checkboxes[fpath] = var
 
-            ctk.CTkLabel(row_frame, text=fname, font=(AppConfig.FONT_FAMILY, 12), anchor="w").grid(
+            ctk.CTkLabel(row_frame, text=fname, font=AppConfig.FONT_CAPTION, anchor="w").grid(
                 row=0, column=1, sticky="w", padx=4, pady=6)
 
             btn_del = ctk.CTkButton(
                 row_frame, text="Delete", width=64, height=28,
                 corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"),
+                font=AppConfig.FONT_BADGE,
                 command=lambda fp=fpath: self._confirm_delete_mod(fp),
             )
             btn_del.grid(row=0, column=3, padx=(0, 6), pady=4)
@@ -1323,7 +1309,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         if hasattr(self, "_btn_update_selected"):
             self._btn_update_selected.configure(
                 text=f"Update Selected ({n})", state="normal" if n else "disabled",
-                fg_color=_MODRINTH_GREEN if n else _ghost,
+                fg_color=AppConfig.COLOR_MODRINTH_BRAND if n else _ghost,
                 text_color=AppConfig.COLOR_TEXT_ON_BRIGHT if n else AppConfig.COLOR_TEXT_PRIMARY)
 
     def _confirm_uninstall_mod(self, slug: str, title: str):
@@ -1696,7 +1682,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         ctk.CTkLabel(
             frame, text="Select a version to install:",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 14, "bold"), anchor="w",
+            font=AppConfig.FONT_HEADING_SMALL, anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         var = ctk.StringVar(value=versions[0].get("id", ""))
@@ -1707,7 +1693,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             rb = ctk.CTkRadioButton(
                 frame, text=f"{vnum}  (MC: {mc_v})",
                 variable=var, value=v.get("id", ""),
-                font=(AppConfig.FONT_FAMILY, 12),
+                font=AppConfig.FONT_CAPTION,
             )
             rb.grid(row=i + 1, column=0, sticky="w", padx=8, pady=2)
 
@@ -1727,7 +1713,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                        hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                        command=dialog.destroy).pack(side="right", padx=4)
         ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
-                       corner_radius=AppConfig.RADIUS_BTN, fg_color=_MODRINTH_GREEN, hover_color=_MODRINTH_GREEN_HOVER,
+                       corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
                        text_color=AppConfig.COLOR_TEXT_ON_BRIGHT, command=_on_confirm).pack(side="right", padx=4)
 
     # ------------------------------------------------------------------
@@ -1819,7 +1805,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         ctk.CTkLabel(
             frame, text=f"{len(updates)} update(s) available",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 16, "bold"), anchor="w",
+            font=AppConfig.FONT_HEADING, anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         for i, u in enumerate(updates):
@@ -1827,7 +1813,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             card.grid(row=i + 1, column=0, sticky="ew", pady=3)
             card.grid_columnconfigure(0, weight=1)
 
-            ctk.CTkLabel(card, text=u["filename"], font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), anchor="w").grid(
+            ctk.CTkLabel(card, text=u["filename"], font=AppConfig.FONT_SUBHEADING, anchor="w").grid(
                 row=0, column=0, sticky="w", padx=10, pady=(8, 0))
             ctk.CTkLabel(card, text=f"→ {u.get('latest_version', 'newer version')} available",
                          font=AppConfig.FONT_BODY_SMALL, anchor="w").grid(

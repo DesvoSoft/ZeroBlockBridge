@@ -88,7 +88,7 @@ class ToolTip:
                              fg_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                              text_color=AppConfig.COLOR_TEXT_PRIMARY,
                              corner_radius=AppConfig.RADIUS_BADGE, padx=10, pady=5,
-                             font=ctk.CTkFont(size=12))
+                             font=AppConfig.FONT_CAPTION)
         label.pack()
         
         # Force update to ensure visibility
@@ -407,7 +407,7 @@ class ServerListItem(ctk.CTkFrame):
             activeborderwidth=0,
             borderwidth=1,
             relief="flat",
-            font=(AppConfig.FONT_FAMILY, 11),
+            font=AppConfig.FONT_BODY_SMALL,
         )
         if self.on_export:
             menu.add_command(

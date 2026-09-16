@@ -52,6 +52,18 @@ class AppConfig:
     # Colors - Badges/pills (shared across status bar, mods browser)
     COLOR_BADGE_BG = ("#ecfccb", "#26331c")    # lime-100 / verde oscuro
     COLOR_BADGE_TEXT = ("#3f6212", "#bef264")  # lime-800 / lime-300
+    # Soft badge palettes: tinted bg + colored text (no white-on-saturated chips)
+    COLOR_BADGE_NEUTRAL_BG = ("#e2e8f0", "#334155")    # slate-200 / slate-700
+    COLOR_BADGE_NEUTRAL_TEXT = ("#334155", "#cbd5e1")  # slate-700 / slate-300
+    COLOR_BADGE_DANGER_BG = ("#fee2e2", "#450a0a")     # red-100 / red-950
+    COLOR_BADGE_DANGER_TEXT = ("#b91c1c", "#fca5a5")   # red-700 / red-300
+
+    # Third-party brand (Modrinth browser only)
+    COLOR_MODRINTH_BRAND = "#1bd96a"
+    COLOR_MODRINTH_BRAND_HOVER = "#15b858"
+    COLOR_MODRINTH_TEXT = ("#15803d", "#1bd96a")  # brand green readable in each mode
+    # Placeholder tiles for mods without an icon (picked by name hash)
+    ICON_PLACEHOLDER_COLORS = ("#65a30d", "#d97706", "#16a34a", "#92400e", "#0d9488", "#ca8a04")
 
     # Colors - Buttons (roles: Primary, Success, Danger, Warning, Ghost)
     COLOR_BTN_PRIMARY = ("#65a30d", "#65a30d")           # lime-600
@@ -64,11 +76,8 @@ class AppConfig:
     COLOR_BTN_WARNING_HOVER = COLOR_ACCENT_AMBER_HOVER
     COLOR_BTN_GHOST = ("#f1f5f9", "#1e293b")             # slate-100 / slate-800
     COLOR_BTN_GHOST_HOVER = ("#e2e8f0", "#334155")       # slate-200 / slate-700
-    COLOR_BTN_ACCENT_BLUE = ("#2563eb", "#2563eb")       # blue-600
-    COLOR_BTN_ACCENT_BLUE_HOVER = ("#1d4ed8", "#1d4ed8") # blue-700
+    COLOR_BTN_WARNING_GHOST_HOVER = ("#fde9c8", "#3a2e12")  # amber tint behind amber-outlined ghost buttons
     # Legacy aliases — mantener para no romper callers existentes
-    COLOR_BTN_INFO = ("#34d399", "#34d399")
-    COLOR_BTN_INFO_HOVER = ("#10b981", "#10b981")
     COLOR_BTN_SECONDARY = COLOR_ACCENT_BROWN
     COLOR_BTN_SECONDARY_HOVER = COLOR_ACCENT_BROWN_HOVER
 
@@ -88,6 +97,16 @@ class AppConfig:
     FONT_HEADING_SMALL = (FONT_FAMILY_DISPLAY, 14, "bold")
     FONT_TITLE = (FONT_FAMILY_DISPLAY, 20, "bold")
     FONT_NOTE = (FONT_FAMILY, 11, "italic")
+    # Extended type scale -- every UI font must come from these tokens.
+    FONT_LABEL = (FONT_FAMILY, 13, "bold")               # form field / row labels
+    FONT_CAPTION = (FONT_FAMILY, 12)                     # hints, secondary text, tooltips
+    FONT_LABEL_SMALL = (FONT_FAMILY_DISPLAY, 12, "bold") # compact buttons, card titles
+    FONT_SUBHEADING = (FONT_FAMILY_DISPLAY, 13, "bold")  # list item / toast titles
+    FONT_BADGE = (FONT_FAMILY_DISPLAY, 11, "bold")       # pills and status badges
+    FONT_MICRO = (FONT_FAMILY, 10)                       # dense metadata (slider ranges, counts)
+    FONT_MICRO_BOLD = (FONT_FAMILY_DISPLAY, 10, "bold")  # tiny badges on cards
+    FONT_STAT = (FONT_FAMILY_DISPLAY, 22, "bold")        # large numeric stats
+    FONT_MONO_SMALL = (FONT_FAMILY_MONO, 11)
 
     # Radius scale — CTk dibuja esquinas sin antialiasing real: radios grandes
     # en widgets pequeños se ven pixelados. Escala semántica en vez de 12 global.

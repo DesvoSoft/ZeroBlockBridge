@@ -95,7 +95,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         self.lbl_player_count = ctk.CTkLabel(
             header_frame,
             text="Players Online: 0",
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 22, "bold")
+            font=AppConfig.FONT_STAT
         )
         self.lbl_player_count.pack(side="left")
 
@@ -115,7 +115,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
         header_frame.grid_columnconfigure(0, weight=1)
 
-        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist enforcement", font=(AppConfig.FONT_FAMILY, 13, "bold"))
+        lbl_title = ctk.CTkLabel(header_frame, text="Whitelist enforcement", font=AppConfig.FONT_LABEL)
         lbl_title.grid(row=0, column=0, sticky="w")
 
         self.switch_whitelist = ctk.CTkSwitch(header_frame, text="Enabled", command=self._toggle_whitelist)
@@ -232,7 +232,7 @@ class PlayersDashboard(ctk.CTkToplevel):
         for player in self.connected_players:
             item_frame = self._row_frame(self.scroll_players)
 
-            lbl_name = ctk.CTkLabel(item_frame, text=player, font=(AppConfig.FONT_FAMILY, 13, "bold"))
+            lbl_name = ctk.CTkLabel(item_frame, text=player, font=AppConfig.FONT_LABEL)
             lbl_name.pack(side="left", padx=10, pady=8)
 
             btn_ban = ctk.CTkButton(
@@ -265,7 +265,7 @@ class PlayersDashboard(ctk.CTkToplevel):
             lbl_name.pack(side="left", padx=10, pady=8)
 
             btn_remove = ctk.CTkButton(
-                item_frame, text="", image=icon("close", 12, "#ffffff"),
+                item_frame, text="", image=icon("close", 12, AppConfig.COLOR_TEXT_ON_ACCENT),
                 width=28, height=24, corner_radius=AppConfig.RADIUS_BTN,
                 fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
                 command=lambda p=name: self._remove_from_whitelist(p)
@@ -312,7 +312,7 @@ class PlayersDashboard(ctk.CTkToplevel):
             info_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
             info_frame.pack(side="left", padx=10, pady=8, fill="x", expand=True)
 
-            lbl_name = ctk.CTkLabel(info_frame, text=name, font=(AppConfig.FONT_FAMILY, 13, "bold"), anchor="w")
+            lbl_name = ctk.CTkLabel(info_frame, text=name, font=AppConfig.FONT_LABEL, anchor="w")
             lbl_name.pack(anchor="w")
             lbl_reason = ctk.CTkLabel(info_frame, text=reason, text_color=AppConfig.COLOR_TEXT_GRAY,
                                        font=AppConfig.FONT_BODY_SMALL, anchor="w")

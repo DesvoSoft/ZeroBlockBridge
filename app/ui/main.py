@@ -171,10 +171,10 @@ class MCTunnelApp(ctk.CTk):
 
         self.btn_create_server = ctk.CTkButton(
             self.actions_frame, text="Create New Server",
-            image=icon("plus", 14, "#ffffff"),
+            image=icon("plus", 14, AppConfig.COLOR_TEXT_ON_ACCENT),
             command=self.create_server_dialog, corner_radius=AppConfig.RADIUS_BTN, height=36,
             fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold")
+            font=AppConfig.FONT_SUBHEADING
         )
         self.btn_create_server.pack(fill="x", pady=(0, 5))
         ToolTip(self.btn_create_server, "Create a new Minecraft server")
@@ -187,7 +187,7 @@ class MCTunnelApp(ctk.CTk):
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
-            font=(AppConfig.FONT_FAMILY, 12)
+            font=AppConfig.FONT_CAPTION
         )
         self.btn_add_server.pack(fill="x", pady=(0, 5))
         ToolTip(self.btn_add_server, "Import or load an existing server")
@@ -200,7 +200,7 @@ class MCTunnelApp(ctk.CTk):
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
-            font=(AppConfig.FONT_FAMILY, 12)
+            font=AppConfig.FONT_CAPTION
         )
         self.btn_app_settings.pack(fill="x", pady=(0, 10))
         ToolTip(self.btn_app_settings, "Application settings")
@@ -213,7 +213,7 @@ class MCTunnelApp(ctk.CTk):
         # --- List Group ---
         self.lbl_servers = ctk.CTkLabel(
             self.sidebar_frame, text="SERVERS",
-            anchor="center", font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"), text_color=AppConfig.COLOR_TEXT_GRAY
+            anchor="center", font=AppConfig.FONT_BADGE, text_color=AppConfig.COLOR_TEXT_GRAY
         )
         self.lbl_servers.grid(row=3, column=0, padx=25, pady=(5, 2), sticky="ew")
 
@@ -253,10 +253,10 @@ class MCTunnelApp(ctk.CTk):
                                             font=AppConfig.FONT_HEADING_SMALL, anchor="w")
         self.lbl_dash_title.pack(side="left", padx=(10, 0), fill="x", expand=True)
 
-        self.btn_start = ctk.CTkButton(self.status_hero_row, text="", image=icon("play", 14, "#ffffff"), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_start = ctk.CTkButton(self.status_hero_row, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_start, "Start server")
 
-        self.btn_stop = ctk.CTkButton(self.status_hero_row, text="", image=icon("stop", 14, "#ffffff"), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_stop = ctk.CTkButton(self.status_hero_row, text="", image=icon("stop", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_stop, "Stop server")
 
         self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
@@ -336,7 +336,7 @@ class MCTunnelApp(ctk.CTk):
         self.ip_frame = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.ip_frame.pack(side="left", fill="x", expand=True)
 
-        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color=AppConfig.COLOR_LINK)
+        self.lbl_dns_display = ctk.CTkLabel(self.ip_frame, text="", font=AppConfig.FONT_SUBHEADING, text_color=AppConfig.COLOR_LINK)
         self.lbl_dns_display.pack(side="left", padx=(5, 0))
 
         self.btn_copy_ip = ctk.CTkButton(
@@ -352,9 +352,9 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_toolbar = ctk.CTkFrame(self.tunnel_frame, fg_color="transparent")
         self.tunnel_toolbar.pack(side="right", padx=10)
 
-        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, "#ffffff"), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+        self.btn_tunnel_start = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), command=self.start_tunnel, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
         ToolTip(self.btn_tunnel_start, "Start tunnel")
-        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, "#ffffff"), command=self.stop_tunnel, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_tunnel_stop = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("stop", 14, AppConfig.COLOR_TEXT_ON_ACCENT), command=self.stop_tunnel, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_tunnel_stop, "Stop tunnel")
 
         # --- Playit Account Linking (collapsible when unlinked) ---
@@ -366,18 +366,18 @@ class MCTunnelApp(ctk.CTk):
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
             width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
-            font=(AppConfig.FONT_FAMILY_DISPLAY, 12, "bold"), text_color=AppConfig.COLOR_ACCENT_AMBER,
+            font=AppConfig.FONT_LABEL_SMALL, text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
         ToolTip(self.btn_toggle_setup, "Link Playit account")
         self.setup_frame = ctk.CTkFrame(self.tunnel_toolbar, fg_color="transparent")
         self.entry_setup_code = ctk.CTkEntry(self.setup_frame, placeholder_text="Paste Setup Code", width=200, height=36, corner_radius=AppConfig.RADIUS_INPUT)
         self.btn_link_code = ctk.CTkButton(self.setup_frame, text="Link", command=self._link_with_setup_code, width=60, height=36, corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
-        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=AppConfig.RADIUS_BTN, height=36, font=(AppConfig.FONT_FAMILY_DISPLAY, 11, "bold"))
+        self.btn_claim = ctk.CTkButton(self.setup_frame, text="Get Code", command=self.open_claim_url, fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER, width=70, corner_radius=AppConfig.RADIUS_BTN, height=36, font=AppConfig.FONT_BADGE)
 
         self.btn_reset = ctk.CTkButton(self.tunnel_toolbar, text="", image=icon("reset", 15, AppConfig.COLOR_ACCENT_AMBER),
                                    command=self.reset_tunnel,
                                    fg_color=AppConfig.COLOR_BTN_GHOST,
-                                   hover_color=("#fde9c8", "#3a2e12"),
+                                   hover_color=AppConfig.COLOR_BTN_WARNING_GHOST_HOVER,
                                    border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
                                    width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_reset.pack(side="left", padx=2)
@@ -544,7 +544,7 @@ class MCTunnelApp(ctk.CTk):
             ).pack(pady=(24, 4))
             ctk.CTkLabel(
                 self.server_list_frame, text="No servers yet.",
-                text_color=AppConfig.COLOR_TEXT_MUTED, font=(AppConfig.FONT_FAMILY, 13)
+                text_color=AppConfig.COLOR_TEXT_MUTED, font=AppConfig.FONT_BODY
             ).pack(pady=(0, 6))
             ctk.CTkButton(
                 self.server_list_frame, text="Create your first server",

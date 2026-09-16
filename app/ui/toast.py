@@ -34,19 +34,6 @@ _TOAST_STYLES = {
     "error":   (_CARD_BG, AppConfig.COLOR_BTN_DANGER, ("icon", "close")),
 }
 
-# Fallback color mapping from raw color names to toast types
-_COLOR_TYPE_MAP = {
-    "red": "error",
-    "#ef4444": "error",
-    "orange": "warning",
-    "#f97316": "warning",
-    "blue": "info",
-    "#3b82f6": "info",
-    "green": "success",
-    "white": "info",
-}
-
-
 class ToastNotification:
     """Manages a queue of floating toast notifications with fade animations.
     
@@ -83,13 +70,13 @@ class ToastNotification:
         badge_size = 24
         if isinstance(icon_char, tuple):
             badge = ctk.CTkLabel(
-                inner, text="", image=icon(icon_char[1], 12, "#ffffff"),
+                inner, text="", image=icon(icon_char[1], 12, AppConfig.COLOR_TEXT_ON_ACCENT),
                 width=badge_size, height=badge_size, fg_color=border_color, corner_radius=badge_size // 2,
             )
         else:
             badge = ctk.CTkLabel(
                 inner, text=icon_char, width=badge_size, height=badge_size,
-                font=(AppConfig.FONT_FAMILY_DISPLAY, 13, "bold"), text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
+                font=AppConfig.FONT_SUBHEADING, text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
                 fg_color=border_color, corner_radius=badge_size // 2,
             )
         badge.pack(side="left", padx=(0, 10))
@@ -97,7 +84,7 @@ class ToastNotification:
         # Message
         ctk.CTkLabel(
             inner, text=message, text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            font=(AppConfig.FONT_FAMILY, 12), wraplength=320, justify="left",
+            font=AppConfig.FONT_CAPTION, wraplength=320, justify="left",
         ).pack(side="left", fill="x", expand=True)
 
         # Callers pass all sorts of widgets as "parent" (the main window, a
@@ -241,14 +228,10 @@ class ToastNotification:
 
     @staticmethod
     def resolve_type(data: dict) -> str:
-        """Extract toast type from a NOTIFICATION event payload.
-
-        Supports both new {"type": "warning"} and legacy {"color": "red"} formats.
-        """
-        if "type" in data:
-            return data["type"] if data["type"] in _TOAST_STYLES else "info"
-        color = data.get("color", "")
-        return _COLOR_TYPE_MAP.get(color, "info")
+        """Toast type from a NOTIFICATION payload ({"type": ...}); unknown or
+        missing types fall back to "info"."""
+        toast_type = data.get("type")
+        return toast_type if toast_type in _TOAST_STYLES else "info"
 
 
 # Module-level singleton
