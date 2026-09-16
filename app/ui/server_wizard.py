@@ -500,6 +500,13 @@ class ServerWizard(ctk.CTkToplevel):
 
         engine = self.engine_var.get()
 
+        # Fetch happens in background — a fast search keystroke or engine
+        # switch can spawn several overlapping fetches; sequence counter
+        # discards a result if a newer call has started since (same pattern
+        # as _update_java_check's _java_check_seq, same underlying hazard).
+        self._version_render_seq = getattr(self, "_version_render_seq", 0) + 1
+        seq = self._version_render_seq
+
         # Show loading indicator immediately — fetch happens in background
         loading_lbl = ctk.CTkLabel(self.scroll_versions, text="Loading versions...",
                                     text_color=AppConfig.COLOR_TEXT_GRAY)
@@ -529,7 +536,7 @@ class ServerWizard(ctk.CTkToplevel):
             filtered = [v for v in versions if search_q in v.lower()]
 
             def render_ui():
-                if not self.winfo_exists():
+                if seq != self._version_render_seq or not self.winfo_exists():
                     return
                 for widget in self.scroll_versions.winfo_children():
                     widget.destroy()
