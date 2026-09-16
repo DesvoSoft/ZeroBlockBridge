@@ -713,15 +713,28 @@ class MCTunnelApp(ctk.CTk):
             self._on_console_tab_changed()
 
     def _update_mods_tab_state(self):
-        """Players and Mods tabs are only usable with a server selected."""
-        enabled = bool(self.zbb_manager.current_server)
-        for tab in ("Players", "Mods"):
+        """Players needs a selected server; Mods also needs an engine that can
+        load mods or plugins (vanilla can't)."""
+        server = self.zbb_manager.current_server
+        info = self._get_current_server_info() if server else None
+        can_mod = bool(info and info[2])
+        enabled = {"Players": bool(server), "Mods": can_mod}
+        for tab, on in enabled.items():
             try:
                 btn = self.console_tabs._segmented_button._buttons_dict[tab]
-                btn.configure(state="normal" if enabled else "disabled")
+                btn.configure(state="normal" if on else "disabled")
             except (AttributeError, KeyError) as e:
                 logger.debug("%s tab state update failed: %s", tab, e)
-        if not enabled and self.console_tabs.get() in ("Players", "Mods"):
+        tip = ("Vanilla servers can't load mods or plugins" if server and not can_mod
+               else "Select a server first" if not server else "")
+        if not hasattr(self, "_mods_tab_tooltip"):
+            try:
+                self._mods_tab_tooltip = ToolTip(self.console_tabs._segmented_button._buttons_dict["Mods"], tip)
+            except (AttributeError, KeyError) as e:
+                logger.debug("Mods tab tooltip unavailable: %s", e)
+        else:
+            self._mods_tab_tooltip.text = tip
+        if not enabled.get(self.console_tabs.get(), True):
             self.console_tabs.set("Console")
 
     def on_server_delete(self, server_name):
@@ -924,7 +937,7 @@ class MCTunnelApp(ctk.CTk):
         if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
             loader = stype
         
-        logger.info("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.zbb_manager.current_server, mc_version, loader or 'any')
+        logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.zbb_manager.current_server, mc_version, loader or 'any')
         return (self.zbb_manager.current_server, mc_version, loader)
 
     def save_advanced_settings(self, *args):
@@ -1025,7 +1038,7 @@ class MCTunnelApp(ctk.CTk):
             self._installed_mods_count = installed
         counts = {
             "Players": getattr(self, "_player_count", 0) if self.zbb_manager.current_server else 0,
-            "Mods": self._installed_mods_count if self.zbb_manager.current_server else 0,
+            "Mods": self._installed_mods_count if self._get_current_server_info() and self._get_current_server_info()[2] else 0,
         }
         try:
             buttons = self.console_tabs._segmented_button._buttons_dict
