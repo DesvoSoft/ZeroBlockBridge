@@ -179,6 +179,13 @@ class ModrinthBrowser(ctk.CTkFrame):
         # landed while the Installed view was open).
         self._results_stale = False
 
+        # Server the panel currently targets, and its installed/updates counts
+        # shown on the Installed button.
+        self._context_key = None
+        self._installed_count = 0
+        self._update_count = 0
+        self._search_context_dirty = False
+
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -242,7 +249,35 @@ class ModrinthBrowser(ctk.CTkFrame):
         return ctx
 
     def refresh_server_context(self):
-        """Update the context banner + type filter for the selected server."""
+        """Update the context banner + type filter for the selected server,
+        and reload whatever the panel shows when the target server changed."""
+        self._update_context_banner()
+        ctx = self._resolve_server_context()
+        if ctx == self._context_key:
+            return
+        first = self._context_key is None and not self._popular_loaded
+        self._context_key = ctx
+        self._installed_count, self._update_count = 0, 0
+        self._refresh_installed_counter(check_updates=True)
+        if first:
+            return
+        # Results were filtered for (and marked installed against) the previous
+        # server: reload them for the new one.
+        if self._view == "installed":
+            self._render_installed()
+            self._search_context_dirty = True  # re-fetch on the way back to Explore
+        elif self._popular_loaded:
+            self._reload_search()
+
+    def _reload_search(self):
+        """Re-run the current search (or the popular list) for the current server."""
+        self._search_context_dirty = False
+        if not self._search_query and self._search_sort == "downloads":
+            self._load_popular_mods()
+        else:
+            self._run_search()
+
+    def _update_context_banner(self):
         ctx = self._resolve_server_context()
         if not ctx:
             self.lbl_context.configure(
@@ -372,13 +407,14 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         # Installed toggle button (M.6) — most frequently used, same row as search
         self.btn_installed = ctk.CTkButton(
-            bar, text="Installed", width=90, height=28,
+            bar, text="Installed", width=110, height=28, compound="right",
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             text_color=AppConfig.COLOR_TEXT_PRIMARY, font=AppConfig.FONT_BADGE,
             command=self._toggle_installed_view,
         )
         self.btn_installed.grid(row=0, column=5, padx=(4, 12), pady=(8, 6))
+        self._installed_tooltip = ToolTip(self.btn_installed, "")
 
         # Thin separator between search row and context/actions row
         separator = ctk.CTkFrame(
@@ -747,6 +783,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._current_page = 0
 
         if self._view == "installed":
+            self._search_context_dirty = False  # this search replaces the stale results
             self._toggle_installed_view()  # switch back to search view
 
         self._do_search()
@@ -970,6 +1007,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _refresh_installed_state(self):
         """Rebuild only the cards whose installed state changed (install,
         uninstall, delete) — the rest of the page stays put, no flicker."""
+        self._refresh_installed_counter()
         if self._view != "search" or self._results_stale:
             return
         for entry in list(self._cards):
@@ -1142,8 +1180,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._view = "installed"
             self.btn_installed.configure(
                 fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-                text="Explore", text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
+                text="Explore", text_color=AppConfig.COLOR_TEXT_ON_ACCENT, image=None,
             )
+            self._installed_tooltip.text = ""
             self._hide_loading()
             self._pagination_controls.pack_forget()
             self.btn_install_selected.pack_forget()
@@ -1156,8 +1195,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._view = "search"
             self.btn_installed.configure(
                 fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                text="Installed", text_color=AppConfig.COLOR_TEXT_PRIMARY,
+                text_color=AppConfig.COLOR_TEXT_PRIMARY,
             )
+            self._update_installed_button()
             self._render_gen += 1  # abandon an in-flight Installed render
             self._hide_loading()
             self._btn_select_all.pack_forget()
@@ -1165,7 +1205,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.btn_install_selected.pack(side="right", padx=8, pady=6)
             self._set_status("")
             self._raise_list(self.results_frame)
-            if self._results_stale:
+            if self._search_context_dirty:
+                self._reload_search()
+            elif self._results_stale:
                 self._render_results()
             else:
                 self._update_pagination()
@@ -1176,6 +1218,51 @@ class ModrinthBrowser(ctk.CTkFrame):
                     mod_install_tracker.get_installed_slugs(ctx[0]) if ctx else set()
                 )
                 self._refresh_installed_state()
+
+    @staticmethod
+    def _installed_jar_files(server_name: str) -> list:
+        files = []
+        for d in (os.path.join(SERVERS_DIR, server_name, "mods"), os.path.join(SERVERS_DIR, server_name, "plugins")):
+            if os.path.isdir(d):
+                files.extend(os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".jar"))
+        return files
+
+    def _refresh_installed_counter(self, check_updates: bool = False):
+        """Installed (N) on the toggle button, plus an amber dot when the
+        background check found updates. check_updates hits Modrinth, so it
+        only runs when the target server changes."""
+        ctx = self._resolve_server_context()
+        self._installed_count = len(self._installed_jar_files(ctx[0])) if ctx else 0
+        self._update_installed_button()
+        if not (check_updates and ctx and ctx[2] and self._installed_count):
+            return
+        key = ctx
+
+        def _worker():
+            try:
+                count = len(self.client.check_updates(ctx[0], ctx[1], ctx[2]))
+            except Exception as exc:
+                logger.debug("Background update count failed: %s", exc)
+                return
+
+            def _apply():
+                if self.winfo_exists() and self._context_key == key:
+                    self._update_count = count
+                    self._update_installed_button()
+            self.after(0, _apply)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _update_installed_button(self):
+        if self._view != "search":
+            return
+        n, updates = self._installed_count, self._update_count
+        self.btn_installed.configure(
+            text=f"Installed ({n})" if self._context_key else "Installed",
+            image=icon("dot", 10, AppConfig.COLOR_ACCENT_AMBER) if updates else None,
+        )
+        self._installed_tooltip.text = (
+            f"{updates} update{'s' if updates != 1 else ''} available" if updates else "")
 
     def _render_installed(self, behind: bool = False):
         """(Re)build the Installed list.
@@ -1196,12 +1283,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.installed_frame._parent_canvas.yview_moveto(0)
 
         ctx = self._resolve_server_context()
-        files = []
-        if ctx:
-            for d in (os.path.join(SERVERS_DIR, ctx[0], "mods"), os.path.join(SERVERS_DIR, ctx[0], "plugins")):
-                if os.path.isdir(d):
-                    files.extend(os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".jar"))
+        files = self._installed_jar_files(ctx[0]) if ctx else []
         self._installed_files = files
+        self._installed_count = len(files)
         has_files = bool(files)
         self._btn_select_all.configure(state="normal" if has_files else "disabled")
         self._btn_check_updates.configure(state="normal" if has_files else "disabled")
@@ -1252,6 +1336,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             if gen != self._render_gen or not self.winfo_exists():
                 return
             self._pending_updates = {u["filename"]: u for u in updates}
+            self._update_count = len(updates)
             self.after(0, lambda: self._apply_update_badges(gen))
 
         threading.Thread(target=_worker, daemon=True).start()
