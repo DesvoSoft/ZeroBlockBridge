@@ -30,7 +30,7 @@ from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
 from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
-from app.ui.modrinth_browser import ModrinthBrowser
+from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
 from app.ui.players_dashboard import PlayersDashboard
@@ -1135,6 +1135,7 @@ class MCTunnelApp(ctk.CTk):
 
         # Cancel in-flight UI tasks immediately (downloads, link checks, etc.)
         self.executor.shutdown(wait=False, cancel_futures=True)
+        MODRINTH_ICON_EXECUTOR.shutdown(wait=False, cancel_futures=True)
 
         self._shutdown_event = threading.Event()
 

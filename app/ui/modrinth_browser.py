@@ -47,6 +47,11 @@ _BADGE_RED_TEXT = ("#b91c1c", "#fca5a5")      # red-700 / red-300
 _MODRINTH_TEXT = ("#15803d", "#1bd96a")       # readable Modrinth green per mode
 _ICON_COLORS = ["#65a30d", "#d97706", "#16a34a", "#92400e", "#0d9488", "#ca8a04"]
 _ICON_CACHE: dict[str, ctk.CTkImage] = {}
+# Unbounded growth over a long browsing session (many search pages, each mod
+# icon cached forever) — cap it. Plain FIFO eviction (dicts preserve
+# insertion order) rather than real LRU: good enough for thumbnails, no
+# extra dependency needed for it.
+_ICON_CACHE_MAX = 300
 _ICONS_IN_FLIGHT: set[str] = set()
 _ICONS_LOCK = threading.Lock()
 _ICON_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="modrinth-icon")
@@ -55,6 +60,17 @@ _ICON_DISK_DIR = BASE_DIR / ".zbb_cache" / "modrinth_icons"
 
 def _icon_disk_path(icon_url: str):
     return _ICON_DISK_DIR / (hashlib.md5(icon_url.encode()).hexdigest() + ".png")
+
+
+def _store_icon(icon_url: str, ctk_img: "ctk.CTkImage") -> None:
+    """Insert into the in-memory icon cache, evicting the oldest entries
+    once over the cap. Guarded by _ICONS_LOCK — up to 4 icon-fetch worker
+    threads can reach here concurrently."""
+    with _ICONS_LOCK:
+        _ICON_CACHE[icon_url] = ctk_img
+        overflow = len(_ICON_CACHE) - _ICON_CACHE_MAX
+        for stale_key in list(_ICON_CACHE.keys())[:max(overflow, 0)]:
+            del _ICON_CACHE[stale_key]
 
 _PAGE_SIZE = 20
 _RENDER_BATCH_SIZE = 8
@@ -1852,7 +1868,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 except OSError as exc:
                     logger.debug("Icon disk cache write failed: %s", exc)
             ctk_img = ctk.CTkImage(img, size=(48, 48))
-            _ICON_CACHE[icon_url] = ctk_img
+            _store_icon(icon_url, ctk_img)
             self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
         except Exception as exc:
             logger.debug("Image fetch error: %s", exc)
