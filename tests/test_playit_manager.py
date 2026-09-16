@@ -512,6 +512,20 @@ class TestReset:
                 assert m._api_dns is None
                 assert mock_api._secret_key is None
 
+    def test_full_reset_survives_locked_toml(self, manager, tmp_path):
+        # A sync/AV lock on playit.toml used to abort the reset halfway,
+        # leaving the manager still marked as linked.
+        m, mock_api, _ = manager
+        m.is_linked = True
+        toml = tmp_path / "playit.toml"
+        toml.touch()
+        with patch.object(m, "toml_path", str(toml)), patch.object(m, "stop"),              patch("app.core.playit_manager.os.remove", side_effect=PermissionError("locked")):
+            mock_api.list_tunnels.return_value = []
+            mock_api.delete_agent.return_value = True
+            m.reset(mode="full")
+        assert m.is_linked is False
+        assert any("Delete it manually" in str(c.args[0]) for c in m.console_callback.call_args_list)
+
     def test_soft_reset_escalates_to_full_when_auth_failed(self, manager, tmp_path):
         m, mock_api, _ = manager
         m.is_linked = True

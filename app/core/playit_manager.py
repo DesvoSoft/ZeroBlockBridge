@@ -495,70 +495,25 @@ class PlayitManager:
         self.status_callback("Offline", None)
 
     def reset(self, mode: str = "full") -> None:
+        """"full": delete tunnels + agent, remove playit.toml and unlink.
+        Anything else: delete tunnels only and keep the agent linked."""
         try:
             if mode != "full" and self._auth_failed:
                 # Soft reset keeps playit.toml, so a rejected secret would just
                 # relaunch into the same auth loop — force a full re-link instead.
                 self.console_callback("[Playit] Stored secret is invalid. Escalating to full reset to force re-link.")
                 mode = "full"
-            if mode == "full":
-                self.console_callback("[Playit] Starting full reset...")
-            else:
-                self.console_callback("[Playit] Starting tunnel-only reset...")
+            self.console_callback("[Playit] Starting full reset..." if mode == "full"
+                                  else "[Playit] Starting tunnel-only reset...")
 
-            # --- CRITICAL DNS: load secret key from toml for remote cleanup ---
+            # Secret is needed for the remote cleanup below.
             self.api_client.load_secret_key()
-
-            # 1. Delete remote tunnels (both modes)
-            self.console_callback("[Playit] Cleaning up remote tunnels...")
-            try:
-                tunnels = self.api_client.list_tunnels()
-                for t in tunnels:
-                    tid = t.get("id")
-                    if tid:
-                        try:
-                            if self.api_client.delete_tunnel(tid):
-                                self.console_callback(f"[Playit] Deleted tunnel: {tid}")
-                        except Exception as e:
-                            self.console_callback(f"[Playit] Tunnel delete failed: {e}")
-            except Exception as e:
-                self.console_callback(f"[Playit] Tunnel list failed: {e}")
-
-            # 2. Stop local process (both modes)
+            self._delete_remote_tunnels()
             self.stop()
 
             if mode == "full":
-                # Full reset: also delete agent, config, credentials
-                self.console_callback("[Playit] Cleaning up remote agent...")
-                api_deleted = False
-                try:
-                    api_deleted = self.api_client.delete_agent()
-                    if api_deleted:
-                        self.console_callback("[Playit] Remote agent deleted via API.")
-                except Exception as e:
-                    self.console_callback(f"[Playit] API agent deletion failed (agent may remain in dashboard): {e}")
-
-                if not api_deleted:
-                    self.console_callback("[Playit] Agent could not be deleted automatically. If it remains, delete manually at:")
-                    self.console_callback("[Playit] https://playit.gg/dashboard/agents")
-
-                if os.path.exists(self.toml_path):
-                    os.remove(self.toml_path)
-                    self.console_callback("[Playit] Local config playit.toml removed.")
-
-                self.is_linked = False
-                self.api_client.is_read_only = False
-                self.api_client._secret_key = None
-                self.api_client._agent_id = None
-                self.api_client.consecutive_auth_failures = 0
-                self._auth_failed = False
-                self.current_address = None
-                self._api_dns = None
-                self.console_callback("[Playit] Account unlinked and reset complete.")
-                if self.notification_callback:
-                    self.notification_callback("Playit account unlinked and reset.", "success")
+                self._unlink_account()
             else:
-                # Soft reset: keep agent linked, user can create a new tunnel with Start Tunnel
                 self.current_address = None
                 self._api_dns = None
                 self.console_callback("[Playit] Tunnels cleared. Agent stays linked. Click Start Tunnel to create a new tunnel.")
@@ -566,6 +521,56 @@ class PlayitManager:
                     self.notification_callback("Tunnels cleared. Click Start Tunnel to create a new tunnel.", "success")
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
+
+    def _delete_remote_tunnels(self) -> None:
+        self.console_callback("[Playit] Cleaning up remote tunnels...")
+        try:
+            tunnels = self.api_client.list_tunnels()
+        except Exception as e:
+            self.console_callback(f"[Playit] Tunnel list failed: {e}")
+            return
+        for tunnel_id in (t.get("id") for t in tunnels):
+            if not tunnel_id:
+                continue
+            try:
+                if self.api_client.delete_tunnel(tunnel_id):
+                    self.console_callback(f"[Playit] Deleted tunnel: {tunnel_id}")
+            except Exception as e:
+                self.console_callback(f"[Playit] Tunnel delete failed: {e}")
+
+    def _unlink_account(self) -> None:
+        self.console_callback("[Playit] Cleaning up remote agent...")
+        api_deleted = False
+        try:
+            api_deleted = self.api_client.delete_agent()
+            if api_deleted:
+                self.console_callback("[Playit] Remote agent deleted via API.")
+        except Exception as e:
+            self.console_callback(f"[Playit] API agent deletion failed (agent may remain in dashboard): {e}")
+        if not api_deleted:
+            self.console_callback("[Playit] Agent could not be deleted automatically. If it remains, delete manually at:")
+            self.console_callback("[Playit] https://playit.gg/dashboard/agents")
+
+        try:
+            if os.path.exists(self.toml_path):
+                os.remove(self.toml_path)
+                self.console_callback("[Playit] Local config playit.toml removed.")
+        except OSError as e:
+            # A sync/AV lock must not abort the reset halfway (process already
+            # stopped, agent deleted) with the in-memory link state untouched.
+            self.console_callback(f"[Playit] Could not remove {self.toml_path}: {e}. Delete it manually.")
+
+        self.is_linked = False
+        self.api_client.is_read_only = False
+        self.api_client._secret_key = None
+        self.api_client._agent_id = None
+        self.api_client.consecutive_auth_failures = 0
+        self._auth_failed = False
+        self.current_address = None
+        self._api_dns = None
+        self.console_callback("[Playit] Account unlinked and reset complete.")
+        if self.notification_callback:
+            self.notification_callback("Playit account unlinked and reset.", "success")
 
     def link_manually(self, setup_code: str) -> bool:
         if not setup_code or len(setup_code.strip()) < 8:
