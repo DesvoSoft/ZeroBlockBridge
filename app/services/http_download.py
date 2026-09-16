@@ -16,7 +16,7 @@ from app.core.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = f"ZeroBlockBridge/{AppConfig.APP_VERSION} (github.com/DesvoSoft/ZeroBlockBridge)"
+USER_AGENT = AppConfig.USER_AGENT
 CHUNK_SIZE = 64 * 1024
 
 

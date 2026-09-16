@@ -5,6 +5,7 @@ import platform
 import uuid
 import logging
 from typing import Dict, List, Optional
+from app.core.app_config import AppConfig
 from app.core.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class PlayitApiClient:
     def __init__(self):
         self.api_base = "https://api.playit.gg"
         self.session = requests.Session()
-        self.session.headers["User-Agent"] = "ZeroBlockBridge/1.0"
+        self.session.headers["User-Agent"] = AppConfig.USER_AGENT
         self._secret_key = None
         self._agent_id = None
         self._proto_key = None
@@ -75,7 +76,7 @@ class PlayitApiClient:
         url = f"{self.api_base}/{endpoint.strip('/')}"
         headers = {
             "Authorization": f"agent-key {self._secret_key}",
-            "User-Agent": "ZeroBlockBridge/1.0.4"
+            "User-Agent": AppConfig.USER_AGENT
         }
         try:
             response = self.session.request(method, url, json=json_data, headers=headers, timeout=10)

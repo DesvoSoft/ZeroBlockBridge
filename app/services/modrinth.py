@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 
 import requests
 
+from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 from app.services import mod_id_resolver, mod_install_tracker
 from app.services.sha1_validator import download_with_verification
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 MODRINTH_API = "https://api.modrinth.com/v2"
-USER_AGENT = "DesvoSoft/ZeroBlockBridge/1.0 (github.com/DesvoSoft/ZeroBlockBridge)"
+USER_AGENT = AppConfig.USER_AGENT
 REQUEST_TIMEOUT = 12  # seconds
 
 

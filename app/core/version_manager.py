@@ -8,6 +8,7 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
+from app.core.app_config import AppConfig
 from app.core.constants import (
     VERSIONS_CACHE_FILE, 
     VANILLA_MANIFEST_URL, 
@@ -241,7 +242,7 @@ class VersionManager:
         # Fill asks for a descriptive User-Agent.
         resp = requests.get(
             "https://fill.papermc.io/v3/projects/paper/versions",
-            headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+            headers={"User-Agent": AppConfig.USER_AGENT},
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -419,7 +420,7 @@ class VersionManager:
         try:
             resp = requests.get(
                 f"https://fill.papermc.io/v3/projects/paper/versions/{version}/builds/latest",
-                headers={"User-Agent": "ZeroBlockBridge (github.com/DesvoSoft)"},
+                headers={"User-Agent": AppConfig.USER_AGENT},
                 timeout=10,
             )
             resp.raise_for_status()
