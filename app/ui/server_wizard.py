@@ -7,7 +7,7 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.template_manager import list_templates, load_template, save_template
-from app.ui.ui_components import ZBBDialog, center_on_parent
+from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from PIL import Image
@@ -81,12 +81,8 @@ class ServerWizard(ctk.CTkToplevel):
         self.header_frame = ctk.CTkFrame(self, height=50, corner_radius=0,
                                          fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.header_frame.grid(row=0, column=0, sticky="ew")
-        self.lbl_step = ctk.CTkLabel(self.header_frame, text="Step 1 of 3",
-                                     font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_TEXT_GRAY)
-        self.lbl_step.pack(side="left", padx=20, pady=10)
-        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Identity",
-                                      font=AppConfig.FONT_HEADING)
-        self.lbl_title.pack(side="right", padx=20, pady=10)
+        header, _, self.lbl_step = dialog_header(self.header_frame, "Create New Server", "")
+        header.pack(fill="x", padx=20, pady=10)
 
         # Content Frame
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -135,8 +131,7 @@ class ServerWizard(ctk.CTkToplevel):
         super().destroy()
 
     def update_header(self, title):
-        self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps}")
-        self.lbl_title.configure(text=title)
+        self.lbl_step.configure(text=f"Step {self.current_step} of {self.total_steps} · {title}")
         
         if self.current_step == 1:
             self.btn_back.configure(state="disabled")

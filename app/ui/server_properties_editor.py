@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
@@ -170,10 +170,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self.font_small = AppConfig.FONT_BODY_SMALL
         self.font_header = AppConfig.FONT_HEADING_SMALL
         
-        # Layout
+        # Layout: header / [running banner] / tabs / buttons
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1) # Content
-        self.grid_rowconfigure(1, weight=0) # Buttons
+        meta = get_server_meta(server_name) or {}
+        engine = f"{str(meta.get('type', 'vanilla')).title()} {meta.get('version', '')}".strip()
+        header, _, _ = dialog_header(self, "Server Properties", f"{server_name} · {engine}")
+        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 0))
         
         self._running_locked = bool(self.zbb_manager and self.zbb_manager.is_running()
                                      and self.zbb_manager.current_server == server_name)
@@ -185,15 +187,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
                 font=self.font_small, text_color=AppConfig.COLOR_STATUS_STARTING,
                 anchor="w", wraplength=660,
             )
-            banner.grid(row=0, column=0, sticky="ew", padx=15, pady=(10, 0))
-            self.grid_rowconfigure(0, weight=0)
-            self.grid_rowconfigure(1, weight=1)
-            self.grid_rowconfigure(2, weight=0)
-            tabview_row = 1
-            self.btn_frame_row = 2
+            banner.grid(row=1, column=0, sticky="ew", padx=15, pady=(10, 0))
+            tabview_row = 2
         else:
-            tabview_row = 0
-            self.btn_frame_row = 1
+            tabview_row = 1
+        self.btn_frame_row = tabview_row + 1
+        self.grid_rowconfigure(tabview_row, weight=1)
 
         # Tabview
         self.tabview = ctk.CTkTabview(self)

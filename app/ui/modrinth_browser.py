@@ -26,7 +26,7 @@ from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityErr
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons
+from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons, dialog_header
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
@@ -1831,18 +1831,15 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _show_version_picker(self, versions, title, on_confirm):
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Choose Version — {title}")
-        dialog.geometry("460x320")
+        dialog.geometry("460x360")
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
         apply_rounded_corners(dialog)
 
+        header, _, _ = dialog_header(dialog, "Choose Version", title)
+        header.pack(fill="x", padx=16, pady=(14, 8))
         frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
-        frame.pack(fill="both", expand=True, padx=12, pady=(12, 0))
-
-        ctk.CTkLabel(
-            frame, text="Select a version to install:",
-            font=AppConfig.FONT_HEADING_SMALL, anchor="w",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        frame.pack(fill="both", expand=True, padx=12, pady=(0, 0))
 
         var = ctk.StringVar(value=versions[0].get("id", ""))
 
@@ -1956,13 +1953,11 @@ class ModrinthBrowser(ctk.CTkFrame):
         apply_rounded_corners(dialog)
         dialog.grab_set()
 
+        count = len(updates)
+        header, _, _ = dialog_header(dialog, "Mod Updates", f"{count} update{'s' if count != 1 else ''} available")
+        header.pack(fill="x", padx=16, pady=(14, 8))
         frame = ctk.CTkScrollableFrame(dialog, corner_radius=AppConfig.RADIUS_CARD)
-        frame.pack(fill="both", expand=True, padx=12, pady=12)
-
-        ctk.CTkLabel(
-            frame, text=f"{len(updates)} update(s) available",
-            font=AppConfig.FONT_HEADING, anchor="w",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
         for i, u in enumerate(updates):
             card = ctk.CTkFrame(frame, corner_radius=AppConfig.RADIUS_CARD)

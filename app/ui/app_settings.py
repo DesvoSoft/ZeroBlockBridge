@@ -24,7 +24,7 @@ from app.services.sanitizer import ALLOWLISTED_COMMANDS
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header
 from app.ui.win_effects import apply_rounded_corners, apply_titlebar_theme
 
 logger = logging.getLogger(__name__)
@@ -72,8 +72,8 @@ class AppSettingsDialog(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        header = ctk.CTkLabel(self, text="Application Settings", font=AppConfig.FONT_HEADING, anchor="w")
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
+        header, _, _ = dialog_header(self, "Settings", f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
+        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
 
         # Transparent: the section cards are the elevated surfaces. A card-colored
         # tab view made every card indistinguishable from its background.

@@ -34,6 +34,22 @@ def center_on_parent(toplevel, parent, width, height):
     toplevel.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
 
+def dialog_header(parent, title, subtitle=None):
+    """Title (+ optional subtitle, e.g. the server it applies to) at the top of
+    a dialog body. Titlebars draw no caption, so every dialog names itself
+    here. Returns (frame, title_label, subtitle_label_or_None); the caller
+    places the frame."""
+    frame = ctk.CTkFrame(parent, fg_color="transparent")
+    lbl_title = ctk.CTkLabel(frame, text=title, font=AppConfig.FONT_HEADING, anchor="w")
+    lbl_title.pack(anchor="w")
+    lbl_subtitle = None
+    if subtitle is not None:
+        lbl_subtitle = ctk.CTkLabel(frame, text=subtitle, font=AppConfig.FONT_BODY_SMALL,
+                                    text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w")
+        lbl_subtitle.pack(anchor="w")
+    return frame, lbl_title, lbl_subtitle
+
+
 def dialog_buttons(parent, primary_text, on_primary, secondary_text=None, on_secondary=None,
                    danger=False, primary_colors=None, height=32, primary_width=130, secondary_width=110):
     """Footer buttons shared by every dialog, one convention everywhere:
@@ -494,13 +510,15 @@ class DownloadProgressDialog(ctk.CTkToplevel):
     def __init__(self, master, title="Downloading..."):
         super().__init__(master)
         self.title(title)
-        self.geometry("350x180")
-        center_on_parent(self, master, 350, 180)
+        self.geometry("350x210")
+        center_on_parent(self, master, 350, 210)
         self.resizable(False, False)
         self.cancelled = False
         
+        header, _, _ = dialog_header(self, title)
+        header.pack(fill="x", padx=20, pady=(16, 0))
         self.label = ctk.CTkLabel(self, text="Starting download...", font=AppConfig.FONT_BODY)
-        self.label.pack(pady=(20, 10))
+        self.label.pack(pady=(8, 10))
 
         self.progress_bar = ctk.CTkProgressBar(self, width=280, height=10, corner_radius=AppConfig.RADIUS_BADGE)
         self.progress_bar.pack(pady=10)
