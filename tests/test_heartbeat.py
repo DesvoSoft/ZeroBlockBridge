@@ -1,3 +1,4 @@
+import pytest
 import time
 import threading
 from unittest.mock import MagicMock, patch
@@ -48,6 +49,30 @@ class TestHeartbeatMonitor:
         hb._running = True
         hb.observe_line("There are 3 players online:")
         assert hb._last_response == t
+
+    @pytest.mark.parametrize("line", [
+        "[12:00:00] [Server thread/INFO]: There are 2 of a max of 20 players online: Alex, Steve",
+        "There are 0/20 players online:",
+        "There are 0 out of maximum 20 players online.",
+    ])
+    def test_list_reply_formats_clear_probe(self, line):
+        hb = self._make()
+        hb._running = True
+        hb._waiting_for_probe = True
+        hb.observe_line(line)
+        assert hb._waiting_for_probe is False
+
+    @pytest.mark.parametrize("line", [
+        "[Server thread/INFO]: There are no updates available for WorldEdit",
+        "<Steve> there are players online somewhere",
+        "No players online",
+    ])
+    def test_unrelated_lines_do_not_clear_probe(self, line):
+        hb = self._make()
+        hb._running = True
+        hb._waiting_for_probe = True
+        hb.observe_line(line)
+        assert hb._waiting_for_probe is True
 
     def test_ignored_when_not_running(self):
         hb = self._make()

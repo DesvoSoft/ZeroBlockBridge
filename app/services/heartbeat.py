@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import threading
 from collections.abc import Callable
@@ -9,11 +10,13 @@ from app.core.protocols import EventEmitterProtocol, ServerRunnerProtocol
 
 logger = logging.getLogger(__name__)
 
-PLAYER_LIST_PATTERNS = [
-    "players online",
-    "There are",
-    "No players online",
-]
+# Reply to the `list` probe across vanilla/Paper/Bukkit formats:
+#   "There are 0 of a max of 20 players online:"   (1.13+)
+#   "There are 0/20 players online:"                (older / Bukkit)
+#   "There are 0 out of maximum 20 players online." (legacy Paper)
+# A loose substring like "There are" also matched unrelated output (plugin
+# and chat lines) and could mark an unanswered probe as answered.
+PLAYER_LIST_REPLY_RE = re.compile(r"There are \d+\D.*players online")
 
 
 class HeartbeatMonitor:
@@ -54,7 +57,7 @@ class HeartbeatMonitor:
         with self._lock:
             if not self._running: return
             self._last_output = time.time()
-            if any(p in line for p in PLAYER_LIST_PATTERNS):
+            if PLAYER_LIST_REPLY_RE.search(line):
                 self._last_response = time.time()
                 self._waiting_for_probe = False
 
