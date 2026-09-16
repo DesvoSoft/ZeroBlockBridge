@@ -516,11 +516,21 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
 ## Privacy & Service Disclaimer
 
 - **No Data Collection**: ZBB does not collect, store, or transmit personal data or usage telemetry.
-- **External Connections**: Only to services required for operation:
-  - **Playit.gg** — tunneling (optional, user-enabled)
+- **No remote-control agent**: ZBB has no built-in remote-control or remote-management channel of its
+  own — nobody but you can operate this app remotely. Every network call it makes is one of the
+  ones listed below, all visible and auditable in `app/services/`.
+- **Third-party trust boundary**: some of those calls route through third-party infrastructure that
+  ZBB does not control and cannot vouch for. Most notably, enabling **Playit.gg tunneling** routes
+  your Minecraft server's traffic through Playit's own relay servers — that's how any tunnel/port-
+  forward solution works, not something ZBB adds on top. It's optional, off by default, and you can
+  disable it at any time; while it's on, you're trusting Playit's infrastructure for that traffic,
+  same as you would with any third-party tunnel provider.
+- **External Connections**: Only to services required for operation, each optional except the first
+  two (needed to fetch/update server software):
   - **Mojang** — version manifest + server jar downloads
-  - **Modrinth** — mod/plugin browsing and downloads
   - **Fabric / Forge / Paper / Purpur APIs** — version lists
+  - **Modrinth** — mod/plugin browsing and downloads
   - **Adoptium** — JDK auto-install
+  - **Playit.gg** — tunneling (optional, user-enabled — see trust boundary above)
   - **Discord** — webhook notifications (optional, user-configured)
 - **User Control**: All server management, backups, tunneling, and webhook operations remain fully under user control.
