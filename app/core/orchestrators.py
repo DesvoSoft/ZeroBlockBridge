@@ -152,7 +152,9 @@ class BackupOrchestrator:
             try:
                 bm = BackupManager(self.manager.current_server)
                 config = BackupScheduler(self.manager.current_server).get_config()
-                path, error = bm.create_backup(retention_count=config.get("retention_count"))
+                # Tagged "auto": the user's "keep last N" then rotates only
+                # scheduled backups, never the ones they made by hand.
+                path, error = bm.create_backup(retention_count=config.get("retention_count"), reason="auto")
                 if path:
                     self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
                     self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.manager.current_server})

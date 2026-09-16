@@ -156,3 +156,16 @@ class TestBackupManager:
             assert (server / "mods" / "sodium-0.5.jar").read_text() == "old"
             assert (server / "server.properties").read_text(encoding="utf-8") == "motd=§aHello"
             assert snapshot.exists()  # rollback must not destroy the snapshot itself
+
+    def test_auto_retention_never_prunes_manual_backups(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            for i in range(3):
+                (tmp_path / f"2025-01-0{i+1}_00-00-00.zip").touch()
+                (tmp_path / f"2025-02-0{i+1}_00-00-00__auto.zip").touch()
+            bm._apply_retention(1, reason="auto")
+            names = sorted(f.name for f in tmp_path.iterdir())
+            assert names == [
+                "2025-01-01_00-00-00.zip", "2025-01-02_00-00-00.zip", "2025-01-03_00-00-00.zip",
+                "2025-02-03_00-00-00__auto.zip",
+            ]

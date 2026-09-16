@@ -207,6 +207,21 @@ class TestBackupOrchestrator:
         assert ServerEvent.BACKUP_COMPLETED in events
         assert mgr._backup_in_progress is False
 
+    def test_run_auto_backup_is_tagged_auto_with_user_retention(self):
+        # Tagged so the user's "keep last N" rotates scheduled backups only,
+        # never manual ones.
+        mgr = _make_manager(_backup_in_progress=True)
+        orch = BackupOrchestrator(mgr)
+
+        with patch("app.core.orchestrators.BackupManager") as MockBM, \
+             patch("app.core.orchestrators.BackupScheduler") as MockSched:
+            MockBM.return_value.create_backup.return_value = (MagicMock(), None)
+            MockSched.return_value.get_config.return_value = {"retention_count": 7}
+
+            orch._run_auto_backup()
+
+        MockBM.return_value.create_backup.assert_called_once_with(retention_count=7, reason="auto")
+
     def test_run_auto_backup_emits_failed_on_error(self):
         mgr = _make_manager(_backup_in_progress=True)
         orch = BackupOrchestrator(mgr)

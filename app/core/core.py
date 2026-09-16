@@ -11,7 +11,7 @@ from app.services.backup_manager import BackupManager
 import datetime
 
 from app.core.logic import (
-    ServerRunner, ServerStartError, load_config, save_config, Scheduler,
+    ServerRunner, ServerStartError, load_config, save_config, Scheduler, BackupScheduler,
     get_server_meta, update_server_meta, migrate_legacy_metadata,
     invalidate_meta_cache, create_junction,
 )
@@ -529,7 +529,8 @@ class ZBBManager:
                     def _do_backup():
                         try:
                             manager = BackupManager(self.current_server)
-                            path, error = manager.create_backup()
+                            retention = BackupScheduler(self.current_server).get_config().get("retention_count")
+                            path, error = manager.create_backup(retention_count=retention, reason="auto")
                         except Exception as e:
                             logger.error("Backup during restart failed: %s", e)
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {e}")
