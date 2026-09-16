@@ -24,6 +24,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
+from app.ui.formatting import format_duration, format_memory
+from app.services.server_properties import load_server_properties
 
 import app.core.logic as logic
 from app.core.constants import SERVERS_DIR, ASSETS_DIR, LOGS_DIR
@@ -149,6 +151,11 @@ class MCTunnelApp(ctk.CTk):
         width = AppConfig.SIDEBAR_WIDTH_COMPACT if compact else AppConfig.SIDEBAR_WIDTH
         self.grid_columnconfigure(0, minsize=width)
         self.sidebar_frame.configure(width=width)
+        # No room for the RAM readout next to the server name at compact widths.
+        if compact:
+            self.lbl_ram.pack_forget()
+        else:
+            self.lbl_ram.pack(side="right", padx=(5, 5))
 
     def _init_state_variables(self):
         self.claim_url = None
@@ -290,10 +297,15 @@ class MCTunnelApp(ctk.CTk):
                                             font=AppConfig.FONT_HEADING_SMALL, anchor="w")
         self.lbl_dash_title.pack(side="left", padx=(10, 0), fill="x", expand=True)
 
-        self.btn_start = ctk.CTkButton(self.status_hero_row, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        # Fixed slot for start/stop: _show_run_stop re-packs whichever is
+        # visible, and re-packing straight into the row appended it after the
+        # other right-side widgets, so it jumped left when the server started.
+        run_slot = ctk.CTkFrame(self.status_hero_row, fg_color="transparent")
+        run_slot.pack(side="right")
+        self.btn_start = ctk.CTkButton(run_slot, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_start, "Start server")
 
-        self.btn_stop = ctk.CTkButton(self.status_hero_row, text="", image=icon("stop", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.btn_stop = ctk.CTkButton(run_slot, text="", image=icon("stop", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_stop, "Stop server")
 
         self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
@@ -319,7 +331,7 @@ class MCTunnelApp(ctk.CTk):
 
         badge_players = ctk.CTkFrame(
             self.status_hero_row, fg_color=AppConfig.COLOR_BADGE_BG, corner_radius=AppConfig.RADIUS_BADGE,
-            width=60, height=30
+            width=76, height=30
         )
         badge_players.pack(side="right", padx=(5, 10))
         badge_players.pack_propagate(False)
@@ -333,7 +345,7 @@ class MCTunnelApp(ctk.CTk):
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
             font=AppConfig.FONT_BODY_SMALL,
             height=24,
-            width=56
+            width=72
         )
         self.btn_players.pack(expand=True, fill="both", padx=2, pady=2)
         ToolTip(self.btn_players, "Players online")
@@ -348,6 +360,16 @@ class MCTunnelApp(ctk.CTk):
             font=AppConfig.FONT_BODY_SMALL, anchor="e"
         )
         self.lbl_server_info.pack(fill="both", expand=True)
+
+        # Live memory readout while the server runs (empty otherwise).
+        self.lbl_ram = ctk.CTkLabel(self.status_hero_row, text="", font=AppConfig.FONT_BODY_SMALL,
+                                    text_color=AppConfig.COLOR_TEXT_GRAY, anchor="e")
+        self.lbl_ram.pack(side="right", padx=(5, 5))  # hidden in compact width, see _on_window_resize
+        self._server_phase = None       # None | "starting" | "running"
+        self._phase_since = 0.0
+        self._status_tick_job = None
+        self._max_players = None
+        self._player_count = 0
 
         # Java version: not shown in the bar (declutter) — kept as a live-updating
         # tooltip on the status dot instead. Widget stays unpacked so the existing
@@ -711,6 +733,8 @@ class MCTunnelApp(ctk.CTk):
             self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
             self._update_mods_tab_state()
             self._set_console_input(False)
+            self._max_players = None
+            self._refresh_players_badge()
         Toast.show(self, f"Server '{server_name}' deleted", toast_type="info")
         self.load_servers()
 
@@ -819,6 +843,11 @@ class MCTunnelApp(ctk.CTk):
         server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
         mc_version = meta.get("version", "?") if meta else "?"
         self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        try:
+            self._max_players = int(load_server_properties(server_name).get("max-players", 20))
+        except (TypeError, ValueError):
+            self._max_players = None
+        self._refresh_players_badge()
 
         is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
 
@@ -937,7 +966,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_starting(self, data=None):
         self.after(0, lambda: self._set_console_input(True))
-        self.after(0, lambda: self.lbl_status.configure(text="● Starting...", text_color=AppConfig.COLOR_STATUS_STARTING))
+        self.after(0, lambda: self._enter_server_phase("starting"))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
@@ -949,11 +978,65 @@ class MCTunnelApp(ctk.CTk):
             self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
 
     def on_server_ready(self, data=None):
-        self.after(0, lambda: self.lbl_status.configure(text="● Running", text_color=AppConfig.COLOR_STATUS_ONLINE))
+        self.after(0, lambda: self._enter_server_phase("running"))
         self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
-        self.after(0, lambda: self.btn_players.configure(text=f"{count}"))
+        def _apply():
+            self._player_count = count
+            self._refresh_players_badge()
+        self.after(0, _apply)
+
+    def _refresh_players_badge(self):
+        max_players = f"/{self._max_players}" if self._max_players else ""
+        self.btn_players.configure(text=f"{self._player_count}{max_players}")
+
+    # --- Live status: elapsed start time, uptime, memory ---
+    _STATUS_TICK_MS = 1000
+    _MEMORY_EVERY_TICKS = 3
+
+    def _enter_server_phase(self, phase):
+        """Track when the server started starting/running; drives the ticking
+        "Starting… 12s" / "Running · 1h 20m" label and the RAM readout."""
+        if phase == self._server_phase:
+            return
+        self._server_phase = phase
+        self._phase_since = time.monotonic()
+        if self._status_tick_job is not None:
+            self.after_cancel(self._status_tick_job)
+            self._status_tick_job = None
+        if phase is None:
+            self.lbl_ram.configure(text="")
+            self._player_count = 0
+            self._refresh_players_badge()
+            return
+        self._status_ticks = 0
+        self._tick_server_status()
+
+    def _tick_server_status(self):
+        self._status_tick_job = None
+        if self._server_phase is None:
+            return
+        elapsed = format_duration(time.monotonic() - self._phase_since)
+        if self._server_phase == "starting":
+            self.lbl_status.configure(text=f"● Starting… {elapsed}", text_color=AppConfig.COLOR_STATUS_STARTING)
+        else:
+            self.lbl_status.configure(text=f"● Running · {elapsed}", text_color=AppConfig.COLOR_STATUS_ONLINE)
+        if self._status_ticks % self._MEMORY_EVERY_TICKS == 0:
+            self.executor.submit(self._sample_server_memory)
+        self._status_ticks += 1
+        self._status_tick_job = self.after(self._STATUS_TICK_MS, self._tick_server_status)
+
+    def _sample_server_memory(self):
+        used = self.zbb_manager.server_memory_usage()
+        server = self.zbb_manager.current_server
+        limit = logic.get_server_ram(server) if server else None
+
+        def _apply():
+            if self._server_phase is None:
+                return
+            self.lbl_ram.configure(text=format_memory(used, limit) if used and limit else "")
+        self.after(0, _apply)
 
     def open_players_dashboard(self):
         if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
@@ -973,6 +1056,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self._set_console_input(False))
+        self.after(0, lambda: self._enter_server_phase(None))
         self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
         self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
