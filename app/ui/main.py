@@ -399,6 +399,7 @@ class MCTunnelApp(ctk.CTk):
             self.console_tabs.tab("Mods"),
             get_server_info=self._get_current_server_info,
             create_snapshot=self.zbb_manager.create_pre_update_snapshot,
+            is_server_running=self.zbb_manager.is_running,
         )
         self.modrinth_browser.pack(fill="both", expand=True)
         self.modrinth_browser.refresh_server_context()

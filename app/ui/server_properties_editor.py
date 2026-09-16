@@ -835,6 +835,13 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
             )
             return
 
+        if self._server_is_running():
+            ZBBDialog.info(
+                self, "Server Running",
+                "Stop the server before importing a modpack.", kind="error"
+            )
+            return
+
         mrpack_path = filedialog.askopenfilename(
             title="Select Modpack File",
             filetypes=[("Modrinth Modpack", "*.mrpack"), ("All files", "*.*")],

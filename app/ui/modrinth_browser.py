@@ -125,7 +125,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     }
 
     def __init__(self, master, get_server_info: Callable = None,
-                 create_snapshot: Callable = None, **kwargs):
+                 create_snapshot: Callable = None, is_server_running: Callable = None, **kwargs):
         """
         Args:
             master: Parent widget (the tab frame).
@@ -135,10 +135,15 @@ class ModrinthBrowser(ctk.CTkFrame):
             create_snapshot: Blocking callable (server_name) -> (path, error)
                              that takes a pre-update snapshot. If None, mod
                              updates are refused (no rollback point).
+            is_server_running: Callable () -> bool for the currently selected
+                             server. If None, running-server checks are skipped
+                             (matches prior behavior for any embedder that
+                             doesn't wire it up).
         """
         super().__init__(master, fg_color="transparent", **kwargs)
         self.get_server_info = get_server_info
         self.create_snapshot = create_snapshot
+        self.is_server_running = is_server_running
         self.client = ModrinthClient()
 
         # Search state
@@ -192,6 +197,23 @@ class ModrinthBrowser(ctk.CTkFrame):
             logger.debug("get_server_info failed: %s", exc)
         return None
 
+    def _server_is_running(self) -> bool:
+        if not self.is_server_running:
+            return False
+        try:
+            return bool(self.is_server_running())
+        except Exception as exc:
+            logger.debug("is_server_running failed: %s", exc)
+            return False
+
+    def _warn_server_running(self) -> None:
+        self._set_status("✗ Stop the server before changing mods/plugins.")
+        ZBBDialog.info(
+            self.winfo_toplevel(), "Server Running",
+            "Stop the server before installing, updating, or removing mods/plugins.\n\n"
+            "Files in use by the running server can't be safely changed.",
+        )
+
     def _resolve_install_context(self) -> Optional[tuple[str, str, str]]:
         """Server context for install actions — blocks engines that can't load content."""
         ctx = self._resolve_server_context()
@@ -205,6 +227,9 @@ class ModrinthBrowser(ctk.CTkFrame):
                    "or Paper/Purpur for plugins.")
             self._set_status("✗ Vanilla servers can't load mods or plugins.")
             ZBBDialog.info(self.winfo_toplevel(), "Vanilla Server", msg)
+            return None
+        if self._server_is_running():
+            self._warn_server_running()
             return None
         return ctx
 
@@ -1289,6 +1314,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         ctx = self._resolve_server_context()
         if not ctx:
             return
+        if self._server_is_running():
+            self._warn_server_running()
+            return
         server_name = ctx[0]
         fname = mod_install_tracker.get_installed_filename(server_name, slug)
         if not fname:
@@ -1313,6 +1341,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._set_status(f"✗ Failed to uninstall {title}: {exc}")
 
     def _confirm_delete_mod(self, filepath: str):
+        if self._server_is_running():
+            self._warn_server_running()
+            return
         fname = os.path.basename(filepath)
         if not ZBBDialog.confirm(self.winfo_toplevel(), "Delete Mod",
                                  f"Delete '{fname}'?", confirm_text="Delete", danger=True):
@@ -1327,6 +1358,9 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _on_delete_selected(self):
         selected = list(self._selected_files)
         if not selected:
+            return
+        if self._server_is_running():
+            self._warn_server_running()
             return
         if not ZBBDialog.confirm(
             self.winfo_toplevel(), "Delete Selected Mods",
