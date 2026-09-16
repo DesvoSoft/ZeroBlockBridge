@@ -27,7 +27,8 @@ from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
 from app.ui.ui_components import (
-    ToolTip, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, themed_menu, add_danger_command,
+    ToolTip, ZBBDialog, ZBBToplevel, dialog_buttons, dialog_header, ScrollableFrame, themed_menu,
+    add_danger_command,
 )
 from app.ui.formatting import clamp_lines
 from app.ui.win_effects import apply_rounded_corners
@@ -1886,7 +1887,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         threading.Thread(target=_install, daemon=True).start()
 
     def _show_version_picker(self, versions, title, on_confirm):
-        dialog = ctk.CTkToplevel(self)
+        dialog = ZBBToplevel(self)
         dialog.title(f"Choose Version — {title}")
         dialog.geometry("460x360")
         dialog.transient(self.winfo_toplevel())
@@ -2003,7 +2004,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._set_status("All mods are up to date.", kind="success")
             return
 
-        dialog = ctk.CTkToplevel(self)
+        dialog = ZBBToplevel(self)
         dialog.title("Mod Updates Available")
         dialog.geometry("520x400")
         dialog.transient(self.winfo_toplevel())

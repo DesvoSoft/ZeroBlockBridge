@@ -7,7 +7,7 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.template_manager import list_templates, load_template, save_template
-from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame
+from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from PIL import Image
@@ -29,7 +29,7 @@ def java_summary(java_path: str, mc_version: str) -> str:
     return java_path
 
 
-class ServerWizard(ctk.CTkToplevel):
+class ServerWizard(ZBBToplevel):
     def __init__(self, parent, on_complete_callback):
         super().__init__(parent)
         self.title("Create New Server - Zero Block Bridge")

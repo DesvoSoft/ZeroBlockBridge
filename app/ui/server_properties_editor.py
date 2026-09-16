@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
@@ -152,7 +152,7 @@ def property_label(key: str) -> str:
     return label[0].upper() + label[1:]
 
 
-class ServerPropertiesEditor(ctk.CTkToplevel):
+class ServerPropertiesEditor(ZBBToplevel):
     def __init__(self, parent, server_name, logic_module, zbb_manager=None):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")

@@ -2,6 +2,7 @@ import customtkinter as ctk
 import hashlib
 import logging
 import threading
+import time
 import tkinter as tk
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
@@ -25,6 +26,74 @@ def resolve_color(color):
     if isinstance(color, tuple):
         return color[0] if ctk.get_appearance_mode() == "Light" else color[1]
     return color
+
+
+# Reveal once no widget has been (re)configured for this long — CTk draws on
+# <Configure>, so a quiet period means the content is painted.
+_REVEAL_QUIET_MS = 50
+_REVEAL_POLL_MS = 25
+_REVEAL_MAX_WAIT_MS = 600
+_FADE_STEP = 0.25
+_FADE_INTERVAL_MS = 15
+
+
+def hide_until_drawn(window, max_wait_ms: int = _REVEAL_MAX_WAIT_MS) -> None:
+    """Keep a window fully transparent until its content is drawn, then fade in.
+
+    Windows shows a new window with a white background before Tk paints it,
+    and CTk widgets then draw themselves one by one — a visible white flash
+    followed by content popping in. Call right after the window is created
+    (before it is built); build synchronously; the reveal runs from idle.
+    """
+    try:
+        window.attributes("-alpha", 0.0)
+    except tk.TclError as e:
+        logger.debug("Window alpha unsupported: %s", e)
+        return
+    state = {"last": time.monotonic()}
+    started = state["last"]
+
+    def note_configure(_event=None):
+        state["last"] = time.monotonic()
+
+    def fade_in(alpha=0.0):
+        if not window.winfo_exists():
+            return
+        alpha = min(alpha + _FADE_STEP, 1.0)
+        try:
+            window.attributes("-alpha", alpha)
+        except tk.TclError as e:
+            logger.debug("Window fade-in error: %s", e)
+            return
+        if alpha < 1.0:
+            window.after(_FADE_INTERVAL_MS, fade_in, alpha)
+        else:
+            window.unbind("<Configure>", bind_id)
+
+    def wait_until_drawn():
+        if not window.winfo_exists():
+            return
+        now = time.monotonic()
+        quiet = (now - state["last"]) * 1000 >= _REVEAL_QUIET_MS
+        timed_out = (now - started) * 1000 >= max_wait_ms
+        if window.winfo_ismapped() and (quiet or timed_out):
+            fade_in()
+        else:
+            window.after(_REVEAL_POLL_MS, wait_until_drawn)
+
+    # A toplevel binding sees <Configure> from every descendant.
+    bind_id = window.bind("<Configure>", note_configure, add="+")
+    # Idle runs after the caller has built the whole window.
+    window.after_idle(wait_until_drawn)
+
+
+class ZBBToplevel(ctk.CTkToplevel):
+    """CTkToplevel that only becomes visible once its content is drawn (no
+    white flash, no widgets popping in) — see hide_until_drawn."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        hide_until_drawn(self)
 
 
 class ScrollableFrame(ctk.CTkScrollableFrame):
@@ -549,7 +618,7 @@ class ServerListItem(ctk.CTkFrame):
         if self.on_click:
             self.on_click(self.server_name)
 
-class DownloadProgressDialog(ctk.CTkToplevel):
+class DownloadProgressDialog(ZBBToplevel):
     def __init__(self, master, title="Downloading..."):
         super().__init__(master)
         self.title(title)
@@ -617,7 +686,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             logger.debug("Dialog close ignored: %s", e)
 
 
-class EulaDialog(ctk.CTkToplevel):
+class EulaDialog(ZBBToplevel):
     """First-run modal: Minecraft EULA consent.
 
     ZBB auto-writes eula=true on servers it creates, so the user must
@@ -697,7 +766,7 @@ class EulaDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class ZBBDialog(ctk.CTkToplevel):
+class ZBBDialog(ZBBToplevel):
     """Themed modal dialog replacing tkinter.messagebox (which renders as
     a native gray Windows dialog and clashes with the dark UI).
 
@@ -766,7 +835,6 @@ class ZBBDialog(ctk.CTkToplevel):
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()
         center_on_parent(self, parent, w, h)
         self.transient(parent)
-        self.attributes("-alpha", 0.0)
         # A modal parent (wizard, properties editor) holds the grab; take it
         # back on close or that window silently stops being modal.
         self._prev_grab = None
@@ -784,20 +852,6 @@ class ZBBDialog(ctk.CTkToplevel):
             self._entry.select_range(0, "end")
         else:
             btn_ok.focus_set()
-        self._fade_in()
-
-    def _fade_in(self, step: float = 0.0):
-        # Quick fade-in on open — same technique as Toast, kept inline since
-        # a dialog only ever fades one direction (destroy() is immediate).
-        if not self.winfo_exists():
-            return
-        try:
-            self.attributes("-alpha", step)
-        except Exception as e:
-            logger.debug("ZBBDialog fade-in error: %s", e)
-            return
-        if step < 1.0:
-            self.after(15, self._fade_in, min(step + 0.2, 1.0))
 
     def _confirm(self):
         self.result = True

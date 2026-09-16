@@ -24,7 +24,7 @@ from app.services.sanitizer import ALLOWLISTED_COMMANDS
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners, apply_titlebar_theme
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ _WEBHOOK_EVENT_LABELS = [
 ]
 
 
-class AppSettingsDialog(ctk.CTkToplevel):
+class AppSettingsDialog(ZBBToplevel):
     def __init__(self, master, zbb_manager, **kwargs):
         super().__init__(master, **kwargs)
         self.title("Settings")

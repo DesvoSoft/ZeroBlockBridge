@@ -21,7 +21,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame
+from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame, hide_until_drawn
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import format_duration, format_memory, memory_tooltip
@@ -51,6 +51,8 @@ class MCTunnelApp(ctk.CTk):
         ctk.set_appearance_mode(theme)
         
         super().__init__()
+        # Startup builds a lot of widgets: stay invisible until they're drawn.
+        hide_until_drawn(self, max_wait_ms=1500)
         self._init_window_config()
         self._init_state_variables()
         self._build_layout()
