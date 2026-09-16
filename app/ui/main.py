@@ -21,7 +21,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame, hide_until_drawn
+from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame, hide_until_drawn
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import format_duration, format_memory, memory_tooltip
@@ -484,7 +484,7 @@ class MCTunnelApp(ctk.CTk):
         self.btn_send.pack(side="right", padx=10, pady=5)
 
         self._build_console_search_bar(self.console_tabs.tab("Tunnel Log"), "tunnel_console")
-        self.tunnel_console = ConsoleWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
+        self.tunnel_console = TunnelLogWidget(self.console_tabs.tab("Tunnel Log"), max_lines=500)
         self.tunnel_console.pack(fill="both", expand=True)
 
         # --- Mods Tab (Modrinth Browser) ---
@@ -571,11 +571,11 @@ class MCTunnelApp(ctk.CTk):
                                   hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, command=do_next)
         btn_next.pack(side="right")
 
-        filter_labels = ["All", "Errors", "Warnings", "Security", "Players", "Server"]
-        filter_values = {
-            "All": None, "Errors": "errors", "Warnings": "warnings",
-            "Security": "security", "Players": "players", "Server": "server",
-        }
+        # The console class defines its own categories (server vs tunnel log).
+        log_class = TunnelLogWidget if console_attr == "tunnel_console" else ConsoleWidget
+        filters = dict(log_class.FILTERS)
+        filter_labels = list(filters)
+        filter_values = filters
 
         def on_filter_change(choice):
             getattr(self, console_attr).set_category_filter(filter_values.get(choice))
@@ -586,7 +586,7 @@ class MCTunnelApp(ctk.CTk):
         )
         filter_menu.set("All")
         filter_menu.pack(side="right", padx=(0, 5))
-        ToolTip(filter_menu, "Show only lines in this category (join/leave, errors, etc.)")
+        ToolTip(filter_menu, log_class.FILTER_HINT)
 
     def send_server_command(self, event=None):
         if not self.zbb_manager.is_running():

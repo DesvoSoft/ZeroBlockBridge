@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import hashlib
 import logging
+import re
 import threading
 import time
 import tkinter as tk
@@ -283,6 +284,9 @@ class ToolTip:
                 logger.debug("ToolTip destroy ignored: %s", e)
             self.tooltip = None
 
+_AGENT_LINE_RE = re.compile(r"^\[Playit\] (\S+\s+)?(TRACE|DEBUG|INFO)\b")
+
+
 class ConsoleWidget(ctk.CTkTextbox):
     # Category filter groups — a filter hides every tag not in the selected
     # group by setting Tk's own `elide` option (hides tagged text without
@@ -295,6 +299,10 @@ class ConsoleWidget(ctk.CTkTextbox):
         "server": ("line_server",),
     }
     _ALL_TAGS = ("line_error", "line_warn", "line_join", "line_leave", "line_server", "line_security", "line_plain")
+    # (menu label, _FILTER_GROUPS key) for the category dropdown above the log
+    FILTERS = (("All", None), ("Errors", "errors"), ("Warnings", "warnings"),
+               ("Security", "security"), ("Players", "players"), ("Server", "server"))
+    FILTER_HINT = "Show only lines in this category (join/leave, errors, etc.)"
 
     def __init__(self, master, max_lines=1000, **kwargs):
         super().__init__(master, **kwargs)
@@ -463,6 +471,40 @@ class ConsoleWidget(ctk.CTkTextbox):
         self.tag_remove("search_hit", cur_pos, f"{cur_pos}+{self._match_len}c")
         self.tag_add("search_hit_current", cur_pos, f"{cur_pos}+{self._match_len}c")
         self.see(cur_pos)
+
+
+class TunnelLogWidget(ConsoleWidget):
+    """Tunnel Log: same widget, tunnel-specific categories. Player/security
+    categories never match Playit output; what matters here is ZBB's own
+    tunnel lifecycle messages vs the agent's raw log."""
+
+    _FILTER_GROUPS = {
+        "errors": ("line_error",),
+        "warnings": ("line_warn",),
+        "tunnel": ("line_tunnel",),
+        "agent": ("line_agent",),
+    }
+    _ALL_TAGS = ("line_error", "line_warn", "line_tunnel", "line_agent", "line_plain")
+    FILTERS = (("All", None), ("Errors", "errors"), ("Warnings", "warnings"),
+               ("Tunnel", "tunnel"), ("Agent", "agent"))
+    FILTER_HINT = "Tunnel: ZBB's tunnel steps (start, address, reset). Agent: raw playitd output."
+
+    @staticmethod
+    def _line_tag(message):
+        if "ERROR" in message or "Error" in message or "failed" in message or "Failed" in message:
+            return "line_error"
+        if "WARN" in message:
+            return "line_warn"
+        if _AGENT_LINE_RE.match(message):
+            return "line_agent"
+        if message.startswith(("[Playit]", "[System]", "[UI]")):
+            return "line_tunnel"
+        return "line_plain"
+
+    def _apply_tag_colors(self):
+        self.tag_config("line_error", foreground=resolve_color(AppConfig.COLOR_STATUS_OFFLINE))
+        self.tag_config("line_warn", foreground=resolve_color(AppConfig.COLOR_ACCENT_AMBER))
+        self.tag_config("line_agent", foreground=resolve_color(AppConfig.COLOR_TEXT_MUTED))
 
 
 class ServerListItem(ctk.CTkFrame):

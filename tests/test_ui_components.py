@@ -48,3 +48,25 @@ class TestConsoleFilterElideMap:
     def test_unknown_category_falls_back_to_all(self):
         m = ConsoleWidget._elide_map("nonsense")
         assert all(hidden is False for hidden in m.values())
+
+
+class TestTunnelLogCategories:
+    def test_agent_output_vs_zbb_messages(self):
+        from app.ui.ui_components import TunnelLogWidget as T
+        assert T._line_tag("[Playit] 2026-09-16T20:00:00.123Z  INFO playitd::agent: tunnel ready") == "line_agent"
+        assert T._line_tag("[Playit] DEBUG connecting to control") == "line_agent"
+        assert T._line_tag("[Playit] Tunnel created: friends.joinmc.link") == "line_tunnel"
+        assert T._line_tag("[System] Clearing tunnels...") == "line_tunnel"
+
+    def test_errors_and_warnings_win(self):
+        from app.ui.ui_components import TunnelLogWidget as T
+        assert T._line_tag("[Playit] Download failed: timeout") == "line_error"
+        assert T._line_tag("[Playit] 2026-09-16T20:00:00Z ERROR playitd: lost connection") == "line_error"
+        assert T._line_tag("[Playit] 2026-09-16T20:00:00Z  WARN playitd: slow ping") == "line_warn"
+
+    def test_filters_have_no_player_or_security_categories(self):
+        from app.ui.ui_components import TunnelLogWidget as T
+        keys = {key for _, key in T.FILTERS}
+        assert keys == {None, "errors", "warnings", "tunnel", "agent"}
+        m = T._elide_map("agent")
+        assert m["line_agent"] is False and m["line_tunnel"] is True
