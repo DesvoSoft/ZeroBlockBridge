@@ -54,7 +54,7 @@ class ToolTip:
 
     def show(self, event=None):
         self.unschedule()
-        if self.tooltip or not self.widget.winfo_exists():
+        if self.tooltip or not self.text or not self.widget.winfo_exists():
             return
             
         # Final check: is the mouse still over the widget?

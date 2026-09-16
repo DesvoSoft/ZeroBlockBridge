@@ -562,12 +562,12 @@ class PlayitManager:
                 if self.notification_callback:
                     self.notification_callback("Playit account unlinked and reset.", "success")
             else:
-                # Soft reset: keep agent linked, user can create a new tunnel with ▶
+                # Soft reset: keep agent linked, user can create a new tunnel with Start Tunnel
                 self.current_address = None
                 self._api_dns = None
-                self.console_callback("[Playit] Tunnels cleared. Agent stays linked. Click ▶ to create a new tunnel.")
+                self.console_callback("[Playit] Tunnels cleared. Agent stays linked. Click Start Tunnel to create a new tunnel.")
                 if self.notification_callback:
-                    self.notification_callback("Tunnels cleared. Click ▶ to create a new tunnel.", "success")
+                    self.notification_callback("Tunnels cleared. Click Start Tunnel to create a new tunnel.", "success")
         except Exception as e:
             self.console_callback(f"[Playit] Reset failed: {e}")
 

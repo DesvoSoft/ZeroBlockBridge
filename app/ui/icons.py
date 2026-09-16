@@ -67,6 +67,12 @@ class _Painters:
         d.line([(0.78 * s, 0.22 * s), (0.22 * s, 0.78 * s)], fill=c, width=w)
 
     @staticmethod
+    def warning(d, s, c, w):
+        d.polygon([(0.50 * s, 0.12 * s), (0.92 * s, 0.86 * s), (0.08 * s, 0.86 * s)], outline=c, width=w)
+        d.line([(0.50 * s, 0.38 * s), (0.50 * s, 0.60 * s)], fill=c, width=w)
+        d.ellipse([0.50 * s - w * 0.6, 0.72 * s - w * 0.6, 0.50 * s + w * 0.6, 0.72 * s + w * 0.6], fill=c)
+
+    @staticmethod
     def folder(d, s, c, w):
         # Tab + body, outline style
         d.rounded_rectangle([0.10 * s, 0.28 * s, 0.90 * s, 0.80 * s], radius=0.08 * s,

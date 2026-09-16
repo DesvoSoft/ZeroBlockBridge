@@ -1045,7 +1045,7 @@ class MCTunnelApp(ctk.CTk):
     def reset_tunnel(self):
         msg = (
             "This will delete all tunnels but keep your agent linked.\n\n"
-            "After reset, click ▶ to create a new tunnel.\n\n"
+            "After reset, click Start Tunnel to create a new tunnel.\n\n"
             "Are you sure?"
         )
         if not ZBBDialog.confirm(self, "Reset Tunnels", msg, confirm_text="Reset"): return
@@ -1057,7 +1057,7 @@ class MCTunnelApp(ctk.CTk):
             self.zbb_manager.reset_tunnel(mode="soft")
             self.after(0, lambda: self.on_tunnel_status({"status": "Offline", "skip_debounce": True}))
             self.after(0, lambda: self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False))
-            self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use ▶ to create a new tunnel."))
+            self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use Start Tunnel to create a new tunnel."))
             # Toast is handled by PlayitManager.notification_callback via EventBus
 
         self.executor.submit(_reset_task)

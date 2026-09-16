@@ -209,7 +209,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             return False
 
     def _warn_server_running(self) -> None:
-        self._set_status("✗ Stop the server before changing mods/plugins.")
+        self._set_status("Stop the server before changing mods/plugins.", kind="error")
         ZBBDialog.info(
             self.winfo_toplevel(), "Server Running",
             "Stop the server before installing, updating, or removing mods/plugins.\n\n"
@@ -220,14 +220,14 @@ class ModrinthBrowser(ctk.CTkFrame):
         """Server context for install actions — blocks engines that can't load content."""
         ctx = self._resolve_server_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
+            self._set_status("Select a server first.", kind="warning")
             return None
         _, _, loader = ctx
         if loader is None:
             msg = ("Vanilla servers can't load mods or plugins.\n\n"
                    "Create a Fabric or Forge server for mods, "
                    "or Paper/Purpur for plugins.")
-            self._set_status("✗ Vanilla servers can't load mods or plugins.")
+            self._set_status("Vanilla servers can't load mods or plugins.", kind="error")
             ZBBDialog.info(self.winfo_toplevel(), "Vanilla Server", msg)
             return None
         if self._server_is_running():
@@ -254,8 +254,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         engine = (loader or "vanilla").title()
         if loader is None:
             self.lbl_context.configure(
-                text=f"⚠ {server_name} · Vanilla {mc_version} — vanilla can't load mods or plugins",
+                text=f"{server_name} · Vanilla {mc_version} — vanilla can't load mods or plugins",
                 text_color=AppConfig.COLOR_STATUS_STARTING,
+                image=icon("warning", 13, AppConfig.COLOR_STATUS_STARTING), compound="left",
             )
             self._type_tooltip.text = (
                 "Vanilla servers can't load mods/plugins — "
@@ -265,7 +266,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         else:
             self.lbl_context.configure(
                 text=f"Installing to: {server_name} · {engine} {mc_version}",
-                text_color=AppConfig.COLOR_TEXT_GRAY,
+                text_color=AppConfig.COLOR_TEXT_GRAY, image=None, compound="center",
             )
             self._type_tooltip.text = f"Content types filtered for {engine}."
             if loader == "fabric":
@@ -591,6 +592,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_GRAY,
         )
         self.lbl_status.pack(side="left", fill="x", expand=True, padx=12, pady=2)
+        self._status_tooltip = ToolTip(self.lbl_status, "")
 
         self.progress_status = ctk.CTkProgressBar(
             self.pagination_bar, mode="indeterminate", height=4,
@@ -694,7 +696,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._pagination_controls.pack_forget()
             return
 
-        self._pagination_controls.pack(side="left", padx=(12, 0), pady=2)
+        # before= restores the original pack order: when the bar is short on
+        # space Tk shrinks later-packed widgets first, so a long status line
+        # must be the one that gets clipped, not the page controls.
+        self._pagination_controls.pack(side="left", padx=(12, 0), pady=2, before=self.lbl_status)
         page_num = self._current_page + 1
         self.lbl_page.configure(text=f"Page {page_num} of {self._total_pages}")
         _ghost = AppConfig.COLOR_BTN_GHOST
@@ -741,22 +746,28 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         threading.Thread(target=_do_load, daemon=True).start()
 
-    _STATUS_KINDS = {"✓": "success", "✗": "error", "⚠": "warning"}
-    _STATUS_COLORS = {
-        "success": AppConfig.COLOR_STATUS_ONLINE,
-        "error": AppConfig.COLOR_STATUS_ERROR,
-        "warning": AppConfig.COLOR_STATUS_STARTING,
+    # kind -> (text color, icon name)
+    _STATUS_STYLES = {
+        "success": (AppConfig.COLOR_STATUS_ONLINE, "check"),
+        "error": (AppConfig.COLOR_STATUS_ERROR, "close"),
+        "warning": (AppConfig.COLOR_STATUS_STARTING, "warning"),
     }
 
+    # A long status line would push the pagination controls out of the bar;
+    # show a shortened line and keep the full text in the tooltip.
+    _STATUS_MAX_CHARS = 64
+
     def _set_status(self, text: str, busy: bool = False, kind: str = None):
-        # Call sites tag severity with a leading check/cross/warning marker;
-        # strip it and translate to a text color so no glyph reaches the UI.
-        if text and text[0] in self._STATUS_KINDS:
-            kind = kind or self._STATUS_KINDS[text[0]]
-            text = text[1:].strip()
-        color = self._STATUS_COLORS.get(kind, AppConfig.COLOR_TEXT_GRAY)
+        """Status bar line. `kind` ("success"/"error"/"warning") tints the
+        text and shows a matching icon; None is neutral progress text."""
+        style = self._STATUS_STYLES.get(kind)
+        color = style[0] if style else AppConfig.COLOR_TEXT_GRAY
+        image = icon(style[1], 12, color) if style else None
+        shown = text if len(text) <= self._STATUS_MAX_CHARS else text[:self._STATUS_MAX_CHARS - 1] + "…"
+        self._status_tooltip.text = text if shown != text else ""
         if self.lbl_status.winfo_exists():
-            self.lbl_status.configure(text=text, text_color=color)
+            self.lbl_status.configure(text=f" {shown}" if image else shown, text_color=color,
+                                      image=image, compound="left" if image else "center")
         if self.progress_status.winfo_exists():
             if busy:
                 self.progress_status.pack(side="left", padx=(0, 12), pady=2)
@@ -821,12 +832,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         if done >= total:
             failed = batch["failed"]
             if failed:
-                self._set_status(f"✗ Installed {total - failed}/{total} ({failed} failed)")
+                self._set_status(f"Installed {total - failed}/{total} ({failed} failed)", kind="error")
                 Toast.show(self.winfo_toplevel(),
                            f"Installed {total - failed}/{total} mods ({failed} failed)",
                            toast_type="warning")
             else:
-                self._set_status(f"✓ Installed {total}/{total}")
+                self._set_status(f"Installed {total}/{total}", kind="success")
                 if total > 1:
                     Toast.show(self.winfo_toplevel(), f"Installed {total} mods",
                                toast_type="success")
@@ -1223,7 +1234,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             if error:
                 # Nothing was touched — leave _pending_updates intact so the
                 # badge still reflects a real, retryable update offer.
-                self.after(0, lambda: self._set_status(f"✗ Update of {fname} aborted — {error}"))
+                self.after(0, lambda: self._set_status(f"Update of {fname} aborted — {error}", kind="error"))
                 if badge is not None:
                     self.after(0, lambda: badge.configure(
                         state="normal", text=f"● Update {update.get('latest_version', '')}".strip()))
@@ -1231,9 +1242,9 @@ class ModrinthBrowser(ctk.CTkFrame):
 
             self._pending_updates.pop(fname, None)
             if updated:
-                self.after(0, lambda: self._set_status(f"✓ Updated {fname} — snapshot saved (rollback in Backups tab)"))
+                self.after(0, lambda: self._set_status(f"Updated {fname} — snapshot saved (rollback in Backups tab)", kind="success"))
             else:
-                self.after(0, lambda: self._set_status(f"✗ Update failed for {fname} — restore snapshot from Backups tab"))
+                self.after(0, lambda: self._set_status(f"Update failed for {fname} — restore snapshot from Backups tab", kind="error"))
             self.after(0, self._render_installed)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1336,11 +1347,11 @@ class ModrinthBrowser(ctk.CTkFrame):
             if filepath:
                 os.remove(filepath)
             mod_install_tracker.remove_install(server_name, slug)
-            self._set_status(f"✓ Uninstalled {title}")
+            self._set_status(f"Uninstalled {title}", kind="success")
             self._installed_slugs_cache.discard(slug)
             self._render_results()
         except OSError as exc:
-            self._set_status(f"✗ Failed to uninstall {title}: {exc}")
+            self._set_status(f"Failed to uninstall {title}: {exc}", kind="error")
 
     def _confirm_delete_mod(self, filepath: str):
         if self._server_is_running():
@@ -1352,10 +1363,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             return
         try:
             os.remove(filepath)
-            self._set_status(f"✓ Deleted {fname}")
+            self._set_status(f"Deleted {fname}", kind="success")
             self._render_installed()  # refresh inline
         except OSError as exc:
-            self._set_status(f"✗ Failed to delete {fname}: {exc}")
+            self._set_status(f"Failed to delete {fname}: {exc}", kind="error")
 
     def _on_delete_selected(self):
         selected = list(self._selected_files)
@@ -1392,7 +1403,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 logger.warning("Failed to delete %s: %s", fpath, exc)
                 failed += 1
 
-        self._set_status(f"✓ Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""))
+        self._set_status(f"Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""), kind="success")
         self._render_installed()
         self._render_results()
 
@@ -1411,7 +1422,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             try:
                 updates = self.client.check_updates(server_name, mc_version, loader)
             except Exception as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Update check failed: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Update check failed: {e}", kind="error"))
                 return
 
             matched = _filter_updates_for_selection(updates, selected_filenames)
@@ -1426,12 +1437,12 @@ class ModrinthBrowser(ctk.CTkFrame):
             self.after(0, lambda: self._set_status("Creating snapshot before updating…", busy=True))
             error, updated, failed = _snapshot_then_apply(self.create_snapshot, server_name, matched, _apply)
             if error:
-                self.after(0, lambda: self._set_status(f"✗ Updates aborted — {error}"))
+                self.after(0, lambda: self._set_status(f"Updates aborted — {error}", kind="error"))
                 return
 
             self.after(0, lambda: self._set_status(
-                f"✓ Updated {updated} mod(s)" + (f", {failed} failed" if failed else "")
-                + " — snapshot saved (rollback in Backups tab)"))
+                f"Updated {updated} mod(s)" + (f", {failed} failed" if failed else "")
+                + " — snapshot saved (rollback in Backups tab)", kind="success"))
             self.after(0, self._render_installed)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1454,7 +1465,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             try:
                 versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
-                    self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    self.after(0, lambda: self._set_status(f"No compatible versions of {title} found.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
                 if len(versions) == 1:
@@ -1468,7 +1479,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                     ))
             except Exception as exc:
                 logger.debug("Project fetch error: %s", exc)
-                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Failed to load versions: {e}", kind="error"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
@@ -1501,11 +1512,11 @@ class ModrinthBrowser(ctk.CTkFrame):
             try:
                 ok = _install_one(version, server_name, loader, title, slug)
                 if not ok:
-                    self.after(0, lambda: self._set_status(f"✗ Install failed for {title}."))
+                    self.after(0, lambda: self._set_status(f"Install failed for {title}.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
 
-                self.after(0, lambda: self._set_status(f"✓ Installed {title}"))
+                self.after(0, lambda: self._set_status(f"Installed {title}", kind="success"))
 
                 if mc_version:
                     self._resolve_and_install_dependencies(
@@ -1515,7 +1526,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                     self.after(0, self._render_results)
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except Exception as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Install failed: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Install failed: {e}", kind="error"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_install, daemon=True).start()
@@ -1548,13 +1559,13 @@ class ModrinthBrowser(ctk.CTkFrame):
             message += f"{title} requires: {names}.\n\nInstall these dependencies too?"
         if conflicting:
             conflict_names = ", ".join(p.get("title", p.get("slug", "?")) for p in conflicting)
-            warning = f"⚠ {title} conflicts with installed: {conflict_names}"
+            warning = f"Warning: {title} conflicts with installed: {conflict_names}"
             message = f"{message}\n\n{warning}" if message else warning
 
         if not deps:
             self.after(0, lambda: self._set_status(
-                f"⚠ {title} conflicts with installed mod(s): "
-                + ", ".join(p.get("title", p.get("slug", "?")) for p in conflicting)
+                f"{title} conflicts with installed mod(s): "
+                + ", ".join(p.get("title", p.get("slug", "?")) for p in conflicting), kind="warning"
             ))
             return
 
@@ -1611,7 +1622,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             try:
                 versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
-                    self.after(0, lambda: self._set_status(f"✗ No compatible versions of {title} found."))
+                    self.after(0, lambda: self._set_status(f"No compatible versions of {title} found.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
                 if len(versions) == 1:
@@ -1623,7 +1634,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                     ))
             except Exception as exc:
                 logger.debug("Modpack version fetch error: %s", exc)
-                self.after(0, lambda e=exc: self._set_status(f"✗ Failed to load versions: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Failed to load versions: {e}", kind="error"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
 
         threading.Thread(target=_fetch_versions, daemon=True).start()
@@ -1641,7 +1652,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                     ),
                 )
                 if not downloaded:
-                    self.after(0, lambda: self._set_status(f"✗ Download failed for {title}."))
+                    self.after(0, lambda: self._set_status(f"Download failed for {title}.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
                     return
 
@@ -1653,16 +1664,16 @@ class ModrinthBrowser(ctk.CTkFrame):
                     mc_version=meta.get("version"),
                 )
                 self.after(0, lambda: self._set_status(
-                    f"✓ Modpack {title}: {self._format_mrpack_summary(summary)}"))
+                    f"Modpack {title}: {self._format_mrpack_summary(summary)}", kind="success"))
                 logger.info("Installed modpack %s to server %s", title, server_name)
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
             except MrpackCompatibilityError as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Incompatible: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Incompatible: {e}", kind="error"))
                 self.after(0, lambda e=exc: ZBBDialog.info(
                     self.winfo_toplevel(), "Incompatible Modpack", str(e), kind="warning"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
             except Exception as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Modpack install failed: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Modpack install failed: {e}", kind="error"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -1756,12 +1767,12 @@ class ModrinthBrowser(ctk.CTkFrame):
 
             if failed:
                 msg = f"Installed {len(bundle) - len(failed)}/{len(bundle)}. Failed: {', '.join(failed)}"
-                self.after(0, lambda: self._set_status(f"⚠ {msg}"))
+                self.after(0, lambda: self._set_status(msg, kind="warning"))
                 self.after(0, lambda: ZBBDialog.info(
                     self.winfo_toplevel(), "Optimizer Bundle", msg, kind="warning"
                 ))
             else:
-                self.after(0, lambda: self._set_status("✓ Optimizer Bundle installed."))
+                self.after(0, lambda: self._set_status("Optimizer Bundle installed.", kind="success"))
 
         threading.Thread(target=_run_opt, daemon=True).start()
 
@@ -1771,7 +1782,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _on_check_updates(self):
         ctx = self._resolve_server_context()
         if not ctx:
-            self._set_status("⚠ Select a server first.")
+            self._set_status("Select a server first.", kind="warning")
             return
         server_name, mc_version, loader = ctx
 
@@ -1782,7 +1793,7 @@ class ModrinthBrowser(ctk.CTkFrame):
                 updates = self.client.check_updates(server_name, mc_version, loader)
                 self.after(0, lambda: self._show_updates_dialog(updates))
             except Exception as exc:
-                self.after(0, lambda e=exc: self._set_status(f"✗ Update check failed: {e}"))
+                self.after(0, lambda e=exc: self._set_status(f"Update check failed: {e}", kind="error"))
             finally:
                 self.after(0, lambda: self._set_status("Ready"))
 
@@ -1790,7 +1801,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _show_updates_dialog(self, updates):
         if not updates:
-            self._set_status("✓ All mods are up to date.")
+            self._set_status("All mods are up to date.", kind="success")
             return
 
         dialog = ctk.CTkToplevel(self)
