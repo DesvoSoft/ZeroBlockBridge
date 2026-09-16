@@ -145,8 +145,8 @@ class ServerWizard(ctk.CTkToplevel):
             
         if self.current_step == self.total_steps:
             self.btn_next.configure(text="Create Server", image=icon("check", 13, AppConfig.COLOR_TEXT_ON_ACCENT),
-                                    fg_color=AppConfig.COLOR_BTN_SUCCESS,
-                                    hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER)
+                                    fg_color=AppConfig.COLOR_BTN_PRIMARY,
+                                    hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
         else:
             self.btn_next.configure(text="Next", image=icon("chevron_right", 13, AppConfig.COLOR_TEXT_ON_ACCENT),
                                     fg_color=AppConfig.COLOR_BTN_PRIMARY,

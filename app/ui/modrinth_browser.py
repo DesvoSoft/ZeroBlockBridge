@@ -26,7 +26,7 @@ from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityErr
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog
+from app.ui.ui_components import ToolTip, ZBBDialog, dialog_buttons
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 
@@ -1779,16 +1779,13 @@ class ModrinthBrowser(ctk.CTkFrame):
                     on_confirm(v)
                     break
 
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=12, pady=10)
-
-        ctk.CTkButton(btn_frame, text="Cancel", width=90, height=32,
-                       corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                       hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                       command=dialog.destroy).pack(side="right", padx=4)
-        ctk.CTkButton(btn_frame, text="Install", width=90, height=32,
-                       corner_radius=AppConfig.RADIUS_BTN, fg_color=AppConfig.COLOR_MODRINTH_BRAND, hover_color=AppConfig.COLOR_MODRINTH_BRAND_HOVER,
-                       text_color=AppConfig.COLOR_TEXT_ON_BRIGHT, command=_on_confirm).pack(side="right", padx=4)
+        btn_frame, _, _ = dialog_buttons(
+            dialog, "Install", _on_confirm, "Cancel", dialog.destroy,
+            primary_colors=(AppConfig.COLOR_MODRINTH_BRAND, AppConfig.COLOR_MODRINTH_BRAND_HOVER,
+                            AppConfig.COLOR_TEXT_ON_BRIGHT),
+            primary_width=110,
+        )
+        btn_frame.pack(fill="x", padx=12, pady=12)
 
     # ------------------------------------------------------------------
     # Optimizer bundle

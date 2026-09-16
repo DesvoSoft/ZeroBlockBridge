@@ -34,6 +34,40 @@ def center_on_parent(toplevel, parent, width, height):
     toplevel.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
 
+def dialog_buttons(parent, primary_text, on_primary, secondary_text=None, on_secondary=None,
+                   danger=False, primary_colors=None, height=32, primary_width=130, secondary_width=110):
+    """Footer buttons shared by every dialog, one convention everywhere:
+    right-aligned, primary action rightmost (lime; red when destructive, or a
+    caller's (fg, hover, text) brand triple), outlined secondary right beside it.
+
+    Returns (row_frame, primary_button, secondary_button_or_None); the caller
+    places row_frame.
+    """
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    if primary_colors:
+        fg, hover, text = primary_colors
+    elif danger:
+        fg, hover, text = AppConfig.COLOR_BTN_DANGER, AppConfig.COLOR_BTN_DANGER_HOVER, AppConfig.COLOR_TEXT_ON_ACCENT
+    else:
+        fg, hover, text = AppConfig.COLOR_BTN_PRIMARY, AppConfig.COLOR_BTN_PRIMARY_HOVER, AppConfig.COLOR_TEXT_ON_ACCENT
+    primary = ctk.CTkButton(
+        row, text=primary_text, width=primary_width, height=height, corner_radius=AppConfig.RADIUS_BTN,
+        fg_color=fg, hover_color=hover, text_color=text, command=on_primary,
+    )
+    primary.pack(side="right")
+    secondary = None
+    if secondary_text:
+        secondary = ctk.CTkButton(
+            row, text=secondary_text, width=secondary_width, height=height, corner_radius=AppConfig.RADIUS_BTN,
+            fg_color="transparent", border_width=AppConfig.BORDER_BTN,
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+            text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+            command=on_secondary,
+        )
+        secondary.pack(side="right", padx=(0, 8))
+    return row, primary, secondary
+
+
 class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -566,21 +600,11 @@ class EulaDialog(ctk.CTkToplevel):
         link.pack(anchor="w", pady=(0, 18))
         link.bind("<Button-1>", self._open_eula)
 
-        buttons = ctk.CTkFrame(frame, fg_color="transparent")
+        buttons, _, _ = dialog_buttons(
+            frame, "I Accept the EULA", self._accept, "Decline", self._decline,
+            primary_width=180, secondary_width=120,
+        )
         buttons.pack(fill="x")
-        ctk.CTkButton(
-            buttons, text="Decline", corner_radius=AppConfig.RADIUS_BTN, width=120,
-            fg_color="transparent", border_width=AppConfig.BORDER_BTN,
-            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-            text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            command=self._decline,
-        ).pack(side="left")
-        ctk.CTkButton(
-            buttons, text="I Accept the EULA", corner_radius=AppConfig.RADIUS_BTN, width=180,
-            fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
-            command=self._accept,
-        ).pack(side="right")
 
         apply_rounded_corners(self)
         self.update_idletasks()
@@ -668,27 +692,10 @@ class ZBBDialog(ctk.CTkToplevel):
                 self._entry.insert(0, input_value)
             self._entry.pack(fill="x", pady=(0, 16))
 
-        buttons = ctk.CTkFrame(frame, fg_color="transparent")
-        buttons.pack(fill="x")
-        if cancel_text:
-            ctk.CTkButton(
-                buttons, text=cancel_text, width=110, height=32,
-                corner_radius=AppConfig.RADIUS_BTN,
-                fg_color="transparent", border_width=AppConfig.BORDER_BTN,
-                border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
-                text_color=AppConfig.COLOR_TEXT_PRIMARY,
-                hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                command=self._cancel,
-            ).pack(side="left")
-        confirm_fg = AppConfig.COLOR_BTN_DANGER if danger else AppConfig.COLOR_BTN_PRIMARY
-        confirm_hover = AppConfig.COLOR_BTN_DANGER_HOVER if danger else AppConfig.COLOR_BTN_PRIMARY_HOVER
-        btn_ok = ctk.CTkButton(
-            buttons, text=confirm_text, width=130, height=32,
-            corner_radius=AppConfig.RADIUS_BTN,
-            fg_color=confirm_fg, hover_color=confirm_hover,
-            command=self._confirm,
+        buttons, btn_ok, _ = dialog_buttons(
+            frame, confirm_text, self._confirm, cancel_text or None, self._cancel, danger=danger,
         )
-        btn_ok.pack(side="right")
+        buttons.pack(fill="x")
 
         self.bind("<Return>", lambda e: self._confirm())
         self.bind("<Escape>", lambda e: self._cancel())

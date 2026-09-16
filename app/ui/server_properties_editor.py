@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
@@ -254,19 +254,12 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         self._on_tab_changed()
         
         # Footer Buttons
-        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_frame, self.btn_save, self.btn_cancel = dialog_buttons(
+            self, "Save", self.save_properties, "Cancel", self.destroy,
+            height=36, primary_width=140, secondary_width=140,
+        )
         self.btn_frame.grid(row=self.btn_frame_row, column=0, sticky="ew", padx=10, pady=(0, 10))
-        
-        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="Cancel", command=self.destroy,
-                                         fg_color=AppConfig.COLOR_BTN_GHOST, text_color=AppConfig.COLOR_TEXT_PRIMARY, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-                                         corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_cancel.pack(side="right")
 
-        self.btn_save = ctk.CTkButton(self.btn_frame, text="Save", command=self.save_properties,
-                                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
-                                      corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.btn_save.pack(side="right", padx=(0, 8))
-        
         apply_rounded_corners(self)
 
         # Make modal
@@ -305,7 +298,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         _btn = dict(corner_radius=AppConfig.RADIUS_BTN, height=32)
 
         ctk.CTkButton(toolbar, text="Create Backup", command=self.create_backup,
-                      fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER,
+                      fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER,
                       width=120, **_btn).pack(side="left")
         ctk.CTkButton(toolbar, text="Restore Selected", command=self.restore_backup,
                       fg_color=AppConfig.COLOR_BTN_WARNING, hover_color=AppConfig.COLOR_BTN_WARNING_HOVER,
