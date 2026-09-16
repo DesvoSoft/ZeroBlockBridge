@@ -670,12 +670,27 @@ class ZBBDialog(ctk.CTkToplevel):
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()
         center_on_parent(self, parent, w, h)
         self.transient(parent)
+        self.attributes("-alpha", 0.0)
         try:
             self.wait_visibility()
             self.grab_set()
         except Exception as e:
             logger.debug("ZBBDialog grab failed: %s", e)
         btn_ok.focus_set()
+        self._fade_in()
+
+    def _fade_in(self, step: float = 0.0):
+        # Quick fade-in on open — same technique as Toast, kept inline since
+        # a dialog only ever fades one direction (destroy() is immediate).
+        if not self.winfo_exists():
+            return
+        try:
+            self.attributes("-alpha", step)
+        except Exception as e:
+            logger.debug("ZBBDialog fade-in error: %s", e)
+            return
+        if step < 1.0:
+            self.after(15, self._fade_in, min(step + 0.2, 1.0))
 
     def _confirm(self):
         self.result = True
