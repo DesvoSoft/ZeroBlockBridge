@@ -354,6 +354,9 @@ class ZBBManager:
     def is_running(self) -> bool:
         return self.server_orchestrator.is_running()
 
+    def delete_backup(self, server_name: str, backup_path: str) -> tuple[bool, Optional[str]]:
+        return self.backup_orchestrator.delete_backup(server_name, backup_path)
+
     def create_pre_update_snapshot(self, server_name: str) -> tuple[Optional[Any], Optional[str]]:
         """Blocking -- call from a worker thread, never the Tk main loop."""
         return self.backup_orchestrator.create_pre_update_snapshot(server_name)

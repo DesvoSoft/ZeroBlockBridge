@@ -120,6 +120,26 @@ class BackupManager:
         backups.sort(key=lambda x: x["name"], reverse=True)
         return backups
 
+    def delete_backup(self, backup_path_str: str) -> tuple[bool, str | None]:
+        """Delete one backup archive of this server. Refuses anything that
+        isn't a .zip directly inside this server's backup directory."""
+        backup_path = Path(backup_path_str)
+        try:
+            inside = backup_path.resolve().parent == self.backup_dir.resolve()
+        except OSError:
+            inside = False
+        if not inside or backup_path.suffix != ".zip":
+            return False, "Not a backup of this server."
+        try:
+            backup_path.unlink()
+        except FileNotFoundError:
+            return True, None
+        except OSError as e:
+            logger.warning("Failed to delete backup %s: %s", backup_path.name, e)
+            return False, str(e)
+        logger.info("Deleted backup: %s", backup_path.name)
+        return True, None
+
     def get_latest_backup(self) -> dict[str, Any] | None:
         if not self.backup_dir.exists():
             return None

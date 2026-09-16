@@ -169,3 +169,32 @@ class TestBackupManager:
                 "2025-01-01_00-00-00.zip", "2025-01-02_00-00-00.zip", "2025-01-03_00-00-00.zip",
                 "2025-02-03_00-00-00__auto.zip",
             ]
+
+    def test_delete_backup_removes_archive(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            archive = tmp_path / "2025-01-01_00-00-00.zip"
+            archive.touch()
+            assert bm.delete_backup(str(archive)) == (True, None)
+            assert not archive.exists()
+
+    def test_delete_backup_refuses_paths_outside_backup_dir(self, tmp_path):
+        bm = BackupManager("test_server")
+        backups = tmp_path / "backups"
+        backups.mkdir()
+        outside = tmp_path / "world.zip"
+        outside.touch()
+        not_zip = backups / "notes.txt"
+        not_zip.touch()
+        with patch.object(bm, "backup_dir", backups):
+            ok, error = bm.delete_backup(str(outside))
+            assert not ok and error
+            assert outside.exists()
+            ok, _ = bm.delete_backup(str(not_zip))
+            assert not ok
+            assert not_zip.exists()
+
+    def test_delete_backup_missing_file_is_not_an_error(self, tmp_path):
+        bm = BackupManager("test_server")
+        with patch.object(bm, "backup_dir", tmp_path):
+            assert bm.delete_backup(str(tmp_path / "2025-01-01_00-00-00.zip")) == (True, None)

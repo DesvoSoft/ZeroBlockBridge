@@ -207,6 +207,23 @@ class TestBackupOrchestrator:
         assert ServerEvent.BACKUP_COMPLETED in events
         assert mgr._backup_in_progress is False
 
+    def test_delete_backup_logs_to_console_on_success(self):
+        mgr = _make_manager()
+        orch = BackupOrchestrator(mgr)
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.delete_backup.return_value = (True, None)
+            assert orch.delete_backup("test_srv", "/b/2025-01-01_00-00-00.zip") == (True, None)
+        MockBM.assert_called_once_with("test_srv")
+        assert (ServerEvent.CONSOLE_LINE, "[System] Backup deleted: 2025-01-01_00-00-00.zip") in mgr.events.events
+
+    def test_delete_backup_failure_is_silent_on_console(self):
+        mgr = _make_manager()
+        orch = BackupOrchestrator(mgr)
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.delete_backup.return_value = (False, "locked")
+            assert orch.delete_backup("test_srv", "/b/x.zip") == (False, "locked")
+        assert mgr.events.events == []
+
     def test_run_auto_backup_is_tagged_auto_with_user_retention(self):
         # Tagged so the user's "keep last N" rotates scheduled backups only,
         # never manual ones.

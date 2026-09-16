@@ -176,6 +176,12 @@ class BackupOrchestrator:
             with self.manager._backup_lock:
                 self.manager._backup_in_progress = False
 
+    def delete_backup(self, server_name: str, backup_path: str) -> tuple[bool, str | None]:
+        ok, error = BackupManager(server_name).delete_backup(backup_path)
+        if ok:
+            self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Backup deleted: {Path(backup_path).name}")
+        return ok, error
+
     def create_pre_update_snapshot(self, server_name: str) -> tuple[Path | None, str | None]:
         """Blocking full-server snapshot taken right before a mod update.
 
