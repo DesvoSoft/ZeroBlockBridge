@@ -100,7 +100,8 @@ class CrashReporter:
         try:
             from app.core.logic import get_server_meta
             meta = get_server_meta(server_name) or {}
-        except Exception:
+        except Exception as e:
+            logger.debug("CrashReporter: server meta unavailable: %s", e)
             meta = {}
         config = self._get_config()
         return {
