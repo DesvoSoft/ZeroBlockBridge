@@ -66,25 +66,31 @@ class ToastNotification:
         inner.pack(fill="both", expand=True, padx=12, pady=10)
 
         # Icon badge: PIL icon when one exists, letter fallback otherwise.
-        # corner_radius is half the badge size (circle), not a card/button/badge token.
+        # A fixed-size circular frame holds the glyph -- a CTkLabel with an
+        # image pads itself by its corner radius and stretches into a pill.
         badge_size = 24
+        badge = ctk.CTkFrame(
+            inner, width=badge_size, height=badge_size,
+            fg_color=border_color, corner_radius=badge_size // 2,
+        )
+        badge.pack_propagate(False)
         if isinstance(icon_char, tuple):
-            badge = ctk.CTkLabel(
-                inner, text="", image=icon(icon_char[1], 12, AppConfig.COLOR_TEXT_ON_ACCENT),
-                width=badge_size, height=badge_size, fg_color=border_color, corner_radius=badge_size // 2,
+            glyph = ctk.CTkLabel(
+                badge, text="", image=icon(icon_char[1], 12, AppConfig.COLOR_TEXT_ON_ACCENT),
+                width=12, height=12, fg_color="transparent",
             )
         else:
-            badge = ctk.CTkLabel(
-                inner, text=icon_char, width=badge_size, height=badge_size,
+            glyph = ctk.CTkLabel(
+                badge, text=icon_char, width=12, height=16, fg_color="transparent",
                 font=AppConfig.FONT_SUBHEADING, text_color=AppConfig.COLOR_TEXT_ON_ACCENT,
-                fg_color=border_color, corner_radius=badge_size // 2,
             )
+        glyph.place(relx=0.5, rely=0.5, anchor="center")
         badge.pack(side="left", padx=(0, 10))
 
         # Message
         ctk.CTkLabel(
             inner, text=message, text_color=AppConfig.COLOR_TEXT_PRIMARY,
-            font=AppConfig.FONT_CAPTION, wraplength=320, justify="left",
+            font=AppConfig.FONT_CAPTION, wraplength=320, justify="left", anchor="w",
         ).pack(side="left", fill="x", expand=True)
 
         # Callers pass all sorts of widgets as "parent" (the main window, a
