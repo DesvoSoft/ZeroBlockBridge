@@ -56,7 +56,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 - **Safe Mod Updates** — Search, install, and update mods/plugins straight from Modrinth, with dependency resolution, client-only filtering, and a one-click Optimizer Bundle per loader. Every update takes a full snapshot first, so a bad update is one restore away from undone.
 - **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching runtime — no manual installs, no version mismatches.
 
-*Also included: player management (whitelist, ops, bans), Discord notifications, a choice of where your data lives (standard, portable, or custom folder), light/dark/system theming, and experimental Linux support.*
+*Also included: a Players tab (whitelist, operators, bans, kicks, skin heads, playtime history), Discord notifications, a choice of where your data lives (standard, portable, or custom folder), light/dark/system theming, and experimental Linux support.*
 
 ---
 

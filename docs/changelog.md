@@ -17,6 +17,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Backups tab rework** — each backup is a row with its date, a reason chip (Manual, Auto, Pre-update) and size, plus its own Restore and **Delete** buttons; **Open Folder** jumps to the server's backup directory.
 - **Installed mod count** — the Mods tab's Installed button shows how many mods/plugins the server has, with an amber dot and "N updates available" tooltip when newer versions exist.
 - Servers without an icon get a colored initial tile in the sidebar list.
+- **Players tab** (replaces the Player Management window) — one list of every player the server knows (online, joined before, whitelisted, operators, banned) with skin heads, status chips, last seen and playtime, search and filters. Each player has an actions menu: kick or ban with a reason, make operator with a described permission level, whitelist, unban, copy UUID. Players can also be added by name.
+- **Player history** — ZBB records when each player was first and last seen and how long they have played, per server.
+- Main tabs show icons plus the online player count and the installed mod count.
 
 ### Changed
 - Dependencies are pinned to the exact tested versions (`requirements.txt`, new `requirements-dev.txt`), so CI and release builds install the same packages; Dependabot proposes weekly updates.
@@ -31,6 +34,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Every dialog uses the same footer buttons: secondary (outlined) next to the primary action on the right. Dialog primary actions use the lime primary color; green is kept for start buttons.
 - Outlined buttons use a 2px border (1px borders looked broken around rounded corners).
 - Every dialog shows the app icon and a titlebar tinted to match its background, and titlebars follow live Dark/Light switches.
+- **Minimal titlebars** — the titlebar no longer draws the app icon or window title (both stay in the taskbar and Alt-Tab); every dialog names itself with a title and subtitle at the top of its body instead.
+- Scrollbars only appear when a list or page actually overflows.
+- Mod cards: installed mods show an "Installed" button with a menu (update to the newer version when one exists, uninstall) instead of a red Uninstall button; descriptions are limited to two lines; category tags are neutral so the client/server badge stands out.
+- The header RAM readout shows memory used ("RAM 2.3 GB"), with a tooltip explaining that the server's RAM setting caps Java's heap, so total usage can be higher.
 
 ### Fixed
 - A server that failed to launch because Java could not be started stayed stuck on "Starting" with no error.
@@ -47,6 +54,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Light mode: mod cards were white on a white list and couldn't be told apart.
 - The "Loading mods" message went blank as soon as search results arrived, leaving an empty panel while the page was built.
 - Settings, Properties, Players and the other dialogs showed CustomTkinter's blue icon instead of the app's.
+- Whitelist, operator and ban entries added while the server was stopped were written without a UUID, so the server ignored them on startup. They are now written with the player's real UUID (from the server's user cache, Mojang, or the offline-mode UUID).
+- The operator level chosen while the server was running was shown but not applied (`/op` always uses the server's `op-permission-level`); the running-server menu now offers that level and says so.
+- Bedrock players joining through Geyser/Floodgate (names starting with ".") were never counted as online.
+- Dialogs opened before their window was shown (Server Properties, confirmations) missed the titlebar tint.
 
 ## [2.1.0] — 2026-09-16
 

@@ -177,11 +177,15 @@ Roboto is not installed on stock Windows — never use it.
 - Outlined buttons: `border_width=AppConfig.BORDER_BTN` (2). 1px CTk borders break up around rounded corners.
 - A disabled action button switches to `COLOR_BTN_GHOST` fill (and `COLOR_TEXT_PRIMARY` text), so it doesn't read as clickable (Send, Install Selected, Update/Delete (n)).
 - Row labels mirror each other: a gray label plus a colored state ("Server: ● Running", "Tunnel: ● Online").
+- Tabs of the main `console_tabs` carry an icon (`_TAB_ICONS`) and, where useful, a live count in the button text ("Mods (9)"); the tab *name* stays the plain key.
+- Only create a container frame when it will have children: an empty `CTkFrame` requests 200×200 and inflates its row.
 
 ### 3.6 Dialogs & Windows
 
 - Confirmations/info/text input: `ZBBDialog.confirm()` / `ZBBDialog.info()` / `ZBBDialog.ask_string()` from `ui_components.py`. Never `tkinter.messagebox` or `ctk.CTkInputDialog` (native gray dialog clashes with the dark theme). Only exception: the single-instance warning shown before the app window exists.
 - Every `CTkToplevel`: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (Win11 native corners + shadow; no-op elsewhere). It also sets the app icon (CTkToplevel otherwise swaps in CustomTkinter's blue logo ~200ms after creation) and tints the titlebar with the window's `fg_color`, re-applied on every Dark/Light switch. Pass `caption_color=(light, dark)` to tint with something else (the main window uses the sidebar color).
+- Header: `dialog_header(parent, title, subtitle)` from `ui_components.py` at the top of every dialog body. Titlebars draw no icon or title (`hide_titlebar_caption`, applied by `apply_rounded_corners`), so the body header is the only visible name.
+- Menus: `themed_menu(parent)` / `add_danger_command(menu, label, command)` — a theme-colored `tk.Menu` (CTk has no dropdown menu widget). Destructive entries in red.
 - Footer buttons: `dialog_buttons(parent, primary_text, on_primary, secondary_text, on_secondary, danger=..., primary_colors=...)` from `ui_components.py` — right-aligned, primary action rightmost, outlined secondary beside it. Don't hand-build dialog footers.
 
 ### 3.7 Layout
@@ -191,7 +195,8 @@ Roboto is not installed on stock Windows — never use it.
 - In rows that can clip from the right (badge rows), put status before decoration.
 - Show values the way users think about them: `Yes`/`No`, not `True`/`False`; server.properties keys via `property_label()` ("Spawn NPCs", not "Spawn Npcs").
 - **Alignment**: controls stacked in one panel share a right edge. Settings rows use a fixed-width control column (`server_properties_editor._CONTROL_WIDTH`, help/impact columns with `minsize`) so every card lines up; text-less switches use `_bare_switch()` (CTkSwitch otherwise reserves an empty label column); sibling rows (server/tunnel) use identical insets and heights.
-- A `CTkScrollableFrame` holding aligned content uses `corner_radius=0` — a rounded one insets its content by the radius and shifts it off the column of the widgets above/below.
+- Scrollable areas use `ui_components.ScrollableFrame` (not `ctk.CTkScrollableFrame` directly): it hides the scrollbar while the content fits.
+- A scrollable frame holding aligned content uses `corner_radius=0` — a rounded one insets its content by the radius and shifts it off the column of the widgets above/below.
 - Readouts that don't fit at compact width (below `SIDEBAR_COMPACT_BELOW`) are hidden rather than squeezed (e.g. the header RAM label).
 
 ### 3.8 UI Thread Safety

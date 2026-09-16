@@ -20,6 +20,7 @@ This document covers the internal architecture, auto-healing system, technical d
    - [CrashReporter](#crashreporter)
    - [Command Sanitizer](#command-sanitizer)
    - [Pre-Update Snapshots](#pre-update-snapshots)
+   - [Player Management](#player-management)
    - [Notifications](#notifications)
 7. [Threading Model](#threading-model)
 8. [Key Invariants](#key-invariants)
@@ -105,6 +106,7 @@ Scheduled restarts and mod-dependency installs arrive as `REQUEST_RESTART` / `RE
 | `BackupOrchestrator` | Scheduled auto-backup check/run, pre-update snapshots (running-server guard, partial-snapshot discard) |
 | `TunnelOrchestrator` | Playit.gg agent lifecycle |
 | `SchedulerOrchestrator` | Tick loop: player-count sync, heartbeat tick, restart/backup scheduling |
+| `PlayerOrchestrator` (`app/core/players.py`, `ZBBManager.players`) | Player roster + whitelist/op/ban/pardon/kick — see [Player Management](#player-management) |
 
 Manual backup create/restore is done by `BackupManager` from the Backups tab (`server_properties_editor.py`). Protocol classes in `app/core/protocols.py` define structural typing contracts (structural, not inheritance).
 
@@ -135,7 +137,7 @@ Runs every 100ms (`ServerTickThread`) while the app is open:
 | `CRASHED` | `Watchdog` | ZBBManager (`_on_server_crashed`), `CrashReporter` |
 | `RESTARTED` | `Watchdog` | — (Discord only, opt-in) |
 | `PLAYER_COUNT` | `ServerRunner` join/leave, `SchedulerOrchestrator` resync | UI sidebar |
-| `PLAYER_LIST` | `ServerRunner` (stdout parse) | UI player dashboard |
+| `PLAYER_LIST` | `ServerRunner` (stdout parse; Java names and Floodgate `.`-prefixed Bedrock names) | Players tab, `PlayerHistoryTracker`, Discord webhook |
 | `ZOMBIE_DETECTED` | `HeartbeatMonitor` | Watchdog |
 | `LAG_SPIKE` | `LagMonitor` | UI toast |
 | `CONSOLE_LINE` | `ServerRunner`, orchestrators, monitors | UI console, ZBBManager buffer, Heartbeat, LagMonitor |
@@ -245,6 +247,17 @@ Subscribes to `CRASHED` event. On each crash:
 - Backup reasons: `manual` (untagged filename, "Create Backup"), `auto` (scheduled auto-backups and the optional backup before a scheduled restart — both honor the user's "keep last N"), `pre_update` (default cap: 5). Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason`, so no rotation ever deletes another reason's backups — in particular the auto-backup rotation never touches manual backups (it did before `auto` existed).
 - Rollback reuses the Backups tab restore flow (`server_properties_editor.py`): one row per backup with a reason chip (Manual / Auto / Pre-update), size chip, per-row **Restore** (blocked while the server runs) and **Delete** (via `ZBBManager.delete_backup`), and **Open Folder** for the backup directory.
 
+### Player Management
+
+**Files:** `app/core/players.py`, `app/services/player_identity.py`, `app/services/player_history.py`, `app/services/player_heads.py`, `app/ui/players_panel.py`
+
+- **Ownership of player files**: while the selected server runs it owns `whitelist.json` / `ops.json` / `banned-players.json` (rewrites them from memory), so `PlayerOrchestrator` sends console commands (`whitelist add`, `op`, `ban <name> <reason>`, `kick`, …). While stopped it writes the files itself through `player_files` (atomic, per-file lock). The UI re-reads the roster ~1.5s after a command on a running server to pick up what the server wrote (or rejected).
+- **UUIDs**: the server ignores entries whose UUID doesn't parse, so offline writes always carry one from `player_identity.resolve_player`: the server's `usercache.json` → Mojang profile API (`online-mode=true`) → offline UUID (`OfflinePlayer:<name>` MD5 v3, `online-mode=false`). Floodgate players must have joined once (usercache). Names are validated (Java 3-16 `[A-Za-z0-9_]`, Floodgate `.`-prefixed); kick/ban reasons are restricted to plain text before reaching a command.
+- **Operator level**: `/op` grants `op-permission-level`; a specific level can only be written to `ops.json` while stopped. The Players tab offers a level submenu when stopped and the fixed level when running.
+- **Roster**: `PlayerOrchestrator.roster()` merges online players, usercache, whitelist, ops, bans and history by case-insensitive name (online first).
+- **History**: `PlayerHistoryTracker` (owned by `ZBBManager`) diffs consecutive `PLAYER_LIST` snapshots into joins/leaves and closes open sessions on `STOPPED`; persisted per server in `servers/<name>/zbb_player_history.json` (`first_seen`, `last_seen`, `playtime_seconds`).
+- **Skin heads**: `player_heads.fetch_head` downloads mc-heads.net avatars by UUID into `.zbb_cache/player_heads/` (3-day reuse, stale copy on network failure). Only requested for online-mode servers and non-Bedrock players; others get an initial tile.
+
 ### Notifications
 
 All auto-healing events surface via the **Toast** system (`app/ui/toast.py`):
@@ -323,7 +336,7 @@ ZeroBlockBridge/
 │   │   ├── server_wizard.py           # 6-step creation wizard (~826 LOC)
 │   │   ├── server_properties_editor.py# 7-tab editor: General/World/Network/Advanced/Backups/Automation/Launch (~1091 LOC)
 │   │   ├── modrinth_browser.py        # Modrinth browser: search, install, update badges, bulk ops (~1850 LOC)
-│   │   ├── players_dashboard.py       # Player management: Online/Whitelist/Operators/Bans tabs (~427 LOC)
+│   │   ├── players_panel.py           # Players tab: unified roster, filters, actions menu, skin heads
 │   │   ├── app_settings.py            # Settings dialog: General/Notifications/Java/Storage/About (~754 LOC)
 │   │   ├── first_run_dialog.py        # First-launch data directory picker: Standard/Portable/Custom (~174 LOC)
 │   │   ├── toast.py                   # Non-blocking notification overlay (~200 LOC)
@@ -338,6 +351,7 @@ ZeroBlockBridge/
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~656 LOC)
 │   │   ├── logic.py                   # ServerRunner, Scheduler, BackupScheduler, downloads, metadata, port preflight (~948 LOC)
 │   │   ├── orchestrators.py           # Server/Backup/Tunnel/Scheduler orchestrators (~275 LOC)
+│   │   ├── players.py                 # PlayerOrchestrator: roster + whitelist/op/ban/kick (command vs file)
 │   │   ├── provisioning.py            # ServerProvisioner — wizard config -> installed server (jar, scaffold, Java, tunnel)
 │   │   ├── logging_setup.py           # Rotating log file + uncaught-exception hooks
 │   │   ├── protocols.py               # Protocol classes for structural typing (~41 LOC)
@@ -365,6 +379,9 @@ ZeroBlockBridge/
 │       ├── scaffolder.py              # Server directory + eula + server.properties scaffold (~156 LOC)
 │       ├── server_properties.py       # server.properties read/write, world listing/switching (~80 LOC)
 │       ├── player_files.py            # ops/bans/whitelist JSON read/write (~47 LOC)
+│       ├── player_identity.py         # Name validation + UUID resolution (usercache / Mojang / offline UUID)
+│       ├── player_history.py          # First/last seen + playtime tracker (PLAYER_LIST diffs)
+│       ├── player_heads.py            # mc-heads.net skin heads, disk-cached
 │       ├── template_manager.py        # Wizard server templates (~69 LOC)
 │       ├── migration.py               # .zbbpack export/import (~90 LOC)
 │       ├── playit_api.py              # Playit.gg REST API v2 client (~466 LOC)
@@ -515,7 +532,7 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
 | ID | Feature | Status |
 |----|---------|--------|
 | CA-H01 | JVM args UI per-server | Done — Launch tab: per-server Java runtime, Aikar's flags toggle, and Custom JVM Flags (`jvm_custom_flags`, applied by `ServerRunner`) |
-| CA-H02 | Unified player management (ops+bans+whitelist) | Done — `players_dashboard.py` Online/Whitelist/Operators/Bans tabs |
+| CA-H02 | Unified player management (ops+bans+whitelist) | Done — Players tab (`players_panel.py` + `core/players.py`): unified roster, history, skin heads |
 | CA-H03 | Console search/filter | Done — search bar on Console and Tunnel Log tabs (`main._build_console_search_bar`) |
 | CA-H04 | World switching UI | Done — World tab active-world picker (`server_properties.list_worlds` / `set_active_world`) |
 
@@ -538,6 +555,8 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
   - **Mojang** — version manifest + server jar downloads
   - **Fabric / Forge / Paper / Purpur APIs** — version lists
   - **Modrinth** — mod/plugin browsing and downloads
+  - **Mojang profile API** (`api.mojang.com`) — looks up a player's UUID when you add them by name while an online-mode server is stopped
+  - **mc-heads.net** — player skin heads in the Players tab (online-mode servers only; the request contains the player's UUID)
   - **Adoptium** — JDK auto-install
   - **Playit.gg** — tunneling (optional, user-enabled — see trust boundary above)
   - **Discord** — webhook notifications (optional, user-configured)
