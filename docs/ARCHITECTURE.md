@@ -2,7 +2,7 @@
 
 This document covers the internal architecture, auto-healing system, technical details, and design decisions of ZeroBlockBridge.
 
-> **Last updated:** 2026-09-14 — 633 tests in 36 files, 100% pass. Since v2.0.0: configurable data directory, explainable command safety, pre-update snapshots routed through `BackupOrchestrator`, Java 25 for MC 26.x, light-mode GUI fixes.
+> **Last updated:** 2026-09-16 — 800 tests in 44 files, 100% pass. Since v2.0.0: configurable data directory, explainable command safety, pre-update snapshots routed through `BackupOrchestrator`, Java 25 for MC 26.x, light-mode GUI fixes.
 
 ---
 
@@ -372,7 +372,7 @@ ZeroBlockBridge/
 │       ├── console_buffer.py          # Thread-safe console buffer (collections.deque) (~29 LOC)
 │       └── settings_manager.py        # App settings singleton, debounced flush (~94 LOC)
 │
-├── tests/                             # 36 test files, 633 tests, 100% pass
+├── tests/                             # 44 test files, 800 tests, 100% pass
 │   ├── conftest.py                    # FakeEmitter (EventBus stub), FakeRunner
 │   ├── test_playit_manager.py         # PlayitManager lifecycle (59)
 │   ├── test_version_manager.py        # VersionManager fetch + cache (43)

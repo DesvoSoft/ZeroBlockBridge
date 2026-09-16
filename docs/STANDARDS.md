@@ -3,7 +3,7 @@
 This document defines the coding standards, architectural philosophy, and quality criteria for ZeroBlockBridge.
 All contributors (human or AI) must adhere to these rules.
 
-> **Last updated:** 2026-09-14 — 633 tests in 36 files, 100% pass.
+> **Last updated:** 2026-09-16 — 800 tests in 44 files, 100% pass.
 
 ---
 
@@ -156,11 +156,13 @@ Elevation comes from background contrast, not borders — cards use `border_widt
 
 ### 3.4 Typography
 
-Use the `AppConfig.FONT_*` tokens:
+Every font comes from an `AppConfig.FONT_*` token — never `ctk.CTkFont(size=...)` or a literal `(family, size)` tuple (`tests/test_ui_design_tokens.py` enforces this):
 
-- Body: **Segoe UI Variable Text** (`FONT_BODY` 13, `FONT_BODY_SMALL` 11)
-- Headings/Titles: **Segoe UI Variable Display**, bold (`FONT_HEADING` 18, `FONT_HEADING_SMALL` 14, `FONT_TITLE` 20)
-- Console/code: **Cascadia Mono** (`FONT_MONO` 12)
+- Body: **Segoe UI Variable Text** — `FONT_BODY` 13, `FONT_LABEL` 13 bold (form labels), `FONT_CAPTION` 12 (hints, tooltips), `FONT_BODY_SMALL` 11, `FONT_MICRO` 10
+- Headings/Titles: **Segoe UI Variable Display**, bold — `FONT_TITLE` 20, `FONT_HEADING` 18, `FONT_HEADING_SMALL` 14, `FONT_SUBHEADING` 13, `FONT_LABEL_SMALL` 12 (compact buttons), `FONT_BADGE` 11, `FONT_MICRO_BOLD` 10, `FONT_STAT` 22 (large numbers)
+- Console/code: **Cascadia Mono** — `FONT_MONO` 12, `FONT_MONO_SMALL` 11
+
+Colors follow the same rule: no raw `"#rrggbb"` in `app/ui` outside `icons.py`.
 
 Roboto is not installed on stock Windows — never use it.
 
@@ -169,10 +171,11 @@ Roboto is not installed on stock Windows — never use it.
 - All buttons must define `hover_color`. No button without explicit hover feedback.
 - Icons come from `app/ui/icons.py` — `icon(name, size, color)`, PIL-drawn, antialiased, theme-tintable. **Never use emoji** as button/label icons (Tk renders them misaligned and untintable).
 - Icon-only buttons need a `ToolTip`.
+- Status severity is an explicit `kind` (`success`/`error`/`warning`) rendered with a tinted icon — never a leading ✓/✗/⚠ glyph in the text.
 
 ### 3.6 Dialogs & Windows
 
-- Confirmations/info: `ZBBDialog.confirm()` / `ZBBDialog.info()` from `ui_components.py`. Never `tkinter.messagebox` (native gray dialog clashes with the dark theme). Only exception: the single-instance warning shown before the app window exists.
+- Confirmations/info/text input: `ZBBDialog.confirm()` / `ZBBDialog.info()` / `ZBBDialog.ask_string()` from `ui_components.py`. Never `tkinter.messagebox` or `ctk.CTkInputDialog` (native gray dialog clashes with the dark theme). Only exception: the single-instance warning shown before the app window exists.
 - Every `CTkToplevel`: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (Win11 native corners + shadow; no-op elsewhere).
 
 ### 3.7 Layout
@@ -218,7 +221,7 @@ main        ← Production releases only
 
 Release process: `python tools/bump_version.py X.Y.Z`, fill in the changelog section, merge `dev` → `main`, tag `vX.Y.Z` — the build workflow gates on tests and publishes binaries with release notes taken from the changelog.
 
-**Current dev state:** v2.0.0 + unreleased features above. 633 tests.
+**Current dev state:** v2.0.0 + unreleased features above. 800 tests.
 
 ---
 
