@@ -388,10 +388,14 @@ class ModrinthClient:
             fpath = os.path.join(mods_dir, fname)
             if not os.path.isfile(fpath) or not fname.endswith(".jar"):
                 continue
-            sha1 = hashlib.sha1()
-            with open(fpath, "rb") as fp:
-                for chunk in iter(lambda: fp.read(8192), b""):
-                    sha1.update(chunk)
+            try:
+                sha1 = hashlib.sha1()
+                with open(fpath, "rb") as fp:
+                    for chunk in iter(lambda: fp.read(8192), b""):
+                        sha1.update(chunk)
+            except OSError as e:
+                logger.warning("Skipping %s (could not read for hashing): %s", fname, e)
+                continue
             hashes[sha1.hexdigest()] = fname
 
         if not hashes:
