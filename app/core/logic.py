@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -83,18 +84,25 @@ def invalidate_meta_cache(server_name: str) -> None:
         _meta_cache.pop(server_name, None)
 
 def get_server_meta(server_name: str) -> dict:
-    """Centralized reader for server metadata.json with write-through cache."""
+    """Centralized reader for server metadata.json with write-through cache.
+
+    Returns a deep copy: several callers fetch a nested value (e.g.
+    "scheduler", "crash_history"), mutate it in place, then pass it to
+    update_server_meta(). A shallow copy would leave that nested object
+    aliased to the live cache entry, so the mutation would race with
+    update_server_meta()'s own lock-protected read/write of the same cache.
+    """
     meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
     with _meta_lock:
         if server_name in _meta_cache:
-            return _meta_cache[server_name].copy()
+            return copy.deepcopy(_meta_cache[server_name])
         if not os.path.exists(meta_path):
             return {}
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
                 data: dict = json.load(f)
                 _meta_cache[server_name] = data
-                return data.copy()
+                return copy.deepcopy(data)
         except (json.JSONDecodeError, OSError) as e:
             logger.error("Failed to load metadata for %s: %s", server_name, e)
             return {}
