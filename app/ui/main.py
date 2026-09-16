@@ -657,19 +657,19 @@ class MCTunnelApp(ctk.CTk):
             return
 
         suggested_name = os.path.splitext(os.path.basename(src_path))[0]
-        prompt_text = f"Server name (suggested: {suggested_name}):"
+        initial = suggested_name
         new_name = None
         while True:
-            dialog = ctk.CTkInputDialog(text=prompt_text, title="Import .zbbpack")
-            entered = dialog.get_input()
-            if not entered:
+            entered = ZBBDialog.ask_string(
+                self, "Import .zbbpack", "Name for the imported server:",
+                initial=initial, placeholder=suggested_name, confirm_text="Import",
+            )
+            if entered is None:
                 return
-            entered = entered.strip()
-            if not entered:
-                entered = suggested_name
+            entered = entered.strip() or suggested_name
             if os.path.isdir(os.path.join(SERVERS_DIR, entered)):
                 Toast.show(self, f"A server named '{entered}' already exists", toast_type="error")
-                prompt_text = f"Server name (suggested: {suggested_name}):"
+                initial = entered
                 continue
             new_name = entered
             break

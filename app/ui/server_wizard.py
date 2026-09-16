@@ -7,7 +7,7 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.template_manager import list_templates, load_template, save_template
-from app.ui.ui_components import center_on_parent
+from app.ui.ui_components import ZBBDialog, center_on_parent
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from PIL import Image
@@ -375,8 +375,10 @@ class ServerWizard(ctk.CTkToplevel):
     def _save_as_template(self):
         self._collect_step5_fields()
 
-        dialog = ctk.CTkInputDialog(text="Template name:", title="Save as Template")
-        name = dialog.get_input()
+        name = ZBBDialog.ask_string(
+            self, "Save as Template", "Template name:",
+            placeholder="my-template", confirm_text="Save",
+        )
         if not name:
             return
         name = name.strip().lower().replace(" ", "-")

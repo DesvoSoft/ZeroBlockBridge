@@ -606,6 +606,7 @@ class ZBBDialog(ctk.CTkToplevel):
     Use the classmethods:
         ZBBDialog.confirm(parent, title, message, danger=False) -> bool
         ZBBDialog.info(parent, title, message, kind="info"|"warning"|"error")
+        ZBBDialog.ask_string(parent, title, message, initial="") -> str | None
     """
 
     _KIND_STYLE = {
@@ -616,9 +617,14 @@ class ZBBDialog(ctk.CTkToplevel):
     }
 
     def __init__(self, parent, title, message, *, confirm_text="OK",
-                 cancel_text=None, danger=False, kind="question"):
+                 cancel_text=None, danger=False, kind="question",
+                 input_value=None, placeholder=""):
         super().__init__(parent)
         self.result = False
+        # Text entered on confirm; stays None on cancel or when the dialog
+        # has no input field (input_value=None).
+        self.value = None
+        self._entry = None
         self.title(title)
         self.resizable(False, False)
         self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
@@ -638,7 +644,16 @@ class ZBBDialog(ctk.CTkToplevel):
         ctk.CTkLabel(
             frame, text=message, font=AppConfig.FONT_BODY,
             justify="left", wraplength=380, anchor="w",
-        ).pack(anchor="w", fill="x", pady=(0, 16))
+        ).pack(anchor="w", fill="x", pady=(0, 8 if input_value is not None else 16))
+
+        if input_value is not None:
+            self._entry = ctk.CTkEntry(
+                frame, width=380, height=32, corner_radius=AppConfig.RADIUS_BTN,
+                placeholder_text=placeholder or None,
+            )
+            if input_value:
+                self._entry.insert(0, input_value)
+            self._entry.pack(fill="x", pady=(0, 16))
 
         buttons = ctk.CTkFrame(frame, fg_color="transparent")
         buttons.pack(fill="x")
@@ -676,7 +691,11 @@ class ZBBDialog(ctk.CTkToplevel):
             self.grab_set()
         except Exception as e:
             logger.debug("ZBBDialog grab failed: %s", e)
-        btn_ok.focus_set()
+        if self._entry is not None:
+            self._entry.focus_set()
+            self._entry.select_range(0, "end")
+        else:
+            btn_ok.focus_set()
         self._fade_in()
 
     def _fade_in(self, step: float = 0.0):
@@ -694,6 +713,8 @@ class ZBBDialog(ctk.CTkToplevel):
 
     def _confirm(self):
         self.result = True
+        if self._entry is not None:
+            self.value = self._entry.get()
         self._close()
 
     def _cancel(self):
@@ -720,3 +741,14 @@ class ZBBDialog(ctk.CTkToplevel):
         dlg = cls(parent, title, message, confirm_text="OK", kind=kind,
                   danger=(kind == "error"))
         parent.wait_window(dlg)
+
+    @classmethod
+    def ask_string(cls, parent, title, message, *, initial="", placeholder="",
+                   confirm_text="OK", cancel_text="Cancel"):
+        """Themed replacement for CTkInputDialog. Returns the entered text
+        (possibly empty) on confirm, None on cancel/close."""
+        dlg = cls(parent, title, message, confirm_text=confirm_text,
+                  cancel_text=cancel_text, kind="question",
+                  input_value=initial, placeholder=placeholder)
+        parent.wait_window(dlg)
+        return dlg.value
