@@ -190,12 +190,18 @@ class PlayitApiClient:
             logger.error("Bridge response body: %s", data)
             raise PlayitApiException(f"Bridge did not return a secret key: {data}")
 
-        # Write playit.toml â€” persistencia crÃ­tica del secret_key
-        os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
-        with open(self.toml_path, "w", encoding="utf-8") as f:
-            f.write(f'secret_key = "{secret_key}"\n')
-        if platform.system() != "Windows":
-            os.chmod(self.toml_path, 0o600)
+        # Write playit.toml — critical persistence of the secret_key
+        try:
+            os.makedirs(os.path.dirname(self.toml_path), exist_ok=True)
+            with open(self.toml_path, "w", encoding="utf-8") as f:
+                f.write(f'secret_key = "{secret_key}"\n')
+            if platform.system() != "Windows":
+                os.chmod(self.toml_path, 0o600)
+        except OSError as e:
+            raise PlayitApiException(
+                f"Linked successfully but could not write {self.toml_path}: {e}. "
+                "Close any program using this file and try again."
+            )
 
         self._secret_key = secret_key
         self._agent_id = agent_id
