@@ -6,13 +6,14 @@ automatic retry on mismatch. Integrates with the download pipeline
 in app/logic.py.
 """
 
-import hashlib
 import logging
 import os
 import time
 from typing import Callable, Optional
 
 import requests
+
+from app.services.http_download import stream_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -52,39 +53,21 @@ def download_with_verification(
     """
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.get(url, stream=True, timeout=60)
             try:
-                resp.raise_for_status()
-
-                total = int(resp.headers.get("content-length", 0))
-                downloaded = 0
-                sha1 = hashlib.sha1()
-
-                try:
-                    with open(dest_path, "wb") as f:
-                        for chunk in resp.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                sha1.update(chunk)
-                                downloaded += len(chunk)
-                                if progress_callback and total > 0:
-                                    progress_callback(downloaded / total)
-                except PermissionError as exc:
-                    return False, None, (
-                        f"Permission denied writing to {dest_path}. Close any program "
-                        f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
-                    )
-                except OSError as exc:
-                    return False, None, f"Failed to write {dest_path}: {exc}"
-            finally:
-                resp.close()
+                actual = stream_to_file(url, dest_path, timeout=60, progress_callback=progress_callback)
+            except PermissionError as exc:
+                return False, None, (
+                    f"Permission denied writing to {dest_path}. Close any program "
+                    f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
+                )
+            except OSError as exc:
+                return False, None, f"Failed to write {dest_path}: {exc}"
 
             if progress_callback:
                 progress_callback(1.0)
 
             # SHA1 verification
             if expected_sha1:
-                actual = sha1.hexdigest()
                 if actual != expected_sha1.lower():
                     logger.warning(
                         "SHA1 mismatch (attempt %d/%d) for %s: expected=%s, actual=%s",

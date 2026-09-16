@@ -14,6 +14,7 @@ from typing import Optional
 import requests
 
 from app.core.constants import JDK_CACHE_DIR
+from app.services.http_download import stream_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -284,12 +285,7 @@ class JdkManager:
 
     def _download_file(self, url: str, dest: Path):
         try:
-            resp = requests.get(url, stream=True, timeout=120)
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=32768):
-                    if chunk:
-                        f.write(chunk)
+            stream_to_file(url, dest, timeout=120)
         except requests.ConnectionError:
             raise JdkDownloadError("No internet connection during JDK download")
         except requests.Timeout:

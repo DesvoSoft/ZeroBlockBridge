@@ -20,6 +20,7 @@ from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_UR
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
+from app.services.http_download import stream_to_file
 import re
 
 def create_junction(source: str, dest: str) -> None:
@@ -281,11 +282,7 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
 
     try:
         if progress_callback: progress_callback(0.1)
-        response = requests.get(installer_url, stream=True, timeout=30)
-        response.raise_for_status()
-        with open(installer_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        stream_to_file(installer_url, installer_path, timeout=30)
         if progress_callback: progress_callback(0.3)
     except PermissionError as e:
         logger.error("Installer download permission denied at %s: %s", installer_path, e)

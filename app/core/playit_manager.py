@@ -2,7 +2,6 @@ import os
 import platform
 import subprocess
 import threading
-import requests
 import re
 import time
 import logging
@@ -10,6 +9,7 @@ import logging
 from app.core.process_job import assign_to_job
 from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX, subprocess_flags
 from app.services.playit_api import PlayitApiClient, PlayitApiException
+from app.services.http_download import stream_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -161,11 +161,7 @@ class PlayitManager:
         # an infinite version-check-fail -> redownload loop (WinError 216).
         tmp_path = BIN_DIR / "agent_download.tmp"
         try:
-            response = requests.get(url, stream=True, timeout=30)
-            response.raise_for_status()
-            with open(tmp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            stream_to_file(url, tmp_path, timeout=30)
 
             size = tmp_path.stat().st_size
             if size < 1_000_000:
