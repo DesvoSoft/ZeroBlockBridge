@@ -975,8 +975,9 @@ class ModrinthBrowser(ctk.CTkFrame):
                               font=AppConfig.FONT_BODY_SMALL)
         lbl_dl.pack(side="left", padx=(0, 10))
 
-        # Status first: on narrow cards the row clips from the right, so
-        # categories should be what gets cut, never "Installed".
+        # Most important first: on narrow cards the row clips from the right,
+        # so categories are what gets cut -- never "Installed" or the
+        # client/server compatibility badge.
         if hit_key in self._installed_slugs_cache:
             installed_badge = ctk.CTkLabel(
                 badge_frame, text="Installed",
@@ -987,43 +988,16 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             installed_badge.pack(side="left", padx=(0, 4))
 
-        categories = hit.get("categories", [])[:3]
-        for cat in categories:
-            badge = ctk.CTkLabel(
-                badge_frame, text=cat,
-                font=AppConfig.FONT_MICRO,
-                text_color=AppConfig.COLOR_BADGE_TEXT,
-                fg_color=AppConfig.COLOR_BADGE_BG,
-                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
-            )
-            badge.pack(side="left", padx=(0, 4))
-
         server_side = hit.get("server_side", "unknown")
         if client_only:
-            side_badge = ctk.CTkLabel(
-                badge_frame, text="Client-only",
-                font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_BADGE_DANGER_TEXT,
-                fg_color=AppConfig.COLOR_BADGE_DANGER_BG,
-                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
-            )
-            side_badge.pack(side="left", padx=(0, 4))
+            self._pill(badge_frame, "Client-only", AppConfig.COLOR_BADGE_DANGER_BG, AppConfig.COLOR_BADGE_DANGER_TEXT)
         elif server_side == "required":
-            side_badge = ctk.CTkLabel(
-                badge_frame, text="Server",
-                font=AppConfig.FONT_MICRO,
-                text_color=AppConfig.COLOR_BADGE_TEXT,
-                fg_color=AppConfig.COLOR_BADGE_BG,
-                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
-            )
-            side_badge.pack(side="left", padx=(0, 4))
+            self._pill(badge_frame, "Server", AppConfig.COLOR_BADGE_BG, AppConfig.COLOR_BADGE_TEXT)
         elif server_side == "optional":
-            side_badge = ctk.CTkLabel(
-                badge_frame, text="Client + Server",
-                font=AppConfig.FONT_MICRO, text_color=AppConfig.COLOR_BADGE_NEUTRAL_TEXT,
-                fg_color=AppConfig.COLOR_BADGE_NEUTRAL_BG,
-                corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
-            )
-            side_badge.pack(side="left", padx=(0, 4))
+            self._pill(badge_frame, "Client + Server", AppConfig.COLOR_BADGE_NEUTRAL_BG, AppConfig.COLOR_BADGE_NEUTRAL_TEXT)
+
+        for cat in hit.get("categories", [])[:3]:
+            self._pill(badge_frame, cat, AppConfig.COLOR_BADGE_BG, AppConfig.COLOR_BADGE_TEXT)
 
         is_modpack = hit.get("project_type") == "modpack"
         install_cmd = self._on_install_modpack if is_modpack else self._on_install
@@ -1054,6 +1028,14 @@ class ModrinthBrowser(ctk.CTkFrame):
         btn_install.grid(row=0, column=3, rowspan=2, padx=(4, 12), pady=12, sticky="e")
 
         return card
+
+    @staticmethod
+    def _pill(parent, text: str, fg_color, text_color) -> None:
+        ctk.CTkLabel(
+            parent, text=text, font=AppConfig.FONT_MICRO,
+            text_color=text_color, fg_color=fg_color,
+            corner_radius=AppConfig.RADIUS_BADGE, padx=8, pady=2,
+        ).pack(side="left", padx=(0, 4))
 
     # ------------------------------------------------------------------
     # Installed view toggle (M.6)
