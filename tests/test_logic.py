@@ -95,6 +95,20 @@ class TestNormalizeServerJar:
                 result = normalize_server_jar(self.tmpdir)
         assert result is True
 
+    def test_stub_server_jar_replaced_by_real_jar(self):
+        # A truncated server.jar must not be picked as its own source.
+        self._make_jar("server.jar", size=10)
+        self._make_jar("purpur-1.21.jar")
+        with patch("os.symlink", side_effect=OSError("no symlink")):
+            result = normalize_server_jar(self.tmpdir)
+        assert result is True
+        assert os.path.getsize(os.path.join(self.tmpdir, "server.jar")) == 200
+
+    def test_installer_jars_are_never_used(self):
+        self._make_jar("forge-installer.jar")
+        self._make_jar("fabric-installer.jar")
+        assert normalize_server_jar(self.tmpdir) is False
+
     def test_no_valid_jar_returns_false(self):
         result = normalize_server_jar(self.tmpdir)
         assert result is False

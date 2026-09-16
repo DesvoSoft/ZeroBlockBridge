@@ -343,96 +343,94 @@ def _try_link_or_copy(src: str, dest: str, debug_name: str) -> bool:
             return False
 
 
+_MIN_JAR_BYTES = 100
+_INSTALLER_JARS = ("forge-installer.jar", "fabric-installer.jar")
+
+
+def _is_valid_jar(path: str) -> bool:
+    """Exists, larger than a stub, and readable."""
+    try:
+        if os.path.getsize(path) <= _MIN_JAR_BYTES:
+            return False
+        with open(path, "rb") as f:
+            f.read(4)
+        return True
+    except OSError:
+        return False
+
+
+def _fabric_candidates(server_dir: str):
+    path = os.path.join(server_dir, "fabric-server-launch.jar")
+    if os.path.exists(path):
+        yield path, "fabric"
+
+
+def _forge_legacy_candidates(server_dir: str):
+    for fname in os.listdir(server_dir):
+        if fname.startswith("forge-") and fname.endswith(".jar") and "installer" not in fname:
+            yield os.path.join(server_dir, fname), "forge legacy"
+
+
+def _forge_modern_candidates(server_dir: str):
+    """Forge 1.17+ launches from libraries/; the first jar referenced by
+    win_args.txt / unix_args.txt is the server entry point."""
+    args_name = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+    for root, _dirs, files in os.walk(os.path.join(server_dir, "libraries")):
+        if args_name not in files:
+            continue
+        try:
+            with open(os.path.join(root, args_name), "r", encoding="utf-8") as f:
+                match = re.search(r"([^\s]+\.jar)", f.read())
+        except OSError as e:
+            logger.debug("Normalize: forge modern detection failed: %s", e)
+            return
+        if match:
+            lib_abs = os.path.join(server_dir, match.group(1))
+            if os.path.exists(lib_abs):
+                yield lib_abs, "forge modern"
+        return
+
+
+def _generic_candidates(server_dir: str):
+    """Paper / Purpur / anything else: the first non-installer jar."""
+    for fname in os.listdir(server_dir):
+        if fname.endswith(".jar") and fname not in _INSTALLER_JARS and fname != "server.jar":
+            yield os.path.join(server_dir, fname), "paper/purpur"
+
+
+_JAR_STRATEGIES = (_fabric_candidates, _forge_legacy_candidates, _forge_modern_candidates, _generic_candidates)
+
+
 def normalize_server_jar(server_dir: str) -> bool:
-    """Normalize the server jar to 'server.jar' for consistent access.
+    """Make the server entry jar available as 'server.jar'.
 
-    Forge uses dynamic names like 'forge-1.20.1-44.1.23.jar'.
-    This function finds the actual server entry jar and creates a
-    copy or symlink named 'server.jar' so the bytecode analyzer
-    and ServerRunner can always find it.
-
-    After creating the jar, verifies it is readable and has minimum
-    content size (> 100 bytes), then signals the per-server
-    threading.Event so consumers (bytecode analyzer, server starter)
-    can wait on it synchronously.
+    Forge and Fabric use dynamic names ('forge-1.20.1-44.1.23.jar',
+    'fabric-server-launch.jar'); a symlink (or copy when symlinks are not
+    permitted) named server.jar lets the bytecode analyzer and ServerRunner
+    always find it. Strategies are tried in order: Fabric, legacy Forge,
+    modern Forge (libraries/ args file), then any other jar. Returns True
+    only when the resulting server.jar is readable and not a stub.
     """
     server_jar_path = os.path.join(server_dir, "server.jar")
-    result = False
+    if os.path.exists(server_jar_path) and _is_valid_jar(server_jar_path):
+        return True
 
-    # Verify existing server.jar is valid
-    if os.path.exists(server_jar_path):
-        try:
-            if os.path.getsize(server_jar_path) > 100:
-                with open(server_jar_path, "rb") as _f:
-                    _f.read(4)
-                result = True
-        except OSError as e:
-            logger.debug("Normalize: existing server.jar validation failed: %s", e)
-        if result:
+    linked = any(
+        _try_link_or_copy(src, server_jar_path, label)
+        for strategy in _JAR_STRATEGIES
+        for src, label in strategy(server_dir)
+    )
+    if not linked:
+        return False
+
+    # A copy onto a slow or AV-scanned volume can lag behind the call.
+    for _ in range(10):
+        if _is_valid_jar(server_jar_path):
             return True
-
-    # Fabric
-    fabric_jar = os.path.join(server_dir, "fabric-server-launch.jar")
-    if os.path.exists(fabric_jar):
-        result = _try_link_or_copy(fabric_jar, server_jar_path, "fabric")
-
-    # Forge (legacy: forge-*.jar, excluding installer)
-    if not result:
-        for fname in os.listdir(server_dir):
-            if fname.startswith("forge-") and fname.endswith(".jar") and "installer" not in fname:
-                src = os.path.join(server_dir, fname)
-                result = _try_link_or_copy(src, server_jar_path, "forge legacy")
-                if result:
-                    break
-
-    # Forge Modern (1.17+) — look in libraries/ for the main jar via win_args.txt / unix_args.txt
-    if not result:
-        args_pattern = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
-        for root, _dirs, files in os.walk(os.path.join(server_dir, "libraries")):
-            if args_pattern in files:
-                args_path = os.path.join(root, args_pattern)
-                try:
-                    with open(args_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    lib_jar_match = re.search(r'([^\s]+\.jar)', content)
-                    if lib_jar_match:
-                        lib_rel = lib_jar_match.group(1)
-                        lib_abs = os.path.join(server_dir, lib_rel)
-                        if os.path.exists(lib_abs):
-                            result = _try_link_or_copy(lib_abs, server_jar_path, "forge modern")
-                except Exception as e:
-                    logger.debug("Normalize: forge modern detection failed: %s", e)
-                break
-
-    # Paper / Purpur — find any jar that is not an installer
-    if not result:
-        for fname in os.listdir(server_dir):
-            if fname.endswith(".jar") and fname not in ("forge-installer.jar", "fabric-installer.jar"):
-                src = os.path.join(server_dir, fname)
-                result = _try_link_or_copy(src, server_jar_path, "paper/purpur")
-                if result:
-                    break
-
-    # Final verification: ensure the created symlink/copy is readable
-    if result:
-        try:
-            for _ in range(10):
-                if os.path.exists(server_jar_path) and os.path.getsize(server_jar_path) > 100:
-                    break
-                time.sleep(0.5)
-
-            if not os.path.exists(server_jar_path) or os.path.getsize(server_jar_path) <= 100:
-                size = os.path.getsize(server_jar_path) if os.path.exists(server_jar_path) else 0
-                logger.warning("normalize_server_jar: %s is missing or too small (%d bytes)", server_jar_path, size)
-                result = False
-            else:
-                with open(server_jar_path, "rb") as _f:
-                    _f.read(4)
-        except OSError as e:
-            logger.debug("Normalize: final verification failed: %s", e)
-            result = False
-
-    return result
+        time.sleep(0.5)
+    size = os.path.getsize(server_jar_path) if os.path.exists(server_jar_path) else 0
+    logger.warning("normalize_server_jar: %s is missing or too small (%d bytes)", server_jar_path, size)
+    return False
 
 
 def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
