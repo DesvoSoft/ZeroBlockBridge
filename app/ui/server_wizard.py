@@ -569,12 +569,18 @@ class ServerWizard(ctk.CTkToplevel):
         threading.Thread(target=fetch_and_render, daemon=True).start()
 
     # --- Step 3: Rules & World ---
+    def _scroll_body(self):
+        # corner_radius=0: a rounded scrollable frame insets its content by the
+        # radius, which shifted steps 4-6 right of steps 1-3.
+        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent", corner_radius=0)
+        scroll.pack(fill="both", expand=True)
+        return scroll
+
     def show_step_4(self):
         self.clear_content()
         self.update_header("Rules & Security")
 
-        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll = self._scroll_body()
         p = scroll
 
         # Game Mode
@@ -589,77 +595,62 @@ class ServerWizard(ctk.CTkToplevel):
         self.combo_difficulty.pack(fill="x", pady=(0, 10))
         self.combo_difficulty.set(self.wizard_data["difficulty"])
         
-        # Toggles Frame
-        toggles_frame = ctk.CTkFrame(p, fg_color="transparent")
-        toggles_frame.pack(fill="x", pady=(0, 15))
-        
+        # Switches sit on a shared 3-column grid so every column lines up.
+        def switch_grid(parent, items):
+            grid = ctk.CTkFrame(parent, fg_color="transparent")
+            grid.pack(fill="x", pady=(0, 10))
+            grid.grid_columnconfigure((0, 1, 2), weight=1, uniform="switches")
+            switches = []
+            for n, (text, var) in enumerate(items):
+                sw = ctk.CTkSwitch(grid, text=text, variable=var)
+                sw.grid(row=n // 3, column=n % 3, sticky="w", pady=4)
+                switches.append(sw)
+            return switches
+
         self.var_hardcore = ctk.BooleanVar(value=self.wizard_data["hardcore"])
-        self.chk_hardcore = ctk.CTkSwitch(toggles_frame, text="Hardcore", variable=self.var_hardcore)
-        self.chk_hardcore.pack(side="left", padx=(0, 20))
-        
         self.var_whitelist = ctk.BooleanVar(value=self.wizard_data["whitelist"])
-        self.chk_whitelist = ctk.CTkSwitch(toggles_frame, text="White-list", variable=self.var_whitelist)
-        self.chk_whitelist.pack(side="left")
-
         self.var_auto_jdk = ctk.BooleanVar(value=self.wizard_data["auto_install_jdk"])
-        self.chk_auto_jdk = ctk.CTkSwitch(toggles_frame, text="Auto-install JDK if missing", variable=self.var_auto_jdk)
-        self.chk_auto_jdk.pack(side="left", padx=(20, 0))
+        self.chk_hardcore, self.chk_whitelist, self.chk_auto_jdk = switch_grid(p, [
+            ("Hardcore", self.var_hardcore),
+            ("White-list", self.var_whitelist),
+            ("Auto-install JDK", self.var_auto_jdk),
+        ])
 
-        # Security section
-        sec_frame = ctk.CTkFrame(p, fg_color="transparent")
-        sec_frame.pack(fill="x", pady=(10, 10))
-
-        ctk.CTkLabel(sec_frame, text="Security:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
-
-        sec_row1 = ctk.CTkFrame(sec_frame, fg_color="transparent")
-        sec_row1.pack(fill="x", pady=(0, 6))
-
+        ctk.CTkLabel(p, text="Security:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
         self.var_online_mode = ctk.BooleanVar(value=self.wizard_data["online_mode"])
-        self.chk_online_mode = ctk.CTkSwitch(sec_row1, text="Online Mode", variable=self.var_online_mode)
-        self.chk_online_mode.pack(side="left", padx=(0, 20))
-
         self.var_enforce_whitelist = ctk.BooleanVar(value=self.wizard_data["enforce_whitelist"])
-        self.chk_enforce_whitelist = ctk.CTkSwitch(sec_row1, text="Enforce Whitelist", variable=self.var_enforce_whitelist)
-        self.chk_enforce_whitelist.pack(side="left", padx=(0, 20))
-
         self.var_pvp = ctk.BooleanVar(value=self.wizard_data["pvp"])
-        self.chk_pvp = ctk.CTkSwitch(sec_row1, text="PvP", variable=self.var_pvp)
-        self.chk_pvp.pack(side="left")
-
-        sec_row2_sec = ctk.CTkFrame(sec_frame, fg_color="transparent")
-        sec_row2_sec.pack(fill="x", pady=(0, 4))
-
         self.var_allow_flight = ctk.BooleanVar(value=self.wizard_data["allow_flight"])
-        self.chk_allow_flight = ctk.CTkSwitch(sec_row2_sec, text="Allow Flight", variable=self.var_allow_flight)
-        self.chk_allow_flight.pack(side="left", padx=(0, 20))
-
         self.var_enforce_secure_profile = ctk.BooleanVar(value=self.wizard_data["enforce_secure_profile"])
-        self.chk_enforce_secure_profile = ctk.CTkSwitch(sec_row2_sec, text="Secure Profile", variable=self.var_enforce_secure_profile)
-        self.chk_enforce_secure_profile.pack(side="left")
-
-        sec_row2 = ctk.CTkFrame(p, fg_color="transparent")
-        sec_row2.pack(fill="x", pady=(0, 10))
-
-        ctk.CTkLabel(sec_row2, text="Max Players:", font=AppConfig.FONT_LABEL).pack(side="left", padx=(0, 10))
-        self.entry_max_players = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
-        self.entry_max_players.pack(side="left", padx=(0, 20))
-        self.entry_max_players.insert(0, str(self.wizard_data["max_players"]))
-
-        ctk.CTkLabel(sec_row2, text="Spawn Protection:", font=AppConfig.FONT_LABEL).pack(side="left", padx=(0, 10))
-        self.entry_spawn_protection = ctk.CTkEntry(sec_row2, width=60, corner_radius=AppConfig.RADIUS_BTN, height=32)
-        self.entry_spawn_protection.pack(side="left", padx=(0, 20))
-        self.entry_spawn_protection.insert(0, str(self.wizard_data["spawn_protection"]))
-
         self.var_enable_command_block = ctk.BooleanVar(value=self.wizard_data["enable_command_block"])
-        self.chk_enable_command_block = ctk.CTkSwitch(sec_row2, text="Command Blocks", variable=self.var_enable_command_block)
-        self.chk_enable_command_block.pack(side="left")
+        (self.chk_online_mode, self.chk_enforce_whitelist, self.chk_pvp,
+         self.chk_allow_flight, self.chk_enforce_secure_profile, self.chk_enable_command_block) = switch_grid(p, [
+            ("Online Mode", self.var_online_mode),
+            ("Enforce Whitelist", self.var_enforce_whitelist),
+            ("PvP", self.var_pvp),
+            ("Allow Flight", self.var_allow_flight),
+            ("Secure Profile", self.var_enforce_secure_profile),
+            ("Command Blocks", self.var_enable_command_block),
+        ])
+
+        numbers = ctk.CTkFrame(p, fg_color="transparent")
+        numbers.pack(fill="x", pady=(0, 10))
+        numbers.grid_columnconfigure((0, 1), weight=1, uniform="numbers")
+        ctk.CTkLabel(numbers, text="Max Players:", font=AppConfig.FONT_LABEL).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ctk.CTkLabel(numbers, text="Spawn Protection:", font=AppConfig.FONT_LABEL).grid(
+            row=0, column=1, sticky="w", padx=(10, 0), pady=(0, 5))
+        self.entry_max_players = ctk.CTkEntry(numbers, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.entry_max_players.grid(row=1, column=0, sticky="ew", padx=(0, 10))
+        self.entry_max_players.insert(0, str(self.wizard_data["max_players"]))
+        self.entry_spawn_protection = ctk.CTkEntry(numbers, corner_radius=AppConfig.RADIUS_BTN, height=36)
+        self.entry_spawn_protection.grid(row=1, column=1, sticky="ew", padx=(10, 0))
+        self.entry_spawn_protection.insert(0, str(self.wizard_data["spawn_protection"]))
 
     def show_step_5(self):
         self.clear_content()
         self.update_header("World & Network")
 
-        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll = self._scroll_body()
         p = scroll
 
         # Seed
@@ -683,21 +674,21 @@ class ServerWizard(ctk.CTkToplevel):
 
         # View Distance
         ctk.CTkLabel(dist_frame, text="View Distance:", font=AppConfig.FONT_LABEL).grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.lbl_view_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["view_distance"]))
-        self.lbl_view_val.grid(row=0, column=1, sticky="w", padx=(10, 20))
+        self.lbl_view_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["view_distance"]), font=AppConfig.FONT_LABEL)
+        self.lbl_view_val.grid(row=0, column=1, sticky="e", pady=(0, 5))
 
         self.slider_view = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_view_label)
         self.slider_view.set(int(self.wizard_data["view_distance"]))
-        self.slider_view.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 20))
+        self.slider_view.grid(row=1, column=0, columnspan=2, sticky="ew")
 
         # Simulation Distance
         ctk.CTkLabel(dist_frame, text="Simulation Distance:", font=AppConfig.FONT_LABEL).grid(row=2, column=0, sticky="w", pady=(10, 5))
-        self.lbl_sim_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["simulation_distance"]))
-        self.lbl_sim_val.grid(row=2, column=1, sticky="w", padx=10)
+        self.lbl_sim_val = ctk.CTkLabel(dist_frame, text=str(self.wizard_data["simulation_distance"]), font=AppConfig.FONT_LABEL)
+        self.lbl_sim_val.grid(row=2, column=1, sticky="e", pady=(10, 5))
 
         self.slider_sim = ctk.CTkSlider(dist_frame, from_=2, to=32, number_of_steps=30, command=self.update_sim_label)
         self.slider_sim.set(int(self.wizard_data["simulation_distance"]))
-        self.slider_sim.grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 20))
+        self.slider_sim.grid(row=3, column=0, columnspan=2, sticky="ew")
 
     def update_view_label(self, value):
         self.wizard_data["view_distance"] = str(int(value))
@@ -712,8 +703,7 @@ class ServerWizard(ctk.CTkToplevel):
         self.clear_content()
         self.update_header("Summary")
 
-        scroll = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
-        scroll.pack(fill="both", expand=True)
+        scroll = self._scroll_body()
         p = scroll
 
         d = self.wizard_data
