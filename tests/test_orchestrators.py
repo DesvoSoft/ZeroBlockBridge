@@ -232,10 +232,14 @@ class TestBackupOrchestrator:
             MockBM.return_value.create_backup.side_effect = RuntimeError("unexpected")
             MockSched.return_value.get_config.return_value = {}
 
-            with pytest.raises(RuntimeError):
-                orch._run_auto_backup()
+            # This runs fire-and-forget on an executor in production — nobody
+            # calls .result() on the future — so an unexpected exception must
+            # be caught here, not left to propagate and vanish silently.
+            orch._run_auto_backup()
 
         assert mgr._backup_in_progress is False
+        assert any(e[0] == ServerEvent.BACKUP_FAILED for e in mgr.events.events)
+        assert any(e[0] == ServerEvent.NOTIFICATION and e[1]["type"] == "error" for e in mgr.events.events)
 
     def test_pre_update_snapshot_refused_while_server_running(self):
         mgr = _make_manager()

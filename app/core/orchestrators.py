@@ -149,16 +149,27 @@ class BackupOrchestrator:
 
     def _run_auto_backup(self) -> None:
         try:
-            bm = BackupManager(self.manager.current_server)
-            config = BackupScheduler(self.manager.current_server).get_config()
-            path, error = bm.create_backup(retention_count=config.get("retention_count"))
-            if path:
-                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
-                self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.manager.current_server})
-            else:
-                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
-                self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.manager.current_server})
-            BackupScheduler(self.manager.current_server).mark_run()
+            try:
+                bm = BackupManager(self.manager.current_server)
+                config = BackupScheduler(self.manager.current_server).get_config()
+                path, error = bm.create_backup(retention_count=config.get("retention_count"))
+                if path:
+                    self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
+                    self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.manager.current_server})
+                else:
+                    self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+                    self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.manager.current_server})
+                BackupScheduler(self.manager.current_server).mark_run()
+            except Exception as exc:
+                # This runs fire-and-forget on the executor — nobody calls .result()
+                # on the future, so an uncaught exception here would vanish silently
+                # and the user would never learn the auto-backup failed.
+                logger.exception("Auto-backup task raised unexpectedly")
+                self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": str(exc), "server": self.manager.current_server})
+                self.manager.events.emit(ServerEvent.NOTIFICATION, {
+                    "msg": f"Auto-backup failed unexpectedly: {exc}",
+                    "type": "error",
+                })
         finally:
             with self.manager._backup_lock:
                 self.manager._backup_in_progress = False
@@ -220,51 +231,57 @@ class SchedulerOrchestrator:
             while self.manager._tick_running:
                 now = time.time()
 
-                if getattr(self.manager, "_heartbeat", None):
-                    self.manager._heartbeat.tick(now)
+                try:
+                    if getattr(self.manager, "_heartbeat", None):
+                        self.manager._heartbeat.tick(now)
 
-                # Player sync — checked 1x/sec, emitted only on change
-                # (join/leave already emit; this is a safety-net resync).
-                if self.manager.server_runner and self.manager.server_runner.running:
-                    if now - last_player_emit >= 1.0:
-                        count = self.manager.server_runner.player_count
-                        if count != last_player_count:
-                            self.manager.events.emit(ServerEvent.PLAYER_COUNT, count)
-                            last_player_count = count
-                        last_player_emit = now
+                    # Player sync — checked 1x/sec, emitted only on change
+                    # (join/leave already emit; this is a safety-net resync).
+                    if self.manager.server_runner and self.manager.server_runner.running:
+                        if now - last_player_emit >= 1.0:
+                            count = self.manager.server_runner.player_count
+                            if count != last_player_count:
+                                self.manager.events.emit(ServerEvent.PLAYER_COUNT, count)
+                                last_player_count = count
+                            last_player_emit = now
 
-                if now - last_sched_check >= AppConfig.SCHEDULER_CHECK_INTERVAL:
-                    last_sched_check = now
-                    if self.manager.server_runner and self.manager.server_runner.running and self.manager.current_server:
-                        service = Scheduler(self.manager.current_server)
-                        status = service.get_status()
-                        if status:
-                            with self.manager._restart_warnings_lock:
-                                key, message = Scheduler.get_warning_message(status["remaining_seconds"], self.manager.restart_warnings_sent)
-                                if key:
-                                    self.manager._send_system_message(message)
-                                    self.manager.restart_warnings_sent.add(key)
-
-                            if status["is_due"]:
-                                self.manager.events.emit(ServerEvent.CONSOLE_LINE, "[System] Scheduled restart due. Initiating final countdown...")
-                                self.manager.events.emit(ServerEvent.REQUEST_RESTART, {"reason": "scheduled"})
-                                service.update_last_run()
+                    if now - last_sched_check >= AppConfig.SCHEDULER_CHECK_INTERVAL:
+                        last_sched_check = now
+                        if self.manager.server_runner and self.manager.server_runner.running and self.manager.current_server:
+                            service = Scheduler(self.manager.current_server)
+                            status = service.get_status()
+                            if status:
                                 with self.manager._restart_warnings_lock:
-                                    self.manager.restart_warnings_sent.clear()
-                            elif status.get("missed") and self._missed_notified_date != datetime.date.today():
-                                self._missed_notified_date = datetime.date.today()
-                                logger.warning(
-                                    "Scheduled restart for '%s' was missed (target passed >120s ago). "
-                                    "Next window: tomorrow at configured time.",
-                                    self.manager.current_server
-                                )
-                                self.manager.events.emit(ServerEvent.NOTIFICATION, {
-                                    "msg": "Scheduled restart was missed (system was busy). Next attempt tomorrow.",
-                                    "type": "warning",
-                                })
+                                    key, message = Scheduler.get_warning_message(status["remaining_seconds"], self.manager.restart_warnings_sent)
+                                    if key:
+                                        self.manager._send_system_message(message)
+                                        self.manager.restart_warnings_sent.add(key)
 
-                        self.manager.backup_orchestrator._check_auto_backup()
-                
+                                if status["is_due"]:
+                                    self.manager.events.emit(ServerEvent.CONSOLE_LINE, "[System] Scheduled restart due. Initiating final countdown...")
+                                    self.manager.events.emit(ServerEvent.REQUEST_RESTART, {"reason": "scheduled"})
+                                    service.update_last_run()
+                                    with self.manager._restart_warnings_lock:
+                                        self.manager.restart_warnings_sent.clear()
+                                elif status.get("missed") and self._missed_notified_date != datetime.date.today():
+                                    self._missed_notified_date = datetime.date.today()
+                                    logger.warning(
+                                        "Scheduled restart for '%s' was missed (target passed >120s ago). "
+                                        "Next window: tomorrow at configured time.",
+                                        self.manager.current_server
+                                    )
+                                    self.manager.events.emit(ServerEvent.NOTIFICATION, {
+                                        "msg": "Scheduled restart was missed (system was busy). Next attempt tomorrow.",
+                                        "type": "warning",
+                                    })
+
+                            self.manager.backup_orchestrator._check_auto_backup()
+                except Exception:
+                    # A single bad tick (e.g. corrupted metadata.json) must never kill this
+                    # daemon thread — that would silently stop scheduling/backup/heartbeat
+                    # for the rest of the session with no visible error.
+                    logger.exception("ServerTickThread: unhandled error in tick iteration")
+
                 # 100ms cadence: fastest consumer (player sync) only needs 1s;
                 # heartbeat/scheduler decide on 30-60s intervals.
                 elapsed = time.time() - now
