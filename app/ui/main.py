@@ -22,6 +22,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.ui.ui_components import ConsoleWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color
+from app.ui.win_effects import apply_rounded_corners, apply_titlebar_brand_color
 from app.ui.icons import icon
 
 import app.core.logic as logic
@@ -62,6 +63,38 @@ class MCTunnelApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self._sidebar_compact = False
         self.bind("<Configure>", self._on_window_resize, add="+")
+        self._apply_app_icon()
+        self._apply_window_effects()
+
+    def _apply_app_icon(self):
+        """Set the taskbar/titlebar icon for the live window.
+
+        PyInstaller's spec `icon=` only brands the built .exe file itself —
+        it does nothing for a Tk window's own WM_SETICON, so both the
+        packaged build and `py app/launcher.py` dev runs showed the default
+        Tk feather icon in the taskbar/titlebar without this. iconphoto's
+        `True` argument also makes this the default icon for every
+        CTkToplevel dialog spawned later (they don't need their own call).
+        """
+        try:
+            if sys.platform == "win32":
+                self.iconbitmap(default=str(ASSETS_DIR / "logo.ico"))
+            else:
+                import tkinter as tk
+                self._app_icon_photo = tk.PhotoImage(file=str(ASSETS_DIR / "logo.png"))
+                self.iconphoto(True, self._app_icon_photo)
+        except Exception as e:
+            logger.debug("Could not set app icon: %s", e)
+
+    def _apply_window_effects(self):
+        """Round the corners + brand the native titlebar (Win11 22000+, no-op
+        elsewhere). Keeps the OS-native titlebar — deliberately not a frameless
+        custom one, see win_effects.apply_titlebar_brand_color's docstring."""
+        apply_rounded_corners(self)
+        light = ctk.get_appearance_mode() == "Light"
+        bg = AppConfig.COLOR_BG_SIDEBAR_LIGHT if light else AppConfig.COLOR_BG_SIDEBAR_DARK
+        text = AppConfig.COLOR_TEXT_PRIMARY[0] if light else AppConfig.COLOR_TEXT_PRIMARY[1]
+        apply_titlebar_brand_color(self, bg, text)
 
     def _on_window_resize(self, event):
         # Narrow windows: give the sidebar's spare width to the main area, where

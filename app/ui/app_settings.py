@@ -192,6 +192,11 @@ class AppSettingsDialog(ctk.CTkToplevel):
             self.lift()
             self.focus_force()
         apply_titlebar_theme(self)
+        # Main window's branded titlebar color is only applied once at
+        # startup (not part of CTk's own automatic re-theme) — refresh it
+        # here so a live Dark/Light switch doesn't leave it stale.
+        if hasattr(self.master, "_apply_window_effects"):
+            self.master._apply_window_effects()
 
     # ------------------------------------------------------------------
     # Tab: Notifications

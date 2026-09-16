@@ -16,6 +16,15 @@ _DWMWCP_ROUND = 2
 _DWMWCP_ROUNDSMALL = 3
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19
+_DWMWA_CAPTION_COLOR = 35
+_DWMWA_TEXT_COLOR = 36
+
+
+def _colorref(hex_color: str) -> int:
+    """'#RRGGBB' -> Windows COLORREF (0x00BBGGRR — reversed byte order)."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return (b << 16) | (g << 8) | r
 
 
 def _hwnd(window):
@@ -47,6 +56,37 @@ def apply_titlebar_theme(window) -> None:
             )
     except (OSError, AttributeError) as e:
         logger.debug("DWM titlebar theme unavailable: %s", e)
+
+
+def apply_titlebar_brand_color(window, bg_hex: str, text_hex: str) -> None:
+    """Tint a Win11 native titlebar with the app's own colors (DWMWA_CAPTION_COLOR
+    / DWMWA_TEXT_COLOR, build 22000+ only). Keeps the OS-native titlebar — and
+    with it every bit of native window behavior (taskbar entry, Aero Snap,
+    Alt-Tab thumbnail, minimize/restore, resize borders) — while still giving
+    the window a branded look instead of default Windows gray/black. No-op
+    on Win10 or older Win11 builds (DwmSetWindowAttribute just fails, silently).
+
+    A fully custom (frameless) titlebar was considered instead but rejected:
+    overrideredirect() on Windows is notorious for losing the taskbar entry
+    and breaking iconify/restore, which is a real regression for an app whose
+    whole point is glanceable "is my server still up" status.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = _hwnd(window)
+        caption = ctypes.c_int(_colorref(bg_hex))
+        text = ctypes.c_int(_colorref(text_hex))
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, _DWMWA_CAPTION_COLOR, ctypes.byref(caption), ctypes.sizeof(caption)
+        )
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, _DWMWA_TEXT_COLOR, ctypes.byref(text), ctypes.sizeof(text)
+        )
+    except (OSError, AttributeError) as e:
+        logger.debug("DWM titlebar brand color unavailable: %s", e)
 
 
 def apply_rounded_corners(window, small: bool = False) -> None:
