@@ -354,6 +354,10 @@ class ZBBManager:
     def is_running(self) -> bool:
         return self.server_orchestrator.is_running()
 
+    def server_memory_usage(self) -> Optional[int]:
+        """Resident memory (bytes) of the running server, or None."""
+        return self.server_orchestrator.memory_usage_bytes()
+
     def delete_backup(self, server_name: str, backup_path: str) -> tuple[bool, Optional[str]]:
         return self.backup_orchestrator.delete_backup(server_name, backup_path)
 

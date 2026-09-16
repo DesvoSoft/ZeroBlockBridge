@@ -718,6 +718,26 @@ class ServerRunner:
         })
         self.process = None
 
+    def memory_usage_bytes(self) -> Optional[int]:
+        """Resident memory of the server process plus its children (a Forge
+        run script launches java as a child), or None when not running."""
+        proc = self.process
+        if proc is None or not self.running:
+            return None
+        import psutil
+        try:
+            root = psutil.Process(proc.pid)
+            total = root.memory_info().rss
+            for child in root.children(recursive=True):
+                try:
+                    total += child.memory_info().rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            return total
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+            logger.debug("Server memory usage unavailable: %s", e)
+            return None
+
     def _read_stderr(self):
         self._stderr_done.clear()
         if not self.process or not self.process.stderr:

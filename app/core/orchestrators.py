@@ -4,6 +4,7 @@ import time
 import os
 import threading
 from pathlib import Path
+from typing import Optional
 from app.core.server_events import ServerEvent
 from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
@@ -90,6 +91,10 @@ class ServerOrchestrator:
 
     def is_running(self) -> bool:
         return self.manager.server_runner is not None and self.manager.server_runner.running
+
+    def memory_usage_bytes(self) -> Optional[int]:
+        runner = self.manager.server_runner
+        return runner.memory_usage_bytes() if runner is not None else None
 
     def send_command(self, cmd: str) -> None:
         if self.manager.server_runner and self.manager.server_runner.running:

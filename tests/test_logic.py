@@ -562,3 +562,33 @@ class TestDeleteServer:
         with patch("app.core.logic.SERVERS_DIR", str(tmp_path)):
             delete_server("empty")
         assert not server.exists()
+
+
+class TestServerRunnerMemoryUsage:
+    def _runner(self, running=True, process=True):
+        runner = ServerRunner("srv", "1024M", MagicMock())
+        runner.process = MagicMock(pid=4242) if process else None
+        runner.running = running
+        return runner
+
+    def test_sums_process_and_children(self):
+        import psutil
+        root = MagicMock()
+        root.memory_info.return_value.rss = 1000
+        child_ok = MagicMock()
+        child_ok.memory_info.return_value.rss = 500
+        child_gone = MagicMock()
+        child_gone.memory_info.side_effect = psutil.NoSuchProcess(1)
+        root.children.return_value = [child_ok, child_gone]
+        with patch("psutil.Process", return_value=root) as mock_proc:
+            assert self._runner().memory_usage_bytes() == 1500
+        mock_proc.assert_called_once_with(4242)
+
+    def test_none_when_not_running(self):
+        assert self._runner(running=False).memory_usage_bytes() is None
+        assert self._runner(process=False).memory_usage_bytes() is None
+
+    def test_none_when_process_vanished(self):
+        import psutil
+        with patch("psutil.Process", side_effect=psutil.NoSuchProcess(4242)):
+            assert self._runner().memory_usage_bytes() is None
