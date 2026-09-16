@@ -212,27 +212,12 @@ class ModrinthClient:
         only unpinned required deps need a per-project version lookup, since
         the API has no bulk filtered-version endpoint.
         """
-        required_deps = {}  # project_id -> pinned version_id (or None), insertion-ordered
-        incompatible_ids = []
-        for dep in version.get("dependencies", []):
-            dep_type = dep.get("dependency_type")
-            project_id = dep.get("project_id")
-            if not project_id:
-                continue
-            if dep_type == "required" and project_id not in required_deps:
-                required_deps[project_id] = dep.get("version_id")
-            elif dep_type == "incompatible" and project_id not in incompatible_ids:
-                incompatible_ids.append(project_id)
-
+        required_deps, incompatible_ids = self._collect_dependency_ids(version)
         all_ids = list(required_deps) + [p for p in incompatible_ids if p not in required_deps]
         if not all_ids:
             return {"required": [], "incompatible": []}
         try:
-            projects = {}
-            for p in self.get_projects(all_ids):
-                # The endpoint accepts IDs or slugs; index by both so either matches.
-                projects[p.get("id")] = p
-                projects[p.get("slug")] = p
+            projects = self._fetch_projects_indexed(all_ids)
         except ModrinthException as exc:
             logger.warning("Could not resolve dependencies %s: %s", all_ids, exc)
             return {"required": [], "incompatible": []}
@@ -244,10 +229,40 @@ class ModrinthClient:
             project = projects.get(pid)
             if project is None:
                 logger.warning("Dependency %s not found on Modrinth", pid)
-                continue
-            if project.get("slug") not in installed_slugs:
+            elif project.get("slug") not in installed_slugs:
                 pending[pid] = project
 
+        resolved = self._resolve_dependency_versions(pending, required_deps, mc_version, loader)
+        return {"required": resolved, "incompatible": incompatible}
+
+    @staticmethod
+    def _collect_dependency_ids(version: dict) -> tuple[dict, list]:
+        """({required project_id: pinned version_id or None}, [incompatible
+        project_ids]), deduplicated and in declaration order."""
+        required_deps = {}
+        incompatible_ids = []
+        for dep in version.get("dependencies", []):
+            project_id = dep.get("project_id")
+            if not project_id:
+                continue
+            dep_type = dep.get("dependency_type")
+            if dep_type == "required" and project_id not in required_deps:
+                required_deps[project_id] = dep.get("version_id")
+            elif dep_type == "incompatible" and project_id not in incompatible_ids:
+                incompatible_ids.append(project_id)
+        return required_deps, incompatible_ids
+
+    def _fetch_projects_indexed(self, ids: List[str]) -> Dict[str, Dict]:
+        """Bulk-fetch projects, indexed by both id and slug (the endpoint
+        accepts either, so a dependency may reference a slug)."""
+        projects = {}
+        for p in self.get_projects(ids):
+            projects[p.get("id")] = p
+            projects[p.get("slug")] = p
+        return projects
+
+    def _resolve_dependency_versions(self, pending: Dict[str, Dict], required_deps: Dict[str, Optional[str]],
+                                     mc_version: str, loader: str) -> List[Dict]:
         pinned_ids = [required_deps[pid] for pid in pending if required_deps[pid]]
         pinned_versions = {}
         if pinned_ids:
@@ -270,8 +285,7 @@ class ModrinthClient:
                 dep_version = versions[0] if versions else None
             if dep_version:
                 resolved.append({"project": project, "version": dep_version})
-
-        return {"required": resolved, "incompatible": incompatible}
+        return resolved
 
     # ------------------------------------------------------------------
     # Public API — Download + Install
