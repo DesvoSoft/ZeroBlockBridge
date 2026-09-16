@@ -82,6 +82,8 @@ Single source of truth for server lifecycle. Responsibilities:
 | `stop_server()` | `ServerOrchestrator.stop_server()` (full monitor teardown first) |
 | `send_command(cmd)` | `ServerOrchestrator.send_command()` — sanitizer gate |
 | `is_running()` | `ServerOrchestrator.is_running()` |
+| `server_memory_usage()` | `ServerOrchestrator.memory_usage_bytes()` → `ServerRunner.memory_usage_bytes()`: psutil resident memory of the server process + children, `None` when not running (header RAM readout) |
+| `delete_backup(name, path)` | `BackupOrchestrator.delete_backup()` → `BackupManager.delete_backup()`; refuses anything but a `.zip` directly in that server's backup dir |
 | `create_pre_update_snapshot(name)` | `BackupOrchestrator.create_pre_update_snapshot()` — blocking, call from a worker |
 | `start_tunnel()` / `stop_tunnel()` / `reset_tunnel(mode)` | `TunnelOrchestrator` |
 | `create_tunnel_for_server(name)` / `get_tunnel_ip()` | `TunnelOrchestrator` |
@@ -240,8 +242,8 @@ Subscribes to `CRASHED` event. On each crash:
 
 - Mod updates (single-badge and bulk "Update Selected") call `ZBBManager.create_pre_update_snapshot(server_name)` — injected into `ModrinthBrowser` as the `create_snapshot` callback, so the UI never touches `BackupManager` — before any file changes. Ordering lives in the pure helper `_snapshot_then_apply`: snapshot failure aborts the update rather than proceeding without a rollback point.
 - The orchestrator refuses a snapshot when the target is the active, running server (locked files), when another backup holds `_backup_in_progress`, and **discards** a snapshot that skipped locked files instead of reporting it as a usable rollback point. Emits `BACKUP_COMPLETED` / `BACKUP_FAILED` like scheduled backups.
-- Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason` — pruning pre-update snapshots (default cap: 5) can never delete a user's manual/scheduled backups, and vice versa.
-- Rollback reuses the existing Backups tab restore flow (`server_properties_editor.py`), which now labels pre-update snapshots ("Pre-Update — ...") instead of introducing a second restore path.
+- Backup reasons: `manual` (untagged filename, "Create Backup"), `auto` (scheduled auto-backups and the optional backup before a scheduled restart — both honor the user's "keep last N"), `pre_update` (default cap: 5). Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason`, so no rotation ever deletes another reason's backups — in particular the auto-backup rotation never touches manual backups (it did before `auto` existed).
+- Rollback reuses the Backups tab restore flow (`server_properties_editor.py`): one row per backup with a reason chip (Manual / Auto / Pre-update), size chip, per-row **Restore** (blocked while the server runs) and **Delete** (via `ZBBManager.delete_backup`), and **Open Folder** for the backup directory.
 
 ### Notifications
 
@@ -305,6 +307,7 @@ These rules must never be violated:
 - The choice is persisted in `install.json` under `%LOCALAPPDATA%\ZeroBlockBridge\` (Linux: `~/.zeroblockbridge/`) and exported as `ZBB_DATA_DIR` before `constants` is imported, which honors that variable first.
 - Bundled read-only assets always come from the PyInstaller `_MEIPASS` dir, independent of `BASE_DIR`.
 - Settings → Storage shows the active location (with **Open Folder**) and disk usage for Servers, Backups, Java runtimes, Crash reports, and Versions cache, plus **Clear Crash Reports**. Managed JDK purge lives in Settings → Java.
+- `config/zbb_settings.json` (`SettingsManager`, 500ms debounced writes, flushed on close) also stores UI session state: `window_geometry` (logical `WxH+X+Y`, last normal — not maximized — size), `window_zoomed`, `last_server`, `last_console_tab`. On launch the geometry is restored only if it lands on the current virtual desktop (`window_state.restorable_geometry`).
 
 ---
 
@@ -325,8 +328,10 @@ ZeroBlockBridge/
 │   │   ├── first_run_dialog.py        # First-launch data directory picker: Standard/Portable/Custom (~174 LOC)
 │   │   ├── toast.py                   # Non-blocking notification overlay (~200 LOC)
 │   │   ├── icons.py                   # PIL-drawn, theme-tintable icon set — replaces emoji (~210 LOC)
-│   │   ├── win_effects.py             # Win11 DWM rounded corners + shadow, no-op elsewhere (~69 LOC)
-│   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, ZBBDialog, EulaDialog (~673 LOC)
+│   │   ├── win_effects.py             # Win11 DWM corners + shadow, tinted theme-following titlebar, app icon; no-op elsewhere
+│   │   ├── window_state.py            # Pure helpers: validate a saved main-window geometry against the current desktop
+│   │   ├── formatting.py              # Pure helpers: uptime ("1h 20m") and RAM ("RAM 1.3 / 2.0 GB") readouts
+│   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, ZBBDialog, EulaDialog, dialog_buttons
 │   │
 │   ├── core/                          # Orchestration & Business Logic
 │   │   ├── bootstrap.py               # Resolves data dir before any other module reads a path (~86 LOC)

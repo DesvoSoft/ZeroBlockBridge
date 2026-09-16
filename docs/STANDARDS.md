@@ -133,7 +133,7 @@ Any other literal is a visual regression.
 
 ### 3.3 Colors
 
-Use `AppConfig` constants only. Hardcoded color literals (`"green"`, `"white"`, `"gray"`, `"#f97316"`) in widget calls are banned. "Dirt Block" palette — lime green primary, brown secondary, slate backgrounds, **no blue accents**. Tokens are `(light, dark)` tuples where they differ:
+Use `AppConfig` constants only. Hardcoded color literals (`"green"`, `"white"`, `"gray"`, `"#f97316"`) in widget calls are banned. "Dirt Block" palette — lime green primary, brown secondary, slate backgrounds, **no blue accents** (single exception: `COLOR_ADDRESS`, the tunnel join address, so the thing to share stands out). Tokens are `(light, dark)` tuples where they differ:
 
 | Token | Value | Use |
 |-------|-------|-----|
@@ -142,13 +142,15 @@ Use `AppConfig` constants only. Hardcoded color literals (`"green"`, `"white"`, 
 | `COLOR_BG_CARD_DARK` | `#243044` | Cards/panels (dark) |
 | `COLOR_BTN_PRIMARY` | `#65a30d` lime-600 | Primary actions |
 | `COLOR_BTN_SECONDARY` | `#92400e` amber-800 (brown) | Secondary actions |
-| `COLOR_BTN_SUCCESS` | `#16a34a` green-600 | Start buttons |
+| `COLOR_BTN_SUCCESS` | `#16a34a` green-600 | Start buttons only — dialog confirms use `COLOR_BTN_PRIMARY` |
 | `COLOR_BTN_DANGER` | `#dc2626` red-600 | Stop/destructive |
 | `COLOR_BTN_GHOST` | slate-100 / slate-800 | Low-emphasis actions |
 | `COLOR_ACCENT_AMBER` | `#d97706` amber-600 | Highlights, warnings |
 | `COLOR_STATUS_ONLINE` / `_STARTING` / `_ERROR` | lime-400 / amber-400 / red-400 | Status dots, console tags |
 | `COLOR_TEXT_ON_ACCENT` | `#ffffff` | Text/icons on saturated fills (buttons, toasts) |
 | `COLOR_TEXT_ON_BRIGHT` | `#0f172a` | Text/icons on bright fills (lime-400 badges) |
+| `COLOR_BADGE_*` (`BG`/`TEXT`, `NEUTRAL_`, `DANGER_`, `WARNING_`) | pairs | Chips/pills (e.g. backup reason: Manual neutral, Auto lime, Pre-update amber) |
+| `COLOR_ADDRESS` | blue-600 / blue-400 | Tunnel join address and its copy button — nothing else |
 
 Elevation comes from background contrast, not borders — cards use `border_width=0`. Borders are reserved for outline buttons, selection rings (selected server row), and the toast accent edge.
 
@@ -172,11 +174,15 @@ Roboto is not installed on stock Windows — never use it.
 - Icons come from `app/ui/icons.py` — `icon(name, size, color)`, PIL-drawn, antialiased, theme-tintable. **Never use emoji** as button/label icons (Tk renders them misaligned and untintable).
 - Icon-only buttons need a `ToolTip`.
 - Status severity is an explicit `kind` (`success`/`error`/`warning`) rendered with a tinted icon — never a leading ✓/✗/⚠ glyph in the text.
+- Outlined buttons: `border_width=AppConfig.BORDER_BTN` (2). 1px CTk borders break up around rounded corners.
+- A disabled action button switches to `COLOR_BTN_GHOST` fill (and `COLOR_TEXT_PRIMARY` text), so it doesn't read as clickable (Send, Install Selected, Update/Delete (n)).
+- Row labels mirror each other: a gray label plus a colored state ("Server: ● Running", "Tunnel: ● Online").
 
 ### 3.6 Dialogs & Windows
 
 - Confirmations/info/text input: `ZBBDialog.confirm()` / `ZBBDialog.info()` / `ZBBDialog.ask_string()` from `ui_components.py`. Never `tkinter.messagebox` or `ctk.CTkInputDialog` (native gray dialog clashes with the dark theme). Only exception: the single-instance warning shown before the app window exists.
-- Every `CTkToplevel`: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (Win11 native corners + shadow; no-op elsewhere).
+- Every `CTkToplevel`: call `apply_rounded_corners(window)` from `app/ui/win_effects.py` (Win11 native corners + shadow; no-op elsewhere). It also sets the app icon (CTkToplevel otherwise swaps in CustomTkinter's blue logo ~200ms after creation) and tints the titlebar with the window's `fg_color`, re-applied on every Dark/Light switch. Pass `caption_color=(light, dark)` to tint with something else (the main window uses the sidebar color).
+- Footer buttons: `dialog_buttons(parent, primary_text, on_primary, secondary_text, on_secondary, danger=..., primary_colors=...)` from `ui_components.py` — right-aligned, primary action rightmost, outlined secondary beside it. Don't hand-build dialog footers.
 
 ### 3.7 Layout
 
@@ -184,10 +190,24 @@ Roboto is not installed on stock Windows — never use it.
 - Check the minimum window size (`AppConfig.MIN_WIDTH` × `MIN_HEIGHT`, 900×580). Below `SIDEBAR_COMPACT_BELOW` the sidebar shrinks to `SIDEBAR_WIDTH_COMPACT`.
 - In rows that can clip from the right (badge rows), put status before decoration.
 - Show values the way users think about them: `Yes`/`No`, not `True`/`False`; server.properties keys via `property_label()` ("Spawn NPCs", not "Spawn Npcs").
+- **Alignment**: controls stacked in one panel share a right edge. Settings rows use a fixed-width control column (`server_properties_editor._CONTROL_WIDTH`, help/impact columns with `minsize`) so every card lines up; text-less switches use `_bare_switch()` (CTkSwitch otherwise reserves an empty label column); sibling rows (server/tunnel) use identical insets and heights.
+- A `CTkScrollableFrame` holding aligned content uses `corner_radius=0` — a rounded one insets its content by the radius and shifts it off the column of the widgets above/below.
+- Readouts that don't fit at compact width (below `SIDEBAR_COMPACT_BELOW`) are hidden rather than squeezed (e.g. the header RAM label).
 
 ### 3.8 UI Thread Safety
 
 Never read widgets from a background thread. Always `self.after(0, lambda: self.widget.configure(...))`.
+
+### 3.9 Rendering Long Lists Without Pop-in
+
+Each CTk widget is several native windows that draw themselves on `<Configure>`, i.e. after layout, one by one. Rules for lists of cards/rows (`modrinth_browser.py` is the reference):
+
+- Build rows **under a cover** (an overlay styled like the empty list) or **beneath** the visible list, lay them out in small batches (`update_idletasks()` per batch keeps a spinner animating), and reveal only after the last batch is drawn (`ModrinthBrowser._reveal_when_drawn`).
+- Switch views by stacking ready frames in one grid cell and `tkraise`-ing the wanted one. Never `grid_remove()`/`grid()` a populated list: re-mapping redraws every widget visibly.
+- Keep geometry stable across views (shared footer in the same slot), so a switch doesn't resize the list.
+- When one item changes (install/uninstall/delete), replace that row only — create the new row in the same grid cell, then destroy the old one.
+- Show a loading message immediately for network loads and don't reset it when the data arrives; delay it (`delay_spinner=True`) only for local refreshes that are usually instant.
+- Verify with an external capture (another process calling `PrintWindow` on the window); frames grabbed from inside the Tk loop stall with it and misrepresent what the user sees.
 
 ---
 

@@ -11,12 +11,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - **Application log file** — the app now writes `logs/zbb.log` (rotating, 2 MB × 3) in the data folder, including crashes in background threads and UI callbacks. The released Windows build has no console, so until now every log line was lost. Settings → About has an **Open Logs Folder** button to attach it to bug reports.
 - Mods status bar shows a tinted success/error/warning icon; long messages are shortened with the full text on hover.
+- **Live server status** — the header reads "Starting… 12s" while the server boots and "Running · 1h 20m" once it is up, shows the server's memory use against its allocation ("RAM 1.3 / 2.0 GB", hidden at narrow window widths) and players as online/max ("2/20").
+- **The app remembers where you left off** — window size, position and maximized state, the last selected server and the last console tab are restored on launch (a position on a monitor that is no longer connected is ignored).
+- **Console command history** — Up/Down in the command input recall the last 50 commands sent.
+- **Backups tab rework** — each backup is a row with its date, a reason chip (Manual, Auto, Pre-update) and size, plus its own Restore and **Delete** buttons; **Open Folder** jumps to the server's backup directory.
+- **Installed mod count** — the Mods tab's Installed button shows how many mods/plugins the server has, with an amber dot and "N updates available" tooltip when newer versions exist.
+- Servers without an icon get a colored initial tile in the sidebar list.
 
 ### Changed
 - Dependencies are pinned to the exact tested versions (`requirements.txt`, new `requirements-dev.txt`), so CI and release builds install the same packages; Dependabot proposes weekly updates.
 - Server creation logic moved out of the main window into a core provisioning module. The progress bar no longer jumps back from 100% to 25% after the download.
 - Mod dependency lookups use bulk Modrinth requests instead of two requests per dependency.
 - All fonts and colors come from the design tokens (the creation wizard used ad-hoc sizes); text inputs use a themed dialog instead of CustomTkinter's unthemed input box.
+- **Mod lists no longer pop in widget by widget** — search pages render behind the "Loading mods" cover until fully drawn, switching between Explore and Installed swaps two ready lists instead of rebuilding them, and installing or uninstalling a mod only redraws that card. Both views share one footer, so the status line stays visible in Installed and the list keeps its size.
+- The Mods tab reloads its results (or the Installed list) for the newly selected server when you switch servers.
+- The console command input is disabled while the server is stopped, with a hint saying why, instead of accepting commands and answering "Server is not running".
+- The header reads "Server: ● Running" / "Tunnel: ● Online" with the labels in gray and only the state colored; the tunnel join address is blue so it stands out as the thing to share.
+- Layout alignment pass: server and tunnel start buttons share one right edge and both rows are the same height; the properties editor lines up every "?" badge, impact dot, switch and input in one control column, and its Automation tab uses the same layout as the other tabs; wizard steps 4–6 line up with steps 1–3 and the Rules & Security switches sit on a grid; the Settings cards are visibly raised with the Notifications buttons aligned to them; the Mods search bar and footer use even insets.
+- Every dialog uses the same footer buttons: secondary (outlined) next to the primary action on the right. Dialog primary actions use the lime primary color; green is kept for start buttons.
+- Outlined buttons use a 2px border (1px borders looked broken around rounded corners).
+- Every dialog shows the app icon and a titlebar tinted to match its background, and titlebars follow live Dark/Light switches.
 
 ### Fixed
 - A server that failed to launch because Java could not be started stayed stuck on "Starting" with no error.
@@ -28,6 +42,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Opening a dialog from the creation wizard or the properties editor made that window stop being modal.
 - Toast badges rendered as pills instead of circles, and single-line messages were centered.
 - Long Mods status messages pushed the page controls out of view at small window sizes.
+- Scheduled and pre-restart backups were saved as manual backups, so the auto-backup "keep last N" setting also deleted backups you made by hand. Automatic backups are now tagged "auto" and only they are rotated.
+- The server stop button jumped next to the server name once the server started.
+- Light mode: mod cards were white on a white list and couldn't be told apart.
+- The "Loading mods" message went blank as soon as search results arrived, leaving an empty panel while the page was built.
+- Settings, Properties, Players and the other dialogs showed CustomTkinter's blue icon instead of the app's.
 
 ## [2.1.0] — 2026-09-16
 

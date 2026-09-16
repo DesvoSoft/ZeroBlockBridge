@@ -49,9 +49,10 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 
 - **Guided Server Creation** — 6-step wizard covering every major flavor (Vanilla/Fabric/Forge/Paper/Purpur), with templates, RAM allocation, and an integrated console with search and colored log lines.
 - **Zero-Config Tunneling** — Built-in Playit.gg integration gets you a persistent, shareable join URL — no port forwarding or router setup required.
+- **Live Server Status** — See at a glance how long the server has been starting or running, how much memory it uses against its allocation, and how many players are on out of the maximum.
 - **Auto-Healing** — Watchdog crash recovery with JSON crash reports, zombie detection, and lag-spike monitoring keep a server running unattended. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Visible Command Safety** — Console commands are checked before they reach the server; anything blocked shows a toast explaining exactly what was rejected and why, and the full list of allowed commands is viewable in Settings.
-- **One-Click Backups & Scheduling** — Scheduled restarts and backups with countdown warnings, plus `.zbbpack` export/import to move a server between machines.
+- **One-Click Backups & Scheduling** — Scheduled restarts and backups with countdown warnings, a Backups tab that tells manual, automatic and pre-update backups apart with one-click restore or delete, plus `.zbbpack` export/import to move a server between machines.
 - **Safe Mod Updates** — Search, install, and update mods/plugins straight from Modrinth, with dependency resolution, client-only filtering, and a one-click Optimizer Bundle per loader. Every update takes a full snapshot first, so a bad update is one restore away from undone.
 - **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching runtime — no manual installs, no version mismatches.
 
