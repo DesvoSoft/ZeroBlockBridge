@@ -47,3 +47,16 @@ def test_clamp_lines_cuts_to_two_lines_with_ellipsis():
     assert "eeee" not in result
     # the last kept line plus the ellipsis still fits the width
     assert _measure(result.split("bbbb ")[1]) <= 100
+
+
+def test_format_relative():
+    import datetime
+    from app.ui.formatting import format_relative
+    now = datetime.datetime(2026, 9, 16, 20, 0, 0)
+    assert format_relative("2026-09-16T19:59:30", now) == "just now"
+    assert format_relative("2026-09-16T19:55:00", now) == "5m ago"
+    assert format_relative("2026-09-16T17:00:00", now) == "3h ago"
+    assert format_relative("2026-09-14T20:00:00", now) == "2d ago"
+    assert format_relative("2026-07-01T10:00:00", now) == "2026-07-01"
+    assert format_relative(None, now) == ""
+

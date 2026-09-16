@@ -131,6 +131,19 @@ class _Painters:
         d.pieslice([0.16 * s, 0.48 * s, 0.84 * s, 1.16 * s], 180, 360, fill=c)
 
     @staticmethod
+    def more(d, s, c, w):
+        for cx in (0.22, 0.50, 0.78):
+            d.ellipse([(cx - 0.08) * s, 0.42 * s, (cx + 0.08) * s, 0.58 * s], fill=c)
+
+    @staticmethod
+    def terminal(d, s, c, w):
+        d.rounded_rectangle([0.10 * s, 0.18 * s, 0.90 * s, 0.82 * s], radius=0.08 * s,
+                            outline=c, width=w)
+        d.line([(0.26 * s, 0.38 * s), (0.40 * s, 0.50 * s), (0.26 * s, 0.62 * s)],
+               fill=c, width=w, joint="curve")
+        d.line([(0.46 * s, 0.64 * s), (0.70 * s, 0.64 * s)], fill=c, width=w)
+
+    @staticmethod
     def search(d, s, c, w):
         d.ellipse([0.14 * s, 0.14 * s, 0.64 * s, 0.64 * s], outline=c, width=w)
         d.line([(0.60 * s, 0.60 * s), (0.86 * s, 0.86 * s)], fill=c, width=w)

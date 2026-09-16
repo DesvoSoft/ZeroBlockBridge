@@ -43,6 +43,25 @@ def clamp_lines(text: str, measure, width: int, max_lines: int = 2, ellipsis: st
     return " ".join(w for line in kept for w in line) + ellipsis
 
 
+def format_relative(iso_timestamp, now) -> str:
+    """'just now', '5m ago', '3h ago', '2d ago', or the date for older times."""
+    import datetime
+    try:
+        then = datetime.datetime.fromisoformat(iso_timestamp)
+    except (TypeError, ValueError):
+        return ""
+    seconds = (now - then).total_seconds()
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h ago"
+    if seconds < 30 * 86400:
+        return f"{int(seconds // 86400)}d ago"
+    return then.strftime("%Y-%m-%d")
+
+
 def format_memory(used_bytes: int) -> str:
     """'RAM 2.3 GB' — resident memory of the server process."""
     return f"RAM {used_bytes / (1024 ** 3):.1f} GB"

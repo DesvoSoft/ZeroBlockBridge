@@ -37,7 +37,6 @@ from app.core.app_config import AppConfig
 from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
-from app.ui.players_dashboard import PlayersDashboard
 
 _theme_path = ASSETS_DIR / "zbb_theme.json"
 ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
@@ -339,7 +338,7 @@ class MCTunnelApp(ctk.CTk):
             badge_players,
             text="0",
             image=icon("user", 13, AppConfig.COLOR_BADGE_TEXT),
-            command=self.open_players_dashboard,
+            command=self.show_players_tab,
             fg_color="transparent",
             text_color=AppConfig.COLOR_BADGE_TEXT,
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
@@ -492,6 +491,8 @@ class MCTunnelApp(ctk.CTk):
         # filters) was previously paid at startup on every launch even when
         # the user never opens this tab. Its own network fetch was already
         # deferred internally (bound to <Visibility>), just not the widgets.
+        # Players tab: built on first visit like Mods (_ensure_players_panel).
+        self.console_tabs.add("Players")
         self.console_tabs.add("Mods")
         self._update_mods_tab_state()
         self._set_console_input(False)
@@ -499,8 +500,25 @@ class MCTunnelApp(ctk.CTk):
     def _on_console_tab_changed(self):
         if self.console_tabs.get() == "Mods":
             self._ensure_modrinth_browser()
+        elif self.console_tabs.get() == "Players":
+            self._ensure_players_panel()
         from app.services.settings_manager import SettingsManager
         SettingsManager().set("last_console_tab", self.console_tabs.get())
+
+    def _ensure_players_panel(self):
+        if hasattr(self, "players_panel"):
+            return
+        from app.ui.players_panel import PlayersPanel
+        self.players_panel = PlayersPanel(
+            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self.executor.submit)
+        self.players_panel.pack(fill="both", expand=True)
+        self.players_panel.update_idletasks()
+
+    def show_players_tab(self):
+        if not self.zbb_manager.current_server:
+            return
+        self.console_tabs.set("Players")
+        self._on_console_tab_changed()
 
     def _ensure_modrinth_browser(self):
         if hasattr(self, "modrinth_browser"):
@@ -685,19 +703,20 @@ class MCTunnelApp(ctk.CTk):
             return
         self.on_server_select(last_server)
         last_tab = settings.get("last_console_tab")
-        if last_tab in ("Tunnel Log", "Mods"):
+        if last_tab in ("Tunnel Log", "Players", "Mods"):
             self.console_tabs.set(last_tab)
             self._on_console_tab_changed()
 
     def _update_mods_tab_state(self):
-        """Mods tab is only usable with a server selected."""
+        """Players and Mods tabs are only usable with a server selected."""
         enabled = bool(self.zbb_manager.current_server)
-        try:
-            btn = self.console_tabs._segmented_button._buttons_dict["Mods"]
-            btn.configure(state="normal" if enabled else "disabled")
-        except (AttributeError, KeyError) as e:
-            logger.debug("Mods tab state update failed: %s", e)
-        if not enabled and self.console_tabs.get() == "Mods":
+        for tab in ("Players", "Mods"):
+            try:
+                btn = self.console_tabs._segmented_button._buttons_dict[tab]
+                btn.configure(state="normal" if enabled else "disabled")
+            except (AttributeError, KeyError) as e:
+                logger.debug("%s tab state update failed: %s", tab, e)
+        if not enabled and self.console_tabs.get() in ("Players", "Mods"):
             self.console_tabs.set("Console")
 
     def on_server_delete(self, server_name):
@@ -856,6 +875,8 @@ class MCTunnelApp(ctk.CTk):
 
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
+        if hasattr(self, "players_panel"):
+            self.players_panel.refresh()
         self._update_mods_tab_state()
 
         item = self.server_items.get(server_name)
@@ -1039,12 +1060,6 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_ram.configure(text=format_memory(used) if used else "")
             self._ram_tooltip.text = memory_tooltip(limit) if used and limit else ""
         self.after(0, _apply)
-
-    def open_players_dashboard(self):
-        if hasattr(self, "players_dashboard_window") and self.players_dashboard_window is not None and self.players_dashboard_window.winfo_exists():
-            self.players_dashboard_window.focus()
-        else:
-            self.players_dashboard_window = PlayersDashboard(self, self.events, self.zbb_manager)
 
     def open_app_settings(self):
         if getattr(self, "app_settings_window", None) is not None and self.app_settings_window.winfo_exists():
