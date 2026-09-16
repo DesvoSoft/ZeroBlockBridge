@@ -143,6 +143,13 @@ class ModrinthClient:
         """Fetch full project details by ID or slug."""
         return self._request("GET", f"/project/{id_or_slug}")
 
+    def get_projects(self, ids: List[str]) -> List[Dict]:
+        """Fetch several projects in one request. Unknown IDs are silently
+        omitted by the API, so the result may be shorter than *ids*."""
+        if not ids:
+            return []
+        return self._request("GET", "/projects", params={"ids": json.dumps(list(ids))})
+
     # ------------------------------------------------------------------
     # Public API — Version listing
     # ------------------------------------------------------------------
@@ -171,6 +178,12 @@ class ModrinthClient:
 
         return self._request("GET", f"/project/{project_id}/version", params=params)
 
+    def get_versions_by_ids(self, ids: List[str]) -> List[Dict]:
+        """Fetch several versions by ID in one request (unknown IDs omitted)."""
+        if not ids:
+            return []
+        return self._request("GET", "/versions", params={"ids": json.dumps(list(ids))})
+
     # ------------------------------------------------------------------
     # Public API — Dependency resolution
     # ------------------------------------------------------------------
@@ -194,55 +207,69 @@ class ModrinthClient:
         compatible build for mc_version/loader are skipped).
         "incompatible" entries are {"project": <project dict>} only — surfaced
         as a warning, not something we auto-resolve a version for.
+
+        Projects and pinned versions are fetched in bulk (one request each);
+        only unpinned required deps need a per-project version lookup, since
+        the API has no bulk filtered-version endpoint.
         """
-        resolved = []
-        incompatible = []
-        seen_ids = set()
-        seen_incompatible_ids = set()
+        required_deps = {}  # project_id -> pinned version_id (or None), insertion-ordered
+        incompatible_ids = []
         for dep in version.get("dependencies", []):
             dep_type = dep.get("dependency_type")
-            if dep_type not in ("required", "incompatible"):
-                continue
             project_id = dep.get("project_id")
             if not project_id:
                 continue
+            if dep_type == "required" and project_id not in required_deps:
+                required_deps[project_id] = dep.get("version_id")
+            elif dep_type == "incompatible" and project_id not in incompatible_ids:
+                incompatible_ids.append(project_id)
 
-            if dep_type == "incompatible":
-                if project_id in seen_incompatible_ids:
-                    continue
-                seen_incompatible_ids.add(project_id)
+        all_ids = list(required_deps) + [p for p in incompatible_ids if p not in required_deps]
+        if not all_ids:
+            return {"required": [], "incompatible": []}
+        try:
+            projects = {}
+            for p in self.get_projects(all_ids):
+                # The endpoint accepts IDs or slugs; index by both so either matches.
+                projects[p.get("id")] = p
+                projects[p.get("slug")] = p
+        except ModrinthException as exc:
+            logger.warning("Could not resolve dependencies %s: %s", all_ids, exc)
+            return {"required": [], "incompatible": []}
+
+        incompatible = [{"project": projects[pid]} for pid in incompatible_ids if pid in projects]
+
+        pending = {}  # project_id -> project, not installed yet
+        for pid in required_deps:
+            project = projects.get(pid)
+            if project is None:
+                logger.warning("Dependency %s not found on Modrinth", pid)
+                continue
+            if project.get("slug") not in installed_slugs:
+                pending[pid] = project
+
+        pinned_ids = [required_deps[pid] for pid in pending if required_deps[pid]]
+        pinned_versions = {}
+        if pinned_ids:
+            try:
+                pinned_versions = {v.get("id"): v for v in self.get_versions_by_ids(pinned_ids)}
+            except ModrinthException as exc:
+                logger.warning("Could not fetch pinned dependency versions %s: %s", pinned_ids, exc)
+
+        resolved = []
+        for pid, project in pending.items():
+            pinned_id = required_deps[pid]
+            if pinned_id:
+                dep_version = pinned_versions.get(pinned_id)
+            else:
                 try:
-                    incompatible.append({"project": self.get_project(project_id)})
+                    versions = self.get_versions(pid, mc_version=mc_version, loader=loader)
                 except ModrinthException as exc:
-                    logger.warning("Could not resolve incompatible dependency %s: %s", project_id, exc)
-                continue
-
-            if project_id in seen_ids:
-                continue
-            seen_ids.add(project_id)
-
-            try:
-                project = self.get_project(project_id)
-            except ModrinthException as exc:
-                logger.warning("Could not resolve dependency %s: %s", project_id, exc)
-                continue
-            if project.get("slug") in installed_slugs:
-                continue
-
-            dep_version_id = dep.get("version_id")
-            try:
-                if dep_version_id:
-                    dep_version = self._request("GET", f"/version/{dep_version_id}")
-                else:
-                    versions = self.get_versions(project_id, mc_version=mc_version, loader=loader)
-                    dep_version = versions[0] if versions else None
-            except ModrinthException as exc:
-                logger.warning("Could not fetch dependency version for %s: %s", project_id, exc)
-                continue
-            if not dep_version:
-                continue
-
-            resolved.append({"project": project, "version": dep_version})
+                    logger.warning("Could not fetch dependency version for %s: %s", pid, exc)
+                    continue
+                dep_version = versions[0] if versions else None
+            if dep_version:
+                resolved.append({"project": project, "version": dep_version})
 
         return {"required": resolved, "incompatible": incompatible}
 
@@ -382,7 +409,9 @@ class ModrinthClient:
         if not os.path.isdir(mods_dir):
             return []
 
-        # Collect SHA1 hashes of installed files
+        # Collect SHA1 hashes of installed files. A jar can be locked by a
+        # currently-running server (the common case when checking for updates)
+        # — skip it instead of crashing the whole scan.
         hashes = {}
         for fname in os.listdir(mods_dir):
             fpath = os.path.join(mods_dir, fname)
