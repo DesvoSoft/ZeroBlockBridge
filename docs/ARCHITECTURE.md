@@ -333,6 +333,8 @@ ZeroBlockBridge/
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~656 LOC)
 │   │   ├── logic.py                   # ServerRunner, Scheduler, BackupScheduler, downloads, metadata, port preflight (~948 LOC)
 │   │   ├── orchestrators.py           # Server/Backup/Tunnel/Scheduler orchestrators (~275 LOC)
+│   │   ├── provisioning.py            # ServerProvisioner — wizard config -> installed server (jar, scaffold, Java, tunnel)
+│   │   ├── logging_setup.py           # Rotating log file + uncaught-exception hooks
 │   │   ├── protocols.py               # Protocol classes for structural typing (~41 LOC)
 │   │   ├── process_job.py             # Child-process reaping: Windows Job Object / Linux PDEATHSIG (~130 LOC)
 │   │   ├── playit_manager.py          # Playit.gg agent (v1.0.10 playitd daemon) lifecycle, DNS recovery (~821 LOC)
