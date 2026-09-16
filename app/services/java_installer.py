@@ -166,6 +166,22 @@ def _fetch_asset_info(version: int) -> dict:
     )
 
 
+def get_release_label(version: int) -> Optional[str]:
+    """'Temurin 17.0.9+9'-style label for the exact release ensure_java(version)
+    would fetch — cosmetic only (surfaced in the wizard so the user sees more
+    than a bare major version number). vendor is always "eclipse"/Temurin,
+    the only vendor _query_assets ever requests. Returns None on any failure
+    (network, no matching asset) — callers must treat this as decoration,
+    never let its failure block the actual install.
+    """
+    try:
+        info = _fetch_asset_info(version)
+        return f"Temurin {info['version']}"
+    except Exception as e:
+        logger.debug("get_release_label(%d) failed: %s", version, e)
+        return None
+
+
 class JdkManager:
 
     def __init__(self):

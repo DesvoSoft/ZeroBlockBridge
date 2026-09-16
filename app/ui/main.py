@@ -971,22 +971,29 @@ class MCTunnelApp(ctk.CTk):
                         except Exception as e:
                             self.server_console.log(f"[Warning] Bytecode analysis crashed: {e}")
 
-                    from app.services.java_installer import JdkManagerInstance
+                    from app.services.java_installer import JdkManagerInstance, get_release_label
                     from app.services.java_detector import get_required_java
                     version_map_java = get_required_java(version)
                     # Floor bytecode result against version-map to avoid Forge shim (Java 8) overriding correct version
-                    if required_java and required_java >= version_map_java:
-                        final_java = required_java
-                    else:
-                        final_java = version_map_java
-                    self.server_console.log(f"[System] Java {final_java} required (source: {'bytecode' if required_java and required_java >= version_map_java else 'version-map'}).")
+                    bytecode_wins = bool(required_java and required_java >= version_map_java)
+                    final_java = required_java if bytecode_wins else version_map_java
+                    self.server_console.log(f"[System] Detected Minecraft {version} → requires Java {final_java}.")
+                    if required_java and required_java != version_map_java:
+                        # The strongest proof this isn't just a lookup table: the exact
+                        # .class bytecode version disagreed with the naive MC-version
+                        # mapping (modded/shaded jars bundling a newer/older major).
+                        self.server_console.log(
+                            f"[System] Bytecode scan found this jar needs Java {required_java} "
+                            f"(standard mapping for MC {version} would be Java {version_map_java})."
+                        )
                     logic.update_server_meta(name, {"required_java": final_java})
                     if not JdkManagerInstance.get_java_path(final_java):
-                        dialog.update_progress(0.65, f"Downloading Java {final_java}...")
-                        self.server_console.log(f"[System] Downloading Java {final_java}...")
+                        label = get_release_label(final_java) or f"Java {final_java}"
+                        dialog.update_progress(0.65, f"Installing {label}...")
+                        self.server_console.log(f"[System] Installing {label}...")
                         try:
                             JdkManagerInstance.ensure_java(final_java)
-                            self.server_console.log(f"[System] Java {final_java} ready.")
+                            self.server_console.log(f"[System] {label} ready.")
                         except Exception as jde:
                             self.server_console.log(f"[Warning] Java {final_java} download failed: {jde}")
 

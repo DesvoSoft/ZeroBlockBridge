@@ -16,6 +16,7 @@ from app.services.java_installer import (
     _jdk_cache_dir,
     _get_common_prefix,
     _fetch_asset_info,
+    get_release_label,
     MAX_RETRIES,
 )
 
@@ -288,6 +289,20 @@ class TestFetchAssetInfo:
         mock_get.side_effect = __import__("requests").RequestException("bad")
         with pytest.raises(JdkDownloadError, match="Adoptium API request failed"):
             _fetch_asset_info(17)
+
+
+class TestGetReleaseLabel:
+    @patch("app.services.java_installer._fetch_asset_info")
+    def test_returns_temurin_label(self, mock_fetch):
+        mock_fetch.return_value = {"version": "17.0.9+9", "url": "x", "checksum": "", "image_type": "jre"}
+        assert get_release_label(17) == "Temurin 17.0.9+9"
+
+    @patch("app.services.java_installer._fetch_asset_info")
+    def test_returns_none_on_failure(self, mock_fetch):
+        # Cosmetic-only helper: any failure (offline, no matching asset) must
+        # degrade to None, never raise and block the actual install flow.
+        mock_fetch.side_effect = JdkDownloadError("no asset")
+        assert get_release_label(17) is None
 
 
 class TestListInstalled:
