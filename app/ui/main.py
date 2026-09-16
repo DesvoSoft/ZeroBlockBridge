@@ -70,8 +70,44 @@ class MCTunnelApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self._sidebar_compact = False
         self.bind("<Configure>", self._on_window_resize, add="+")
+        self._restore_window_geometry()
         self._apply_app_icon()
         self._apply_window_effects()
+
+    def _virtual_screen(self) -> tuple[int, int, int, int]:
+        """(left, top, width, height) of the whole desktop, all monitors."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                metrics = ctypes.windll.user32.GetSystemMetrics
+                # SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN
+                scaling = self._get_window_scaling()
+                return tuple(int(metrics(i) / scaling) for i in (76, 77, 78, 79))
+            except (OSError, AttributeError) as e:
+                logger.debug("Virtual screen metrics unavailable: %s", e)
+        return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
+
+    def _restore_window_geometry(self):
+        from app.services.settings_manager import SettingsManager
+        from app.ui.window_state import restorable_geometry
+        settings = SettingsManager()
+        geometry = restorable_geometry(
+            settings.get("window_geometry"), (AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT), self._virtual_screen())
+        if geometry:
+            self.geometry(geometry)
+        if settings.get("window_zoomed", False):
+            # Zooming before the window is mapped is ignored on Windows.
+            self.after(50, lambda: self.state("zoomed"))
+
+    def _save_window_state(self):
+        from app.services.settings_manager import SettingsManager
+        settings = SettingsManager()
+        zoomed = self.state() == "zoomed"
+        settings.set("window_zoomed", zoomed)
+        if not zoomed:
+            # A maximized window reports the maximized size; keep the last
+            # normal geometry so un-maximizing next session restores it.
+            settings.set("window_geometry", self.geometry())
 
     def _apply_app_icon(self):
         """Set the taskbar/titlebar icon for the live window.
@@ -435,6 +471,8 @@ class MCTunnelApp(ctk.CTk):
     def _on_console_tab_changed(self):
         if self.console_tabs.get() == "Mods":
             self._ensure_modrinth_browser()
+        from app.services.settings_manager import SettingsManager
+        SettingsManager().set("last_console_tab", self.console_tabs.get())
 
     def _ensure_modrinth_browser(self):
         if hasattr(self, "modrinth_browser"):
@@ -605,6 +643,23 @@ class MCTunnelApp(ctk.CTk):
                 item.pack(fill="x", padx=5, pady=5)
                 self.server_items[s] = item
         self.server_console.log(f"[System] Loaded {len(servers)} servers.")
+        self._restore_last_selection(servers)
+
+    def _restore_last_selection(self, servers):
+        """First server-list load only: reselect the last server and tab."""
+        if getattr(self, "_selection_restored", False):
+            return
+        self._selection_restored = True
+        from app.services.settings_manager import SettingsManager
+        settings = SettingsManager()
+        last_server = settings.get("last_server")
+        if self.zbb_manager.current_server or last_server not in servers:
+            return
+        self.on_server_select(last_server)
+        last_tab = settings.get("last_console_tab")
+        if last_tab in ("Tunnel Log", "Mods"):
+            self.console_tabs.set(last_tab)
+            self._on_console_tab_changed()
 
     def _update_mods_tab_state(self):
         """Mods tab is only usable with a server selected."""
@@ -748,6 +803,8 @@ class MCTunnelApp(ctk.CTk):
             return
 
         self.zbb_manager.select_server(server_name)
+        from app.services.settings_manager import SettingsManager
+        SettingsManager().set("last_server", server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
 
         for name, it in self.server_items.items():
@@ -1121,6 +1178,7 @@ class MCTunnelApp(ctk.CTk):
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
     def on_close(self):
+        self._save_window_state()
         self.withdraw()
 
         # SettingsManager debounces writes 500ms — a change right before
