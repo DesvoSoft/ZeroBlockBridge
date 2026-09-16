@@ -72,7 +72,11 @@ class Watchdog:
         # True while a zombie kill we initiated is in flight: the STOPPED that
         # kill produces must not be classified as a fresh crash (CRASHED with
         # reason=zombie was already emitted) nor schedule a second restart.
+        # Mutated from the EventBus callback thread (_on_starting/_on_stopped)
+        # and the restart thread (_do_restart) — guard every read/write like
+        # retry_count above, same cross-thread hazard.
         self._zombie_kill_pending = False
+        self._zombie_lock = threading.Lock()
 
     @property
     def is_retry_exhausted(self) -> bool:
@@ -94,7 +98,8 @@ class Watchdog:
     def _on_starting(self, data=None):
         self._crash_reason = None
         # A new launch invalidates any zombie-kill STOPPED we were waiting for.
-        self._zombie_kill_pending = False
+        with self._zombie_lock:
+            self._zombie_kill_pending = False
 
     def _on_ready(self, data=None):
         self._stable_since = time.time()
@@ -103,8 +108,10 @@ class Watchdog:
     def _on_stopped(self, data=None):
         if not self._listening:
             return
-        if self._zombie_kill_pending:
+        with self._zombie_lock:
+            was_pending = self._zombie_kill_pending
             self._zombie_kill_pending = False
+        if was_pending:
             self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Zombie process terminated.")
             return
         if data is None:
@@ -179,7 +186,8 @@ class Watchdog:
             # kill() after its graceful timeout. Flag first so the STOPPED
             # produced by the kill is swallowed by _on_stopped instead of
             # being classified as a fresh crash.
-            self._zombie_kill_pending = True
+            with self._zombie_lock:
+                self._zombie_kill_pending = True
             self._runner.stop()
             # stop() returns when the process dies, but running only flips
             # False at the tail of the reader thread — wait for it, bounded.
@@ -187,6 +195,11 @@ class Watchdog:
             while self._runner.running and time.time() < deadline:
                 time.sleep(0.2)
             if self._runner.running:
+                # Kill never landed — the flag must not stay set, or the STOPPED
+                # from a later manual/external kill would be silently swallowed
+                # and crash detection would stay dead for the rest of the session.
+                with self._zombie_lock:
+                    self._zombie_kill_pending = False
                 logger.error("Watchdog: zombie process survived kill; aborting restart")
                 self._events.emit(ServerEvent.CONSOLE_LINE, "[Watchdog] Zombie process could not be killed. Manual intervention required.")
                 return
