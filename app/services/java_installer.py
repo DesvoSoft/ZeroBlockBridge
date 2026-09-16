@@ -5,6 +5,7 @@ import platform
 import shutil
 import sys
 import tarfile
+import threading
 import zipfile
 
 from pathlib import Path
@@ -167,6 +168,21 @@ def _fetch_asset_info(version: int) -> dict:
 
 class JdkManager:
 
+    def __init__(self):
+        # One lock per Java version so two concurrent ensure_java(same version)
+        # calls (e.g. two servers needing Java 21 starting close together)
+        # serialize instead of both rmtree/mkdir-ing the same tmp/cache dirs.
+        self._version_locks: dict[int, threading.Lock] = {}
+        self._version_locks_guard = threading.Lock()
+
+    def _lock_for(self, version: int) -> threading.Lock:
+        with self._version_locks_guard:
+            lock = self._version_locks.get(version)
+            if lock is None:
+                lock = threading.Lock()
+                self._version_locks[version] = lock
+            return lock
+
     def get_java_path(self, version: int) -> Optional[str]:
         cache_dir = _jdk_cache_dir(version)
         if not cache_dir.exists():
@@ -184,8 +200,16 @@ class JdkManager:
             logger.info("Using cached JDK %d at %s", version, cached)
             return cached
 
-        logger.info("JDK %d not in cache — downloading", version)
-        path = self._download_and_install(version)
+        with self._lock_for(version):
+            # Re-check: another thread may have finished installing this
+            # exact version while we were waiting for the lock.
+            cached = self.get_java_path(version)
+            if cached:
+                logger.info("Using cached JDK %d at %s (installed while waiting)", version, cached)
+                return cached
+
+            logger.info("JDK %d not in cache — downloading", version)
+            path = self._download_and_install(version)
 
         binary = _find_java_binary(Path(path))
         if binary is None:
@@ -272,11 +296,14 @@ class JdkManager:
 
             common_prefix = _get_common_prefix(members)
             if common_prefix:
+                dest_resolved = dest_dir.resolve()
                 for name in members:
                     rel = name[len(common_prefix):]
                     if not rel:
                         continue
                     target = dest_dir / rel
+                    if not target.resolve().is_relative_to(dest_resolved):
+                        raise JdkIntegrityError(f"Unsafe zip member path: {name}")
                     if name.endswith("/"):
                         target.mkdir(parents=True, exist_ok=True)
                     else:
