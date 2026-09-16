@@ -730,7 +730,7 @@ class ServerPropertiesEditor(ctk.CTkToplevel):
         
         self._start_row(card_identity, "Server Icon")
         btn = ctk.CTkButton(card_identity, text="Change Icon", command=self.change_icon,
-                            width=100, height=28, fg_color="transparent", border_width=1,
+                            width=100, height=28, fg_color="transparent", border_width=AppConfig.BORDER_BTN,
                             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
                             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                             text_color=AppConfig.COLOR_TEXT_PRIMARY)

@@ -1104,7 +1104,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             btn_install = ctk.CTkButton(
                 card, text="Uninstall", width=90, height=32,
                 corner_radius=AppConfig.RADIUS_BTN,
-                fg_color="transparent", border_width=1,
+                fg_color="transparent", border_width=AppConfig.BORDER_BTN,
                 border_color=AppConfig.COLOR_BTN_DANGER,
                 hover_color=AppConfig.COLOR_BADGE_DANGER_BG,
                 text_color=AppConfig.COLOR_BADGE_DANGER_TEXT, font=AppConfig.FONT_LABEL_SMALL,
@@ -1114,7 +1114,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             btn_install = ctk.CTkButton(
                 card, text="Client-only" if unsupported else "Install", width=90, height=32,
                 corner_radius=AppConfig.RADIUS_BTN,
-                fg_color="transparent", border_width=1,
+                fg_color="transparent", border_width=AppConfig.BORDER_BTN,
                 border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK) if unsupported else AppConfig.COLOR_MODRINTH_BRAND,
                 hover_color=AppConfig.COLOR_BTN_GHOST_HOVER if unsupported else AppConfig.COLOR_BADGE_BG,
                 text_color=AppConfig.COLOR_TEXT_MUTED if unsupported else AppConfig.COLOR_MODRINTH_TEXT,

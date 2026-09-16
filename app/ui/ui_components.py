@@ -478,7 +478,7 @@ class DownloadProgressDialog(ctk.CTkToplevel):
             width=100,
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color="transparent",
-            border_width=1,
+            border_width=AppConfig.BORDER_BTN,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
@@ -570,7 +570,7 @@ class EulaDialog(ctk.CTkToplevel):
         buttons.pack(fill="x")
         ctk.CTkButton(
             buttons, text="Decline", corner_radius=AppConfig.RADIUS_BTN, width=120,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=AppConfig.BORDER_BTN,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
@@ -674,7 +674,7 @@ class ZBBDialog(ctk.CTkToplevel):
             ctk.CTkButton(
                 buttons, text=cancel_text, width=110, height=32,
                 corner_radius=AppConfig.RADIUS_BTN,
-                fg_color="transparent", border_width=1,
+                fg_color="transparent", border_width=AppConfig.BORDER_BTN,
                 border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
                 text_color=AppConfig.COLOR_TEXT_PRIMARY,
                 hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,

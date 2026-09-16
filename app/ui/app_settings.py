@@ -131,7 +131,7 @@ class AppSettingsDialog(ctk.CTkToplevel):
         return ctk.CTkButton(
             parent, text=text, command=command, width=width, height=30,
             image=icon(icon_name, 13) if icon_name else None,
-            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", border_width=1,
+            corner_radius=AppConfig.RADIUS_BTN, fg_color="transparent", border_width=AppConfig.BORDER_BTN,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,

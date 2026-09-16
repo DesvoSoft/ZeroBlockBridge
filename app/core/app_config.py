@@ -117,6 +117,9 @@ class AppConfig:
     RADIUS_BTN = 8
     RADIUS_INPUT = 8
     RADIUS_BADGE = 6
+    # Outlined buttons: a 1px CTk border breaks up around the rounded corners
+    # and reads as faint/uneven; 2px draws a solid outline.
+    BORDER_BTN = 2
 
     # Scheduler
     SCHEDULER_CHECK_INTERVAL = 30  # seconds

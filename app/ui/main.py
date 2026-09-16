@@ -181,7 +181,7 @@ class MCTunnelApp(ctk.CTk):
             self.actions_frame, text="Add Server",
             image=icon("folder", 14),
             command=self.show_add_server_menu, corner_radius=AppConfig.RADIUS_BTN, height=32,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=AppConfig.BORDER_BTN,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
@@ -194,7 +194,7 @@ class MCTunnelApp(ctk.CTk):
             self.actions_frame, text="Settings",
             image=icon("gear", 14),
             command=self.open_app_settings, corner_radius=AppConfig.RADIUS_BTN, height=32,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=AppConfig.BORDER_BTN,
             border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
             text_color=AppConfig.COLOR_TEXT_PRIMARY,
             hover_color=AppConfig.COLOR_BTN_GHOST,
@@ -344,7 +344,7 @@ class MCTunnelApp(ctk.CTk):
             command=self._copy_ip_to_clipboard,
             fg_color="transparent",
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            border_width=1, border_color=AppConfig.COLOR_LINK,
+            border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_LINK,
             width=36, corner_radius=AppConfig.RADIUS_BTN, height=28,
         )
         ToolTip(self.btn_copy_ip, "Copy address")
@@ -364,7 +364,7 @@ class MCTunnelApp(ctk.CTk):
             command=self._toggle_setup_section,
             fg_color=AppConfig.COLOR_BTN_GHOST,
             hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
-            border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
+            border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_ACCENT_AMBER,
             width=80, corner_radius=AppConfig.RADIUS_BTN, height=36,
             font=AppConfig.FONT_LABEL_SMALL, text_color=AppConfig.COLOR_ACCENT_AMBER,
         )
@@ -378,7 +378,7 @@ class MCTunnelApp(ctk.CTk):
                                    command=self.reset_tunnel,
                                    fg_color=AppConfig.COLOR_BTN_GHOST,
                                    hover_color=AppConfig.COLOR_BTN_WARNING_GHOST_HOVER,
-                                   border_width=1, border_color=AppConfig.COLOR_ACCENT_AMBER,
+                                   border_width=AppConfig.BORDER_BTN, border_color=AppConfig.COLOR_ACCENT_AMBER,
                                    width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         self.btn_reset.pack(side="left", padx=2)
         ToolTip(self.btn_reset, "Reset tunnels")
