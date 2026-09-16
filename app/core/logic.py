@@ -764,7 +764,8 @@ class ServerRunner:
             return "\n".join(list(self._console_buffer)[-self._CONSOLE_SNAPSHOT_TAIL:])
 
     def _parse_player_count(self, line):
-        join_match = re.search(r': (\w+) joined the game', line)
+        # "\.?": Bedrock players joining through Geyser/Floodgate get a "." prefix.
+        join_match = re.search(r': (\.?\w+) joined the game', line)
         if join_match:
             player = join_match.group(1)
             with self._players_lock:
@@ -780,7 +781,7 @@ class ServerRunner:
                 self.events.emit(ServerEvent.PLAYER_COUNT, new_count)
                 self.events.emit(ServerEvent.PLAYER_LIST, snapshot)
         else:
-            leave_match = re.search(r': (\w+) left the game', line)
+            leave_match = re.search(r': (\.?\w+) left the game', line)
             if leave_match:
                 player = leave_match.group(1)
                 with self._players_lock:

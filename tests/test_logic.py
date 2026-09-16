@@ -592,3 +592,24 @@ class TestServerRunnerMemoryUsage:
         import psutil
         with patch("psutil.Process", side_effect=psutil.NoSuchProcess(4242)):
             assert self._runner().memory_usage_bytes() is None
+
+
+class TestServerRunnerPlayerParsing:
+    def _runner(self):
+        from tests.conftest import FakeEmitter
+        runner = ServerRunner("srv", "1024M", FakeEmitter())
+        return runner
+
+    def test_java_and_bedrock_joins_and_leaves(self):
+        runner = self._runner()
+        runner._parse_player_count("[20:01:02] [Server thread/INFO]: Steve joined the game")
+        runner._parse_player_count("[20:01:03] [Server thread/INFO]: .PhoneUser joined the game")
+        assert runner.connected_players == {"Steve", ".PhoneUser"}
+        runner._parse_player_count("[20:05:00] [Server thread/INFO]: .PhoneUser left the game")
+        assert runner.connected_players == {"Steve"}
+
+    def test_chat_mentioning_join_is_not_a_join(self):
+        runner = self._runner()
+        runner._parse_player_count("[20:01:02] [Server thread/INFO]: <Bob> Steve joined the game lol")
+        assert runner.connected_players == set()
+
