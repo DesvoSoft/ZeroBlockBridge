@@ -8,16 +8,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-09-16
+
 ### Added
 - **Configurable data directory** — first-run dialog offers Standard (`%LOCALAPPDATA%`), Portable (next to the exe), or Custom location; choice persists via a marker file, resolved before any other module reads a path.
 - **Explainable command safety** — blocked console commands now surface a warning toast naming the rejected command and why (e.g. ``Blocked `op x; rm -rf /`: contains shell metacharacters``), `[Security]` console lines get a distinct red tint, and Settings → General lists the full allowlisted command set read-only.
 - **One-click pre-update snapshot + rollback** — mod updates (single or bulk) take a full-server backup before touching any files; a failed snapshot aborts the update instead of proceeding blind. Pre-update snapshots are labeled in the Backups tab and share the existing restore flow.
+- **Java detection is now a visible moment, not backend trivia** — creating a server shows "Detected Minecraft 1.20.4 → requires Java 17", names the exact release being installed ("Installing Temurin 17.0.9+9…") instead of a bare version number, and calls out the rare case where bytecode analysis disagrees with the standard version mapping.
+- **Console log filter** — a category dropdown (All / Errors / Warnings / Security / Players / Server) on both the Console and Tunnel Log tabs, on top of the existing search. Lines stay in the buffer while hidden, so switching back to "All" is instant.
+- **Branded titlebar (Windows 11)** — the native titlebar now matches the app's own theme colors instead of default Windows gray/black.
+- **Toast and dialog entrance animation** — notifications slide up while fading in; confirmation dialogs fade in on open.
 
 ### Changed
 - Removed a redundant, architecture-violating client-side command-safety check in `main.py`; `ServerOrchestrator.send_command` is now the single enforcement point.
 - Command sanitizer returns a typed `BlockedReason` instead of free-form strings.
 - Backups gained a `reason` tag (`manual` vs `pre_update`) with per-reason retention, so automated pre-update snapshots can never prune a user's manual/scheduled backups.
 - Mod updates now require the server to be stopped: a running server locks files, so the snapshot would be incomplete. A snapshot that skipped locked files is discarded instead of being offered as a rollback point.
+- Mods tab now builds itself on first visit instead of at every app startup — faster launch.
+- Privacy & Service Disclaimer reworded: states plainly that ZBB has no remote-control agent of its own, and separately calls out the trust boundary when Playit.gg tunneling is enabled (that traffic runs through Playit's infrastructure, not ZBB's).
+- Deleting a server, installing/removing mods, and importing a modpack are now correctly blocked (or moved off the UI thread) while the server is running or the world is large, instead of risking a locked-file error or a frozen window.
 
 ### Fixed
 - Player chat containing `[Security]` could render as a red ZBB security alert in the console; only lines emitted by ZBB with that prefix are highlighted now.
@@ -27,6 +36,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Server properties: `generate-structures`, `sync-chunk-writes` and `prevent-proxy-connections` showed a raw `true` text field instead of a switch; labels now read "Spawn NPCs", "Server IP", "PvP", "RCON" instead of "Spawn Npcs", "Server Ip", "Pvp", "Rcon".
 - Wizard summary shows `Yes`/`No` and "Auto (Java 25)" instead of `True`/`False`/`auto`; Back uses the same chevron icon as Next.
 - Mods tab at minimum window size: the sidebar narrows to give the browser room, and the "Installed" badge is no longer the first thing clipped.
+- The app icon now shows correctly in the taskbar and titlebar — it previously fell back to the default Python icon both in the installed app and when run from source.
+- Toast notifications could overlap or land in the wrong spot when more than one window had notifications open at once, or when messages wrapped to different heights; a notification flood is now capped instead of piling up unreadable past the top of the window.
+- A wide range of stability hardening from a full internal audit: scheduled restarts, auto-backups, and crash/zombie detection could — under specific rare timing or a malformed config value — silently stop working for the rest of a session with no visible error; several race conditions around starting the server, starting the Playit tunnel, and concurrent downloads that could corrupt state; whitelist/operator/ban changes could occasionally be lost to a conflicting write; backup restore could fail entirely when the server and the system temp folder are on different drives; several settings/config files now save atomically so a crash mid-write can't corrupt them.
+
+---
 
 ---
 
