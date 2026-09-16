@@ -1,5 +1,13 @@
-customtkinter>=5.2.2
-requests>=2.33.1
-Pillow>=12.2.0
-psutil>=7.2.2
-packaging>=26.0
+# Runtime dependencies pinned to the tested set (direct + transitive), so
+# local runs, CI and release builds install identical versions. Bump through
+# Dependabot PRs or deliberately, never by leaving floors open.
+customtkinter==6.0.0
+darkdetect==0.8.0
+packaging==26.0
+Pillow==12.3.0
+psutil==7.2.2
+requests==2.33.1
+certifi==2026.2.25
+charset-normalizer==3.4.7
+idna==3.11
+urllib3==2.6.3

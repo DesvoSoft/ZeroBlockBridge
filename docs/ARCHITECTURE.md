@@ -384,7 +384,8 @@ ZeroBlockBridge/
 ├── tools/                             # bump_version.py, extract_changelog_section.py, gen_theme.py
 ├── .github/workflows/                 # tests.yml (Win+Linux matrix), build.yml (tag → release)
 ├── pyproject.toml                     # Project metadata, requires-python>=3.10, deps
-├── requirements.txt                   # Pinned minimum versions (5 deps)
+├── requirements.txt                   # Exact runtime pins (direct + transitive)
+├── requirements-dev.txt               # requirements.txt + pytest/flake8 pins
 └── docs/
     ├── ARCHITECTURE.md                # This file
     ├── STANDARDS.md                   # Coding standards & quality criteria
@@ -462,15 +463,15 @@ Warning threshold messages emitted before restart: 1h, 30m, 15m, 1m.
 
 ### Dependencies
 
-Defined in `pyproject.toml` and `requirements.txt`:
+`pyproject.toml` declares compatible ranges (major-version upper bounds); `requirements.txt` pins the exact tested set, including transitive dependencies, and is what CI and release builds install. `requirements-dev.txt` adds the pinned test/lint tools. Dependabot (`.github/dependabot.yml`) opens weekly update PRs against `dev` for pip and GitHub Actions.
 
 | Package | Purpose |
 |---------|---------|
-| `customtkinter>=5.2.2` | Modern GUI (extends Tkinter) |
-| `requests>=2.33.1` | HTTP client (downloads, API calls) |
-| `Pillow>=12.2.0` | Server icon image processing |
-| `psutil>=7.2.2` | System resource monitoring |
-| `packaging>=26.0` | Version comparison utilities |
+| `customtkinter` | Modern GUI (extends Tkinter) |
+| `requests` | HTTP client (downloads, API calls) |
+| `Pillow` | Server icon image processing |
+| `psutil` | System resource monitoring |
+| `packaging` | Version comparison utilities |
 
 ---
 

@@ -121,6 +121,8 @@ py --version
    pip install -r requirements.txt
    ```
 
+   For development (tests + lint): `pip install -r requirements-dev.txt`.
+
 4. **Run the application**
    ```bash
    py app/launcher.py
