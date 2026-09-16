@@ -130,7 +130,8 @@ class ModrinthBrowser(ctk.CTkFrame):
     }
 
     def __init__(self, master, get_server_info: Callable = None,
-                 create_snapshot: Callable = None, is_server_running: Callable = None, **kwargs):
+                 create_snapshot: Callable = None, is_server_running: Callable = None,
+                 on_installed_count: Callable = None, **kwargs):
         """
         Args:
             master: Parent widget (the tab frame).
@@ -149,6 +150,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.get_server_info = get_server_info
         self.create_snapshot = create_snapshot
         self.is_server_running = is_server_running
+        self.on_installed_count = on_installed_count
         self.client = ModrinthClient()
 
         # Search state
@@ -1301,6 +1303,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _update_installed_button(self):
+        if self.on_installed_count:
+            self.on_installed_count(self._installed_count)
         if self._view != "search":
             return
         n, updates = self._installed_count, self._update_count

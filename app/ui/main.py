@@ -494,6 +494,8 @@ class MCTunnelApp(ctk.CTk):
         # Players tab: built on first visit like Mods (_ensure_players_panel).
         self.console_tabs.add("Players")
         self.console_tabs.add("Mods")
+        self._installed_mods_count = 0
+        self._refresh_tab_labels()
         self._update_mods_tab_state()
         self._set_console_input(False)
 
@@ -528,6 +530,7 @@ class MCTunnelApp(ctk.CTk):
             get_server_info=self._get_current_server_info,
             create_snapshot=self.zbb_manager.create_pre_update_snapshot,
             is_server_running=self.zbb_manager.is_running,
+            on_installed_count=lambda n: self._refresh_tab_labels(installed=n),
         )
         self.modrinth_browser.pack(fill="both", expand=True)
         self.modrinth_browser.refresh_server_context()
@@ -877,6 +880,8 @@ class MCTunnelApp(ctk.CTk):
             self.modrinth_browser.refresh_server_context()
         if hasattr(self, "players_panel"):
             self.players_panel.refresh()
+        if not hasattr(self, "modrinth_browser"):
+            self._refresh_tab_labels(installed=len(ModrinthBrowser._installed_jar_files(server_name)))
         self._update_mods_tab_state()
 
         item = self.server_items.get(server_name)
@@ -1009,9 +1014,34 @@ class MCTunnelApp(ctk.CTk):
             self._refresh_players_badge()
         self.after(0, _apply)
 
+    # tab name -> icon; the button text is the name plus a live count
+    _TAB_ICONS = {"Console": "terminal", "Tunnel Log": "link", "Players": "user", "Mods": "package"}
+
+    def _refresh_tab_labels(self, installed=None):
+        """Icons on the console tabs, with online players and installed mods counts."""
+        if installed is not None:
+            self._installed_mods_count = installed
+        counts = {
+            "Players": getattr(self, "_player_count", 0) if self.zbb_manager.current_server else 0,
+            "Mods": self._installed_mods_count if self.zbb_manager.current_server else 0,
+        }
+        try:
+            buttons = self.console_tabs._segmented_button._buttons_dict
+        except AttributeError as e:
+            logger.debug("Tab buttons unavailable: %s", e)
+            return
+        for name, icon_name in self._TAB_ICONS.items():
+            button = buttons.get(name)
+            if button is None:
+                continue
+            count = counts.get(name)
+            button.configure(text=f"{name} ({count})" if count else name,
+                             image=icon(icon_name, 13, AppConfig.COLOR_TEXT_PRIMARY), compound="left")
+
     def _refresh_players_badge(self):
         max_players = f"/{self._max_players}" if self._max_players else ""
         self.btn_players.configure(text=f"{self._player_count}{max_players}")
+        self._refresh_tab_labels()
 
     # --- Live status: elapsed start time, uptime, memory ---
     _STATUS_TICK_MS = 1000
