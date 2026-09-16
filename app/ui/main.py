@@ -355,7 +355,7 @@ class MCTunnelApp(ctk.CTk):
         self.on_tunnel_status({"status": "Offline", "skip_debounce": True})
 
     def _build_console_tabs(self):
-        self.console_tabs = ctk.CTkTabview(self.main_frame)
+        self.console_tabs = ctk.CTkTabview(self.main_frame, command=self._on_console_tab_changed)
         self.console_tabs.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="nsew")
         
         self.console_tabs.add("Console")
@@ -380,14 +380,28 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_console.pack(fill="both", expand=True)
 
         # --- Mods Tab (Modrinth Browser) ---
+        # Construction deferred to first visit (_ensure_modrinth_browser):
+        # building its widget tree (a CTkScrollableFrame + search bar + type
+        # filters) was previously paid at startup on every launch even when
+        # the user never opens this tab. Its own network fetch was already
+        # deferred internally (bound to <Visibility>), just not the widgets.
         self.console_tabs.add("Mods")
+        self._update_mods_tab_state()
+
+    def _on_console_tab_changed(self):
+        if self.console_tabs.get() == "Mods":
+            self._ensure_modrinth_browser()
+
+    def _ensure_modrinth_browser(self):
+        if hasattr(self, "modrinth_browser"):
+            return
         self.modrinth_browser = ModrinthBrowser(
             self.console_tabs.tab("Mods"),
             get_server_info=self._get_current_server_info,
             create_snapshot=self.zbb_manager.create_pre_update_snapshot,
         )
         self.modrinth_browser.pack(fill="both", expand=True)
-        self._update_mods_tab_state()
+        self.modrinth_browser.refresh_server_context()
 
     def _init_background_services(self):
         self.check_java_startup()
