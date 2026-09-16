@@ -8,6 +8,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Application log file** — the app now writes `logs/zbb.log` (rotating, 2 MB × 3) in the data folder, including crashes in background threads and UI callbacks. The released Windows build has no console, so until now every log line was lost. Settings → About has an **Open Logs Folder** button to attach it to bug reports.
+- Mods status bar shows a tinted success/error/warning icon; long messages are shortened with the full text on hover.
+
+### Changed
+- Dependencies are pinned to the exact tested versions (`requirements.txt`, new `requirements-dev.txt`), so CI and release builds install the same packages; Dependabot proposes weekly updates.
+- Server creation logic moved out of the main window into a core provisioning module. The progress bar no longer jumps back from 100% to 25% after the download.
+- Mod dependency lookups use bulk Modrinth requests instead of two requests per dependency.
+- All fonts and colors come from the design tokens (the creation wizard used ad-hoc sizes); text inputs use a themed dialog instead of CustomTkinter's unthemed input box.
+
+### Fixed
+- A server that failed to launch because Java could not be started stayed stuck on "Starting" with no error.
+- Servers whose jar needs a newer Java than the Minecraft version implies were re-scanned on every start instead of caching the result.
+- A truncated `server.jar` could not be replaced by the real jar during setup.
+- The zombie-server check could treat unrelated plugin or chat lines as an answer to its `list` probe.
+- Playit: a full reset left the account marked as linked if `playit.toml` was locked by OneDrive or an antivirus; an HTML 401 response did not count toward detecting a revoked secret.
+- Discord notifications could queue without limit during a crash loop or with an unreachable webhook.
+- Opening a dialog from the creation wizard or the properties editor made that window stop being modal.
+- Toast badges rendered as pills instead of circles, and single-line messages were centered.
+- Long Mods status messages pushed the page controls out of view at small window sizes.
+
 ## [2.1.0] — 2026-09-16
 
 ### Added
@@ -39,8 +60,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - The app icon now shows correctly in the taskbar and titlebar — it previously fell back to the default Python icon both in the installed app and when run from source.
 - Toast notifications could overlap or land in the wrong spot when more than one window had notifications open at once, or when messages wrapped to different heights; a notification flood is now capped instead of piling up unreadable past the top of the window.
 - A wide range of stability hardening from a full internal audit: scheduled restarts, auto-backups, and crash/zombie detection could — under specific rare timing or a malformed config value — silently stop working for the rest of a session with no visible error; several race conditions around starting the server, starting the Playit tunnel, and concurrent downloads that could corrupt state; whitelist/operator/ban changes could occasionally be lost to a conflicting write; backup restore could fail entirely when the server and the system temp folder are on different drives; several settings/config files now save atomically so a crash mid-write can't corrupt them.
-
----
 
 ---
 
