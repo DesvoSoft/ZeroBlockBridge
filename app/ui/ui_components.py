@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import logging
 import threading
+import tkinter as tk
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 from app.ui.icons import icon
@@ -686,6 +687,13 @@ class ZBBDialog(ctk.CTkToplevel):
         center_on_parent(self, parent, w, h)
         self.transient(parent)
         self.attributes("-alpha", 0.0)
+        # A modal parent (wizard, properties editor) holds the grab; take it
+        # back on close or that window silently stops being modal.
+        self._prev_grab = None
+        try:
+            self._prev_grab = self.grab_current()
+        except (KeyError, tk.TclError) as e:
+            logger.debug("ZBBDialog could not read current grab: %s", e)
         try:
             self.wait_visibility()
             self.grab_set()
@@ -727,6 +735,12 @@ class ZBBDialog(ctk.CTkToplevel):
         except Exception as e:
             logger.debug("ZBBDialog grab release failed: %s", e)
         self.destroy()
+        if self._prev_grab is not None:
+            try:
+                if self._prev_grab.winfo_exists():
+                    self._prev_grab.grab_set()
+            except tk.TclError as e:
+                logger.debug("ZBBDialog could not restore parent grab: %s", e)
 
     @classmethod
     def confirm(cls, parent, title, message, *, confirm_text="Yes",
