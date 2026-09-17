@@ -137,30 +137,205 @@ def center_on_parent(toplevel, parent, width, height):
     toplevel.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
 
+class PopupMenu:
+    """Themed popup menu (tk.Menu is a native Win32 menu that can't follow the
+    app's look). Same calls as tk.Menu where the app uses them — add_command,
+    add_separator, add_cascade, tk_popup, grab_release — plus icons and a
+    danger style. Cascades open in place with a Back row instead of a second
+    floating window.
+    """
+
+    _open_window = None
+    _MIN_WIDTH = 190
+    _ROW_HEIGHT = 30
+
+    def __init__(self, parent):
+        self.widget = parent.widget if isinstance(parent, PopupMenu) else parent
+        self.items: list[dict] = []
+
+    def add_command(self, label="", command=None, icon_name=None, danger=False, **_tk_options):
+        self.items.append({"kind": "command", "label": label.strip(), "command": command,
+                           "icon": icon_name, "danger": danger})
+
+    def add_separator(self):
+        self.items.append({"kind": "separator"})
+
+    def add_cascade(self, label="", menu=None, icon_name=None, **_tk_options):
+        self.items.append({"kind": "cascade", "label": label.strip(), "menu": menu, "icon": icon_name})
+
+    def tk_popup(self, x, y):
+        PopupMenu.close_open()
+        PopupMenu._open_window = _PopupWindow(self, int(x), int(y))
+
+    def grab_release(self):
+        """tk.Menu compatibility: tk_popup doesn't block here, nothing to release."""
+
+    @classmethod
+    def close_open(cls):
+        window = cls._open_window
+        cls._open_window = None
+        if window is not None and window.winfo_exists():
+            window.destroy()
+
+
+class _PopupWindow(ctk.CTkToplevel):
+    def __init__(self, menu: PopupMenu, x: int, y: int):
+        root = menu.widget.winfo_toplevel()
+        super().__init__(root)
+        self.withdraw()
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.0)
+        self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        self._anchor = (x, y)
+        self._stack: list[PopupMenu] = []
+
+        self.body = ctk.CTkFrame(
+            self, corner_radius=AppConfig.RADIUS_CARD, border_width=1,
+            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK),
+            border_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK),
+        )
+        self.body.pack(fill="both", expand=True)
+        self._show(menu)
+
+        self.bind("<Escape>", lambda e: PopupMenu.close_open())
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        _install_popup_click_away(root)
+        self.after(10, self._reveal)
+
+    # ---------------------------------------------------------------- layout
+    def _show(self, menu: PopupMenu, push: bool = True):
+        if push:
+            self._stack.append(menu)
+        for child in self.body.winfo_children():
+            child.destroy()
+        rows = ctk.CTkFrame(self.body, fg_color="transparent")
+        rows.pack(fill="both", expand=True, padx=5, pady=5)
+
+        with_icons = any(item.get("icon") for item in menu.items) or len(self._stack) > 1
+        if len(self._stack) > 1:
+            self._row(rows, "Back", self._back, "chevron_left", muted=True)
+            self._separator(rows)
+        for item in menu.items:
+            if item["kind"] == "separator":
+                self._separator(rows)
+            elif item["kind"] == "cascade":
+                self._row(rows, item["label"], lambda m=item["menu"]: self._show(m),
+                          item.get("icon") or ("blank" if with_icons else None), chevron=True)
+            else:
+                self._row(rows, item["label"], lambda c=item["command"]: self._run(c),
+                          item.get("icon") or ("blank" if with_icons else None), danger=item["danger"])
+        self._place()
+
+    def _row(self, parent, text, command, icon_name=None, danger=False, chevron=False, muted=False):
+        if danger:
+            text_color, hover = AppConfig.COLOR_BADGE_DANGER_TEXT, AppConfig.COLOR_BADGE_DANGER_BG
+        else:
+            text_color = AppConfig.COLOR_TEXT_GRAY if muted else AppConfig.COLOR_TEXT_PRIMARY
+            hover = AppConfig.COLOR_BTN_GHOST_HOVER
+        image = None
+        if icon_name == "blank":
+            image = _blank_icon(14)
+        elif icon_name:
+            image = icon(icon_name, 14, text_color)
+        button = ctk.CTkButton(
+            parent, text=text, image=image, compound="left", anchor="w", height=self._height(),
+            corner_radius=AppConfig.RADIUS_BADGE, fg_color="transparent", hover_color=hover,
+            text_color=text_color, font=AppConfig.FONT_BODY_SMALL, command=command,
+        )
+        button.pack(fill="x")
+        if chevron:
+            arrow = ctk.CTkLabel(button, text="", image=icon("chevron_right", 12, AppConfig.COLOR_TEXT_GRAY),
+                                 width=12, height=12, fg_color="transparent")
+            arrow.place(relx=1.0, rely=0.5, x=-10, anchor="e")
+            arrow.bind("<Button-1>", lambda e: command())
+            arrow.bind("<Enter>", lambda e: button._on_enter())
+
+    def _height(self):
+        return PopupMenu._ROW_HEIGHT
+
+    def _separator(self, parent):
+        ctk.CTkFrame(parent, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).pack(
+            fill="x", padx=6, pady=4)
+
+    def _place(self):
+        self.update_idletasks()
+        width = max(PopupMenu._MIN_WIDTH, self.body.winfo_reqwidth())
+        height = self.body.winfo_reqheight()
+        x, y = self._anchor
+        screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
+        if x + width > screen_w:
+            x = max(0, screen_w - width - 4)
+        if y + height > screen_h:
+            y = max(0, y - height)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _reveal(self):
+        if not self.winfo_exists():
+            return
+        self.deiconify()
+        from app.ui.win_effects import round_window_corners
+        round_window_corners(self, small=True)
+        self.lift()
+        self.focus_force()
+        self.after(15, lambda: self.winfo_exists() and self.attributes("-alpha", 1.0))
+
+    # ---------------------------------------------------------------- behavior
+    def _back(self):
+        self._stack.pop()
+        self._show(self._stack[-1], push=False)
+
+    def _run(self, command):
+        PopupMenu.close_open()
+        if command is not None:
+            # After the popup is gone: the command may open a dialog or grab.
+            self.master.after(10, command)
+
+    def _on_focus_out(self, _event=None):
+        # Focus left the whole app (another program was clicked): close. Focus
+        # moving inside the app is handled by the click-away binding.
+        self.after(60, lambda: self.winfo_exists() and self.focus_get() is None and PopupMenu.close_open())
+
+    def contains(self, x_root: int, y_root: int) -> bool:
+        return (self.winfo_rootx() <= x_root < self.winfo_rootx() + self.winfo_width()
+                and self.winfo_rooty() <= y_root < self.winfo_rooty() + self.winfo_height())
+
+
+_BLANK_ICONS: dict = {}
+
+
+def _blank_icon(size: int):
+    """Transparent spacer so labels line up when only some items have icons."""
+    if size not in _BLANK_ICONS:
+        blank = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        _BLANK_ICONS[size] = ctk.CTkImage(blank, size=(size, size))
+    return _BLANK_ICONS[size]
+
+
+def _install_popup_click_away(root):
+    """One app-wide handler (installed once): a click anywhere outside the open
+    popup closes it. Never unbound, so it can't remove CTk's own bindings."""
+    if getattr(root, "_zbb_popup_click_away", False):
+        return
+    root._zbb_popup_click_away = True
+
+    def on_click(event):
+        window = PopupMenu._open_window
+        if window is not None and window.winfo_exists() and not window.contains(event.x_root, event.y_root):
+            PopupMenu.close_open()
+
+    root.bind_all("<Button-1>", on_click, add="+")
+    root.bind_all("<Button-3>", on_click, add="+")
+    root.bind("<Configure>", lambda e: e.widget is root and PopupMenu.close_open(), add="+")
+
+
 def themed_menu(parent):
-    """tk.Menu styled to the current theme (CTk has no dropdown menu widget)."""
-    import tkinter as tk
-    return tk.Menu(
-        parent, tearoff=0,
-        bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
-        fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-        activebackground=resolve_color(AppConfig.COLOR_ACCENT_GREEN),
-        activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-        activeborderwidth=0,
-        borderwidth=1,
-        relief="flat",
-        font=AppConfig.FONT_BODY_SMALL,
-    )
+    """App-styled popup menu (see PopupMenu)."""
+    return PopupMenu(parent)
 
 
-def add_danger_command(menu, label, command):
-    menu.add_command(
-        label=label,
-        foreground=resolve_color(AppConfig.COLOR_BTN_DANGER),
-        activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-        activebackground=resolve_color(AppConfig.COLOR_BTN_DANGER),
-        command=command,
-    )
+def add_danger_command(menu, label, command, icon_name=None):
+    menu.add_command(label=label, command=command, icon_name=icon_name, danger=True)
 
 
 def dialog_header(parent, title, subtitle=None):
@@ -654,14 +829,14 @@ class ServerListItem(ctk.CTkFrame):
         menu = themed_menu(self)
         if self.on_export:
             menu.add_command(
-                label="  Export as .zbbpack",
+                label="Export as .zbbpack", icon_name="package",
                 command=lambda: self.on_export(self.server_name),
             )
         if self.on_delete:
             if self.on_export:
                 menu.add_separator()
-            add_danger_command(menu, f"  Delete '{self.full_name}'",
-                               lambda: self.on_delete(self.server_name))
+            add_danger_command(menu, f"Delete '{self.full_name}'",
+                               lambda: self.on_delete(self.server_name), icon_name="trash")
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:

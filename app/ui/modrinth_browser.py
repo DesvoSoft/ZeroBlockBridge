@@ -1191,10 +1191,10 @@ class ModrinthBrowser(ctk.CTkFrame):
         title = hit.get("title", key)
         menu = themed_menu(self)
         if update:
-            menu.add_command(label=f"  Update to {update.get('latest_version', 'latest')}",
-                             command=lambda: self._update_from_card(update))
+            menu.add_command(label=f"Update to {update.get('latest_version', 'latest')}",
+                             command=lambda: self._update_from_card(update), icon_name="download")
             menu.add_separator()
-        add_danger_command(menu, "  Uninstall", lambda: self._confirm_uninstall_mod(key, title))
+        add_danger_command(menu, "Uninstall", lambda: self._confirm_uninstall_mod(key, title), icon_name="trash")
         try:
             menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
         finally:

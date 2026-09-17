@@ -21,7 +21,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, resolve_color, ScrollableFrame, hide_until_drawn
+from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, ScrollableFrame, hide_until_drawn, themed_menu
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import format_duration, format_memory, memory_tooltip
@@ -813,17 +813,10 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=_export, daemon=True).start()
 
     def show_add_server_menu(self):
-        import tkinter as tk
-        menu = tk.Menu(
-            self, tearoff=0,
-            bg=resolve_color((AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK)),
-            fg=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-            activebackground=resolve_color(AppConfig.COLOR_BTN_GHOST_HOVER),
-            activeforeground=resolve_color(AppConfig.COLOR_TEXT_PRIMARY),
-            borderwidth=0,
-        )
-        menu.add_command(label="From Folder (existing server)", command=self.load_existing_server_action)
-        menu.add_command(label="From .zbbpack (import)", command=self.on_import_zbbpack)
+        menu = themed_menu(self)
+        menu.add_command(label="From Folder (existing server)", command=self.load_existing_server_action,
+                         icon_name="folder")
+        menu.add_command(label="From .zbbpack (import)", command=self.on_import_zbbpack, icon_name="package")
         btn = self.btn_add_server
         x = btn.winfo_rootx()
         y = btn.winfo_rooty() + btn.winfo_height()

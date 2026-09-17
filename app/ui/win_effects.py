@@ -169,6 +169,21 @@ def _brand_titlebar(window, caption_color=None) -> None:
                 add="+")
 
 
+def round_window_corners(window, small: bool = True) -> None:
+    """Only the DWM corner rounding (+ Win11 border/shadow) — for borderless
+    popups that have no titlebar to theme."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        window.update_idletasks()
+        pref = ctypes.c_int(_DWMWCP_ROUNDSMALL if small else _DWMWCP_ROUND)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            _hwnd(window), _DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(pref), ctypes.sizeof(pref))
+    except (OSError, AttributeError) as e:
+        logger.debug("DWM corner rounding unavailable: %s", e)
+
+
 def apply_rounded_corners(window, small: bool = False, caption_color=None) -> None:
     """Round a Tk toplevel's corners via DWM. Win11 only; no-op elsewhere.
 

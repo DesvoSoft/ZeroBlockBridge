@@ -402,14 +402,14 @@ class PlayersPanel(ctk.CTkFrame):
         players = self.zbb.players
         if self._live:
             parent_menu.add_command(
-                label=f"  Make operator (level {self._default_level})",
+                label=f"Make operator (level {self._default_level})", icon_name="user",
                 command=lambda: self._run_action(players.op, name, self._default_level, clear_entry=clear_entry))
             return
         sub = themed_menu(parent_menu)
         for level in OP_LEVELS:
-            sub.add_command(label=f"  {_OP_LEVEL_LABELS[level]}",
+            sub.add_command(label=_OP_LEVEL_LABELS[level],
                             command=lambda lv=level: self._run_action(players.op, name, lv, clear_entry=clear_entry))
-        parent_menu.add_cascade(label="  Make operator", menu=sub)
+        parent_menu.add_cascade(label="Make operator", menu=sub, icon_name="user")
 
     def _open_add_menu(self):
         name = self.entry_add.get().strip()
@@ -421,11 +421,11 @@ class PlayersPanel(ctk.CTkFrame):
             return
         players = self.zbb.players
         menu = themed_menu(self)
-        menu.add_command(label="  Add to whitelist",
+        menu.add_command(label="Add to whitelist", icon_name="check",
                          command=lambda: self._run_action(players.whitelist_add, name, clear_entry=True))
         self._op_menu(menu, name, clear_entry=True)
         menu.add_separator()
-        add_danger_command(menu, "  Ban…", lambda: self._ban(name, clear_entry=True))
+        add_danger_command(menu, "Ban…", lambda: self._ban(name, clear_entry=True), icon_name="warning")
         self._popup(menu, self.btn_add)
 
     def _open_row_menu(self, button, player: dict):
@@ -433,7 +433,7 @@ class PlayersPanel(ctk.CTkFrame):
         name = player["name"]
         menu = themed_menu(self)
         if self._live and player["online"]:
-            menu.add_command(label="  Kick…", command=lambda: self._kick(name))
+            menu.add_command(label="Kick…", command=lambda: self._kick(name), icon_name="close")
             menu.add_separator()
         if player["op_level"] is None:
             self._op_menu(menu, name)
@@ -441,23 +441,25 @@ class PlayersPanel(ctk.CTkFrame):
             if not self._live:
                 sub = themed_menu(menu)
                 for level in OP_LEVELS:
-                    sub.add_command(label=f"  {_OP_LEVEL_LABELS[level]}",
+                    sub.add_command(label=_OP_LEVEL_LABELS[level],
                                     command=lambda lv=level: self._run_action(players.op, name, lv))
-                menu.add_cascade(label="  Change operator level", menu=sub)
-            menu.add_command(label="  Remove operator", command=lambda: self._run_action(players.deop, name))
+                menu.add_cascade(label="Change operator level", menu=sub, icon_name="user")
+            menu.add_command(label="Remove operator", command=lambda: self._run_action(players.deop, name),
+                             icon_name="close")
         if player["whitelisted"]:
-            menu.add_command(label="  Remove from whitelist",
+            menu.add_command(label="Remove from whitelist", icon_name="close",
                              command=lambda: self._run_action(players.whitelist_remove, name))
         else:
-            menu.add_command(label="  Add to whitelist", command=lambda: self._run_action(players.whitelist_add, name))
+            menu.add_command(label="Add to whitelist", command=lambda: self._run_action(players.whitelist_add, name),
+                             icon_name="check")
         menu.add_separator()
         if player["banned"]:
-            menu.add_command(label="  Unban", command=lambda: self._run_action(players.pardon, name))
+            menu.add_command(label="Unban", command=lambda: self._run_action(players.pardon, name), icon_name="check")
         else:
-            add_danger_command(menu, "  Ban…", lambda: self._ban(name))
+            add_danger_command(menu, "Ban…", lambda: self._ban(name), icon_name="warning")
         if player["uuid"]:
             menu.add_separator()
-            menu.add_command(label="  Copy UUID", command=lambda: self._copy(player["uuid"]))
+            menu.add_command(label="Copy UUID", command=lambda: self._copy(player["uuid"]), icon_name="copy")
         self._popup(menu, button)
 
     @staticmethod
