@@ -271,6 +271,10 @@ All auto-healing events surface via the **Toast** system (`app/ui/toast.py`):
 
 ---
 
+### UI: selected vs running server
+
+`ZBBManager.current_server` is the runtime server — the one `ServerRunner`, the watchdog restart, the scheduler tick, the crash reporter, the Discord webhook and `PlayerHistoryTracker` act on. The main window tracks the **viewed** server separately (`MCTunnelApp.viewed_server`): selecting a server while another runs only changes what the dashboard, Players/Mods tabs, properties editor and folder button show; the viewed server's start button is disabled until the running one stops. `start_server_action` selects the viewed server in the manager right before starting. The sidebar LED marks the running server.
+
 ## Threading Model
 
 - All background threads: `daemon=True`.

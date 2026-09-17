@@ -17,6 +17,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Backups tab rework** — each backup is a row with its date, a reason chip (Manual, Auto, Pre-update) and size, plus its own Restore and **Delete** buttons; **Open Folder** jumps to the server's backup directory.
 - **Installed mod count** — the Mods tab's Installed button shows how many mods/plugins the server has, with an amber dot and "N updates available" tooltip when newer versions exist.
 - Servers without an icon get a colored initial tile in the sidebar list.
+- **Browse servers while one runs** — any server can be selected to view or change its properties, mods, players and backups while another server is running; only starting a second server is blocked ("Stop X first — one server runs at a time"), and the console input says which server receives commands.
+- **Styled menus** — right-click and dropdown menus (server rows, Add Server, installed mods, players) are app-styled popups with icons, hover rows, red destructive items and in-place submenus, instead of native Windows menus.
 - **Players tab** (replaces the Player Management window) — one list of every player the server knows (online, joined before, whitelisted, operators, banned) with skin heads, status chips, last seen and playtime, search and filters. Each player has an actions menu: kick or ban with a reason, make operator with a described permission level, whitelist, unban, copy UUID. Players can also be added by name.
 - **Player history** — ZBB records when each player was first and last seen and how long they have played, per server.
 - Main tabs show icons plus the online player count and the installed mod count.
@@ -39,6 +41,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Scrollbars only appear when a list or page actually overflows.
 - The Mods tab is disabled (with a tooltip) for vanilla servers, which can't load mods or plugins.
 - Mod cards: installed mods show an "Installed" button with a menu (update to the newer version when one exists, uninstall) instead of a red Uninstall button; descriptions are limited to two lines; category tags are neutral so the client/server badge stands out.
+- **Compact sidebar header** — the app name sits above a smaller centered logo, level with the top of the dashboard; server rows show engine and version under the name, and the running server is marked by a colored LED on the right.
 - The header RAM readout shows memory used ("RAM 2.3 GB"), with a tooltip explaining that the server's RAM setting caps Java's heap, so total usage can be higher.
 
 ### Fixed
