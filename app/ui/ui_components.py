@@ -2,9 +2,11 @@ import customtkinter as ctk
 import hashlib
 import logging
 import re
+import sys
 import threading
 import time
 import tkinter as tk
+from typing import Callable
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 from app.ui.icons import icon
@@ -33,18 +35,24 @@ def resolve_color(color):
 # <Configure>, so a quiet period means the content is painted.
 _REVEAL_QUIET_MS = 50
 _REVEAL_POLL_MS = 25
+_REVEAL_READY_POLL_MS = 5
+_REVEAL_SETTLE_MS = 20
 _REVEAL_MAX_WAIT_MS = 600
-_FADE_STEP = 0.25
+_FADE_STEP = 0.5
 _FADE_INTERVAL_MS = 15
 
 
-def hide_until_drawn(window, max_wait_ms: int = _REVEAL_MAX_WAIT_MS) -> None:
+def hide_until_drawn(window, max_wait_ms: int = _REVEAL_MAX_WAIT_MS, ready: Callable = None) -> None:
     """Keep a window fully transparent until its content is drawn, then fade in.
 
     Windows shows a new window with a white background before Tk paints it,
     and CTk widgets then draw themselves one by one — a visible white flash
     followed by content popping in. Call right after the window is created
     (before it is built); build synchronously; the reveal runs from idle.
+
+    ready: when given, wait for the window to be mapped and ready() to hold,
+    then lay it out synchronously and reveal after a short paint settle —
+    instead of watching <Configure> during the whole build.
     """
     try:
         window.attributes("-alpha", 0.0)
@@ -68,33 +76,103 @@ def hide_until_drawn(window, max_wait_ms: int = _REVEAL_MAX_WAIT_MS) -> None:
             return
         if alpha < 1.0:
             window.after(_FADE_INTERVAL_MS, fade_in, alpha)
-        else:
+        elif bind_id is not None:
             window.unbind("<Configure>", bind_id)
+
+    def timed_out():
+        return (time.monotonic() - started) * 1000 >= max_wait_ms
+
+    def is_ready():
+        return window.winfo_ismapped() and ready()
+
+    def note_paint(_event=None):
+        if not state.get("revealed"):
+            state["last"] = time.monotonic()
+
+    def reveal_when_painted():
+        if not window.winfo_exists():
+            return
+        if not (is_ready() or timed_out()):
+            window.after(_REVEAL_READY_POLL_MS, wait_until_ready)
+        elif (time.monotonic() - state["last"]) * 1000 >= _REVEAL_SETTLE_MS or timed_out():
+            state["revealed"] = True
+            fade_in()
+        else:
+            window.after(_REVEAL_READY_POLL_MS, reveal_when_painted)
+
+    def wait_until_ready():
+        if not window.winfo_exists():
+            return
+        if not (is_ready() or timed_out()):
+            window.after(_REVEAL_READY_POLL_MS, wait_until_ready)
+            return
+        if not state.get("painting_tracked"):
+            # Bound only now, so building the window doesn't pay a Python call
+            # per event. A toplevel binding sees its descendants' events.
+            state["painting_tracked"] = True
+            window.bind("<Configure>", note_paint, add="+")
+            window.bind("<Expose>", note_paint, add="+")
+        # Mapping resizes the window: lay out and draw the CTk widgets now.
+        # Plain Tk widgets still paint from WM_PAINT afterwards, so reveal
+        # once no widget has been exposed or reconfigured for a moment.
+        window.update_idletasks()
+        state["last"] = time.monotonic()
+        window.after(_REVEAL_READY_POLL_MS, reveal_when_painted)
 
     def wait_until_drawn():
         if not window.winfo_exists():
             return
         now = time.monotonic()
         quiet = (now - state["last"]) * 1000 >= _REVEAL_QUIET_MS
-        timed_out = (now - started) * 1000 >= max_wait_ms
-        if window.winfo_ismapped() and (quiet or timed_out):
+        if window.winfo_ismapped() and (quiet or timed_out()):
             fade_in()
         else:
             window.after(_REVEAL_POLL_MS, wait_until_drawn)
 
+    if ready is not None:
+        bind_id = None
+        # Idle runs after the caller has built the whole window.
+        window.after_idle(wait_until_ready)
+        return
     # A toplevel binding sees <Configure> from every descendant.
     bind_id = window.bind("<Configure>", note_configure, add="+")
-    # Idle runs after the caller has built the whole window.
     window.after_idle(wait_until_drawn)
 
 
 class ZBBToplevel(ctk.CTkToplevel):
     """CTkToplevel that only becomes visible once its content is drawn (no
-    white flash, no widgets popping in) — see hide_until_drawn."""
+    white flash, no widgets popping in) — see hide_until_drawn — and hides
+    before it is torn down."""
 
     def __init__(self, *args, **kwargs):
+        # CTk withdraws and re-shows a toplevel to theme its titlebar: at
+        # creation, and again 10ms after every resizable() call. Revealing
+        # before that last re-show would blink the window.
+        self._zbb_titlebar_refresh_pending = False
         super().__init__(*args, **kwargs)
-        hide_until_drawn(self)
+        hide_until_drawn(self, ready=self._titlebar_settled)
+
+    def _titlebar_settled(self) -> bool:
+        return not (self._zbb_titlebar_refresh_pending or self._windows_set_titlebar_color_called)
+
+    def resizable(self, width: bool = None, height: bool = None):
+        if sys.platform.startswith("win"):
+            self._zbb_titlebar_refresh_pending = True
+        return super().resizable(width, height)
+
+    def _windows_set_titlebar_color(self, color_mode: str):
+        self._zbb_titlebar_refresh_pending = False
+        super()._windows_set_titlebar_color(color_mode)
+
+    def destroy(self):
+        # Tearing down a few hundred widgets takes a while (~200ms for the
+        # properties editor), and a visible window came apart piece by piece.
+        try:
+            if self.winfo_exists():
+                self.withdraw()
+        except tk.TclError as e:
+            logger.debug("Withdraw before destroy failed: %s", e)
+        super().destroy()
 
 
 class ScrollableFrame(ctk.CTkScrollableFrame):
