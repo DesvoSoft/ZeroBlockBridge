@@ -24,7 +24,7 @@ from app.services.sanitizer import ALLOWLISTED_COMMANDS
 from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
-from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
+from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, StackedTabview, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners, apply_titlebar_theme
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class AppSettingsDialog(ZBBToplevel):
 
         # Transparent: the section cards are the elevated surfaces. A card-colored
         # tab view made every card indistinguishable from its background.
-        self.tabview = ctk.CTkTabview(self, corner_radius=AppConfig.RADIUS_CARD, fg_color="transparent")
+        self.tabview = StackedTabview(self, corner_radius=AppConfig.RADIUS_CARD, fg_color="transparent")
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
         for name in ("General", "Notifications", "Java", "Storage", "About"):
             self.tabview.add(name)

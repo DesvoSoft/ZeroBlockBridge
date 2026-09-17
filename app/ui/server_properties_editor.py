@@ -9,7 +9,7 @@ from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
-from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, ZBBToplevel
+from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, StackedTabview, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
@@ -195,7 +195,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.grid_rowconfigure(tabview_row, weight=1)
 
         # Tabview
-        self.tabview = ctk.CTkTabview(self)
+        self.tabview = StackedTabview(self)
         self.tabview.grid(row=tabview_row, column=0, sticky="nsew", padx=10, pady=10)
         
         self.tab_general = self.tabview.add("General")
