@@ -583,20 +583,19 @@ class ServerListItem(ctk.CTkFrame):
         )
         self.lbl_name.grid(row=0, column=1, padx=(0, 10), pady=(8, 0), sticky="sew")
 
-        # Subtitle: engine + version in gray, then the live state in color.
-        subtitle = ctk.CTkFrame(self, fg_color="transparent")
-        subtitle.grid(row=1, column=1, padx=(0, 10), pady=(0, 8), sticky="nw")
-        self.lbl_engine = ctk.CTkLabel(subtitle, text=self._engine_text(server_name), height=16,
+        # Subtitle: engine + version.
+        self.lbl_engine = ctk.CTkLabel(self, text=self._engine_text(server_name), height=16, anchor="w",
                                        font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_GRAY)
-        self.lbl_engine.pack(side="left")
-        self.lbl_state = ctk.CTkLabel(subtitle, text="", height=16, font=AppConfig.FONT_BODY_SMALL)
-        self.lbl_state.pack(side="left", padx=(6, 0))
+        self.lbl_engine.grid(row=1, column=1, padx=(0, 10), pady=(0, 8), sticky="nw")
+
+        # State LED: right edge, vertically centered, only while running/starting
+        # (one server runs at a time, so the LED alone marks it).
+        self.status_led = ctk.CTkLabel(self, text="", width=12, height=12)
+        self.status_led.grid(row=0, column=2, rowspan=2, padx=(0, 14))
         self.set_status("offline")
 
         self.bind_events(self)
-        self.bind_events(self.lbl_name)
-        self.bind_events(self.lbl_icon)
-        for widget in (subtitle, self.lbl_engine, self.lbl_state):
+        for widget in (self.lbl_name, self.lbl_icon, self.lbl_engine, self.status_led):
             self.bind_events(widget)
         self.set_cursor("hand2")
 
@@ -618,11 +617,9 @@ class ServerListItem(ctk.CTkFrame):
         else:
             self.configure(fg_color=self._fg_idle, border_color=self._fg_idle)
 
-    _STATES = {
-        "online": ("● Running", AppConfig.COLOR_STATUS_ONLINE),
-        "starting": ("● Starting", AppConfig.COLOR_STATUS_STARTING),
-        # Offline shows nothing: only one server can run, so the LED marks it.
-        "offline": ("", AppConfig.COLOR_STATUS_OFFLINE),
+    _LED_COLORS = {
+        "online": (AppConfig.COLOR_STATUS_ONLINE, "Running"),
+        "starting": (AppConfig.COLOR_STATUS_STARTING, "Starting"),
     }
 
     @staticmethod
@@ -633,8 +630,17 @@ class ServerListItem(ctk.CTkFrame):
         return f"{engine} {meta.get('version', '')}".strip()
 
     def set_status(self, status: str):
-        text, color = self._STATES.get(status, self._STATES["offline"])
-        self.lbl_state.configure(text=text, text_color=color)
+        led = self._LED_COLORS.get(status)
+        if led is None:
+            self.status_led.grid_remove()
+            return
+        color, label = led
+        self.status_led.configure(image=icon("dot", 12, color))
+        self.status_led.grid()
+        if not hasattr(self, "_led_tooltip"):
+            self._led_tooltip = ToolTip(self.status_led, label)
+        else:
+            self._led_tooltip.text = label
 
     def bind_events(self, widget):
         widget.bind("<Button-1>", lambda e: self._on_select())
