@@ -621,7 +621,8 @@ class ServerListItem(ctk.CTkFrame):
     _STATES = {
         "online": ("● Running", AppConfig.COLOR_STATUS_ONLINE),
         "starting": ("● Starting", AppConfig.COLOR_STATUS_STARTING),
-        "offline": ("● Offline", AppConfig.COLOR_STATUS_OFFLINE),
+        # Offline shows nothing: only one server can run, so the LED marks it.
+        "offline": ("", AppConfig.COLOR_STATUS_OFFLINE),
     }
 
     @staticmethod
