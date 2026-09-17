@@ -161,6 +161,10 @@ class MCTunnelApp(ctk.CTk):
     def _init_state_variables(self):
         self.claim_url = None
         self.server_items = {}
+        # The server shown in the dashboard/tabs. Only one server runs at a
+        # time (ZBBManager.current_server while running), but any server can
+        # be selected to browse and configure it.
+        self.viewed_server = None
 
         self.events = EventBus()
         self.zbb_manager = ZBBManager(self.events)
@@ -307,7 +311,7 @@ class MCTunnelApp(ctk.CTk):
         run_slot = ctk.CTkFrame(self.status_hero_row, fg_color="transparent")
         run_slot.pack(side="right")
         self.btn_start = ctk.CTkButton(run_slot, text="", image=icon("play", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.start_server_action, fg_color=AppConfig.COLOR_BTN_SUCCESS, hover_color=AppConfig.COLOR_BTN_SUCCESS_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
-        ToolTip(self.btn_start, "Start server")
+        self._start_tooltip = ToolTip(self.btn_start, "Start server")
 
         self.btn_stop = ctk.CTkButton(run_slot, text="", image=icon("stop", 14, AppConfig.COLOR_TEXT_ON_ACCENT), state="disabled", command=self.stop_server_action, fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER, width=45, corner_radius=AppConfig.RADIUS_BTN, height=36)
         ToolTip(self.btn_stop, "Stop server")
@@ -517,12 +521,13 @@ class MCTunnelApp(ctk.CTk):
             return
         from app.ui.players_panel import PlayersPanel
         self.players_panel = PlayersPanel(
-            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self.executor.submit)
+            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self.executor.submit,
+            get_server=lambda: self.viewed_server)
         self.players_panel.pack(fill="both", expand=True)
         self.players_panel.update_idletasks()
 
     def show_players_tab(self):
-        if not self.zbb_manager.current_server:
+        if not self.viewed_server:
             return
         self.console_tabs.set("Players")
         self._on_console_tab_changed()
@@ -534,7 +539,7 @@ class MCTunnelApp(ctk.CTk):
             self.console_tabs.tab("Mods"),
             get_server_info=self._get_current_server_info,
             create_snapshot=self.zbb_manager.create_pre_update_snapshot,
-            is_server_running=self.zbb_manager.is_running,
+            is_server_running=self._viewing_running_server,
             on_installed_count=lambda n: self._refresh_tab_labels(installed=n),
         )
         self.modrinth_browser.pack(fill="both", expand=True)
@@ -625,7 +630,9 @@ class MCTunnelApp(ctk.CTk):
         otherwise, with a placeholder that says why."""
         if running:
             placeholder = "Type a command (Up/Down: history)"
-        elif self.zbb_manager.current_server:
+        elif self.zbb_manager.is_running() and self.zbb_manager.current_server != self.viewed_server:
+            placeholder = f"{self.zbb_manager.current_server} is running — select it to send commands"
+        elif self.viewed_server:
             placeholder = "Start the server to send commands"
         else:
             placeholder = "Select a server to send commands"
@@ -707,7 +714,7 @@ class MCTunnelApp(ctk.CTk):
         from app.services.settings_manager import SettingsManager
         settings = SettingsManager()
         last_server = settings.get("last_server")
-        if self.zbb_manager.current_server or last_server not in servers:
+        if self.viewed_server or last_server not in servers:
             return
         self.on_server_select(last_server)
         last_tab = settings.get("last_console_tab")
@@ -718,7 +725,7 @@ class MCTunnelApp(ctk.CTk):
     def _update_mods_tab_state(self):
         """Players needs a selected server; Mods also needs an engine that can
         load mods or plugins (vanilla can't)."""
-        server = self.zbb_manager.current_server
+        server = self.viewed_server
         info = self._get_current_server_info() if server else None
         can_mod = bool(info and info[2])
         enabled = {"Players": bool(server), "Mods": can_mod}
@@ -769,6 +776,8 @@ class MCTunnelApp(ctk.CTk):
     def _on_server_deleted(self, server_name):
         if self.zbb_manager.current_server == server_name:
             self.zbb_manager.current_server = None
+        if self.viewed_server == server_name:
+            self.viewed_server = None
             self.lbl_dash_title.configure(text="Select a server")
             self.lbl_server_info.configure(text="No server selected", text_color=AppConfig.COLOR_TEXT_GRAY)
             self._show_run_stop(self.btn_start, self.btn_stop, running=False, enabled=False, side="right")
@@ -867,12 +876,11 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=_import, daemon=True).start()
 
     def on_server_select(self, server_name):
-        # UI Locking: Block switching if current server is active
-        if self.zbb_manager.is_running() and self.zbb_manager.current_server != server_name:
-            Toast.show(self, "Stop the current server before switching", toast_type="warning")
-            return
-
-        self.zbb_manager.select_server(server_name)
+        # Any server can be viewed and configured; only the selection of the
+        # server that *runs* is locked while one is running.
+        self.viewed_server = server_name
+        if not self.zbb_manager.is_running():
+            self.zbb_manager.select_server(server_name)
         from app.services.settings_manager import SettingsManager
         SettingsManager().set("last_server", server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
@@ -881,18 +889,14 @@ class MCTunnelApp(ctk.CTk):
             it.set_selected(name == server_name)
 
         meta = logic.get_server_meta(server_name)
-        server_type = meta.get("type", "Vanilla") if meta else "Vanilla"
-        mc_version = meta.get("version", "?") if meta else "?"
-        self.lbl_server_info.configure(text=f"{server_type} {mc_version}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        server_type = str((meta or {}).get("type") or "Vanilla").title()
+        mc_version = (meta or {}).get("version", "")
+        self.lbl_server_info.configure(text=f"{server_type} {mc_version}".strip(), text_color=AppConfig.COLOR_TEXT_PRIMARY)
         try:
             self._max_players = int(load_server_properties(server_name).get("max-players", 20))
         except (TypeError, ValueError):
             self._max_players = None
-        self._refresh_players_badge()
 
-        is_running = self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name
-
-        self._show_run_stop(self.btn_start, self.btn_stop, running=is_running, side="right")
 
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
@@ -902,14 +906,32 @@ class MCTunnelApp(ctk.CTk):
             self._refresh_tab_labels(installed=len(ModrinthBrowser._installed_jar_files(server_name)))
         self._update_mods_tab_state()
 
-        item = self.server_items.get(server_name)
-        if item:
-            item.set_status("online" if is_running else "offline")
-
         self.btn_config.configure(state="normal")
         self.btn_open_folder.configure(state="normal")
-        self._set_console_input(is_running)
+        self._sync_server_header()
         self.server_console.log(f"[UI] Selected server: {server_name}")
+
+    def _viewing_running_server(self) -> bool:
+        return (self.viewed_server is not None and self.zbb_manager.is_running()
+                and self.zbb_manager.current_server == self.viewed_server)
+
+    def _sync_server_header(self):
+        """Header controls for the viewed server: live state when it is the one
+        running, plain Offline (start disabled) when another server runs."""
+        viewing_running = self._viewing_running_server()
+        other_running = self.zbb_manager.is_running() and not viewing_running
+        self._show_run_stop(self.btn_start, self.btn_stop, running=viewing_running,
+                            enabled=bool(self.viewed_server) and not other_running, side="right")
+        self._start_tooltip.text = (f"Stop {self.zbb_manager.current_server} first — one server runs at a time"
+                                    if other_running else "Start server")
+        self._set_console_input(viewing_running)
+        if viewing_running and self._server_phase is not None:
+            self._render_status_label()
+        else:
+            self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE)
+            self.lbl_ram.configure(text="")
+            self._ram_tooltip.text = ""
+        self._refresh_players_badge()
 
     def _open_in_file_manager(self, path) -> None:
         try:
@@ -923,25 +945,26 @@ class MCTunnelApp(ctk.CTk):
             self.server_console.log(f"[Error] Failed to open folder: {e}")
 
     def open_server_folder(self):
-        if not self.zbb_manager.current_server:
+        if not self.viewed_server:
             self._open_in_file_manager(SERVERS_DIR)
             return
-        server_path = os.path.join(SERVERS_DIR, self.zbb_manager.current_server)
+        server_path = os.path.join(SERVERS_DIR, self.viewed_server)
         if os.path.exists(server_path):
             self._open_in_file_manager(server_path)
 
     def _get_current_server_info(self):
-        if not self.zbb_manager.current_server:
+        """(name, mc_version, loader) of the viewed server, for the Mods tab."""
+        if not self.viewed_server:
             return None
-        meta = logic.get_server_meta(self.zbb_manager.current_server)
+        meta = logic.get_server_meta(self.viewed_server)
         mc_version = meta.get("version", "1.20.1")
         loader = None
         stype = meta.get("type", "Vanilla").lower()
         if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
             loader = stype
         
-        logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.zbb_manager.current_server, mc_version, loader or 'any')
-        return (self.zbb_manager.current_server, mc_version, loader)
+        logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.viewed_server, mc_version, loader or 'any')
+        return (self.viewed_server, mc_version, loader)
 
     def save_advanced_settings(self, *args):
         if not self.zbb_manager.current_server: return
@@ -954,8 +977,8 @@ class MCTunnelApp(ctk.CTk):
         })
 
     def edit_server_properties(self):
-        if not self.zbb_manager.current_server: return
-        ServerPropertiesEditor(self, self.zbb_manager.current_server, logic, self.zbb_manager)
+        if not self.viewed_server: return
+        ServerPropertiesEditor(self, self.viewed_server, logic, self.zbb_manager)
 
     def update_console(self, text):
         if isinstance(text, str):
@@ -989,20 +1012,28 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self.tunnel_console.log(text))
 
     def start_server_action(self):
+        if self.zbb_manager.is_running():
+            return
+        if self.viewed_server and self.zbb_manager.current_server != self.viewed_server:
+            self.zbb_manager.select_server(self.viewed_server)
+
         def _start():
             self.zbb_manager.start_server()
         self.executor.submit(_start)
 
     def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True, side: str = "left"):
         """Show only one of run/stop at a time, matching current state."""
+        # A disabled button drops its saturated fill so it doesn't read as clickable.
         if running:
             btn_run.pack_forget()
             btn_stop.pack(side=side, padx=2)
-            btn_stop.configure(state="normal" if enabled else "disabled")
+            btn_stop.configure(state="normal" if enabled else "disabled",
+                               fg_color=AppConfig.COLOR_BTN_DANGER if enabled else AppConfig.COLOR_BTN_GHOST)
         else:
             btn_stop.pack_forget()
             btn_run.pack(side=side, padx=2)
-            btn_run.configure(state="normal" if enabled else "disabled")
+            btn_run.configure(state="normal" if enabled else "disabled",
+                              fg_color=AppConfig.COLOR_BTN_SUCCESS if enabled else AppConfig.COLOR_BTN_GHOST)
 
     def _set_current_server_pill(self, status: str):
         item = self.server_items.get(self.zbb_manager.current_server)
@@ -1010,9 +1041,7 @@ class MCTunnelApp(ctk.CTk):
             item.set_status(status)
 
     def on_server_starting(self, data=None):
-        self.after(0, lambda: self._set_console_input(True))
         self.after(0, lambda: self._enter_server_phase("starting"))
-        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=True, side="right"))
         self.after(0, lambda: self._set_current_server_pill("starting"))
         if data and isinstance(data, dict):
             jdk_src = data.get("jdk_source", "unknown")
@@ -1040,7 +1069,7 @@ class MCTunnelApp(ctk.CTk):
         if installed is not None:
             self._installed_mods_count = installed
         counts = {
-            "Players": getattr(self, "_player_count", 0) if self.zbb_manager.current_server else 0,
+            "Players": getattr(self, "_player_count", 0) if self._viewing_running_server() else 0,
             "Mods": self._installed_mods_count if self._get_current_server_info() and self._get_current_server_info()[2] else 0,
         }
         try:
@@ -1058,7 +1087,8 @@ class MCTunnelApp(ctk.CTk):
 
     def _refresh_players_badge(self):
         max_players = f"/{self._max_players}" if self._max_players else ""
-        self.btn_players.configure(text=f"{self._player_count}{max_players}")
+        count = self._player_count if self._viewing_running_server() else 0
+        self.btn_players.configure(text=f"{count}{max_players}")
         self._refresh_tab_labels()
 
     # --- Live status: elapsed start time, uptime, memory ---
@@ -1076,26 +1106,30 @@ class MCTunnelApp(ctk.CTk):
             self.after_cancel(self._status_tick_job)
             self._status_tick_job = None
         if phase is None:
-            self.lbl_ram.configure(text="")
             self._player_count = 0
-            self._refresh_players_badge()
+            self._sync_server_header()
             return
         self._status_ticks = 0
+        self._sync_server_header()
         self._tick_server_status()
 
     def _tick_server_status(self):
         self._status_tick_job = None
         if self._server_phase is None:
             return
+        if self._viewing_running_server():
+            self._render_status_label()
+        if self._status_ticks % self._MEMORY_EVERY_TICKS == 0:
+            self.executor.submit(self._sample_server_memory)
+        self._status_ticks += 1
+        self._status_tick_job = self.after(self._STATUS_TICK_MS, self._tick_server_status)
+
+    def _render_status_label(self):
         elapsed = format_duration(time.monotonic() - self._phase_since)
         if self._server_phase == "starting":
             self.lbl_status.configure(text=f"● Starting… {elapsed}", text_color=AppConfig.COLOR_STATUS_STARTING)
         else:
             self.lbl_status.configure(text=f"● Running · {elapsed}", text_color=AppConfig.COLOR_STATUS_ONLINE)
-        if self._status_ticks % self._MEMORY_EVERY_TICKS == 0:
-            self.executor.submit(self._sample_server_memory)
-        self._status_ticks += 1
-        self._status_tick_job = self.after(self._STATUS_TICK_MS, self._tick_server_status)
 
     def _sample_server_memory(self):
         used = self.zbb_manager.server_memory_usage()
@@ -1103,7 +1137,7 @@ class MCTunnelApp(ctk.CTk):
         limit = logic.get_server_ram(server) if server else None
 
         def _apply():
-            if self._server_phase is None:
+            if self._server_phase is None or not self._viewing_running_server():
                 return
             self.lbl_ram.configure(text=format_memory(used) if used else "")
             self._ram_tooltip.text = memory_tooltip(limit) if used and limit else ""
@@ -1120,10 +1154,7 @@ class MCTunnelApp(ctk.CTk):
             self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
 
     def on_server_stopped(self, data=None):
-        self.after(0, lambda: self._set_console_input(False))
         self.after(0, lambda: self._enter_server_phase(None))
-        self.after(0, lambda: self.lbl_status.configure(text="● Offline", text_color=AppConfig.COLOR_STATUS_OFFLINE))
-        self.after(0, lambda: self._show_run_stop(self.btn_start, self.btn_stop, running=False, side="right"))
         self.after(0, lambda: self._set_current_server_pill("offline"))
 
     def stop_server_action(self):

@@ -43,9 +43,12 @@ class PlayersPanel(ctk.CTkFrame):
         "warning": (AppConfig.COLOR_STATUS_STARTING, "warning"),
     }
 
-    def __init__(self, master, zbb_manager, event_bus, run_async, **kwargs):
+    def __init__(self, master, zbb_manager, event_bus, run_async, get_server=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.zbb = zbb_manager
+        # The server whose players are shown (the selected one — not
+        # necessarily the one running).
+        self.get_server = get_server or (lambda: zbb_manager.current_server)
         self.events = event_bus
         self.run_async = run_async
 
@@ -178,7 +181,7 @@ class PlayersPanel(ctk.CTkFrame):
         """Reload the roster for the selected server (off the Tk thread)."""
         self._refresh_gen += 1
         gen = self._refresh_gen
-        server = self.zbb.current_server
+        server = self.get_server()
         if not server:
             self._apply_refresh(gen, None, [], True, False, False, 4)
             return
@@ -367,7 +370,7 @@ class PlayersPanel(ctk.CTkFrame):
 
     # ------------------------------------------------------------------ actions
     def _run_action(self, action, *args, clear_entry=False):
-        server = self.zbb.current_server
+        server = self.get_server()
         if not server:
             return
         self._set_status("Working…")
@@ -410,7 +413,7 @@ class PlayersPanel(ctk.CTkFrame):
 
     def _open_add_menu(self):
         name = self.entry_add.get().strip()
-        if not self.zbb.current_server:
+        if not self.get_server():
             return
         if not name:
             self._set_status("Type a player name first.", kind="warning")
