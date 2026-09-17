@@ -130,6 +130,77 @@ class ScrollableFrame(ctk.CTkScrollableFrame):
             self._scrollbar.grid_remove()
             self._parent_canvas.yview_moveto(0)
 
+
+class StackedTabview(ctk.CTkTabview):
+    """CTkTabview that switches tabs without unmapping them.
+
+    Stock CTkTabview grid_forget()s the old tab and re-grids the new one, and
+    re-mapping makes every CTk widget in it redraw itself, visibly, one after
+    another (the Mods tab popped in on every visit). Here every visited tab
+    stays mapped: the selected one fills the tab area on top, the others sit
+    beneath the tabview's own canvas at the size they last had — so resizing
+    the window doesn't relayout (and redraw) hidden tabs either. A tab being
+    selected is sized, built by the command if lazy, and drawn while still
+    covered, then raised: a single repaint.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # The tab area the stock tabview grids its tabs into; tabs are placed
+        # in it instead. Created before any tab, it never covers one.
+        self._tab_area = None
+        super().__init__(*args, **kwargs)
+        self._tab_area = tk.Frame(self, highlightthickness=0, bd=0, width=0, height=0)
+        self._tab_area.lower()
+
+    def winfo_children(self):
+        return [w for w in super().winfo_children() if w is not self._tab_area]
+
+    def _grid_forget_all_tabs(self, exclude_name=None):
+        pass  # hidden tabs stay mapped beneath the canvas
+
+    def _grid_tab_area(self):
+        pad = self._apply_widget_scaling(max(self._corner_radius, self._border_width))
+        row = 3 if self._anchor.lower() in ("center", "w", "nw", "n", "ne", "e") else 0
+        self._tab_area.grid(row=row, column=0, sticky="nsew", padx=pad, pady=pad)
+
+    def _fill_tab_area(self, tab):
+        # tkinter's place, not CTk's: CTk rejects width/height and would rescale
+        # the pixel sizes _stash passes (winfo_* sizes are already scaled).
+        tk.Place.place_configure(tab, in_=self._tab_area, x=0, y=0, relwidth=1, relheight=1, width="", height="")
+
+    def _set_grid_current_tab(self):
+        """Programmatic set()/insert()/corner changes: show the current tab now."""
+        if self._tab_area is None:
+            return
+        self._grid_tab_area()
+        current = self._tab_dict[self._current_name]
+        self._fill_tab_area(current)
+        current.tkraise()
+        for tab in self._tab_dict.values():
+            if tab is not current and tab.winfo_manager():
+                self._stash(tab)
+
+    def _stash(self, tab):
+        """Keep a hidden tab at its current size, below the canvas."""
+        tk.Place.place_configure(tab, relwidth="", relheight="", width=tab.winfo_width(), height=tab.winfo_height())
+        tab.lower()
+
+    def _segmented_button_callback(self, selected_name):
+        old = self._tab_dict[self._current_name]
+        new = self._tab_dict[selected_name]
+        focused = self.focus_get()
+        if focused is not None and (focused is old or str(focused).startswith(f"{old}.")):
+            self.focus_set()  # keys must not keep landing in a hidden tab
+        new.lower()
+        self._fill_tab_area(new)
+        self._current_name = selected_name
+        if self._command is not None:
+            self._command()
+        self.update_idletasks()
+        new.tkraise()
+        if old is not new:
+            self._stash(old)
+
 def center_on_parent(toplevel, parent, width, height):
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2

@@ -21,7 +21,7 @@ if sys.platform == "win32" and hasattr(sys, 'base_prefix'):
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, ScrollableFrame, hide_until_drawn, themed_menu
+from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, ScrollableFrame, StackedTabview, hide_until_drawn, themed_menu
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import format_duration, format_memory, memory_tooltip
@@ -466,7 +466,7 @@ class MCTunnelApp(ctk.CTk):
         self.on_tunnel_status({"status": "Offline", "skip_debounce": True})
 
     def _build_console_tabs(self):
-        self.console_tabs = ctk.CTkTabview(self.main_frame, command=self._on_console_tab_changed)
+        self.console_tabs = StackedTabview(self.main_frame, command=self._on_console_tab_changed)
         self.console_tabs.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="nsew")
 
         self.console_tabs.add("Console")
