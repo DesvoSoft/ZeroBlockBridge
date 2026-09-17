@@ -732,7 +732,9 @@ class MCTunnelApp(ctk.CTk):
         for tab, on in enabled.items():
             try:
                 btn = self.console_tabs._segmented_button._buttons_dict[tab]
-                btn.configure(state="normal" if on else "disabled")
+                state = "normal" if on else "disabled"
+                if btn.cget("state") != state:
+                    btn.configure(state=state)
             except (AttributeError, KeyError) as e:
                 logger.debug("%s tab state update failed: %s", tab, e)
         tip = ("Vanilla servers can't load mods or plugins" if server and not can_mod
@@ -891,13 +893,15 @@ class MCTunnelApp(ctk.CTk):
             self._max_players = None
 
 
+        # Tab enabled state first: a new count on a still-disabled tab showed
+        # for a frame in the disabled color.
+        self._update_mods_tab_state()
         if hasattr(self, "modrinth_browser"):
             self.modrinth_browser.refresh_server_context()
         if hasattr(self, "players_panel"):
             self.players_panel.refresh()
         if not hasattr(self, "modrinth_browser"):
             self._refresh_tab_labels(installed=len(ModrinthBrowser._installed_jar_files(server_name)))
-        self._update_mods_tab_state()
 
         self.btn_config.configure(state="normal")
         self.btn_open_folder.configure(state="normal")
@@ -1056,27 +1060,47 @@ class MCTunnelApp(ctk.CTk):
 
     # tab name -> icon; the button text is the name plus a live count
     _TAB_ICONS = {"Console": "terminal", "Tunnel Log": "link", "Players": "user", "Mods": "package"}
+    # Tabs with a count reserve room for a two-digit one up front. A label that
+    # grows ("Mods" -> "Mods (9)") widened the whole tab bar, which then
+    # re-centered and redrew every tab button visibly (clipped, torn labels).
+    _COUNT_WIDTH_SAMPLE = " (99)"
 
     def _refresh_tab_labels(self, installed=None):
         """Icons on the console tabs, with online players and installed mods counts."""
         if installed is not None:
             self._installed_mods_count = installed
+        info = self._get_current_server_info()
         counts = {
             "Players": getattr(self, "_player_count", 0) if self._viewing_running_server() else 0,
-            "Mods": self._installed_mods_count if self._get_current_server_info() and self._get_current_server_info()[2] else 0,
+            "Mods": self._installed_mods_count if info and info[2] else 0,
         }
         try:
             buttons = self.console_tabs._segmented_button._buttons_dict
         except AttributeError as e:
             logger.debug("Tab buttons unavailable: %s", e)
             return
-        for name, icon_name in self._TAB_ICONS.items():
+        if not getattr(self, "_tab_buttons_styled", False):
+            self._tab_buttons_styled = True
+            for name, icon_name in self._TAB_ICONS.items():
+                button = buttons.get(name)
+                if button is None:
+                    continue
+                button.configure(image=icon(icon_name, 13, AppConfig.COLOR_TEXT_PRIMARY), compound="left")
+                if name in counts:
+                    button.configure(text=name + self._COUNT_WIDTH_SAMPLE)
+                    button.update_idletasks()
+                    button.configure(width=button._reverse_widget_scaling(button.winfo_reqwidth()), text=name)
+        for name, count in counts.items():
             button = buttons.get(name)
-            if button is None:
-                continue
-            count = counts.get(name)
-            button.configure(text=f"{name} ({count})" if count else name,
-                             image=icon(icon_name, 13, AppConfig.COLOR_TEXT_PRIMARY), compound="left")
+            text = f"{name} ({count})" if count else name
+            if button is not None and button.cget("text") != text:
+                button.configure(text=text)
+                # The centered icon moves with the text; repaint the button now
+                # so the icon isn't left behind at its old spot for a frame.
+                button.update_idletasks()
+                button._canvas.event_generate("<Expose>", x=0, y=0, width=button._canvas.winfo_width(),
+                                              height=button._canvas.winfo_height())
+                button.update_idletasks()
 
     def _refresh_players_badge(self):
         max_players = f"/{self._max_players}" if self._max_players else ""
