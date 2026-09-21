@@ -40,7 +40,8 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 ## Dashboard Preview
 
 <p align="center">
-  <img width="1166" height="739" alt="screenshot-dashboard" src="https://github.com/user-attachments/assets/453023ea-6b98-4e36-8915-fce5418bf029" />
+  <img width="897" height="709" alt="screenshot-dashboard" src="assets/screenshots/dashboard.png" />
+  <img width="894" height="703" alt="screenshot-mods" src="assets/screenshots/mods.png" />
 </p>
 
 ---
@@ -55,6 +56,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 - **One-Click Backups & Scheduling** — Scheduled restarts and backups with countdown warnings, a Backups tab that tells manual, automatic and pre-update backups apart with one-click restore or delete, plus `.zbbpack` export/import to move a server between machines.
 - **Safe Mod Updates** — Search, install, and update mods/plugins straight from Modrinth, with dependency resolution, client-only filtering, and a one-click Optimizer Bundle per loader. Every update takes a full snapshot first, so a bad update is one restore away from undone.
 - **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching runtime — no manual installs, no version mismatches.
+- **Browse While Running** — View or configure any server's properties, mods, players and backups while another one runs; only starting a second server at once is blocked.
 
 *Also included: a Players tab (whitelist, operators, bans, kicks, skin heads, playtime history), Discord notifications, a choice of where your data lives (standard, portable, or custom folder), light/dark/system theming, and experimental Linux support.*
 
