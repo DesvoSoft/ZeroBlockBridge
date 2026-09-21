@@ -130,10 +130,6 @@ body {
   to   { background-position: -100% 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .zbb-stars { animation: none; }
-}
-
 /* ── Tile Grid ─────────────────────────────────────────────── */
 
 #hero-tiles {
@@ -710,4 +706,15 @@ body {
   .hero-btn-ghost { width: 100%; max-width: 280px; justify-content: center; }
   .footer-inner { gap: 0.5rem; }
   .footer-sep   { display: none; }
+}
+
+/* Placed last so it wins the cascade over the unconditional animation
+   rules defined earlier for these same selectors. */
+@media (prefers-reduced-motion: reduce) {
+  .zbb-stars,
+  #hero::before,
+  .title-block,
+  .tiles-hint-sub {
+    animation: none;
+  }
 }

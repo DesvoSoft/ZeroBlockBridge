@@ -48,7 +48,11 @@
   };
 
   createGrid();
-  window.addEventListener('resize', createGrid);
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(createGrid, 150);
+  });
 
   // ── Scroll-out: hero fades as user scrolls (no slide) ───────
   const FADE_RANGE = 220;
@@ -170,18 +174,28 @@
       }
     }
 
-    animId = requestAnimationFrame(tick);
+    if (!reduceMotion) animId = requestAnimationFrame(tick);
   }
 
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let resizeTimer;
   window.addEventListener('resize', () => {
-    cancelAnimationFrame(animId);
-    init();
-    lastTs = null;
-    animId = requestAnimationFrame(tick);
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      cancelAnimationFrame(animId);
+      init();
+      lastTs = null;
+      if (!reduceMotion) animId = requestAnimationFrame(tick);
+    }, 150);
   });
 
   init();
-  animId = requestAnimationFrame(tick);
+  if (reduceMotion) {
+    tick(0); // draw one static frame, no loop
+  } else {
+    animId = requestAnimationFrame(tick);
+  }
 })();
 
 // ── Vitra init ─────────────────────────────────────────────────
