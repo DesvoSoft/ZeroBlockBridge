@@ -148,7 +148,7 @@ jobs:
         run: python tools/extract_changelog_section.py "$TAG_NAME" --strict > release_notes.md
 
       - name: Create Release and Upload Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release_notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}
