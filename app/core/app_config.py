@@ -2,7 +2,7 @@ class AppConfig:
     """Application-wide configuration and constants."""
 
     # App identity
-    APP_VERSION = "2.1.0"
+    APP_VERSION = "2.2.0"
     # Sent to every HTTP API (Modrinth, Playit, PaperMC Fill, downloads); several ask for a
     # descriptive agent with a contact URL.
     USER_AGENT = f"ZeroBlockBridge/{APP_VERSION} (github.com/DesvoSoft/ZeroBlockBridge)"

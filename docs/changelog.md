@@ -8,6 +8,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-09-20
+
 ### Added
 - **Application log file** — the app now writes `logs/zbb.log` (rotating, 2 MB × 3) in the data folder, including crashes in background threads and UI callbacks. The released Windows build has no console, so until now every log line was lost. Settings → About has an **Open Logs Folder** button to attach it to bug reports.
 - Mods status bar shows a tinted success/error/warning icon; long messages are shortened with the full text on hover.
@@ -64,6 +66,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Bedrock players joining through Geyser/Floodgate (names starting with ".") were never counted as online.
 - Dialogs opened before their window was shown (Server Properties, confirmations) missed the titlebar tint.
 - Windows flashed white when opening (the Server Properties editor showed a mostly white frame) before their content drew in; windows now stay invisible until drawn and fade in.
+- **Tab switching redrew every widget visibly** — the Console/Tunnel Log tabs and every tabbed dialog (Server Properties, Settings) used the stock CustomTkinter tabview, which re-maps a tab on every switch; revisiting the Mods tab repainted card by card (~380ms) and a properties tab flashed for 60-220ms. Tabs now stay laid out and are only raised, cutting repaint to ~15-35ms with a pixel-identical result.
+- Dialogs took up to ~480ms to appear (polling for layout to settle every 25ms) and a few hundred widgets tore down visibly on close; dialogs now reveal right after CustomTkinter finishes its titlebar handling and hide before destruction — Properties now opens in ~370ms, confirm/info dialogs in ~120ms, and closing is instant.
+- A tab label gaining a live count ("Mods" → "Mods (9)") widened the tab bar and re-centered it, clipping the label and tearing the other buttons for ~100ms; counted tabs now reserve their width up front so counts update without moving anything.
 
 ## [2.1.0] — 2026-09-16
 
