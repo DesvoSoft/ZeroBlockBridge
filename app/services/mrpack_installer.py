@@ -148,6 +148,20 @@ def _unique_entries(entries: list, server_dir: str) -> list:
     return unique
 
 
+def _download_worker(pending: queue.Queue, results: queue.Queue, stop: threading.Event, server_dir: str):
+    while not stop.is_set():
+        try:
+            entry = pending.get_nowait()
+        except queue.Empty:
+            return
+        try:
+            ok = bool(_download_entry(entry, server_dir))
+        except Exception as e:  # one bad mod must not abort the pack
+            logger.error("mrpack download failed for %s: %s", entry.get("path", "?"), e)
+            ok = False
+        results.put(ok)
+
+
 def _download_all(entries: list, server_dir: str, progress: Callable[[str], None]) -> tuple:
     """Download entries concurrently; returns (installed, failed). Progress
     is only ever reported from the calling thread.
@@ -165,22 +179,9 @@ def _download_all(entries: list, server_dir: str, progress: Callable[[str], None
         return 0, 0
     results: queue.Queue = queue.Queue()
     stop = threading.Event()
-
-    def worker():
-        while not stop.is_set():
-            try:
-                entry = pending.get_nowait()
-            except queue.Empty:
-                return
-            try:
-                ok = bool(_download_entry(entry, server_dir))
-            except Exception as e:  # one bad mod must not abort the pack
-                logger.error("mrpack download failed for %s: %s", entry.get("path", "?"), e)
-                ok = False
-            results.put(ok)
-
     for i in range(min(DOWNLOAD_WORKERS, total)):
-        threading.Thread(target=worker, daemon=True, name=f"mrpack-dl-{i}").start()
+        threading.Thread(target=_download_worker, args=(pending, results, stop, server_dir),
+                         daemon=True, name=f"mrpack-dl-{i}").start()
     installed = failed = 0
     try:
         for done in range(1, total + 1):
