@@ -229,20 +229,37 @@ class TestSchedulerGetStatus:
         assert status["missed"] is False
         assert status["remaining_seconds"] > 0
 
+    @staticmethod
+    def _frozen_clock(now):
+        """Pin the scheduler's clock. "N minutes ago" computed from the real
+        clock crosses midnight right after 00:00 (23:58 reads as later
+        today), which made the time-mode tests fail for a few minutes a day."""
+        import datetime
+        import types
+
+        class _Frozen(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now
+
+        clock = types.SimpleNamespace(datetime=_Frozen, timedelta=datetime.timedelta, date=datetime.date)
+        return patch("app.core.logic.datetime", clock)
+
     def test_get_status_time_mode_missed_window(self):
         """If >120s past target time today, missed=True."""
         import datetime
         from app.core.logic import Scheduler
-        now = datetime.datetime.now()
-        # Target was 5 minutes ago, not run today
-        target = now - datetime.timedelta(minutes=5)
+        # Just past midnight -- the moment the old real-clock version failed.
+        # Target 00:00 was ~4 minutes ago and hasn't run today.
+        now = datetime.datetime(2026, 10, 14, 0, 3, 46)
+        target = now.replace(minute=0, second=0)
         meta = {"scheduler": {
             "type": "time",
             "restart_time": f"{target.hour:02d}:{target.minute:02d}",
             "last_run": None,
             "backup_on_restart": False,
         }}
-        with patch("app.core.logic.get_server_meta", return_value=meta):
+        with patch("app.core.logic.get_server_meta", return_value=meta), self._frozen_clock(now):
             sched = Scheduler("test_server")
             status = sched.get_status()
         assert status is not None
@@ -253,7 +270,7 @@ class TestSchedulerGetStatus:
         """If within 0-120s of target, missed=False (window still valid)."""
         import datetime
         from app.core.logic import Scheduler
-        now = datetime.datetime.now()
+        now = datetime.datetime(2026, 10, 14, 12, 0, 30)
         # Target was 30 seconds ago — still within window
         target = now - datetime.timedelta(seconds=30)
         meta = {"scheduler": {
@@ -262,7 +279,7 @@ class TestSchedulerGetStatus:
             "last_run": None,
             "backup_on_restart": False,
         }}
-        with patch("app.core.logic.get_server_meta", return_value=meta):
+        with patch("app.core.logic.get_server_meta", return_value=meta), self._frozen_clock(now):
             sched = Scheduler("test_server")
             status = sched.get_status()
         assert status is not None
