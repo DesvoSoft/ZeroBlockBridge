@@ -598,15 +598,15 @@ class ZBBManager:
                 if not missing_ids or not server_name:
                     return
 
-                from app.services.modrinth import ModrinthClient, install_missing_mods
+                from app.services.modrinth import (MOD_LOADERS, ModrinthClient, install_missing_mods,
+                                                   loader_for_server_type)
 
                 meta = get_server_meta(server_name) or {}
                 mc_version = meta.get("version", "1.20.1")
-                stype = meta.get("type", "Vanilla").lower()
-                loader = stype if stype in ("fabric", "forge") else None
-                if not loader:
+                loader = loader_for_server_type(meta.get("type", "Vanilla"))
+                if loader not in MOD_LOADERS:
                     self.events.emit(ServerEvent.NOTIFICATION, {
-                        "msg": "Cannot auto-install mods: server is not Fabric or Forge.", "type": "error"
+                        "msg": "Cannot auto-install mods: server is not Fabric, Forge or NeoForge.", "type": "error"
                     })
                     return
 

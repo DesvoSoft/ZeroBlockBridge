@@ -31,6 +31,25 @@ MODRINTH_API = "https://api.modrinth.com/v2"
 USER_AGENT = AppConfig.USER_AGENT
 REQUEST_TIMEOUT = 12  # seconds
 
+# Server engines that load mods / plugins, as Modrinth loader names
+# ("NeoForge".lower() == "neoforge" is Modrinth's own name for it).
+MOD_LOADERS = ("fabric", "forge", "neoforge")
+PLUGIN_LOADERS = ("paper", "purpur", "spigot")
+_LOADER_DISPLAY = {"fabric": "Fabric", "forge": "Forge", "neoforge": "NeoForge", "paper": "Paper",
+                   "purpur": "Purpur", "spigot": "Spigot"}
+
+
+def loader_for_server_type(server_type: Optional[str]) -> Optional[str]:
+    """Modrinth loader for a ZBB server type ("NeoForge" -> "neoforge"),
+    or None for engines that load neither mods nor plugins (Vanilla)."""
+    loader = (server_type or "").lower()
+    return loader if loader in MOD_LOADERS + PLUGIN_LOADERS else None
+
+
+def loader_display(loader: Optional[str]) -> str:
+    """Display name for a Modrinth loader ("neoforge" -> "NeoForge")."""
+    return _LOADER_DISPLAY.get(loader or "", (loader or "vanilla").title())
+
 
 class ModrinthException(Exception):
     """Raised on non-recoverable Modrinth API errors."""

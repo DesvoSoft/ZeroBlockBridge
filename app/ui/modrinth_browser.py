@@ -21,7 +21,8 @@ from PIL import Image
 
 from app.core.app_config import AppConfig
 from app.core.constants import BASE_DIR, SERVERS_DIR
-from app.services.modrinth import ModrinthClient, ModrinthException
+from app.services.modrinth import (MOD_LOADERS, PLUGIN_LOADERS, ModrinthClient, ModrinthException,
+                                   loader_display)
 from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 from app.services import mod_install_tracker
 from app.core.logic import get_server_meta
@@ -121,6 +122,20 @@ class ModrinthBrowser(ctk.CTkFrame):
         {"slug": "clumps", "name": "Clumps", "description": "Reduces lag from scattered XP orbs."},
         {"slug": "spark", "name": "Spark", "description": "Performance profiler for diagnosing lag."},
     ]
+    # The same projects publish NeoForge builds on Modrinth; each install is
+    # looked up with loader="neoforge", so a missing build is reported per mod.
+    OPTIMIZERS_NEOFORGE = OPTIMIZERS_FORGE
+
+    @classmethod
+    def optimizer_bundle(cls, loader: Optional[str]) -> Optional[list]:
+        """The Optimizer Bundle for a mod loader, or None if it has none."""
+        return {"fabric": cls.OPTIMIZERS_FABRIC, "forge": cls.OPTIMIZERS_FORGE,
+                "neoforge": cls.OPTIMIZERS_NEOFORGE}.get(loader)
+
+    @staticmethod
+    def bundle_summary(loader: str) -> str:
+        bundle = ModrinthBrowser.optimizer_bundle(loader) or []
+        return f"{loader_display(loader)}: " + ", ".join(mod["name"] for mod in bundle)
 
     _SORT_OPTIONS = {
         "Relevance": "relevance",
@@ -246,7 +261,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         _, _, loader = ctx
         if loader is None:
             msg = ("Vanilla servers can't load mods or plugins.\n\n"
-                   "Create a Fabric or Forge server for mods, "
+                   "Create a Fabric, Forge or NeoForge server for mods, "
                    "or Paper/Purpur for plugins.")
             self._set_status("Vanilla servers can't load mods or plugins.", kind="error")
             ZBBDialog.info(self.winfo_toplevel(), "Vanilla Server", msg)
@@ -295,13 +310,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             self._apply_type_options(None)
             self._type_tooltip.text = "Select a server to enable all content types."
-            self._opt_tooltip.text = (
-                "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark\n"
-                "Forge: ModernFix, FerriteCore, Clumps, Spark"
-            )
+            self._opt_tooltip.text = "\n".join(self.bundle_summary(name) for name in MOD_LOADERS)
             return
         server_name, mc_version, loader = ctx
-        engine = (loader or "vanilla").title()
+        engine = loader_display(loader)
         if loader is None:
             self.lbl_context.configure(
                 text=f"{server_name} · Vanilla {mc_version} — vanilla can't load mods or plugins",
@@ -310,7 +322,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             )
             self._type_tooltip.text = (
                 "Vanilla servers can't load mods/plugins — "
-                "use Fabric/Forge for mods or Paper/Purpur for plugins."
+                "use Fabric/Forge/NeoForge for mods or Paper/Purpur for plugins."
             )
             self._opt_tooltip.text = "Vanilla servers can't load the Optimizer Bundle."
         else:
@@ -319,19 +331,17 @@ class ModrinthBrowser(ctk.CTkFrame):
                 text_color=AppConfig.COLOR_TEXT_GRAY, image=None, compound="center",
             )
             self._type_tooltip.text = f"Content types filtered for {engine}."
-            if loader == "fabric":
-                self._opt_tooltip.text = "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark"
-            elif loader == "forge":
-                self._opt_tooltip.text = "Forge: ModernFix, FerriteCore, Clumps, Spark"
+            if self.optimizer_bundle(loader):
+                self._opt_tooltip.text = self.bundle_summary(loader)
             else:
                 self._opt_tooltip.text = f"Optimizer Bundle isn't available for {engine}."
         self._apply_type_options(loader)
 
     def _apply_type_options(self, loader: Optional[str]):
         """Restrict the project-type filter to what the engine can actually load."""
-        if loader in ("fabric", "forge"):
+        if loader in MOD_LOADERS:
             values, default = ["mod", "modpack"], "mod"
-        elif loader in ("paper", "purpur", "spigot"):
+        elif loader in PLUGIN_LOADERS:
             values, default = ["plugin"], "plugin"
         else:
             values, default = ["mod", "plugin", "modpack", "resourcepack", "shader"], "mod"
@@ -1936,14 +1946,13 @@ class ModrinthBrowser(ctk.CTkFrame):
             return
         server_name, mc_version, loader = ctx
 
-        if loader not in ("fabric", "forge"):
+        bundle = self.optimizer_bundle(loader)
+        if not bundle:
             ZBBDialog.info(
-                self.winfo_toplevel(), "Fabric or Forge Required",
-                "The Optimizer Bundle only supports Fabric or Forge servers.",
+                self.winfo_toplevel(), "Mod Loader Required",
+                "The Optimizer Bundle only supports Fabric, Forge or NeoForge servers.",
             )
             return
-
-        bundle = self.OPTIMIZERS_FABRIC if loader == "fabric" else self.OPTIMIZERS_FORGE
 
         self._set_status("Installing Optimizer Bundle...", busy=True)
 

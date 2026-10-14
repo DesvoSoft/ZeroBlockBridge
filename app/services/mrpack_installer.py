@@ -31,7 +31,21 @@ _LOADER_DEPENDENCY_MAP = {
 }
 
 # Engines that can actually load mods from a mods/ folder
-_MOD_CAPABLE_ENGINES = {"fabric", "forge"}
+_MOD_CAPABLE_ENGINES = {"fabric", "forge", "neoforge"}
+
+_ENGINE_DISPLAY = {"fabric": "Fabric", "forge": "Forge", "neoforge": "NeoForge", "quilt": "Quilt"}
+
+# NeoForge for Minecraft 1.20.1 was a Forge fork that still loads Forge
+# mods (and its packs run on Forge 1.20.1); later NeoForge versions don't.
+_NEOFORGE_FORGE_COMPAT_MC = "1.20.1"
+
+
+def _required_loaders(deps: dict) -> list:
+    """Engines (lowercase) that can run a pack with these dependencies."""
+    loaders = [engine for key, engine in _LOADER_DEPENDENCY_MAP.items() if key in deps]
+    if "neoforge" in loaders and deps.get("minecraft") == _NEOFORGE_FORGE_COMPAT_MC:
+        loaders.append("forge")
+    return loaders
 
 
 class MrpackCompatibilityError(ValueError):
@@ -214,23 +228,21 @@ def _check_compatibility(manifest: dict, server_type: Optional[str], mc_version:
     """Raise MrpackCompatibilityError if the pack cannot run on this server."""
     deps = manifest.get("dependencies", {})
 
-    required_loaders = [
-        engine for key, engine in _LOADER_DEPENDENCY_MAP.items() if key in deps
-    ]
+    required_loaders = _required_loaders(deps)
 
     if server_type and required_loaders:
         engine = server_type.lower()
         if engine not in required_loaders:
-            wanted = "/".join(sorted(required_loaders)).title()
+            wanted = "/".join(_ENGINE_DISPLAY.get(e, e.title()) for e in sorted(required_loaders))
             raise MrpackCompatibilityError(
                 f"This modpack requires a {wanted} server, but "
                 f"'{server_type}' cannot load its mods. Create a {wanted} "
                 f"server to use this pack."
             )
         if engine not in _MOD_CAPABLE_ENGINES:
-            # quilt/neoforge pack matching an engine ZBB doesn't ship
+            # e.g. a Quilt pack on a server type ZBB doesn't ship
             raise MrpackCompatibilityError(
-                f"Modpacks for {engine.title()} are not supported yet."
+                f"Modpacks for {_ENGINE_DISPLAY.get(engine, engine.title())} are not supported yet."
             )
 
     pack_mc = deps.get("minecraft")

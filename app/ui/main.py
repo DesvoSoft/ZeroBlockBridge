@@ -955,11 +955,9 @@ class MCTunnelApp(ctk.CTk):
             return None
         meta = logic.get_server_meta(self.viewed_server)
         mc_version = meta.get("version", "1.20.1")
-        loader = None
-        stype = meta.get("type", "Vanilla").lower()
-        if stype in ("fabric", "forge", "paper", "purpur", "spigot"):
-            loader = stype
-        
+        from app.services.modrinth import loader_for_server_type
+        loader = loader_for_server_type(meta.get("type", "Vanilla"))
+
         logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.viewed_server, mc_version, loader or 'any')
         return (self.viewed_server, mc_version, loader)
 
