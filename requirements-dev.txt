@@ -1,5 +1,5 @@
 -r requirements.txt
 flake8==7.3.0
 pytest==9.0.3
-pytest-cov==7.0.0
+pytest-cov==7.1.0
 coverage==7.16.2
