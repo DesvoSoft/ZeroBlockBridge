@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 _SCAFFOLD_DIRS = ("mods", "plugins", "world", "logs")
 
 
-def pre_boot_scaffold(server_dir: str, port: int = 25565, eula_accepted: bool = True, config: dict = None):
+def pre_boot_scaffold(server_dir: str, port: int = 25565, eula_accepted: bool = True, config: dict = None,
+                      override_existing: bool = False):
     """Prepare a server directory for a clean first boot.
 
     Generates eula.txt, a minimal server.properties, and standard
@@ -32,6 +33,8 @@ def pre_boot_scaffold(server_dir: str, port: int = 25565, eula_accepted: bool = 
         port:           The server-port value to inject (1-65535).
         eula_accepted:  Whether the user has accepted the Mojang EULA.
         config:         Optional dict containing advanced properties.
+        override_existing: Overwrite the keys `config` sets even if server.properties
+                        already has them (a modpack's own file), instead of keeping them.
 
     Raises:
         ValueError: If port is outside valid range.
@@ -43,7 +46,7 @@ def pre_boot_scaffold(server_dir: str, port: int = 25565, eula_accepted: bool = 
         return
 
     _generate_eula(server_dir, eula_accepted)
-    _generate_properties(server_dir, port, config)
+    _generate_properties(server_dir, port, config, override_existing)
     _create_directories(server_dir)
 
     logger.info("Scaffolding complete for %s", server_dir)
@@ -88,23 +91,47 @@ _CONFIG_PROPERTY_MAP = {
 }
 
 
-def _generate_properties(server_dir: str, port: int, config: dict = None):
-    """Write or patch server.properties with the assigned port and config."""
-    props_path = os.path.join(server_dir, "server.properties")
-
-    props_to_write = {
+def _desired_properties(port: int, config: dict = None, override_existing: bool = False):
+    """(values to write, keys that replace a value already in the file)."""
+    props = {
         "server-port": str(port),
         "motd": "A ZeroBlockBridge Server",
         "enable-query": "false",
         "enable-rcon": "false"
     }
-
+    forced = {"server-port"}
     if config:
         if config.get("seed"):
-            props_to_write["level-seed"] = str(config["seed"])
+            props["level-seed"] = str(config["seed"])
         for config_key, (props_key, transform) in _CONFIG_PROPERTY_MAP.items():
             if config_key in config:
-                props_to_write[props_key] = transform(config[config_key])
+                props[props_key] = transform(config[config_key])
+                if override_existing:
+                    forced.add(props_key)
+    return props, forced
+
+
+def _patch_lines(lines: list, props: dict, forced: set) -> list:
+    """Replace `forced` keys in place, keep every other existing value,
+    append keys the file doesn't have yet."""
+    pending = dict(props)
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        key = stripped.split("=")[0] if stripped and not stripped.startswith("#") else None
+        if key in forced and key in props:
+            out.append(f"{key}={props[key]}\n")
+        else:
+            out.append(line)
+        pending.pop(key, None)
+    out.extend(f"{k}={v}\n" for k, v in pending.items())
+    return out
+
+
+def _generate_properties(server_dir: str, port: int, config: dict = None, override_existing: bool = False):
+    """Write or patch server.properties with the assigned port and config."""
+    props_path = os.path.join(server_dir, "server.properties")
+    props_to_write, forced = _desired_properties(port, config, override_existing)
 
     if not os.path.exists(props_path):
         try:
@@ -121,24 +148,7 @@ def _generate_properties(server_dir: str, port: int, config: dict = None):
 
     try:
         with open(props_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        existing_keys = set()
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            key = stripped.split("=")[0]
-            existing_keys.add(key)
-            if key == "server-port":
-                lines[i] = f"{key}={props_to_write[key]}\n"
-                del props_to_write[key]
-            elif key in props_to_write:
-                del props_to_write[key]
-
-        for k, v in props_to_write.items():
-            lines.append(f"{k}={v}\n")
-
+            lines = _patch_lines(f.readlines(), props_to_write, forced)
         with open(props_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
         logger.info("Patched properties in existing server.properties")

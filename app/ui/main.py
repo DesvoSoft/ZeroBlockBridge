@@ -1191,17 +1191,29 @@ class MCTunnelApp(ctk.CTk):
             result = self.zbb_manager.provision_server(config, dialog.update_progress)
             if result.ok:
                 self.after(0, lambda: self._on_download_complete(
-                    dialog, result.name, config.get("start_after_creation", False)))
+                    dialog, result.name, config.get("start_after_creation", False), result.warnings))
             else:
-                self.after(0, dialog.close)
+                self.after(0, lambda: self._on_provision_failed(dialog, result))
 
         self.executor.submit(_provision)
 
-    def _on_download_complete(self, dialog, name, start_after_creation=False):
+    def _on_provision_failed(self, dialog, result):
+        dialog.close()
+        self.load_servers()  # a rolled-back server must not linger in the list
+        ZBBDialog.info(
+            self, "Server not created",
+            f"'{result.name}' could not be created:\n\n{result.error or 'Unknown error.'}\n\n"
+            "What was created for it has been removed, so you can try again with the same name.",
+            kind="error",
+        )
+
+    def _on_download_complete(self, dialog, name, start_after_creation=False, warnings=None):
         self.load_servers()
         self.server_console.log(f"[System] Setup complete for '{name}'.")
         self.on_server_select(name)
         dialog.close()
+        if warnings:
+            ZBBDialog.info(self, "Server created with warnings", "\n\n".join(warnings), kind="warning")
         if start_after_creation:
             self.start_server_action()
             return

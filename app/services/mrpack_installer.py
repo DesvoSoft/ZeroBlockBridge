@@ -122,18 +122,7 @@ def install_mrpack(
 
         # 4. Copy overrides into server dir (server-specific ones win)
         for overrides_prefix in ("overrides/", "server-overrides/"):
-            override_files = [n for n in zf.namelist() if n.startswith(overrides_prefix) and not n.endswith("/")]
-            if not override_files:
-                continue
-            _progress(f"Copying {len(override_files)} {overrides_prefix.rstrip('/')} file(s)…")
-            for name in override_files:
-                rel = name[len(overrides_prefix):]
-                if not rel:
-                    continue
-                dest = _safe_dest(server_dir, rel)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with zf.open(name) as src, open(dest, "wb") as dst:
-                    dst.write(src.read())
+            _copy_overrides(zf, overrides_prefix, server_dir, _progress)
 
     _progress(
         f"Modpack installed — {summary['installed']} mods"
@@ -142,6 +131,21 @@ def install_mrpack(
         + "."
     )
     return summary
+
+
+def _copy_overrides(zf: zipfile.ZipFile, prefix: str, server_dir: str, progress: Callable[[str], None]):
+    override_files = [n for n in zf.namelist() if n.startswith(prefix) and not n.endswith("/")]
+    if not override_files:
+        return
+    progress(f"Copying {len(override_files)} {prefix.rstrip('/')} file(s)…")
+    for name in override_files:
+        rel = name[len(prefix):]
+        if not rel:
+            continue
+        dest = _safe_dest(server_dir, rel)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with zf.open(name) as src, open(dest, "wb") as dst:
+            dst.write(src.read())
 
 
 def _check_compatibility(manifest: dict, server_type: Optional[str], mc_version: Optional[str]):

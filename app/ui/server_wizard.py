@@ -33,6 +33,49 @@ def java_summary(java_path: str, mc_version: str) -> str:
     return java_path
 
 
+def version_sort_key(v: str) -> tuple:
+    """Numeric sort key for "1.20.1", "26.1", "1.21-pre1"..."""
+    import re
+    try:
+        parts = []
+        for part in v.split('.'):
+            if part.isdigit():
+                parts.append(int(part))
+            else:
+                match = re.match(r"(\d+)", part)
+                parts.append(int(match.group(1)) if match else 0)
+        return tuple(parts)
+    except (ValueError, TypeError) as e:
+        logger.debug("Wizard version_key parse failed: %s", e)
+        return (0, 0, 0)
+
+
+def modpack_step_error(data: dict) -> str | None:
+    """Why the Engine & Version choice can't run the imported modpack."""
+    if not data.get("modpack_path"):
+        return None
+    engine, version = data.get("type"), data.get("version")
+    loader, mc = data.get("modpack_loader"), data.get("modpack_mc")
+    if engine not in ("Fabric", "Forge"):
+        return "Modpacks need a Fabric or Forge server. Pick one below."
+    if loader and engine != loader:
+        return f"This modpack needs a {loader} server."
+    if mc and version != mc:
+        return f"This modpack needs Minecraft {mc}. Select {mc} below."
+    return None
+
+
+def world_step_error(mode: str, world_path: str | None, busy: bool) -> str | None:
+    """Why the World step can't continue with "Import existing world"."""
+    if mode != "import":
+        return None
+    if busy:
+        return "Still reading the world, one moment..."
+    if not world_path:
+        return "Choose a world folder or .zip, or switch to New world."
+    return None
+
+
 def modpack_ram_mb(current: int, mod_count: int, system_mb: int) -> int:
     """RAM to suggest once a modpack is picked: modded servers need far more
     than the vanilla default. Never lowers a bigger choice, and leaves the
@@ -398,12 +441,15 @@ class ServerWizard(ZBBToplevel):
             return
         if error:
             self.btn_modpack.configure(state="normal")
+            if self.wizard_data["modpack_path"]:
+                # The earlier pack is still selected (and still locks engine/version).
+                error += f"\nStill using: {self.wizard_data['modpack_label']}"
             self._set_modpack_status(error, error=True)
             return
         label = info.name + (f" ({info.describe()})" if info.describe() else "")
         self.wizard_data.update(
             modpack_path=info.path, modpack_label=label, modpack_mc=info.mc_version,
-            modpack_loader=info.loader, loader_version=info.loader_version,
+            modpack_loader=info.loader, loader_version=info.pinned_loader_version,
         )
         if info.loader:
             self.wizard_data["type"] = info.loader
@@ -489,6 +535,7 @@ class ServerWizard(ZBBToplevel):
                                               filetypes=[("World archive", "*.zip")])
         if not path:
             return
+        self._inspecting_world = True
         self.lbl_world.configure(text="Reading world...", text_color=AppConfig.COLOR_TEXT_GRAY)
 
         def _work():
@@ -504,6 +551,7 @@ class ServerWizard(ZBBToplevel):
         threading.Thread(target=_work, daemon=True).start()
 
     def _on_world_inspected(self, info, error):
+        self._inspecting_world = False
         if not self.winfo_exists() or self.current_step != 5 or not self.lbl_world.winfo_exists():
             return
         if error:
@@ -727,64 +775,49 @@ class ServerWizard(ZBBToplevel):
         self.scroll_versions.update_idletasks()
 
         def fetch_and_render():
-            import re
-            versions = self.vm.get_versions(engine)
+            versions = sorted(self.vm.get_versions(engine), key=version_sort_key, reverse=True)
             search_q = self.entry_search.get().lower()
-
-            def version_key(v):
-                try:
-                    parts = []
-                    for part in v.split('.'):
-                        if part.isdigit():
-                            parts.append(int(part))
-                        else:
-                            match = re.match(r"(\d+)", part)
-                            parts.append(int(match.group(1)) if match else 0)
-                    return tuple(parts)
-                except (ValueError, TypeError) as e:
-                    logger.debug("Wizard version_key parse failed: %s", e)
-                    return (0, 0, 0)
-
-            versions.sort(key=version_key, reverse=True)
             filtered = [v for v in versions if search_q in v.lower()]
 
             def render_ui():
                 if seq != self._version_render_seq or not self.winfo_exists():
                     return
-                for widget in self.scroll_versions.winfo_children():
-                    widget.destroy()
-
-                if not filtered:
-                    ctk.CTkLabel(self.scroll_versions, text="No versions found.",
-                                  text_color=AppConfig.COLOR_TEXT_GRAY).pack(pady=20)
-                    return
-
-                for v in filtered[:100]:
-                    rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var,
-                                             value=v, command=self._update_java_check)
-                    rb.pack(anchor="w", padx=10, pady=5)
-
-                # Reset version selection when engine changes — each engine has its own list
-                if self.wizard_data["modpack_mc"]:
-                    # A modpack only runs on the Minecraft version it was built for.
-                    self.wizard_data["_last_engine"] = engine
-                    self.wizard_data["version"] = self.wizard_data["modpack_mc"]
-                    self.version_var.set(self.wizard_data["version"])
-                elif self.wizard_data.get("_last_engine") != engine:
-                    self.wizard_data["_last_engine"] = engine
-                    self.wizard_data["version"] = filtered[0] if filtered else ""
-                    self.version_var.set(self.wizard_data["version"])
-                elif self.wizard_data["version"] in filtered:
-                    self.version_var.set(self.wizard_data["version"])
-                elif filtered:
-                    self.version_var.set(filtered[0])
-                    self.wizard_data["version"] = filtered[0]
-
-                self._update_java_check()
+                self._render_version_list(engine, filtered)
 
             self.after(0, render_ui)
 
         threading.Thread(target=fetch_and_render, daemon=True).start()
+
+    def _render_version_list(self, engine, filtered):
+        for widget in self.scroll_versions.winfo_children():
+            widget.destroy()
+        if not filtered:
+            ctk.CTkLabel(self.scroll_versions, text="No versions found.",
+                         text_color=AppConfig.COLOR_TEXT_GRAY).pack(pady=20)
+            return
+        locked = self.wizard_data["modpack_mc"]
+        for v in filtered[:100]:
+            rb = ctk.CTkRadioButton(self.scroll_versions, text=v, variable=self.version_var,
+                                    value=v, command=self._update_java_check)
+            if locked and v != locked:
+                rb.configure(state="disabled")  # a modpack runs on one MC version only
+            rb.pack(anchor="w", padx=10, pady=5)
+        self._select_version(engine, filtered)
+        self._update_java_check()
+
+    def _select_version(self, engine, filtered):
+        """Keep the chosen version when possible; each engine has its own list."""
+        if self.wizard_data["modpack_mc"]:
+            choice = self.wizard_data["modpack_mc"]
+        elif self.wizard_data.get("_last_engine") != engine:
+            choice = filtered[0]
+        elif self.wizard_data["version"] in filtered:
+            choice = self.wizard_data["version"]
+        else:
+            choice = filtered[0]
+        self.wizard_data["_last_engine"] = engine
+        self.wizard_data["version"] = choice
+        self.version_var.set(choice)
 
     # --- Step 3: Rules & World ---
     def _scroll_body(self):
@@ -968,43 +1001,56 @@ class ServerWizard(ZBBToplevel):
 
     # --- Navigation ---
     def go_next(self):
-        if self.current_step == 1:
-            name = self.entry_name.get().strip()
-            loc = self.entry_location.get().strip()
-            if not name:
-                self.entry_name.configure(border_color=AppConfig.COLOR_BTN_DANGER)
-                return
-            self.wizard_data["name"] = name
-            self.wizard_data["location"] = loc
-            
-        elif self.current_step == 2:
-            if self._modpack_busy():
-                return
-            self.wizard_data["type"] = self.engine_var.get()
-            self.wizard_data["version"] = self.version_var.get()
-            if not self.wizard_data["version"]:
-                return
-            if self.wizard_data["modpack_path"] and self.wizard_data["type"] not in ("Fabric", "Forge"):
-                self._set_modpack_status("Modpacks need a Fabric or Forge server. Pick one below.", error=True)
-                return
-
-        elif self.current_step == 3:
-            self._collect_step3_fields()
-
-        elif self.current_step == 4:
-            self._collect_step4_fields()
-
-        elif self.current_step == 5:
-            self._collect_step5_fields()
-
-        elif self.current_step == 6:
-            self.wizard_data["start_after_creation"] = self.var_start_after_creation.get()
+        if self._leave_step(self.current_step) is False:
+            return
+        if self.current_step == self.total_steps:
             self.on_complete_callback(self.wizard_data)
             self.destroy()
             return
-
         self.current_step += 1
         self.show_step()
+
+    def _leave_step(self, step):
+        """Collect the step's fields; returns False to stay on the step."""
+        return {
+            1: self._leave_step_1,
+            2: self._leave_step_2,
+            3: self._collect_step3_fields,
+            4: self._collect_step4_fields,
+            5: self._leave_step_5,
+            6: lambda: self.wizard_data.update(start_after_creation=self.var_start_after_creation.get()),
+        }[step]()
+
+    def _leave_step_1(self):
+        name = self.entry_name.get().strip()
+        if not name:
+            self.entry_name.configure(border_color=AppConfig.COLOR_BTN_DANGER)
+            return False
+        self.wizard_data["name"] = name
+        self.wizard_data["location"] = self.entry_location.get().strip()
+        return True
+
+    def _leave_step_2(self):
+        if self._modpack_busy():
+            return False
+        self.wizard_data["type"] = self.engine_var.get()
+        self.wizard_data["version"] = self.version_var.get()
+        if not self.wizard_data["version"]:
+            return False
+        error = modpack_step_error(self.wizard_data)
+        if error:
+            self._set_modpack_status(error, error=True)
+            return False
+        return True
+
+    def _leave_step_5(self):
+        self._collect_step5_fields()
+        error = world_step_error(self.var_world_mode.get(), self.wizard_data["world_path"],
+                                 getattr(self, "_inspecting_world", False))
+        if error:
+            self.lbl_world.configure(text=error, text_color=AppConfig.COLOR_STATUS_ERROR)
+            return False
+        return True
 
     def go_back(self):
         if self.current_step == 3:

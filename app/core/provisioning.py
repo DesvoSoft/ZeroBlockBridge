@@ -9,8 +9,9 @@ CONSOLE_LINE).
 
 import logging
 import os
+import shutil
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from app.core import logic
@@ -41,6 +42,8 @@ class ProvisionResult:
     name: str
     error: Optional[str] = None
     required_java: Optional[int] = None
+    # Created, but the user should know (e.g. modpack mods that failed to download).
+    warnings: list = field(default_factory=list)
 
 
 def resolve_required_java(bytecode_java: Optional[int], version_map_java: int) -> int:
@@ -75,6 +78,13 @@ class ServerProvisioner:
         self._jar_wait_seconds = jar_wait_seconds
         self._jar_poll_interval = jar_poll_interval
         self._sleep = sleep
+        # Per-run state, reset by provision()
+        self._modpack = None
+        self._world = None
+        self._created: list = []
+        self._warnings: list = []
+        self._kept_existing_target = False
+        self._required_java: Optional[int] = None
 
     @property
     def jdk_manager(self):
@@ -89,54 +99,120 @@ class ServerProvisioner:
     def provision(self, config: dict, progress: Optional[ProgressFn] = None) -> ProvisionResult:
         progress = progress or (lambda value, text=None: None)
         name = config["name"]
+        self._modpack = self._world = None
+        self._created, self._warnings = [], []
+        self._kept_existing_target = False
         try:
-            error = self._prepare_location(config)
+            error = self._build(config, progress)
             if error:
                 self._log(f"[Error] {error}")
-                return ProvisionResult(False, name, error)
+        except Exception as e:
+            logger.exception("Provisioning failed for %s", name)
+            self._log(f"[Error] Installation failed: {e}")
+            error = str(e)
+        if error:
+            self._rollback(name)
+            return ProvisionResult(False, name, error)
 
-            if not self._install_server_jar(config, progress):
-                error = f"Failed to create server '{name}'. Check the log for details."
-                self._log(f"[Error] {error}")
-                return ProvisionResult(False, name, error)
-
-            self._import_content(config, progress)
-            self._log("[System] Installation success. Applying settings...")
-            self._apply_settings(config, progress)
-            required_java = self._resolve_and_install_java(config, progress)
-
+        required_java = self._required_java
+        try:
             progress(_P_TUNNEL, "Setting up Playit tunnel...")
             self._log(f"[System] Server '{name}' created successfully.")
             self._create_tunnel(name)
             progress(_P_DONE, "Server ready!")
-            return ProvisionResult(True, name, required_java=required_java)
         except Exception as e:
-            logger.exception("Provisioning failed for %s", name)
-            self._log(f"[Error] Installation failed: {e}")
-            return ProvisionResult(False, name, str(e))
+            # The server itself is complete; a tunnel can be set up later.
+            logger.exception("Tunnel setup failed for %s", name)
+            self._log(f"[Warning] Tunnel setup failed: {e}")
+            self._warnings.append(f"The Playit tunnel couldn't be set up ({e}). Start it from the Tunnel panel.")
+        return ProvisionResult(True, name, required_java=required_java, warnings=list(self._warnings))
+
+    def _build(self, config: dict, progress: ProgressFn) -> Optional[str]:
+        """Every step that leaves a usable server behind. Returns an error
+        message (or raises); the caller rolls back whatever was created."""
+        error = self._preflight_content(config) or self._prepare_location(config)
+        if error:
+            return error
+        if not self._install_server_jar(config, progress):
+            return f"Failed to create server '{config['name']}'. Check the log for details."
+        self._import_content(config, progress)
+        self._log("[System] Installation success. Applying settings...")
+        self._apply_settings(config, progress)
+        self._required_java = self._resolve_and_install_java(config, progress)
+        return None
 
     # ------------------------------------------------------------------
     # Steps
     # ------------------------------------------------------------------
+    def _preflight_content(self, config: dict) -> Optional[str]:
+        """Check imported modpack/world BEFORE anything is created, so a bad
+        archive never leaves a half-built server behind."""
+        from app.services import content_import
+
+        dest = config.get("location") or self._servers_dir
+        try:
+            if config.get("modpack_path"):
+                info = content_import.inspect_modpack(config["modpack_path"])
+                mismatch = content_import.modpack_mismatch(info, config["type"], config["version"])
+                if mismatch:
+                    return mismatch
+                content_import.validate_modpack(info, dest)
+                self._modpack = info
+            if config.get("world_path"):
+                world = content_import.inspect_world(config["world_path"])
+                content_import.validate_world(world, dest)
+                self._world = world
+        except content_import.ContentImportError as e:
+            return str(e)
+        return None
+
     def _prepare_location(self, config: dict) -> Optional[str]:
         """Reject duplicates and link a custom location into servers/.
-        Returns an error message, or None when the target is ready."""
+        Returns an error message, or None when the target is ready. Records
+        only what it creates, so a rollback never touches what existed."""
         name = config["name"]
         link_path = os.path.join(self._servers_dir, name)
-        if os.path.exists(link_path):
+        if os.path.lexists(link_path):
             return f"Server '{name}' already exists."
 
         custom_loc = config.get("location") or self._servers_dir
         if os.path.normpath(custom_loc) == os.path.normpath(self._servers_dir):
+            self._created.append(("dir", link_path))
             return None
         target_path = os.path.join(custom_loc, name)
         try:
-            os.makedirs(target_path, exist_ok=True)
+            if os.path.exists(target_path):
+                self._kept_existing_target = True
+            else:
+                os.makedirs(target_path)
+                self._created.append(("dir", target_path))
             logic.create_junction(target_path, link_path)
+            self._created.append(("link", link_path))
         except OSError as e:
             return f"Failed to map custom location: {e}"
         self._log(f"[System] Created link for custom location: {target_path}")
         return None
+
+    def _rollback(self, name: str) -> None:
+        """Undo a failed creation: drop the link first (never follow it),
+        then delete only folders this run created."""
+        from app.core.fs_links import is_link, remove_link
+
+        if not self._created:
+            return  # e.g. "already exists": nothing of ours to undo
+        for kind, path in reversed(self._created):
+            try:
+                if kind == "link" and os.path.lexists(path):
+                    remove_link(path)
+                elif kind == "dir" and os.path.isdir(path) and not is_link(path):
+                    shutil.rmtree(path)
+            except OSError as e:
+                logger.warning("Rollback could not remove %s: %s", path, e)
+        if self._kept_existing_target:
+            self._log("[System] The chosen folder already existed, so nothing inside it was deleted.")
+        self._created = []
+        logic.invalidate_meta_cache(name)
+        self._log(f"[System] Removed the partially created server '{name}'.")
 
     def _install_server_jar(self, config: dict, progress: ProgressFn) -> bool:
         name, version, engine = config["name"], config["version"], config["type"]
@@ -156,32 +232,39 @@ class ServerProvisioner:
             java_bin = self.jdk_manager.ensure_java(get_required_java(version)) or "java"
             installer = logic.install_fabric if engine == "Fabric" else logic.install_forge
             # A modpack pins its loader build; otherwise the installer picks one.
-            pinned = {"loader_version": config["loader_version"]} if config.get("loader_version") else {}
+            pinned = {"loader_version": config["loader_version"]} \
+                if config.get("loader_version") and engine == config.get("modpack_loader", engine) else {}
             return bool(installer(name, version, jar_progress, java_bin=java_bin, **pinned))
         self._log(f"[Error] Unknown server type: {engine}")
         return False
 
     def _import_content(self, config: dict, progress: ProgressFn) -> None:
-        """Modpack first (its overrides may ship a world), then the
-        imported world, which replaces whatever is there."""
+        """Modpack first (its overrides may ship a world and set level-name),
+        then the imported world, which replaces whatever is there."""
         from app.services import content_import
+        from app.services.server_properties import load_server_properties
 
         name, server_dir = config["name"], self._server_dir(config["name"])
-        if config.get("modpack_path"):
-            info = content_import.inspect_modpack(config["modpack_path"])
+        if self._modpack is not None:
+            info = self._modpack
             progress(_P_MODPACK, f"Installing modpack {info.name}...")
             self._log(f"[System] Installing modpack '{info.name}'...")
-            summary = content_import.install_modpack(
+            installed = content_import.install_modpack(
                 info, server_dir, config["type"], config["version"],
                 progress=lambda msg: progress(_P_MODPACK, msg),
             )
-            self._log(f"[System] Modpack ready: {summary}.")
+            self._log(f"[System] Modpack ready: {installed.summary}.")
+            if installed.failed:
+                self._log(f"[Warning] {installed.failed} modpack mod(s) failed to download.")
+                self._warnings.append(
+                    f"{installed.failed} mod(s) from the modpack couldn't be downloaded, so the server "
+                    "may not start. Check the console, then retry by importing the pack again.")
             logic.update_server_meta(name, {"modpack": info.name})
-        if config.get("world_path"):
-            info = content_import.inspect_world(config["world_path"])
-            progress(_P_WORLD, f"Importing world {info.name}...")
-            content_import.import_world(info, server_dir)
-            self._log(f"[System] World '{info.name}' imported.")
+        if self._world is not None:
+            level_name = load_server_properties(server_dir=server_dir).get("level-name") or "world"
+            progress(_P_WORLD, f"Importing world {self._world.name}...")
+            content_import.import_world(self._world, server_dir, level_name=level_name)
+            self._log(f"[System] World '{self._world.name}' imported as '{level_name}'.")
 
     def _apply_settings(self, config: dict, progress: ProgressFn) -> None:
         name = config["name"]
@@ -194,7 +277,10 @@ class ServerProvisioner:
         from app.services.scaffolder import pre_boot_scaffold
         port_str = config.get("playit_port")
         port = int(port_str) if port_str and str(port_str).isdigit() else self._get_server_port(name)
-        pre_boot_scaffold(self._server_dir(name), port=port, eula_accepted=True, config=config)
+        # A modpack may ship its own server.properties: the choices made in the
+        # wizard (game mode, difficulty, whitelist...) still win.
+        pre_boot_scaffold(self._server_dir(name), port=port, eula_accepted=True, config=config,
+                          override_existing=self._modpack is not None)
         self._log("[System] Environment ready (eula.txt, server.properties, directories).")
         if "auto_install_jdk" in config:
             logic.update_server_meta(name, {"auto_install_jdk": config["auto_install_jdk"]})

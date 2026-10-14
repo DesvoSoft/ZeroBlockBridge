@@ -44,9 +44,23 @@ _MRPACK_LOADERS = {
 # writes its own launch config and EULA.
 _SERVERPACK_SKIP_DIRS = {"libraries", ".fabric", "versions", "logs", "crash-reports", "jre", "java"}
 _SERVERPACK_SKIP_EXT = (".jar", ".bat", ".cmd", ".sh", ".ps1", ".command", ".exe")
-_SERVERPACK_SKIP_FILES = {"eula.txt", "user_jvm_args.txt", "variables.txt", "server-icon.png"}
+_SERVERPACK_SKIP_FILES = {"eula.txt", "user_jvm_args.txt", "variables.txt", "server-icon.png",
+                          # Written by the Fabric installer; the pack's copy can name a
+                          # server jar that was never copied (root jars are skipped).
+                          "fabric-server-launcher.properties"}
 # Never copied from a world: the running game's lock.
 _WORLD_SKIP_FILES = {"session.lock"}
+# Junk folder macOS adds to zips it creates.
+_MACOS_JUNK = "__MACOSX/"
+
+# Hard ceiling on what one archive may unpack to, on top of the free-space
+# check: real worlds/modpacks stay far below it, a zip bomb doesn't.
+MAX_UNPACKED_BYTES = 32 * 1024 ** 3
+# Keep this much disk free after unpacking.
+_DISK_MARGIN_BYTES = 1024 ** 3
+_RESERVED_NAMES = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)),
+                   *(f"lpt{i}" for i in range(1, 10))}
+_INVALID_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
 
 
 class ContentImportError(ValueError):
@@ -77,6 +91,12 @@ class ModpackInfo:
     def supported(self) -> bool:
         return self.loader is None or self.loader in SUPPORTED_LOADERS
 
+    @property
+    def pinned_loader_version(self) -> Optional[str]:
+        """Loader build to install. Only meaningful together with the
+        Minecraft version: a Forge build only exists for one MC version."""
+        return self.loader_version if self.mc_version else None
+
     def describe(self) -> str:
         parts = []
         if self.loader:
@@ -104,6 +124,44 @@ def _open_zip(path: str) -> zipfile.ZipFile:
     if not zipfile.is_zipfile(path):
         raise ContentImportError("That file isn't a valid .zip archive.")
     return zipfile.ZipFile(path, "r")
+
+
+def _invalid_component(part: str) -> bool:
+    stem = part.split(".", 1)[0].strip().lower()
+    return (stem in _RESERVED_NAMES or bool(_INVALID_CHARS.search(part))
+            or part.endswith((" ", ".")) and part not in (".", ".."))
+
+
+def check_members(members: list, dest_dir: str) -> None:
+    """Reject archives that can't be unpacked safely here: names Windows
+    can't create (CON, aux.txt, "a:b"...) and more data than fits on the
+    disk or than MAX_UNPACKED_BYTES. Runs before anything is written, so a
+    bad archive never leaves a half-copied server behind."""
+    total = 0
+    for member in members:
+        total += member.file_size
+        for part in member.filename.replace("\\", "/").split("/"):
+            if part and _invalid_component(part):
+                raise ContentImportError(
+                    f"The archive contains a file name Windows can't create: {member.filename}")
+    if total > MAX_UNPACKED_BYTES:
+        raise ContentImportError(
+            f"The archive unpacks to {total / 1024 ** 3:.1f} GB, more than the "
+            f"{MAX_UNPACKED_BYTES // 1024 ** 3} GB limit.")
+    probe = dest_dir
+    while probe and not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    try:
+        free = shutil.disk_usage(probe).free
+    except OSError:
+        return
+    if total + _DISK_MARGIN_BYTES > free:
+        raise ContentImportError(
+            f"Not enough disk space: the archive needs {total / 1024 ** 3:.1f} GB "
+            f"and only {free / 1024 ** 3:.1f} GB is free.")
 
 
 def _stem(path: str) -> str:
@@ -149,8 +207,8 @@ def inspect_world(path: str) -> WorldInfo:
 
     if os.path.isfile(path):
         with _open_zip(path) as zf:
-            candidates = [n for n in zf.namelist()
-                          if n.replace("\\", "/").split("/")[-1] == "level.dat"]
+            candidates = [n for n in (x.replace("\\", "/") for x in zf.namelist())
+                          if n.split("/")[-1] == "level.dat" and not n.startswith(_MACOS_JUNK)]
         if not candidates:
             raise ContentImportError("No Minecraft world found in that .zip (it needs a level.dat).")
         # Shallowest level.dat is the world root (DIM folders hold none).
@@ -162,27 +220,48 @@ def inspect_world(path: str) -> WorldInfo:
     raise ContentImportError("That world file or folder doesn't exist.")
 
 
+def _world_members(info: WorldInfo, zf: zipfile.ZipFile) -> list:
+    """(member, path relative to the world root) for every file to copy."""
+    out = []
+    for member in zf.infolist():
+        name = member.filename.replace("\\", "/")
+        if not name.startswith(info.root) or name.endswith("/") or name.startswith(_MACOS_JUNK):
+            continue
+        rel = name[len(info.root):]
+        if rel and rel.split("/")[-1] not in _WORLD_SKIP_FILES:
+            out.append((member, rel))
+    return out
+
+
+def validate_world(info: WorldInfo, dest_dir: str) -> None:
+    """Fail early (before a server is created) if the world can't be copied."""
+    if info.is_zip:
+        with _open_zip(info.path) as zf:
+            check_members([m for m, _ in _world_members(info, zf)], dest_dir)
+
+
 def import_world(info: WorldInfo, server_dir: str, level_name: str = "world",
                  progress: Optional[ProgressFn] = None) -> None:
-    """Copy the world into `server_dir/level_name`, replacing what's there."""
-    dest = os.path.join(server_dir, level_name)
+    """Copy the world into `server_dir/level_name`, replacing what's there.
+    `level_name` comes from server.properties, so it's confined to the
+    server folder like any archive path."""
+    dest = _safe_dest(server_dir, level_name or "world")
+    if os.path.normcase(dest) == os.path.normcase(os.path.realpath(server_dir)):
+        raise ContentImportError(f"Invalid level-name in server.properties: {level_name!r}")
     if progress:
         progress(f"Importing world '{info.name}'...")
-    _clear_dir(dest)
 
     if not info.is_zip:
+        _clear_dir(dest)
         shutil.copytree(info.root, dest, ignore=shutil.ignore_patterns(*_WORLD_SKIP_FILES))
         return
 
-    os.makedirs(dest, exist_ok=True)
     with _open_zip(info.path) as zf:
-        for member in zf.infolist():
-            name = member.filename.replace("\\", "/")
-            if not name.startswith(info.root) or name.endswith("/"):
-                continue
-            rel = name[len(info.root):]
-            if not rel or rel.split("/")[-1] in _WORLD_SKIP_FILES:
-                continue
+        members = _world_members(info, zf)
+        check_members([m for m, _ in members], server_dir)
+        _clear_dir(dest)
+        os.makedirs(dest, exist_ok=True)
+        for member, rel in members:
             target = _safe_dest(dest, rel)
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with zf.open(member) as src, open(target, "wb") as dst:
@@ -212,25 +291,29 @@ def _inspect_mrpack(path: str, zf: zipfile.ZipFile) -> ModpackInfo:
     )
 
 
+# Matched against one archive entry name at a time.
 _FORGE_JAR_RE = re.compile(r"(?:^|/)forge-(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)(?:-[a-z]+)?\.jar$")
-_FORGE_LIB_RE = re.compile(r"libraries/net/minecraftforge/forge/(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)/")
-_NEOFORGE_RE = re.compile(r"(?:^|/)(?:libraries/net/neoforged/neoforge/|neoforge-)(\d+(?:\.\d+)+)")
-_FABRIC_LOADER_RE = re.compile(r"libraries/net/fabricmc/fabric-loader/(\d+(?:\.\d+)+)/")
-_FABRIC_MC_RE = re.compile(r"libraries/net/fabricmc/intermediary/(\d+\.\d+(?:\.\d+)?)/")
-_QUILT_RE = re.compile(r"libraries/org/quiltmc/quilt-loader/")
+_FORGE_LIB_RE = re.compile(r"^libraries/net/minecraftforge/forge/(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)/")
+_NEOFORGE_RE = re.compile(r"^libraries/net/neoforged/neoforge/\d|(?:^|/)neoforge-\d[\w.-]*\.jar$")
+_FABRIC_LOADER_RE = re.compile(r"^libraries/net/fabricmc/fabric-loader/(\d+(?:\.\d+)+)/")
+_FABRIC_MC_RE = re.compile(r"^libraries/net/fabricmc/intermediary/(\d+\.\d+(?:\.\d+)?)/")
+_QUILT_RE = re.compile(r"^libraries/org/quiltmc/quilt-loader/")
+_MOD_JAR_RE = re.compile(r"(?:^|/)mods/[^/]+\.jar$")
+
+
+def _content_names(names: list) -> list:
+    return [n for n in names if not n.startswith(_MACOS_JUNK)]
 
 
 def _pack_root(names: list) -> str:
-    """In-zip prefix of the pack's content: server packs are often wrapped
-    in one top-level folder."""
-    if any(n.startswith("mods/") for n in names):
+    """In-zip prefix of the pack's content. Server packs are often wrapped
+    in a folder; the shallowest mods/*.jar tells where the pack starts, so
+    a stray README or __MACOSX/ next to the wrapper doesn't matter."""
+    mod_jars = [n for n in _content_names(names) if _MOD_JAR_RE.search(n)]
+    if not mod_jars:
         return ""
-    tops = {n.split("/", 1)[0] for n in names if n.strip("/")}
-    if len(tops) == 1:
-        top = next(iter(tops))
-        if any(n.startswith(top + "/") for n in names):
-            return top + "/"
-    return ""
+    shallowest = min(mod_jars, key=lambda n: n.count("/"))
+    return shallowest[: shallowest.rfind("mods/")]
 
 
 def _read_variables(zf: zipfile.ZipFile, root: str) -> dict:
@@ -247,9 +330,45 @@ def _read_variables(zf: zipfile.ZipFile, root: str) -> dict:
     return out
 
 
+def _first_match(regex, names):
+    for name in names:
+        m = regex.search(name)
+        if m:
+            return m
+    return None
+
+
+def _detect_from_files(names: list) -> tuple:
+    """(loader, mc_version, loader_version) from the pack's files; each part
+    may be None."""
+    forge = _first_match(_FORGE_LIB_RE, names) or _first_match(_FORGE_JAR_RE, names)
+    if forge:
+        return "Forge", forge.group(1), forge.group(2)
+    if _first_match(_NEOFORGE_RE, names):
+        return "NeoForge", None, None
+    if _first_match(_QUILT_RE, names):
+        return "Quilt", None, None
+    loader_m = _first_match(_FABRIC_LOADER_RE, names)
+    if loader_m or any(n.split("/")[-1] == "fabric-server-launch.jar" for n in names):
+        mc_m = _first_match(_FABRIC_MC_RE, names)
+        return "Fabric", (mc_m.group(1) if mc_m else None), (loader_m.group(1) if loader_m else None)
+    return None, None, None
+
+
+_VARIABLE_LOADERS = {"forge": "Forge", "fabric": "Fabric", "neoforge": "NeoForge", "quilt": "Quilt"}
+
+
+def _apply_variables(info: ModpackInfo, variables: dict) -> None:
+    info.mc_version = variables.get("MINECRAFT_VERSION") or None
+    loader_var = variables.get("MODLOADER", "")
+    if loader_var:
+        info.loader = _VARIABLE_LOADERS.get(loader_var.lower(), loader_var)
+        info.loader_version = variables.get("MODLOADER_VERSION") or None
+
+
 def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackInfo:
     root = _pack_root(names)
-    rel_names = [n[len(root):] for n in names if n.startswith(root)]
+    rel_names = [n[len(root):] for n in _content_names(names) if n.startswith(root)]
     mods = [n for n in rel_names if n.startswith("mods/") and n.endswith(".jar")]
     if not mods:
         raise ContentImportError(
@@ -257,36 +376,47 @@ def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackI
             "Use a Modrinth .mrpack or the pack's \"Server Pack\" download.")
 
     info = ModpackInfo(path=path, kind="serverpack", name=_stem(path), mod_count=len(mods), root=root)
-    joined = "\n".join(rel_names)
-
-    variables = _read_variables(zf, root)
-    loader_var = variables.get("MODLOADER", "").lower()
-    if variables.get("MINECRAFT_VERSION"):
-        info.mc_version = variables["MINECRAFT_VERSION"]
-    if loader_var:
-        info.loader = {"forge": "Forge", "fabric": "Fabric", "neoforge": "NeoForge",
-                       "quilt": "Quilt"}.get(loader_var, variables["MODLOADER"])
-        info.loader_version = variables.get("MODLOADER_VERSION") or None
-
+    _apply_variables(info, _read_variables(zf, root))
+    loader, mc, loader_version = _detect_from_files(rel_names)
     if info.loader is None:
-        m = _FORGE_LIB_RE.search(joined) or _FORGE_JAR_RE.search(joined)
-        if m:
-            info.loader, info.mc_version, info.loader_version = "Forge", m.group(1), m.group(2)
-        elif _NEOFORGE_RE.search(joined):
-            info.loader = "NeoForge"
-        elif _QUILT_RE.search(joined):
-            info.loader = "Quilt"
-        elif "fabric-server-launch.jar" in joined or _FABRIC_LOADER_RE.search(joined):
-            info.loader = "Fabric"
-            loader_m = _FABRIC_LOADER_RE.search(joined)
-            mc_m = _FABRIC_MC_RE.search(joined)
-            info.loader_version = loader_m.group(1) if loader_m else None
-            info.mc_version = info.mc_version or (mc_m.group(1) if mc_m else None)
+        info.loader, info.loader_version = loader, loader_version
+    elif info.loader == loader and not info.loader_version:
+        info.loader_version = loader_version
+    if info.mc_version is None and info.loader == loader:
+        info.mc_version = mc
+    if info.mc_version and info.loader_version and info.loader_version.startswith(info.mc_version + "-"):
+        # variables.txt sometimes carries the full "1.20.1-47.2.0" build.
+        info.loader_version = info.loader_version[len(info.mc_version) + 1:]
 
     if info.loader is None or info.mc_version is None:
         info.notes.append("Couldn't tell which loader/Minecraft version this pack needs. "
                           "Pick the same ones the pack's page lists.")
     return info
+
+
+def _is_curseforge_client(names: list) -> bool:
+    """A CurseForge client export: manifest.json with its files under
+    overrides/ and no server-ready mods/ folder next to it."""
+    for name in _content_names(names):
+        if name.split("/")[-1] != "manifest.json" or name.count("/") > 1:
+            continue
+        prefix = name[: -len("manifest.json")]
+        has_mods = any(n.startswith(prefix + "mods/") for n in names)
+        has_overrides = any(n.startswith(prefix + "overrides/") for n in names)
+        if not has_mods and (has_overrides or not any(_MOD_JAR_RE.search(n) for n in names)):
+            return True
+    return False
+
+
+def modpack_mismatch(info: ModpackInfo, engine: str, mc_version: str) -> Optional[str]:
+    """Why `info` can't run on an `engine` server for `mc_version`, or None."""
+    if engine not in SUPPORTED_LOADERS:
+        return f"Modpacks need a {' or '.join(SUPPORTED_LOADERS)} server, not {engine}."
+    if info.loader and info.loader != engine:
+        return f"This modpack needs a {info.loader} server, not {engine}."
+    if info.mc_version and info.mc_version != mc_version:
+        return f"This modpack needs Minecraft {info.mc_version}, not {mc_version}."
+    return None
 
 
 def inspect_modpack(path: str) -> ModpackInfo:
@@ -296,8 +426,7 @@ def inspect_modpack(path: str) -> ModpackInfo:
         names = [n.replace("\\", "/") for n in zf.namelist()]
         if "modrinth.index.json" in names:
             info = _inspect_mrpack(path, zf)
-        elif any(n.split("/")[-1] == "manifest.json" and n.count("/") <= 1 for n in names) \
-                and not any("/mods/" in "/" + n for n in names):
+        elif _is_curseforge_client(names):
             raise ContentImportError(
                 "This is a CurseForge client modpack. On the pack's CurseForge page, open "
                 "Files, download the \"Server Pack\" and import that .zip instead.")
@@ -311,21 +440,45 @@ def inspect_modpack(path: str) -> ModpackInfo:
     return info
 
 
+def _serverpack_members(info: ModpackInfo, zf: zipfile.ZipFile) -> list:
+    """(member, path relative to the pack root) for every file to copy."""
+    out = []
+    for member in zf.infolist():
+        name = member.filename.replace("\\", "/")
+        if name.endswith("/") or not name.startswith(info.root) or name.startswith(_MACOS_JUNK):
+            continue
+        rel = name[len(info.root):]
+        parts = rel.split("/")
+        if parts[0] in _SERVERPACK_SKIP_DIRS:
+            continue
+        if len(parts) == 1 and (rel.lower().endswith(_SERVERPACK_SKIP_EXT)
+                                or rel.lower() in _SERVERPACK_SKIP_FILES):
+            continue
+        out.append((member, rel))
+    return out
+
+
+def _mrpack_override_members(zf: zipfile.ZipFile) -> list:
+    return [m for m in zf.infolist()
+            if m.filename.startswith(("overrides/", "server-overrides/")) and not m.filename.endswith("/")]
+
+
+def validate_modpack(info: ModpackInfo, dest_dir: str) -> None:
+    """Fail early (before a server is created) if the pack can't be unpacked."""
+    with _open_zip(info.path) as zf:
+        if info.kind == "mrpack":
+            members = _mrpack_override_members(zf)
+        else:
+            members = [m for m, _ in _serverpack_members(info, zf)]
+        check_members(members, dest_dir)
+
+
 def _copy_serverpack(info: ModpackInfo, server_dir: str, progress: Optional[ProgressFn]) -> int:
     copied = 0
     with _open_zip(info.path) as zf:
-        members = [m for m in zf.infolist() if not m.filename.endswith("/")]
-        for member in members:
-            name = member.filename.replace("\\", "/")
-            if not name.startswith(info.root):
-                continue
-            rel = name[len(info.root):]
-            parts = rel.split("/")
-            if parts[0] in _SERVERPACK_SKIP_DIRS:
-                continue
-            if len(parts) == 1 and (rel.lower().endswith(_SERVERPACK_SKIP_EXT)
-                                    or rel.lower() in _SERVERPACK_SKIP_FILES):
-                continue
+        members = _serverpack_members(info, zf)
+        check_members([m for m, _ in members], server_dir)
+        for member, rel in members:
             target = _safe_dest(server_dir, rel)
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with zf.open(member) as src, open(target, "wb") as dst:
@@ -336,11 +489,18 @@ def _copy_serverpack(info: ModpackInfo, server_dir: str, progress: Optional[Prog
     return copied
 
 
+@dataclass
+class ModpackInstall:
+    summary: str
+    failed: int = 0  # mods that could not be downloaded
+
+
 def install_modpack(info: ModpackInfo, server_dir: str, server_type: str, mc_version: str,
-                    progress: Optional[ProgressFn] = None) -> str:
-    """Install the pack into `server_dir`; returns a one-line summary."""
+                    progress: Optional[ProgressFn] = None) -> ModpackInstall:
+    """Install the pack into `server_dir`."""
     if info.kind == "mrpack":
         from app.services.mrpack_installer import install_mrpack
+        validate_modpack(info, server_dir)
         summary = install_mrpack(info.path, os.path.basename(server_dir), progress_callback=progress,
                                  server_type=server_type, mc_version=mc_version, server_dir=server_dir)
         text = f"{summary['installed']} mods installed"
@@ -348,9 +508,9 @@ def install_modpack(info: ModpackInfo, server_dir: str, server_type: str, mc_ver
             text += f", {summary['skipped_client']} client-only skipped"
         if summary["failed"]:
             text += f", {summary['failed']} failed to download"
-        return text
+        return ModpackInstall(text, summary["failed"])
 
     if progress:
         progress("Copying modpack files...")
     copied = _copy_serverpack(info, server_dir, progress)
-    return f"{info.mod_count} mods ({copied} files) copied"
+    return ModpackInstall(f"{info.mod_count} mods ({copied} files) copied")

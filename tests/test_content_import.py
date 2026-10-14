@@ -1,11 +1,16 @@
 import json
 import zipfile
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
 
+from app.services import content_import
+from tests.test_provisioning import _Env
+
 from app.services.content_import import (
-    ContentImportError, import_world, inspect_modpack, inspect_world, install_modpack,
+    ContentImportError, ModpackInfo, import_world, inspect_modpack, inspect_world, install_modpack,
+    modpack_mismatch,
 )
 
 
@@ -123,10 +128,10 @@ def test_mrpack_install_applies_server_overrides_last(tmp_path):
     server = tmp_path / "srv"
     server.mkdir()
 
-    summary = install_modpack(inspect_modpack(path), str(server), "Fabric", "1.20.1")
+    result = install_modpack(inspect_modpack(path), str(server), "Fabric", "1.20.1")
 
     assert (server / "config" / "a.toml").read_text() == "server"
-    assert summary.startswith("0 mods installed")
+    assert result.summary.startswith("0 mods installed") and result.failed == 0
 
 
 def test_curseforge_client_export_points_to_server_pack(tmp_path):
@@ -219,9 +224,6 @@ def test_not_a_zip_is_rejected(tmp_path):
 # Provisioning wiring
 # ----------------------------------------------------------------------
 def test_provisioning_installs_modpack_then_world_with_pinned_loader(tmp_path):
-    from tests.test_provisioning import _Env
-    from contextlib import ExitStack
-
     world = _world_folder(tmp_path / "saves")
     pack = _zip(tmp_path / "pack.zip", {
         "mods/a.jar": "a",
@@ -251,17 +253,15 @@ def test_provisioning_installs_modpack_then_world_with_pinned_loader(tmp_path):
     assert env.progress == sorted(env.progress)
 
 
-def test_provisioning_fails_cleanly_on_bad_modpack(tmp_path):
-    from tests.test_provisioning import _Env
-    from contextlib import ExitStack
-
+def test_provisioning_rejects_bad_modpack_before_creating_anything(tmp_path):
     bogus = tmp_path / "x.zip"
     bogus.write_text("nope")
     with ExitStack() as stack:
         env = _Env(tmp_path, stack)
-        with patch("app.core.provisioning.logger"):
-            result = env.run(type="Fabric", version="1.20.1", modpack_path=str(bogus))
+        result = env.run(type="Fabric", version="1.20.1", modpack_path=str(bogus))
     assert not result.ok and "zip" in result.error
+    env.install_fabric.assert_not_called()
+    assert not (env.servers_dir / "srv").exists()
 
 
 def test_modpack_ram_suggestion():
@@ -270,3 +270,300 @@ def test_modpack_ram_suggestion():
     assert modpack_ram_mb(2048, 300, 16384) == 6144
     assert modpack_ram_mb(8192, 300, 16384) == 8192   # never lowers
     assert modpack_ram_mb(2048, 300, 6144) == 4096    # leaves 2 GB to the system
+
+
+
+# ----------------------------------------------------------------------
+# Review fixes: detection
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("jar, mc, forge", [
+    ("forge-1.12.2-14.23.5.2860.jar", "1.12.2", "14.23.5.2860"),
+    ("forge-1.12.2-14.23.5.2860-universal.jar", "1.12.2", "14.23.5.2860"),
+    ("forge-1.20.1-47.2.0-installer.jar", "1.20.1", "47.2.0"),
+])
+def test_forge_root_jar_detected_anywhere_in_the_archive(tmp_path, jar, mc, forge):
+    # Not first and not last entry: the regex must match per name.
+    archive = _zip(tmp_path / "pack.zip", {"mods/a.jar": "a", jar: "j", "run.bat": "java"})
+    info = inspect_modpack(archive)
+    assert (info.loader, info.mc_version, info.loader_version) == ("Forge", mc, forge)
+    assert info.pinned_loader_version == forge
+
+
+@pytest.mark.parametrize("marker", [
+    "libraries/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-universal.jar",
+    "neoforge-21.1.77-installer.jar",
+])
+def test_neoforge_server_pack_is_rejected(tmp_path, marker):
+    archive = _zip(tmp_path / "pack.zip", {"mods/a.jar": "a", marker: "x", "run.sh": "java"})
+    with pytest.raises(ContentImportError, match="NeoForge"):
+        inspect_modpack(archive)
+
+
+def test_wrapper_folder_with_readme_and_macosx_junk(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "README.txt": "hi",
+        "__MACOSX/Pack/mods/._a.jar": "junk",
+        "Pack/mods/a.jar": "a",
+        "Pack/config/c.toml": "c",
+    })
+    info = inspect_modpack(archive)
+    assert info.root == "Pack/" and info.mod_count == 1
+
+    server = tmp_path / "srv"
+    server.mkdir()
+    install_modpack(info, str(server), "Forge", "1.20.1")
+    assert (server / "mods" / "a.jar").exists()
+    assert not (server / "__MACOSX").exists() and not (server / "Pack").exists()
+
+
+def test_variables_without_mc_version_fill_it_from_libraries(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "variables.txt": "MODLOADER=forge\nMODLOADER_VERSION=47.2.0\n",
+        "libraries/net/minecraftforge/forge/1.20.1-47.2.0/x.jar": "l",
+    })
+    info = inspect_modpack(archive)
+    assert (info.loader, info.mc_version, info.pinned_loader_version) == ("Forge", "1.20.1", "47.2.0")
+
+
+def test_loader_version_is_not_pinned_without_mc_version(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "variables.txt": "MODLOADER=forge\nMODLOADER_VERSION=47.2.0\n",
+    })
+    info = inspect_modpack(archive)
+    assert info.loader == "Forge" and info.mc_version is None
+    assert info.pinned_loader_version is None
+    assert info.notes
+
+
+def test_full_forge_build_in_variables_is_trimmed(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "variables.txt": "MINECRAFT_VERSION=1.20.1\nMODLOADER=Forge\nMODLOADER_VERSION=1.20.1-47.2.0\n",
+    })
+    assert inspect_modpack(archive).pinned_loader_version == "47.2.0"
+
+
+def test_curseforge_client_export_with_override_mods_points_to_server_pack(tmp_path):
+    archive = _zip(tmp_path / "cf.zip", {
+        "manifest.json": json.dumps({"manifestType": "minecraftModpack"}),
+        "overrides/mods/bundled.jar": "x",
+        "overrides/config/c.toml": "c",
+    })
+    with pytest.raises(ContentImportError, match="CurseForge client"):
+        inspect_modpack(archive)
+
+
+def test_fabric_launcher_properties_from_pack_is_not_copied(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "fabric-server-launch.jar": "x",
+        "fabric-server-launcher.properties": "serverJar=minecraft_server.1.20.1.jar",
+    })
+    server = tmp_path / "srv"
+    server.mkdir()
+    install_modpack(inspect_modpack(archive), str(server), "Fabric", "1.20.1")
+    assert not (server / "fabric-server-launcher.properties").exists()
+
+
+# ----------------------------------------------------------------------
+# Review fixes: archive safety
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("bad", ["config/CON", "config/aux.txt", "config/a:b.toml", "mods/trailing."])
+def test_windows_invalid_names_rejected_before_copying(tmp_path, bad):
+    archive = _zip(tmp_path / "pack.zip", {"mods/a.jar": "a", bad: "x"})
+    server = tmp_path / "srv"
+    server.mkdir()
+    with pytest.raises(ContentImportError, match="Windows can't create"):
+        install_modpack(inspect_modpack(archive), str(server), "Forge", "1.20.1")
+    assert list(server.iterdir()) == []  # nothing half-copied
+
+
+def test_oversized_archive_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(content_import, "MAX_UNPACKED_BYTES", 10)
+    archive = _zip(tmp_path / "w.zip", {"level.dat": "x" * 50})
+    with pytest.raises(ContentImportError, match="limit"):
+        content_import.validate_world(inspect_world(archive), str(tmp_path))
+
+
+def test_archive_larger_than_free_space_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(content_import.shutil, "disk_usage", lambda p: type("U", (), {"free": 100})())
+    archive = _zip(tmp_path / "w.zip", {"level.dat": "x" * 50})
+    with pytest.raises(ContentImportError, match="disk space"):
+        content_import.validate_world(inspect_world(archive), str(tmp_path / "not" / "yet"))
+
+
+def test_world_imports_into_custom_level_name_and_rejects_traversal(tmp_path):
+    archive = _zip(tmp_path / "w.zip", {"level.dat": "nbt", "__MACOSX/._level.dat": "junk"})
+    server = tmp_path / "srv"
+    server.mkdir()
+    info = inspect_world(archive)
+    import_world(info, str(server), level_name="SkyWorld")
+    assert (server / "SkyWorld" / "level.dat").read_text() == "nbt"
+    with pytest.raises(ContentImportError):
+        import_world(info, str(server), level_name="../escape")
+    with pytest.raises(ContentImportError):
+        import_world(info, str(server), level_name=".")
+
+
+def test_mrpack_failed_downloads_are_counted(tmp_path):
+    path = _mrpack(tmp_path, {"minecraft": "1.20.1", "fabric-loader": "0.15.7"},
+                   [{"path": "mods/a.jar", "downloads": ["https://x/a.jar"], "hashes": {}}])
+    server = tmp_path / "srv"
+    server.mkdir()
+    with patch("app.services.mrpack_installer.download_with_verification", return_value=(False, None, "404")):
+        result = install_modpack(inspect_modpack(path), str(server), "Fabric", "1.20.1")
+    assert result.failed == 1 and "1 failed" in result.summary
+
+
+def test_modpack_mismatch_messages():
+    info = ModpackInfo(path="p", kind="mrpack", name="P", mc_version="1.20.1", loader="Fabric")
+    assert modpack_mismatch(info, "Fabric", "1.20.1") is None
+    assert "Fabric server" in modpack_mismatch(info, "Forge", "1.20.1")
+    assert "Minecraft 1.20.1" in modpack_mismatch(info, "Fabric", "1.21")
+    assert "Fabric or Forge" in modpack_mismatch(info, "Paper", "1.20.1")
+
+
+# ----------------------------------------------------------------------
+# Review fixes: provisioning
+# ----------------------------------------------------------------------
+def _pack_zip(tmp_path, props=None, mc="1.20.1"):
+    files = {"mods/a.jar": "a",
+             "variables.txt": f"MINECRAFT_VERSION={mc}\nMODLOADER=Forge\nMODLOADER_VERSION=47.2.0\n"}
+    if props:
+        files["server.properties"] = props
+    return _zip(tmp_path / "pack.zip", files)
+
+
+def test_mismatched_modpack_fails_before_jar_install(tmp_path):
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        result = env.run(type="Forge", version="1.21.1", modpack_path=_pack_zip(tmp_path))
+    assert not result.ok and "Minecraft 1.20.1" in result.error
+    env.install_forge.assert_not_called()
+    assert not (env.servers_dir / "srv").exists()
+
+
+def test_failure_after_jar_install_rolls_back_server_dir(tmp_path):
+    world = _world_folder(tmp_path / "saves")
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        stack.enter_context(patch("app.services.content_import.import_world", side_effect=OSError("disk full")))
+        result = env.run(world_path=str(world))
+    assert not result.ok and "disk full" in result.error
+    assert not (env.servers_dir / "srv").exists()
+    assert any("Removed the partially created server" in line for line in env.lines)
+
+
+def test_rollback_keeps_a_custom_folder_that_already_existed(tmp_path):
+    custom = tmp_path / "elsewhere"
+    (custom / "srv").mkdir(parents=True)
+    (custom / "srv" / "mine.txt").write_text("user data")
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        env.download.side_effect = lambda *a, **k: None
+        result = env.run(location=str(custom))
+    assert not result.ok
+    assert (custom / "srv" / "mine.txt").read_text() == "user data"
+
+
+def test_rollback_removes_a_custom_folder_it_created(tmp_path):
+    custom = tmp_path / "elsewhere"
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        env.download.side_effect = lambda *a, **k: None
+        result = env.run(location=str(custom))
+    assert not result.ok
+    assert not (custom / "srv").exists()
+
+
+def test_duplicate_name_never_deletes_the_existing_server(tmp_path):
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        (env.servers_dir / "srv").mkdir()
+        (env.servers_dir / "srv" / "world.dat").write_text("precious")
+        result = env.run()
+    assert not result.ok and "already exists" in result.error
+    assert (env.servers_dir / "srv" / "world.dat").read_text() == "precious"
+
+
+def test_wizard_settings_win_over_pack_properties_and_world_follows_level_name(tmp_path):
+    world = _world_folder(tmp_path / "saves")
+    pack = _pack_zip(tmp_path, props="gamemode=creative\nlevel-name=SkyWorld\nlevel-type=skyblock\n")
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        result = env.run(type="Forge", version="1.20.1", modpack_path=pack, world_path=str(world),
+                         game_mode="survival")
+    assert result.ok, result.error
+    assert env.scaffold.call_args.kwargs["override_existing"] is True
+    assert (env.servers_dir / "srv" / "SkyWorld" / "level.dat").exists()
+
+
+def test_scaffold_override_existing_replaces_only_wizard_keys(tmp_path):
+    from app.services.scaffolder import pre_boot_scaffold
+    props = tmp_path / "server.properties"
+    props.write_text("gamemode=creative\nlevel-type=skyblock\nmotd=Pack MOTD\n", encoding="utf-8")
+
+    pre_boot_scaffold(str(tmp_path), port=25570, config={"game_mode": "survival"}, override_existing=True)
+
+    text = props.read_text(encoding="utf-8")
+    assert "gamemode=survival" in text and "gamemode=creative" not in text
+    assert "level-type=skyblock" in text and "motd=Pack MOTD" in text
+    assert "server-port=25570" in text
+
+
+def test_scaffold_keeps_existing_values_without_override(tmp_path):
+    from app.services.scaffolder import pre_boot_scaffold
+    props = tmp_path / "server.properties"
+    props.write_text("gamemode=creative\nserver-port=1\n", encoding="utf-8")
+    pre_boot_scaffold(str(tmp_path), port=25570, config={"game_mode": "survival"})
+    text = props.read_text(encoding="utf-8")
+    assert "gamemode=creative" in text and "server-port=25570" in text
+
+
+def test_failed_mod_downloads_become_a_warning(tmp_path):
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        stack.enter_context(patch("app.services.content_import.install_modpack",
+                                  return_value=content_import.ModpackInstall("1 mods installed", failed=2)))
+        result = env.run(type="Forge", version="1.20.1", modpack_path=_pack_zip(tmp_path))
+    assert result.ok
+    assert result.warnings and "2 mod(s)" in result.warnings[0]
+
+
+def test_tunnel_failure_keeps_the_server_with_a_warning(tmp_path):
+    with ExitStack() as stack:
+        env = _Env(tmp_path, stack)
+        env.provisioner._create_tunnel = lambda name: (_ for _ in ()).throw(RuntimeError("playit down"))
+        result = env.run()
+    assert result.ok and "playit down" in result.warnings[0]
+    assert (env.servers_dir / "srv").exists()
+
+
+# ----------------------------------------------------------------------
+# Review fixes: wizard validation helpers
+# ----------------------------------------------------------------------
+def test_modpack_step_error_enforces_engine_and_version():
+    from app.ui.server_wizard import modpack_step_error
+    base = {"modpack_path": "p", "modpack_loader": "Forge", "modpack_mc": "1.20.1",
+            "type": "Forge", "version": "1.20.1"}
+    assert modpack_step_error(base) is None
+    assert modpack_step_error({**base, "modpack_path": None, "type": "Paper"}) is None
+    assert "1.20.1" in modpack_step_error({**base, "version": "1.21.4"})
+    assert "Forge server" in modpack_step_error({**base, "type": "Fabric"})
+    assert "Fabric or Forge" in modpack_step_error({**base, "type": "Vanilla", "modpack_loader": None})
+
+
+def test_world_step_error_blocks_import_without_a_world():
+    from app.ui.server_wizard import world_step_error
+    assert world_step_error("new", None, False) is None
+    assert world_step_error("import", "C:/w", False) is None
+    assert "Choose a world" in world_step_error("import", None, False)
+    assert "Still reading" in world_step_error("import", None, True)
+
+
+def test_version_sort_key_orders_numerically():
+    from app.ui.server_wizard import version_sort_key
+    assert sorted(["1.9", "1.20.1", "1.21-pre1", "26.1"], key=version_sort_key) == \
+        ["1.9", "1.20.1", "1.21-pre1", "26.1"]
