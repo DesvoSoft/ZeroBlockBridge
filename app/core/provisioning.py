@@ -36,6 +36,10 @@ SIMPLE_JAR_ENGINES = ("Vanilla", "Paper", "Purpur")
 INSTALLER_ENGINES = ("Fabric", "Forge")
 
 
+class ProvisionCancelled(Exception):
+    """The user cancelled the creation (or the app is closing)."""
+
+
 @dataclass
 class ProvisionResult:
     ok: bool
@@ -46,6 +50,8 @@ class ProvisionResult:
     warnings: list = field(default_factory=list)
     # Something was created and then removed again (vs. failing up front).
     rolled_back: bool = False
+    # Stopped by the user: not an error to report.
+    cancelled: bool = False
 
 
 def resolve_required_java(bytecode_java: Optional[int], version_map_java: int) -> int:
@@ -71,8 +77,10 @@ class ServerProvisioner:
         jar_wait_seconds: float = 10.0,
         jar_poll_interval: float = 0.5,
         sleep: Callable[[float], None] = time.sleep,
+        cancel_event=None,
     ):
         self._log = log
+        self._cancel_event = cancel_event
         self._get_server_port = get_server_port
         self._create_tunnel = create_tunnel
         self._jdk_manager = jdk_manager
@@ -86,6 +94,8 @@ class ServerProvisioner:
         self._created: list = []
         self._warnings: list = []
         self._kept_existing_target = False
+        self._target_entries_before: Optional[set] = None
+        self._existing_target: Optional[str] = None
         self._required_java: Optional[int] = None
 
     @property
@@ -99,15 +109,18 @@ class ServerProvisioner:
     # Entry point
     # ------------------------------------------------------------------
     def provision(self, config: dict, progress: Optional[ProgressFn] = None) -> ProvisionResult:
-        progress = progress or (lambda value, text=None: None)
+        progress = self._cancellable(progress or (lambda value, text=None: None))
         name = config["name"]
         self._modpack = self._world = None
         self._created, self._warnings = [], []
         self._kept_existing_target = False
+        self._target_entries_before = self._existing_target = None
         try:
             error = self._build(config, progress)
             if error:
                 self._log(f"[Error] {error}")
+        except ProvisionCancelled:
+            return self._cancelled(name)
         except Exception as e:
             logger.exception("Provisioning failed for %s", name)
             self._log(f"[Error] Installation failed: {e}")
@@ -132,17 +145,47 @@ class ServerProvisioner:
 
     def _build(self, config: dict, progress: ProgressFn) -> Optional[str]:
         """Every step that leaves a usable server behind. Returns an error
-        message (or raises); the caller rolls back whatever was created."""
+        message (or raises); the caller rolls back whatever was created.
+        Raises ProvisionCancelled between steps (and from `progress` during
+        downloads) once the cancel event is set."""
+        self._check_cancel()
         error = self._preflight_content(config) or self._prepare_location(config)
         if error:
             return error
+        self._check_cancel()
         if not self._install_server_jar(config, progress):
+            self._check_cancel()  # a cancelled installer reports failure: say why
             return f"Failed to create server '{config['name']}'. Check the log for details."
-        self._import_content(config, progress)
-        self._log("[System] Installation success. Applying settings...")
-        self._apply_settings(config, progress)
+        for step in (self._import_content, self._apply_settings):
+            self._check_cancel()
+            if step is self._apply_settings:
+                self._log("[System] Installation success. Applying settings...")
+            step(config, progress)
+        self._check_cancel()
         self._required_java = self._resolve_and_install_java(config, progress)
+        self._check_cancel()  # the JDK download can't be interrupted; honour a cancel made meanwhile
         return None
+
+    # ------------------------------------------------------------------
+    # Cancellation
+    # ------------------------------------------------------------------
+    def _check_cancel(self) -> None:
+        if self._cancel_event is not None and self._cancel_event.is_set():
+            raise ProvisionCancelled()
+
+    def _cancellable(self, progress: ProgressFn) -> ProgressFn:
+        """Progress reporting doubles as a cancellation point: downloads call
+        it per chunk, so a cancel stops a jar download mid-stream."""
+        def report(value, text=None):
+            self._check_cancel()
+            progress(value, text)
+        return report
+
+    def _cancelled(self, name: str) -> ProvisionResult:
+        rolled_back = bool(self._created)
+        self._rollback(name)
+        self._log(f"[System] Creation of '{name}' cancelled.")
+        return ProvisionResult(False, name, "Cancelled", rolled_back=rolled_back, cancelled=True)
 
     # ------------------------------------------------------------------
     # Steps
@@ -194,6 +237,8 @@ class ServerProvisioner:
         try:
             if os.path.exists(target_path):
                 self._kept_existing_target = True
+                self._existing_target = target_path
+                self._target_entries_before = set(os.listdir(target_path))
             else:
                 os.makedirs(target_path)
                 self._created.append(("dir", target_path))
@@ -211,6 +256,7 @@ class ServerProvisioner:
 
         if not self._created:
             return  # e.g. "already exists": nothing of ours to undo
+        self._remove_additions_to_existing_target()
         for kind, path in reversed(self._created):
             try:
                 if kind == "link" and os.path.lexists(path):
@@ -220,10 +266,32 @@ class ServerProvisioner:
             except OSError as e:
                 logger.warning("Rollback could not remove %s: %s", path, e)
         if self._kept_existing_target:
-            self._log("[System] The chosen folder already existed, so nothing inside it was deleted.")
+            self._log("[System] The chosen folder already existed: only what this attempt added "
+                      "to it was removed.")
         self._created = []
         logic.invalidate_meta_cache(name)
         self._log(f"[System] Removed the partially created server '{name}'.")
+
+    def _remove_additions_to_existing_target(self) -> None:
+        """In a custom folder that existed before, delete only the entries
+        this run added (jar, .part downloads, libraries...), never the
+        user's own files."""
+        from app.core.fs_links import is_link, remove_link
+
+        target = self._existing_target
+        if self._target_entries_before is None or not target or not os.path.isdir(target):
+            return
+        for entry in set(os.listdir(target)) - self._target_entries_before:
+            path = os.path.join(target, entry)
+            try:
+                if is_link(path):
+                    remove_link(path)
+                elif os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+            except OSError as e:
+                logger.warning("Rollback could not remove %s: %s", path, e)
 
     def _install_server_jar(self, config: dict, progress: ProgressFn) -> bool:
         name, version, engine = config["name"], config["version"], config["type"]
@@ -243,9 +311,11 @@ class ServerProvisioner:
             java_bin = self.jdk_manager.ensure_java(get_required_java(version)) or "java"
             installer = logic.install_fabric if engine == "Fabric" else logic.install_forge
             # A modpack pins its loader build; otherwise the installer picks one.
-            pinned = {"loader_version": config["loader_version"]} \
+            extra = {"loader_version": config["loader_version"]} \
                 if config.get("loader_version") and engine == config.get("modpack_loader", engine) else {}
-            return bool(installer(name, version, jar_progress, java_bin=java_bin, **pinned))
+            if self._cancel_event is not None:
+                extra["cancel_event"] = self._cancel_event  # kills a running installer
+            return bool(installer(name, version, jar_progress, java_bin=java_bin, **extra))
         self._log(f"[Error] Unknown server type: {engine}")
         return False
 

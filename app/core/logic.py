@@ -367,7 +367,7 @@ def accept_eula(server_name: str) -> None:
     server_path = os.path.join(SERVERS_DIR, server_name)
     _generate_eula(server_path, accepted=True)
 
-def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
+def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None, cancel_event=None) -> Optional[str]:
     server_path = create_server_directory(server_name, server_type, mc_version)
     vm = VersionManager()
     installer_url = (vm.get_download_url(server_type, mc_version, loader_version)
@@ -390,25 +390,13 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
         return None
 
     cmd = [java_bin, "-jar", installer_name] + installer_args
+    if cancel_event is not None and cancel_event.is_set():
+        return None
     try:
         if progress_callback: progress_callback(0.5)
-        # Retry on transient WinError 5/32: OneDrive/AV can briefly lock a
-        # jar right after it's written to a synced folder before it's
-        # executable.
-        last_error = None
-        for attempt in range(3):
-            try:
-                subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
-                last_error = None
-                break
-            except OSError as e:
-                last_error = e
-                if getattr(e, "winerror", None) not in (5, 32):
-                    raise
-                logger.warning("Installer spawn blocked (attempt %d/3): %s", attempt + 1, e)
-                time.sleep(1.5)
-        if last_error:
-            raise last_error
+        if not _spawn_installer(cmd, server_path, cancel_event):
+            logger.info("%s installer cancelled for %s", server_type, server_name)
+            return None
         if progress_callback: progress_callback(0.9)
         normalize_server_jar(server_path)
         return server_path
@@ -419,13 +407,71 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
         return None
 
 
-def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
+def _spawn_installer(cmd: list, server_path: str, cancel_event=None) -> bool:
+    """Run an installer to completion (raises CalledProcessError on a
+    non-zero exit). Returns False when `cancel_event` stopped it.
+
+    Retries on transient WinError 5/32: OneDrive/AV can briefly lock a jar
+    right after it's written to a synced folder before it's executable.
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            if cancel_event is None:
+                subprocess.run(cmd, cwd=server_path, check=True, capture_output=True, text=True, **subprocess_flags())
+                return True
+            return _run_cancellable(cmd, server_path, cancel_event) is not None
+        except OSError as e:
+            last_error = e
+            if getattr(e, "winerror", None) not in (5, 32):
+                raise
+            logger.warning("Installer spawn blocked (attempt %d/3): %s", attempt + 1, e)
+            time.sleep(1.5)
+    raise last_error
+
+
+def _run_cancellable(cmd: list, cwd: str, cancel_event, poll_interval: float = 0.25):
+    """subprocess.run(check=True, capture_output=True, text=True) that a set
+    `cancel_event` interrupts: the process tree is killed and None returned.
+    A Forge install can take minutes; Cancel must not wait for it."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, **subprocess_flags())
+    while True:
+        try:
+            out, err = proc.communicate(timeout=poll_interval)
+        except subprocess.TimeoutExpired:
+            if cancel_event.is_set():
+                _kill_process_tree(proc)
+                return None
+            continue
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, out, err)
+        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
+def _kill_process_tree(proc) -> None:
+    """Kill a process and everything it spawned, then reap it."""
+    if sys.platform == "win32":
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=10, **subprocess_flags())
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug("taskkill failed for %s: %s", proc.pid, e)
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        proc.communicate(timeout=5)  # reap and close the pipes
+    except subprocess.TimeoutExpired:
+        logger.warning("Installer process %s did not exit after kill", proc.pid)
+
+
+def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None, cancel_event=None) -> Optional[str]:
     args = ["server", "-mcversion", mc_version, "-downloadMinecraft"]
     if loader_version:
         # A modpack pins its Fabric Loader; the installer otherwise takes the latest.
         args += ["-loader", loader_version]
     server_path = _run_installer(server_name, "Fabric", mc_version, "fabric-installer.jar",
-                                  args, progress_callback, java_bin=java_bin)
+                                  args, progress_callback, java_bin=java_bin, cancel_event=cancel_event)
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
         return os.path.join(server_path, "fabric-server-launch.jar")
     return None
@@ -535,12 +581,13 @@ def normalize_server_jar(server_dir: str) -> bool:
     return False
 
 
-def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
+def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None, cancel_event=None) -> Optional[str]:
     """Installs Forge by delegating to the unified installer runner.
     `loader_version` pins an exact Forge build (modpacks need theirs)."""
     server_path = _run_installer(
         server_name, "Forge", mc_version, "forge-installer.jar",
         ["--installServer"], progress_callback, java_bin=java_bin, loader_version=loader_version,
+        cancel_event=cancel_event,
     )
     if not server_path:
         return None

@@ -1007,13 +1007,21 @@ class ServerListItem(ctk.CTkFrame):
             self.on_click(self.server_name)
 
 class DownloadProgressDialog(ZBBToplevel):
-    def __init__(self, master, title="Downloading..."):
+    """Progress for a background task.
+
+    Without `on_cancel`, Cancel just closes the dialog. With it, Cancel (or
+    the window's X) calls `on_cancel` and the dialog stays up, showing
+    "Cancelling...", until the task's owner closes it once the work has
+    actually stopped -- so nothing appears after the user cancelled."""
+
+    def __init__(self, master, title="Downloading...", on_cancel=None):
         super().__init__(master)
         self.title(title)
         self.geometry("350x210")
         center_on_parent(self, master, 350, 210)
         self.resizable(False, False)
         self.cancelled = False
+        self._on_cancel_cb = on_cancel
         
         header, _, _ = dialog_header(self, title)
         header.pack(fill="x", padx=20, pady=(16, 0))
@@ -1042,12 +1050,22 @@ class DownloadProgressDialog(ZBBToplevel):
         self.transient(master)
         self.wait_visibility()
         self.grab_set()
-        self.protocol("WM_DELETE_WINDOW", self.close)
-        
+        self.protocol("WM_DELETE_WINDOW", self._on_cancel if on_cancel else self.close)
+
     def _on_cancel(self):
+        if self.cancelled:
+            return
         self.cancelled = True
-        self.close()
-        
+        if self._on_cancel_cb is None:
+            self.close()
+            return
+        self._on_cancel_cb()
+        try:
+            self.label.configure(text="Cancelling…")
+            self.btn_cancel.configure(state="disabled", text="Cancelling…")
+        except Exception as e:
+            logger.debug("Cancel feedback ignored: %s", e)
+
     def update_progress(self, val, status_text=None):
         # Callable from worker threads: marshal to the Tk main loop first
         if threading.current_thread() is not threading.main_thread():

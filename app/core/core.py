@@ -481,16 +481,17 @@ class ZBBManager:
         self.tunnel_orchestrator.create_tunnel_for_server(server_name)
 
     # --- Provisioning ---
-    def provision_server(self, config: dict, progress=None):
+    def provision_server(self, config: dict, progress=None, cancel_event=None):
         """Create a server from wizard config (blocking; call off the UI
         thread). Returns a ProvisionResult; console output goes to
-        CONSOLE_LINE."""
+        CONSOLE_LINE. Setting `cancel_event` stops it and rolls back."""
         from app.core.provisioning import ServerProvisioner
         provisioner = ServerProvisioner(
             log=lambda line: self.events.emit(ServerEvent.CONSOLE_LINE, line),
             get_server_port=self.get_server_port,
             create_tunnel=self.create_tunnel_for_server,
             jdk_manager=JdkManagerInstance,
+            cancel_event=cancel_event,
         )
         return provisioner.provision(config, progress)
 
