@@ -45,7 +45,7 @@ UI emits event → ZBBManager receives → delegates to orchestrator/service
 Rules:
 - Use `events.subscribe()` — never `.on()`.
 - UI updates only via `self.after(0, callback)` (Tkinter thread safety).
-- No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the first-run dialog before any window exists).
+- No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the setup dialogs before any window exists).
 - Mutating flows (start/stop/backup/restart/snapshot) go through `ZBBManager`. When a UI widget needs one, it receives the manager method as an injected callback (e.g. `ModrinthBrowser(create_snapshot=zbb_manager.create_pre_update_snapshot)`) instead of importing the service.
 - Pragmatic exception: UI may import services for read-only/stateless helpers (load properties, list templates, disk usage).
 
@@ -310,18 +310,31 @@ These rules must never be violated:
 
 ## Data Directory
 
-**Files:** `app/core/bootstrap.py`, `app/core/constants.py`, `app/ui/first_run_dialog.py`
+**Files:** `app/core/bootstrap.py`, `app/core/installer.py`, `app/core/constants.py`, `app/ui/first_run_dialog.py`
 
 `BASE_DIR` (parent of `servers/`, `backups/`, `config/`, `bin/`, `.zbb_cache/`) is resolved at startup:
 
 | Mode | `BASE_DIR` |
 |------|-----------|
 | Running from source | Repo root — no marker, no dialog |
-| Frozen build, marker present and writable | Path stored in the marker |
-| Frozen build, `servers/` or `config/` already next to the exe | Exe folder, adopted silently (pre-feature installs) |
-| Frozen build, first run | First-run dialog: **Standard** (`%LOCALAPPDATA%\ZeroBlockBridge`; Linux `~/ZeroBlockBridge`), **Portable** (next to the exe), or **Custom** |
+| Frozen build, `ZeroBlockBridge-portable.txt` next to the exe | Exe folder (portable copy) |
+| Frozen build, marker present and writable | Path stored in the marker (see install states below) |
+| Frozen build, no marker, `servers/` or `config/` already next to the exe | Exe folder, adopted silently as portable (pre-feature installs) |
+| Frozen build, first run | Setup dialog: **Install on this PC** (data in `%LOCALAPPDATA%\ZeroBlockBridge` or a chosen folder) or **Portable**; Linux keeps Standard (`~/ZeroBlockBridge`) / Portable / Custom |
 
-- The choice is persisted in `install.json` under `%LOCALAPPDATA%\ZeroBlockBridge\` (Linux: `~/.zeroblockbridge/`) and exported as `ZBB_DATA_DIR` before `constants` is imported, which honors that variable first.
+- The choice is persisted in `install.json` under `%LOCALAPPDATA%\ZeroBlockBridge\` (Linux: `~/.zeroblockbridge/`) and exported as `ZBB_DATA_DIR` before `constants` is imported, which honors that variable first. Portable copies use the flag file instead and never write the marker.
+- **Every dialog shown before that point must not import `app.core.constants`**, even transitively (icons come from `app.core.resources`). Importing it early pinned `BASE_DIR` to the exe folder for the whole first session while later sessions used the chosen folder — servers created on first launch vanished. `tests/test_bootstrap.py::test_setup_dialogs_never_import_constants` guards this, and `rescue_stray_data()` moves anything left next to the exe into the data dir on startup (junction-linked servers are re-linked, never copied).
+
+**Install states** (`install.json` `mode`, Windows; `app/core/installer.py`):
+
+| `mode` | Meaning | On launch |
+|--------|---------|-----------|
+| `installed` | Exe copied to `%LOCALAPPDATA%\Programs\ZeroBlockBridge`, Start menu/Desktop `.lnk` (WScript.Shell via PowerShell), HKCU `...\Uninstall\ZeroBlockBridge` entry. `exe_path` + `version` recorded | Running that exe: silent (refreshes the recorded version). Any other copy: "already installed" dialog — open it, update it (if newer), or run this copy |
+| `manual` | User declined to install | Silent |
+| *(missing)* | Marker from a pre-install build, or installed exe deleted | One-time install offer that keeps the data folder |
+
+- Uninstall: Windows Settings runs `ZeroBlockBridge.exe --uninstall` (handled in `launcher.py` before bootstrap). It removes shortcuts and the Apps entry, optionally the data folder (unlinking custom-location junctions first so external server folders are never deleted), and deletes the install folder via a delayed `cmd` after the process exits.
+- Handing over to another copy sets `PYINSTALLER_RESET_ENVIRONMENT=1` so the child onefile exe doesn't reuse this process's `_MEIPASS`.
 - Bundled read-only assets always come from the PyInstaller `_MEIPASS` dir, independent of `BASE_DIR`.
 - Settings → Storage shows the active location (with **Open Folder**) and disk usage for Servers, Backups, Java runtimes, Crash reports, and Versions cache, plus **Clear Crash Reports**. Managed JDK purge lives in Settings → Java.
 - `config/zbb_settings.json` (`SettingsManager`, 500ms debounced writes, flushed on close) also stores UI session state: `window_geometry` (logical `WxH+X+Y`, last normal — not maximized — size), `window_zoomed`, `last_server`, `last_console_tab`. On launch the geometry is restored only if it lands on the current virtual desktop (`window_state.restorable_geometry`).
@@ -342,7 +355,7 @@ ZeroBlockBridge/
 │   │   ├── modrinth_browser.py        # Modrinth browser: search, install, update badges, bulk ops (~1850 LOC)
 │   │   ├── players_panel.py           # Players tab: unified roster, filters, actions menu, skin heads
 │   │   ├── app_settings.py            # Settings dialog: General/Notifications/Java/Storage/About (~754 LOC)
-│   │   ├── first_run_dialog.py        # First-launch data directory picker: Standard/Portable/Custom (~174 LOC)
+│   │   ├── first_run_dialog.py        # Pre-app dialogs: setup/install, already installed, uninstall
 │   │   ├── toast.py                   # Non-blocking notification overlay (~200 LOC)
 │   │   ├── icons.py                   # PIL-drawn, theme-tintable icon set — replaces emoji (~210 LOC)
 │   │   ├── win_effects.py             # Win11 DWM corners + shadow, tinted theme-following titlebar, app icon; no-op elsewhere
@@ -351,7 +364,10 @@ ZeroBlockBridge/
 │   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, ZBBDialog, EulaDialog, dialog_buttons
 │   │
 │   ├── core/                          # Orchestration & Business Logic
-│   │   ├── bootstrap.py               # Resolves data dir before any other module reads a path (~86 LOC)
+│   │   ├── bootstrap.py               # Resolves data dir + install state before any other module reads a path
+│   │   ├── installer.py               # Per-user Windows install: copy exe, shortcuts, Apps entry, uninstall
+│   │   ├── fs_links.py                # Junction/symlink helpers (custom server locations)
+│   │   ├── resources.py               # Bundled assets path, safe to import before the data dir is set
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~656 LOC)
 │   │   ├── logic.py                   # ServerRunner, Scheduler, BackupScheduler, downloads, metadata, port preflight (~948 LOC)
 │   │   ├── orchestrators.py           # Server/Backup/Tunnel/Scheduler orchestrators (~275 LOC)
@@ -390,6 +406,7 @@ ZeroBlockBridge/
 │       ├── migration.py               # .zbbpack export/import (~90 LOC)
 │       ├── playit_api.py              # Playit.gg REST API v2 client (~466 LOC)
 │       ├── modrinth.py                # Modrinth API client, dependency resolution, updates (~508 LOC)
+│       ├── content_import.py          # Wizard imports: worlds (folder/.zip), modpacks (.mrpack / server pack .zip)
 │       ├── mrpack_installer.py        # Modrinth modpack (.mrpack) install (~215 LOC)
 │       ├── mod_install_tracker.py     # Installed Modrinth slugs per server (~73 LOC)
 │       ├── mod_id_resolver.py         # Crash-log mod IDs → Modrinth slugs (~26 LOC)

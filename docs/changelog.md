@@ -8,6 +8,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Install on this PC** — the first launch offers to install ZeroBlockBridge (per-user, no admin rights): the app is copied to `%LOCALAPPDATA%\Programs\ZeroBlockBridge`, with optional Start menu and Desktop shortcuts, and an entry in Windows Settings → Apps with a proper uninstaller (which can keep or delete your servers; servers in other folders are never touched). The finish screen says which app to open from now on and that the downloaded file can be deleted. **Portable** mode (data next to the exe) is still available.
+- **Already installed?** — opening another downloaded copy shows where the installed app is and offers **Open installed app**, or **Update to X** when the download is newer (the shortcuts and servers stay the same). Data folders chosen by older builds get a one-time offer to install.
+- Settings → Storage shows how the app is installed and can add Start menu / Desktop shortcuts.
+- **Import a modpack while creating a server** — the wizard's Engine & Version step takes a Modrinth `.mrpack` or a modpack's Server Pack `.zip`; the engine, Minecraft version and exact Fabric/Forge loader build are set from the pack, RAM is raised for modded play, and mods/configs are installed during creation. CurseForge client exports explain how to get the Server Pack instead.
+- **Import an existing world while creating a server** — the World & Network step can bring in a world folder (e.g. from `.minecraft/saves`) or a `.zip` of one instead of generating a new world.
+- `.mrpack` imports also apply the pack's `server-overrides/` folder.
+
+### Fixed
+- **Servers created on the first launch disappeared from the list** — the data-folder dialog loaded the app's paths before the choice was saved, so that whole first session wrote servers, config and the Playit agent next to the `.exe` while every later launch read the chosen folder. Paths are now resolved only after the choice, and on the next launch anything left next to the exe (servers, backups, config such as `playit.toml`) is moved into the data folder automatically — servers in custom folders are re-linked, never copied.
+
 ## [2.2.0] — 2026-09-20
 
 ### Added

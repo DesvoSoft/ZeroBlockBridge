@@ -49,6 +49,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 ## Features
 
 - **Guided Server Creation** — 6-step wizard covering every major flavor (Vanilla/Fabric/Forge/Paper/Purpur), with templates, RAM allocation, and an integrated console with search and colored log lines.
+- **Bring Your Modpack & World** — import a Modrinth `.mrpack` or a modpack's Server Pack `.zip` and an existing world (folder or `.zip`) right in the creation wizard; the engine, version and loader are set from the pack.
 - **Zero-Config Tunneling** — Built-in Playit.gg integration gets you a persistent, shareable join URL — no port forwarding or router setup required.
 - **Live Server Status** — See at a glance how long the server has been starting or running, how much memory it uses against its allocation, and how many players are on out of the maximum.
 - **Auto-Healing** — Watchdog crash recovery with JSON crash reports, zombie detection, and lag-spike monitoring keep a server running unattended. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -58,7 +59,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 - **Zero Java Hassle** — Detects the required Java version per server and auto-installs the matching runtime — no manual installs, no version mismatches.
 - **Browse While Running** — View or configure any server's properties, mods, players and backups while another one runs; only starting a second server at once is blocked.
 
-*Also included: a Players tab (whitelist, operators, bans, kicks, skin heads, playtime history), Discord notifications, a choice of where your data lives (standard, portable, or custom folder), light/dark/system theming, and experimental Linux support.*
+*Also included: a Players tab (whitelist, operators, bans, kicks, skin heads, playtime history), Discord notifications, a proper Windows install with shortcuts and uninstaller (or a portable mode), light/dark/system theming, and experimental Linux support.*
 
 ---
 
@@ -67,7 +68,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 ### Option A: Download the app
 
 1. Grab the latest build from the [Releases page](https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest) — `ZeroBlockBridge.exe` (`ZeroBlockBridge-linux` also available, experimental). Each file has a matching `.sha256` checksum.
-2. Run it. On first launch you'll pick where ZeroBlockBridge keeps your servers and backups: **Standard** (your user AppData folder, recommended), **Portable** (next to the app), or a **Custom** folder. You can see the location later in Settings → Storage.
+2. Run it and choose **Install on this PC** (recommended, no admin rights needed): ZeroBlockBridge is installed to your user folder with Start menu and Desktop shortcuts, and shows up in Windows Settings → Apps for uninstalling. From then on, open it from the Start menu; you can delete the downloaded file. Prefer not to install? Pick **Portable** to keep the app and your servers together in one folder. To update, just run a newer download: it offers to update the installed app.
 3. Jump straight to [First Server](#first-server) below.
 
 > **Windows SmartScreen warning?** That's expected. I'm a student and independent developer, and this executable isn't code-signed — signing certificates cost money I can't justify yet. Windows flags any unsigned `.exe` from an unrecognized publisher, regardless of whether it's safe. Click **"More info" → "Run anyway"** to proceed, or if you'd rather verify for yourself first, the full source is public — read it, or build it yourself with Option B below.
