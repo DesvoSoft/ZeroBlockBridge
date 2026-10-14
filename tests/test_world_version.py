@@ -196,3 +196,59 @@ def test_template_never_stores_the_world_version():
     from app.ui.server_wizard import _CONTENT_KEYS
     assert {"world_mc", "world_snapshot"} <= set(_CONTENT_KEYS)
 
+
+
+# ----------------------------------------------------------------------
+# Review round
+# ----------------------------------------------------------------------
+def test_gzip_bomb_is_refused_without_inflating_it(tmp_path, monkeypatch):
+    """Review #2: gzip.decompress had no output limit -- a 305 KB level.dat
+    peaked at ~600 MB. The cap now applies to the decompressed size."""
+    import tracemalloc
+    monkeypatch.setattr(nbt, "MAX_BYTES", 1024 * 1024)  # 1 MB cap
+    bomb = gzip.compress(b"\x00" * (50 * 1024 * 1024), compresslevel=9)  # 50 MB of zeros, ~50 KB file
+    tracemalloc.start()
+    try:
+        with pytest.raises(nbt.NbtError, match="size limit"):
+            nbt.parse(bomb)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 10 * 1024 * 1024
+
+
+def test_oversized_level_dat_in_a_world_folder_is_not_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(nbt, "MAX_BYTES", 100)
+    world = tmp_path / "W"
+    world.mkdir()
+    (world / "level.dat").write_bytes(level_dat() + b"\x00" * 200)
+    assert inspect_world(str(world)).mc_version is None
+
+
+def test_deep_nesting_raises_nbt_error_not_recursion_error():
+    """Review #3: Python's recursion limit tripped before the depth guard."""
+    depth = 600
+    inner = b""
+    for _ in range(depth):
+        inner = _tag(nbt.TAG_COMPOUND, "c", _compound(inner))
+    blob = struct.pack(">b", nbt.TAG_COMPOUND) + _name("") + _compound(inner)
+    with pytest.raises(nbt.NbtError):
+        nbt.parse(blob)
+
+
+@pytest.mark.parametrize("world, server, level", [
+    ("1.21.5-pre1", "1.21.4", "error"),    # review #4: pre-release of a newer version
+    ("1.21.5-rc1", "1.21.4", "error"),
+    ("1.21.5-pre1", "1.21.5", "warning"),  # its own release: fine to open, still flagged
+    ("25w10a", "1.21.4", "warning"),       # weekly snapshot: can't be ordered by name
+])
+def test_prerelease_worlds(world, server, level):
+    assert world_version_check(_world(world, snapshot=True), server)[0] == level
+
+
+def test_switching_to_new_world_clears_the_world_version():
+    """Review #1: the summary kept "(Minecraft 1.21.4)" after switching to New world."""
+    import inspect
+    from app.ui.server_wizard import ServerWizard
+    src = inspect.getsource(ServerWizard._collect_step5_fields)
+    assert "world_mc=None" in src and "world_snapshot=False" in src

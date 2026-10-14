@@ -1141,7 +1141,7 @@ class ServerWizard(ZBBToplevel):
 
     def _collect_step5_fields(self):
         if self.var_world_mode.get() == "new":
-            self.wizard_data.update(world_path=None, world_label="")
+            self.wizard_data.update(world_path=None, world_label="", world_mc=None, world_snapshot=False)
         self.wizard_data["seed"] = self.entry_seed.get().strip()
         port_val = self.entry_port.get().strip()
         self.wizard_data["playit_port"] = port_val if port_val else "25565"

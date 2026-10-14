@@ -269,10 +269,19 @@ def world_version_check(world: WorldInfo, server_version: Optional[str]):
     level is "error" (would damage the world: refuse), "warning" or "info"."""
     if not world.mc_version:
         return None
+    server_key = _release_key(server_version)
     if world.snapshot:
+        # Minecraft flags pre-releases and release candidates as snapshots
+        # too. "1.21.5-pre1" comes before 1.21.5: newer than a 1.21.4 server
+        # (block, like a release), fine for 1.21.5 or later.
+        base = re.match(r"(\d+(?:\.\d+)+)-(?:pre|rc)\d*$", world.mc_version)
+        if base and server_key and _release_key(base.group(1)) > server_key:
+            return ("error", f"This world was saved with Minecraft {world.mc_version}, newer than this server "
+                             f"({server_version}). An older version can corrupt it: choose Minecraft "
+                             f"{base.group(1)} or newer in the Engine & Version step.")
         return ("warning", f"This world was saved with snapshot {world.mc_version}. It may not load on a "
                            "regular release; keep a copy of it.")
-    world_key, server_key = _release_key(world.mc_version), _release_key(server_version)
+    world_key = _release_key(world.mc_version)
     if world_key is None or server_key is None:
         return None
     if world_key > server_key:

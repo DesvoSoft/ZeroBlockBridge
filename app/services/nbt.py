@@ -5,7 +5,7 @@ supported; arrays and lists are parsed so they can be skipped correctly.
 Spec: https://minecraft.wiki/w/NBT_format
 """
 
-import gzip
+import zlib
 import struct
 from typing import Any, BinaryIO
 
@@ -14,8 +14,11 @@ TAG_FLOAT, TAG_DOUBLE, TAG_BYTE_ARRAY, TAG_STRING = 5, 6, 7, 8
 TAG_LIST, TAG_COMPOUND, TAG_INT_ARRAY, TAG_LONG_ARRAY = 9, 10, 11, 12
 
 # A real level.dat is a few KB; refuse anything absurd (corrupt or hostile).
+# Applies to the file AND to its decompressed size (a gzip bomb).
 MAX_BYTES = 64 * 1024 * 1024
-_MAX_DEPTH = 512
+# Each nesting level costs two Python frames; stay well under the default
+# recursion limit (1000) so the guard, not RecursionError, fires.
+_MAX_DEPTH = 200
 
 _SCALARS = {
     TAG_BYTE: ">b", TAG_SHORT: ">h", TAG_INT: ">i", TAG_LONG: ">q",
@@ -77,16 +80,31 @@ def _compound(stream: BinaryIO, depth: int) -> dict:
 def parse(data: bytes) -> dict:
     """Root compound of an NBT document (gzip-compressed or raw)."""
     import io
+    if len(data) > MAX_BYTES:
+        raise NbtError("file too large to be a level.dat")
     if data[:2] == b"\x1f\x8b":
-        try:
-            data = gzip.decompress(data)
-        except (OSError, EOFError) as e:
-            raise NbtError(f"not a valid gzip stream: {e}") from e
+        data = _gunzip_capped(data)
     stream = io.BytesIO(data)
     if _unpack(stream, ">b") != TAG_COMPOUND:
         raise NbtError("NBT root is not a compound")
     _string(stream)  # root name, usually empty
-    return _compound(stream, 0)
+    try:
+        return _compound(stream, 0)
+    except RecursionError as e:  # belt and braces behind _MAX_DEPTH
+        raise NbtError("NBT nesting too deep") from e
+
+
+def _gunzip_capped(data: bytes) -> bytes:
+    """gzip.decompress has no output limit: a tiny hostile level.dat could
+    expand to gigabytes. Stop at MAX_BYTES."""
+    try:
+        inflater = zlib.decompressobj(wbits=31)  # 31 = gzip container
+        out = inflater.decompress(data, MAX_BYTES)
+    except zlib.error as e:
+        raise NbtError(f"not a valid gzip stream: {e}") from e
+    if inflater.unconsumed_tail:
+        raise NbtError("level.dat decompresses to more than the size limit")
+    return out
 
 
 def read_file(path) -> dict:
