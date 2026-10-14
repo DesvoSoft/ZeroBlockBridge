@@ -5,7 +5,7 @@ import shutil
 import zipfile
 from typing import Callable, Optional
 
-from app.core.constants import SERVERS_DIR, check_disk_space
+from app.core.constants import SERVERS_DIR, atomic_write_json, check_disk_space
 from app.core.logic import get_server_meta
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,6 @@ def import_server(zbbpack_path: str, new_server_name: str,
             raise
 
     meta_path = os.path.join(dest_dir, "metadata.json")
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=4)
+    atomic_write_json(meta_path, meta)
 
     return meta

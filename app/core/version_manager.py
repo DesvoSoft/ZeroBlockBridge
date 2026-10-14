@@ -13,7 +13,8 @@ from app.core.constants import (
     VERSIONS_CACHE_FILE, 
     VANILLA_MANIFEST_URL, 
     FABRIC_META_URL, 
-    FORGE_PROMOTIONS_URL
+    FORGE_PROMOTIONS_URL,
+    atomic_write_json,
 )
 
 class VersionManager:
@@ -284,9 +285,7 @@ class VersionManager:
     def _save_cache(self):
         """Persists current version cache to disk."""
         try:
-            VERSIONS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(VERSIONS_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.cache, f, indent=4)
+            atomic_write_json(VERSIONS_CACHE_FILE, self.cache)
         except Exception as e:
             logger.error("Failed to save version cache: %s", e)
 

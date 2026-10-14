@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.app_config import AppConfig
+from app.core.atomic_io import atomic_write_json
 from app.core.fs_links import create_junction, is_link, link_target, remove_link
 
 logger = logging.getLogger(__name__)
@@ -74,9 +75,7 @@ def read_marker(marker_path: Path | None = None) -> dict:
 
 def write_marker(data: dict, marker_path: Path | None = None) -> None:
     marker_path = marker_path or _marker_path()
-    marker_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(marker_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+    atomic_write_json(marker_path, data)
 
 
 def is_writable_dir(path: Path) -> bool:

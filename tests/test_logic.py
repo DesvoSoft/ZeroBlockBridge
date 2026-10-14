@@ -18,6 +18,7 @@ from app.core.logic import (
     get_server_meta,
     set_server_meta,
     update_server_meta,
+    invalidate_meta_cache,
     _run_installer,
     download_server,
     ServerRunner,
@@ -175,9 +176,29 @@ class TestServerMeta:
 
     def test_set_server_meta_io_error_returns_false(self):
         with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
-            with patch("builtins.open", side_effect=OSError("Permission denied")):
+            with patch("app.core.logic.atomic_write_json", side_effect=OSError("Permission denied")):
                 result = set_server_meta("test_server", "ram", 2048)
                 assert result is False
+
+    def test_failed_metadata_write_keeps_the_previous_file(self):
+        """A crash mid-write must not leave a truncated metadata.json."""
+        server_dir = os.path.join(self.tmpdir, "crashy")
+        os.makedirs(server_dir)
+        meta_path = os.path.join(server_dir, "metadata.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump({"name": "crashy", "type": "Fabric", "ram": 4096}, f)
+
+        def dies_mid_write(obj, fp, **kwargs):
+            fp.write('{"name": "cra')  # partial content, then the process "crashes"
+            raise OSError("disk full")
+
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            invalidate_meta_cache("crashy")
+            with patch("json.dump", side_effect=dies_mid_write):
+                assert update_server_meta("crashy", {"ram": 8192}) is False
+            invalidate_meta_cache("crashy")
+            assert get_server_meta("crashy") == {"name": "crashy", "type": "Fabric", "ram": 4096}
+        assert os.listdir(server_dir) == ["metadata.json"]  # temp file cleaned up
 
 
 class TestSchedulerGetStatus:

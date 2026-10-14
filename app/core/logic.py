@@ -16,7 +16,8 @@ from collections import deque
 
 from typing import Optional, Callable, Any
 
-from app.core.constants import APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE
+from app.core.constants import (APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE,
+                                 atomic_write_json)
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
@@ -57,9 +58,7 @@ def load_config() -> dict:
 
 def save_config(config: dict) -> None:
     """Saves the configuration to config.json."""
-    APP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(APP_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=4)
+    atomic_write_json(APP_CONFIG_PATH, config)
 
 _meta_lock = threading.Lock()
 _meta_cache: dict[str, dict] = {}
@@ -109,8 +108,9 @@ def update_server_meta(server_name: str, updates: dict) -> bool:
             else:
                 meta = {}
             meta.update(updates)
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=4)
+            # Atomic: a crash mid-write must never leave a truncated
+            # metadata.json (the server would lose its type/version/RAM).
+            atomic_write_json(meta_path, meta)
             _meta_cache[server_name] = meta
             return True
         except (OSError, json.JSONDecodeError) as e:

@@ -549,13 +549,10 @@ class TestVersionManagerSaveCache:
             mock_save.assert_called_once()
 
     @patch("app.core.version_manager.os.path.exists", return_value=False)
-    def test_save_cache_writes_json(self, mock_exists):
+    def test_save_cache_writes_json(self, mock_exists, tmp_path):
         vm = VersionManager()
-        with patch("builtins.open", mock_open()) as mock_file:
-            with patch("app.core.version_manager.VERSIONS_CACHE_FILE") as mock_path:
-                mock_path.parent.mkdir = MagicMock()
-                vm._save_cache()
-                mock_file.assert_called_once()
-                handle = mock_file()
-                written = "".join(call[0][0] for call in handle.write.call_args_list)
-                assert "Vanilla" in written
+        cache_file = tmp_path / "config" / "versions_cache.json"
+        with patch("app.core.version_manager.VERSIONS_CACHE_FILE", cache_file):
+            vm._save_cache()
+        assert "Vanilla" in json.loads(cache_file.read_text(encoding="utf-8"))
+        assert [p.name for p in cache_file.parent.iterdir()] == ["versions_cache.json"]  # no temp left
