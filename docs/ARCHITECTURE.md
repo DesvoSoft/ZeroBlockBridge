@@ -356,6 +356,8 @@ ZeroBlockBridge/
 │   │   ├── players_panel.py           # Players tab: unified roster, filters, actions menu, skin heads
 │   │   ├── app_settings.py            # Settings dialog: General/Notifications/Java/Storage/About (~754 LOC)
 │   │   ├── first_run_dialog.py        # Pre-app dialogs: setup/install, already installed, uninstall
+│   │   ├── close_dialog.py            # Window X: minimize to tray or exit (+ don't ask again)
+│   │   ├── tray.py                    # System tray icon (pystray) and the close_action setting
 │   │   ├── toast.py                   # Non-blocking notification overlay (~200 LOC)
 │   │   ├── icons.py                   # PIL-drawn, theme-tintable icon set — replaces emoji (~210 LOC)
 │   │   ├── win_effects.py             # Win11 DWM corners + shadow, tinted theme-following titlebar, app icon; no-op elsewhere
@@ -368,6 +370,8 @@ ZeroBlockBridge/
 │   │   ├── installer.py               # Per-user Windows install: copy exe, shortcuts, Apps entry, uninstall
 │   │   ├── fs_links.py                # Junction/symlink helpers (custom server locations)
 │   │   ├── resources.py               # Bundled assets path, safe to import before the data dir is set
+│   │   ├── atomic_io.py               # Crash-safe JSON/text writes (temp + replace, retry on Windows locks)
+│   │   ├── neoforge.py                # NeoForge build <-> Minecraft version mapping (pure)
 │   │   ├── core.py                    # ZBBManager — central orchestrator (~656 LOC)
 │   │   ├── logic.py                   # ServerRunner, Scheduler, BackupScheduler, downloads, metadata, port preflight (~948 LOC)
 │   │   ├── orchestrators.py           # Server/Backup/Tunnel/Scheduler orchestrators (~275 LOC)
@@ -406,7 +410,8 @@ ZeroBlockBridge/
 │       ├── migration.py               # .zbbpack export/import (~90 LOC)
 │       ├── playit_api.py              # Playit.gg REST API v2 client (~466 LOC)
 │       ├── modrinth.py                # Modrinth API client, dependency resolution, updates (~508 LOC)
-│       ├── content_import.py          # Wizard imports: worlds (folder/.zip), modpacks (.mrpack / server pack .zip)
+│       ├── content_import.py          # Wizard imports: worlds (folder/.zip, version check), modpacks (.mrpack / server pack .zip)
+│       ├── nbt.py                     # Minimal NBT reader for level.dat (size/depth capped)
 │       ├── mrpack_installer.py        # Modrinth modpack (.mrpack) install (~215 LOC)
 │       ├── mod_install_tracker.py     # Installed Modrinth slugs per server (~73 LOC)
 │       ├── mod_id_resolver.py         # Crash-log mod IDs → Modrinth slugs (~26 LOC)
@@ -582,3 +587,23 @@ Analysis vs **auto-mcs** (Python server manager) and **Prism Launcher** (Qt clie
   - **Playit.gg** — tunneling (optional, user-enabled — see trust boundary above)
   - **Discord** — webhook notifications (optional, user-configured)
 - **User Control**: All server management, backups, tunneling, and webhook operations remain fully under user control.
+
+---
+
+## Process Lifecycle (close, tray, exit)
+
+**Files:** `app/ui/main.py` (`on_close`, `hide_to_tray`, `exit_app`, `finish_exit`), `app/ui/tray.py`, `app/ui/close_dialog.py`
+
+- The window's X follows the `close_action` setting (`ask` | `tray` | `exit`). Without a usable tray (Linux), X always exits.
+- `exit_app()` cancels in-flight server creations (`cancel_active_tasks`), stops services, then `finish_exit()` gives remaining non-daemon work 3 s before `os._exit(0)`. Python otherwise joins still-running executor tasks at exit, which kept a windowless process alive for minutes.
+- Anything that may be cut off by that exit writes atomically: JSON via `atomic_io`, downloads via `<file>.part` (`sha1_validator`), backups via `<name>.zip.part` (`backup_manager`).
+
+## Server Creation & Cancellation
+
+**Files:** `app/core/provisioning.py`, `app/core/logic.py` (`_run_installer`, `_run_cancellable`), `app/services/java_installer.py`
+
+- Order: preflight (modpack/world validation, world version check) → claim the folder atomically → install jar/loader → modpack → world → scaffold → Java → tunnel.
+- A `cancel_event` is checked between steps and on every download chunk (server jar, JDK); a running Fabric/Forge/NeoForge installer is killed with its process tree. Failure and cancel both roll back exactly what the attempt created (in a pre-existing custom folder, only its additions).
+- Once the server is complete (tunnel step), a cancel is ignored: the tunnel phase reports with the raw progress callback.
+- Loaders: `INSTALLER_FUNCTIONS` maps Fabric / Forge / NeoForge to their installers; a modpack can pin the exact loader build.
+

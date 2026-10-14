@@ -249,7 +249,7 @@ main        ← Production releases only
 
 Release process: `python tools/bump_version.py X.Y.Z`, fill in the changelog section, merge `dev` → `main`, tag `vX.Y.Z` — the build workflow gates on tests and publishes binaries with release notes taken from the changelog.
 
-**Current dev state:** v2.0.0 + unreleased features above. 800 tests.
+**Current dev state:** v2.2.0 + unreleased features tracked in `docs/changelog.md` and `docs/ROADMAP.md`. ~1150 tests; every PR passes `tools/qa_gate.py` (§8).
 
 ---
 
