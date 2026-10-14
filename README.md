@@ -48,7 +48,7 @@ ZeroBlockBridge is a desktop app for creating and managing Minecraft servers —
 
 ## Features
 
-- **Guided Server Creation** — 6-step wizard covering every major flavor (Vanilla/Fabric/Forge/Paper/Purpur), with templates, RAM allocation, and an integrated console with search and colored log lines.
+- **Guided Server Creation** — 6-step wizard covering every major flavor (Vanilla/Fabric/Forge/NeoForge/Paper/Purpur), with templates, RAM allocation, and an integrated console with search and colored log lines.
 - **Bring Your Modpack & World** — import a Modrinth `.mrpack` or a modpack's Server Pack `.zip` and an existing world (folder or `.zip`) right in the creation wizard; the engine, version and loader are set from the pack.
 - **Zero-Config Tunneling** — Built-in Playit.gg integration gets you a persistent, shareable join URL — no port forwarding or router setup required.
 - **Live Server Status** — See at a glance how long the server has been starting or running, how much memory it uses against its allocation, and how many players are on out of the maximum.
