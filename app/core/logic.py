@@ -122,29 +122,28 @@ def _has_library(server_dir: str, *parts: str) -> bool:
     return os.path.isdir(os.path.join(server_dir, "libraries", *parts))
 
 
+# Modern Forge/Fabric installs keep the loader under libraries/, with no
+# telltale jar name at the root (Forge 1.17+ ships run.bat instead).
+_LIBRARY_ENGINES = ((("net", "minecraftforge", "forge"), "Forge"),
+                    (("net", "fabricmc", "fabric-loader"), "Fabric"))
+# Root jar name fragment -> engine, checked in this order per jar.
+_JAR_NAME_ENGINES = (("fabric", "Fabric"), ("forge", "Forge"), ("purpur", "Purpur"),
+                     ("paper", "Paper"), ("spigot", "Paper"))
+
+
 def _infer_server_type(server_dir: str) -> str:
     """Infer server type from files present in the server directory."""
     try:
-        files = [f.lower() for f in os.listdir(server_dir)]
+        jars = [f.lower() for f in os.listdir(server_dir) if f.lower().endswith(".jar")]
     except OSError:
         return "Vanilla"
-    # Modern Forge/Fabric installs keep the loader under libraries/, with no
-    # telltale jar name at the root (Forge 1.17+ ships run.bat instead).
-    if _has_library(server_dir, "net", "minecraftforge", "forge"):
-        return "Forge"
-    if _has_library(server_dir, "net", "fabricmc", "fabric-loader"):
-        return "Fabric"
-    for f in files:
-        if "fabric" in f and f.endswith(".jar"):
-            return "Fabric"
-        if "forge" in f and f.endswith(".jar"):
-            return "Forge"
-        if "purpur" in f and f.endswith(".jar"):
-            return "Purpur"
-        if "paper" in f and f.endswith(".jar"):
-            return "Paper"
-        if "spigot" in f and f.endswith(".jar"):
-            return "Paper"
+    for parts, engine in _LIBRARY_ENGINES:
+        if _has_library(server_dir, *parts):
+            return engine
+    for jar in jars:
+        for fragment, engine in _JAR_NAME_ENGINES:
+            if fragment in jar:
+                return engine
     return "Vanilla"
 
 
