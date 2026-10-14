@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 from app.core.constants import SERVERS_DIR
@@ -108,17 +109,9 @@ def install_mrpack(
         _progress(f"Found {len(files_list)} file(s) in modpack.")
 
         # 3. Download mod files (skip client-only entries per mrpack spec)
-        for i, entry in enumerate(files_list):
-            env_server = entry.get("env", {}).get("server")
-            if env_server == "unsupported":
-                logger.info("mrpack: skipping client-only file %s", entry.get("path", "?"))
-                summary["skipped_client"] += 1
-                continue
-            _progress(f"Downloading mod {i + 1}/{len(files_list)}…")
-            if _download_entry(entry, server_dir):
-                summary["installed"] += 1
-            else:
-                summary["failed"] += 1
+        wanted = [e for e in files_list if e.get("env", {}).get("server") != "unsupported"]
+        summary["skipped_client"] = len(files_list) - len(wanted)
+        summary["installed"], summary["failed"] = _download_all(wanted, server_dir, _progress)
 
         # 4. Copy overrides into server dir (server-specific ones win)
         for overrides_prefix in ("overrides/", "server-overrides/"):
@@ -131,6 +124,35 @@ def install_mrpack(
         + "."
     )
     return summary
+
+
+# Parallel downloads: big packs have 100-400 small jars, where one-at-a-time
+# spends most of its time on per-request latency. Six keeps a home
+# connection busy without hammering Modrinth's CDN.
+DOWNLOAD_WORKERS = 6
+
+
+def _download_all(entries: list, server_dir: str, progress: Callable[[str], None]) -> tuple:
+    """Download entries concurrently; returns (installed, failed). Progress
+    is only ever reported from the calling thread."""
+    for entry in entries:
+        # Reject a malicious path before downloading anything at all.
+        _safe_dest(server_dir, entry.get("path", "") or "mods/unknown.jar")
+    total, installed, failed = len(entries), 0, 0
+    if not total:
+        return 0, 0
+    with ThreadPoolExecutor(max_workers=min(DOWNLOAD_WORKERS, total), thread_name_prefix="mrpack") as pool:
+        futures = [pool.submit(_download_entry, entry, server_dir) for entry in entries]
+        for done, future in enumerate(as_completed(futures), 1):
+            try:
+                ok = future.result()
+            except OSError as e:
+                logger.error("mrpack download failed: %s", e)
+                ok = False
+            installed += bool(ok)
+            failed += not ok
+            progress(f"Downloading mods {done}/{total}…")
+    return installed, failed
 
 
 def _copy_overrides(zf: zipfile.ZipFile, prefix: str, server_dir: str, progress: Callable[[str], None]):

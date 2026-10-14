@@ -141,3 +141,59 @@ class TestInstallMrpack:
         bad_path.write_text("not a zip", encoding="utf-8")
         with pytest.raises(ValueError, match="Not a valid ZIP"):
             install_mrpack(str(bad_path), "myserver")
+
+
+# ----------------------------------------------------------------------
+# Parallel downloads
+# ----------------------------------------------------------------------
+def test_downloads_run_concurrently(tmp_path):
+    """Several downloads must be in flight at once: each fake download waits
+    until DOWNLOAD_WORKERS of them are running (a sequential loop would time
+    out the barrier and fail)."""
+    import threading
+    from unittest.mock import patch
+    from app.services import mrpack_installer as m
+
+    barrier = threading.Barrier(m.DOWNLOAD_WORKERS, timeout=5)
+
+    def slow(entry, server_dir):
+        barrier.wait()
+        return True
+
+    entries = [{"path": f"mods/m{i}.jar"} for i in range(m.DOWNLOAD_WORKERS * 2)]
+    with patch.object(m, "_download_entry", side_effect=slow):
+        assert m._download_all(entries, str(tmp_path), lambda msg: None) == (len(entries), 0)
+
+
+def test_progress_reported_from_calling_thread_and_counts_failures(tmp_path):
+    import threading
+    from unittest.mock import patch
+    from app.services import mrpack_installer as m
+
+    caller = threading.current_thread()
+    seen = []
+
+    def flaky(entry, server_dir):
+        if entry["path"] == "mods/bad.jar":
+            raise OSError("disk full")
+        return entry["path"] != "mods/missing.jar"
+
+    entries = [{"path": "mods/a.jar"}, {"path": "mods/bad.jar"}, {"path": "mods/missing.jar"}]
+    with patch.object(m, "_download_entry", side_effect=flaky):
+        result = m._download_all(entries, str(tmp_path),
+                                 lambda msg: seen.append((msg, threading.current_thread())))
+    assert result == (1, 2)
+    assert [msg for msg, _ in seen] == ["Downloading mods 1/3…", "Downloading mods 2/3…", "Downloading mods 3/3…"]
+    assert all(t is caller for _, t in seen)
+
+
+def test_unsafe_path_rejected_before_any_download(tmp_path):
+    from unittest.mock import patch
+    import pytest as _pytest
+    from app.services import mrpack_installer as m
+
+    entries = [{"path": "mods/ok.jar"}, {"path": "../../evil.jar"}]
+    with patch.object(m, "_download_entry") as download:
+        with _pytest.raises(ValueError):
+            m._download_all(entries, str(tmp_path), lambda msg: None)
+    download.assert_not_called()
