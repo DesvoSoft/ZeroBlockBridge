@@ -39,6 +39,8 @@ class SettingsManager:
             "webhook_avatar_url": "",
             "webhook_crash_mention_role": "",
             "webhook_templates": {},
+            # Window X: "ask" | "tray" | "exit" (see app.ui.tray)
+            "close_action": "ask",
         }
 
     def _ensure_loaded(self):

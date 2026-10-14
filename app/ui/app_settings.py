@@ -157,7 +157,32 @@ class AppSettingsDialog(ZBBToplevel):
         self._theme_selector.set(self._settings.get("theme", "Dark"))
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
 
+        self._build_close_behavior_card(scroll)
         self._build_command_safety_card(scroll)
+
+    # Labels for the "close_action" setting, in display order.
+    _CLOSE_LABELS = (("ask", "Ask every time"), ("tray", "Minimize to tray"), ("exit", "Exit"))
+
+    def _build_close_behavior_card(self, parent):
+        from app.ui.tray import tray_supported
+        if not tray_supported():
+            return  # without a tray, closing the window always exits
+        card = self._card(
+            parent, "Closing the window",
+            "Minimize to tray keeps your server and tunnel running in the background; "
+            "Exit stops everything.",
+        )
+        labels = dict(self._CLOSE_LABELS)
+        self._close_selector = ctk.CTkSegmentedButton(
+            card, values=[label for _, label in self._CLOSE_LABELS],
+            command=self._on_close_action_selected, height=32,
+        )
+        self._close_selector.set(labels.get(self._settings.get("close_action", "ask"), labels["ask"]))
+        self._close_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
+
+    def _on_close_action_selected(self, label: str):
+        value = next((key for key, text in self._CLOSE_LABELS if text == label), "ask")
+        self._settings.set("close_action", value)
 
     def _build_command_safety_card(self, parent):
         card = self._card(

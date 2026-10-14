@@ -1185,17 +1185,39 @@ class MCTunnelApp(ctk.CTk):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
-        dialog = DownloadProgressDialog(self, title=f"Installing {config['name']}...")
+        # Cancel (or closing the app) sets this; provisioning stops at the
+        # next step/download chunk, kills a running installer and rolls back.
+        cancel_event = threading.Event()
+        self._active_provision_cancels = getattr(self, "_active_provision_cancels", set())
+        self._active_provision_cancels.add(cancel_event)
+        dialog = DownloadProgressDialog(self, title=f"Installing {config['name']}...",
+                                        on_cancel=cancel_event.set)
 
         def _provision():
-            result = self.zbb_manager.provision_server(config, dialog.update_progress)
-            if result.ok:
+            try:
+                result = self.zbb_manager.provision_server(config, dialog.update_progress, cancel_event)
+            finally:
+                self._active_provision_cancels.discard(cancel_event)
+            if result.cancelled:
+                self.after(0, lambda: self._on_provision_cancelled(dialog))
+            elif result.ok:
                 self.after(0, lambda: self._on_download_complete(
                     dialog, result.name, config.get("start_after_creation", False), result.warnings))
             else:
                 self.after(0, lambda: self._on_provision_failed(dialog, result))
 
         self.executor.submit(_provision)
+
+    def cancel_active_tasks(self):
+        """Stop every cancellable background task (server creations); used
+        when the app exits so none keeps the process alive."""
+        for event in list(getattr(self, "_active_provision_cancels", ())):
+            event.set()
+
+    def _on_provision_cancelled(self, dialog):
+        dialog.close()
+        self.load_servers()  # nothing of the cancelled server may linger
+        Toast.show(self, "Creation cancelled.", toast_type="info")
 
     def _on_provision_failed(self, dialog, result):
         dialog.close()
@@ -1389,7 +1411,73 @@ class MCTunnelApp(ctk.CTk):
         except Exception as e:
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
+    # ------------------------------------------------------------------
+    # Closing: the X button asks (or follows the saved choice) whether to
+    # hide to the system tray or exit; exit_app() really ends the process.
+    # ------------------------------------------------------------------
     def on_close(self):
+        from app.services.settings_manager import SettingsManager
+        from app.ui.tray import CLOSE_ASK, CLOSE_TRAY, resolve_close_action, tray_supported
+
+        settings = SettingsManager()
+        action = resolve_close_action(settings.get("close_action", CLOSE_ASK), tray_supported())
+        if action == CLOSE_ASK:
+            from app.ui.close_dialog import CloseChoiceDialog
+            choice, remember = CloseChoiceDialog.ask(self, self._running_summary())
+            if choice is None:
+                return
+            if remember:
+                settings.set("close_action", choice)
+            action = choice
+        if action == CLOSE_TRAY:
+            self.hide_to_tray()
+        else:
+            self.exit_app()
+
+    def _running_summary(self) -> list:
+        """What exiting would stop, for the close dialog."""
+        running = []
+        if self.zbb_manager.is_running():
+            running.append(f"the server '{self.zbb_manager.current_server}'")
+        playit = getattr(self.zbb_manager, "playit_manager", None)
+        if playit is not None and getattr(playit, "running", False):
+            running.append("the Playit tunnel")
+        if getattr(self, "_active_provision_cancels", None):
+            running.append("the server being created")
+        return running
+
+    def hide_to_tray(self):
+        from app.ui.tray import TrayIcon
+        self._save_window_state()
+        if getattr(self, "_tray", None) is None:
+            self._tray = TrayIcon(self, on_open=self.show_from_tray, on_exit=self.exit_app)
+        try:
+            self._tray.show()
+        except Exception as e:
+            # No tray after all: never leave an invisible app behind.
+            logger.warning("Could not show tray icon, exiting instead: %s", e)
+            self.exit_app()
+            return
+        self.withdraw()
+
+    def show_from_tray(self):
+        tray = getattr(self, "_tray", None)
+        if tray is not None:
+            tray.hide()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def exit_app(self):
+        if getattr(self, "_exiting", False):
+            return
+        self._exiting = True
+        tray = getattr(self, "_tray", None)
+        if tray is not None:
+            tray.hide()
+        cancel_tasks = getattr(self, "cancel_active_tasks", None)
+        if cancel_tasks:
+            cancel_tasks()  # e.g. a server being created: stop and roll back
         self._save_window_state()
         self.withdraw()
 
@@ -1459,8 +1547,9 @@ def main():
         import tkinter.messagebox
         tkinter.messagebox.showwarning(
             "Zero Block Bridge",
-            "Another instance is already running.\n\n"
-            "Only one instance of the application is allowed."
+            "ZeroBlockBridge is already running.\n\n"
+            "If you don't see its window, look for its icon in the system tray "
+            "(next to the clock) and choose Open."
         )
         sys.exit(1)
 
@@ -1484,10 +1573,32 @@ def main():
         _settings.set("eula_accepted", True)
 
     import signal
-    signal.signal(signal.SIGTERM, lambda sig, frame: app.after(0, app.on_close))
-    signal.signal(signal.SIGINT, lambda sig, frame: app.after(0, app.on_close))
+    signal.signal(signal.SIGTERM, lambda sig, frame: app.after(0, app.exit_app))
+    signal.signal(signal.SIGINT, lambda sig, frame: app.after(0, app.exit_app))
 
     app.mainloop()
+    finish_exit()
+
+
+def finish_exit(grace: float = 3.0) -> None:
+    """End the process once the window is gone.
+
+    Python joins worker threads (ThreadPoolExecutor workers are non-daemon)
+    before exiting, so a long task still running -- a jar download, a
+    Forge install, a backup -- kept a windowless process alive for minutes.
+    Give running work a short grace period, then exit for real.
+    """
+    deadline = time.monotonic() + grace
+    for thread in threading.enumerate():
+        if thread is threading.main_thread() or thread.daemon:
+            continue
+        thread.join(max(0.0, deadline - time.monotonic()))
+    stuck = [t.name for t in threading.enumerate()
+             if t is not threading.main_thread() and not t.daemon and t.is_alive()]
+    if stuck:
+        logger.warning("Exiting with background work still running: %s", ", ".join(stuck))
+        logging.shutdown()
+        os._exit(0)
 
 if __name__ == "__main__":
     main()

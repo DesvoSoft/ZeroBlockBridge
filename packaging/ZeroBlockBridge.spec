@@ -23,6 +23,8 @@ a = Analysis(
         'PIL',
         'PIL._tkinter_finder',
         'psutil',
+        'pystray',
+        'pystray._win32',
         'requests',
         'packaging',
         'tkinter',

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Re-exported: many modules import these from constants.
 from app.core.atomic_io import atomic_write_json, atomic_write_text  # noqa: E402,F401
+from app.core.resources import resource_dir  # noqa: E402
 
 
 class ServerState(Enum):
@@ -51,12 +52,8 @@ if _data_dir_override:
     # first imported -- lets the user relocate servers/config/etc. away
     # from the .exe's own folder (first-run picker or migrated marker).
     BASE_DIR = Path(_data_dir_override)
-    _RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
 elif getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
-    # Read-only bundled data (PyInstaller `datas`) lives under the onefile
-    # temp extraction dir, not next to the .exe.
-    _RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
 else:
     # Anchor to the repo root (parent of app/), matching the frozen build's
     # exe-dir anchoring and the documented project layout (README "Project
@@ -64,7 +61,10 @@ else:
     # must not land inside app/, which is source-only and gets wiped/copied
     # as a unit during packaging and cleanup.
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
-    _RESOURCE_DIR = BASE_DIR
+# Read-only bundled data (PyInstaller `datas`) lives under the onefile temp
+# extraction dir (or the repo when running from source) -- never under a
+# relocated data dir.
+_RESOURCE_DIR = resource_dir()
 SERVERS_DIR = BASE_DIR / "servers"
 CONFIG_DIR = BASE_DIR / "config"
 BIN_DIR = BASE_DIR / "bin"
