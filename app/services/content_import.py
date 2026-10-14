@@ -24,13 +24,23 @@ import zipfile
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from app.core import neoforge
 from app.core.fs_links import is_link, remove_link
 
 logger = logging.getLogger(__name__)
 
 ProgressFn = Callable[[str], None]
 
-SUPPORTED_LOADERS = ("Fabric", "Forge")
+SUPPORTED_LOADERS = ("Fabric", "Forge", "NeoForge")
+
+# NeoForge for Minecraft 1.20.1 was a Forge fork that still runs Forge mods;
+# its packs are installed on Forge 1.20.1 (ZBB installs NeoForge 1.20.2+).
+_NEOFORGE_FORGE_COMPAT_MC = "1.20.1"
+
+
+def supported_loaders_text() -> str:
+    """'Fabric, Forge or NeoForge' for user-facing messages."""
+    return ", ".join(SUPPORTED_LOADERS[:-1]) + " or " + SUPPORTED_LOADERS[-1]
 
 # mrpack dependency key -> loader display name
 _MRPACK_LOADERS = {
@@ -368,7 +378,10 @@ def _inspect_mrpack(path: str, zf: zipfile.ZipFile) -> ModpackInfo:
 # Matched against one archive entry name at a time.
 _FORGE_JAR_RE = re.compile(r"(?:^|/)forge-(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)(?:-[a-z]+)?\.jar$")
 _FORGE_LIB_RE = re.compile(r"^libraries/net/minecraftforge/forge/(\d+\.\d+(?:\.\d+)?)-(\d+(?:\.\d+)+)/")
-_NEOFORGE_RE = re.compile(r"^libraries/net/neoforged/neoforge/\d|(?:^|/)neoforge-\d[\w.-]*\.jar$")
+_NEOFORGE_LIB_RE = re.compile(r"^libraries/net/neoforged/neoforge/(\d[\w.-]*)/")
+_NEOFORGE_JAR_RE = re.compile(r"(?:^|/)neoforge-(\d[\w.-]*?)(?:-installer|-universal|-server|-shim)?\.jar$")
+# NeoForge for 1.20.1 shipped as net.neoforged:forge:1.20.1-47.1.x
+_NEOFORGE_1201_RE = re.compile(r"^libraries/net/neoforged/forge/1\.20\.1-(\d+(?:\.\d+)+)/")
 _FABRIC_LOADER_RE = re.compile(r"^libraries/net/fabricmc/fabric-loader/(\d+(?:\.\d+)+)/")
 _FABRIC_MC_RE = re.compile(r"^libraries/net/fabricmc/intermediary/(\d+\.\d+(?:\.\d+)?)/")
 _QUILT_RE = re.compile(r"^libraries/org/quiltmc/quilt-loader/")
@@ -412,14 +425,31 @@ def _first_match(regex, names):
     return None
 
 
+def _detect_neoforge(names: list):
+    """("NeoForge", mc_version, build) or None. The build number encodes the
+    Minecraft version (see app.core.neoforge)."""
+    match = _first_match(_NEOFORGE_LIB_RE, names) or _first_match(_NEOFORGE_JAR_RE, names)
+    if match:
+        build = match.group(1)
+        mc = neoforge.mc_version(build)
+        return "NeoForge", mc, (build if mc else None)
+    legacy = _first_match(_NEOFORGE_1201_RE, names)
+    if legacy:
+        return "NeoForge", _NEOFORGE_FORGE_COMPAT_MC, legacy.group(1)
+    return None
+
+
 def _detect_from_files(names: list) -> tuple:
     """(loader, mc_version, loader_version) from the pack's files; each part
     may be None."""
+    # NeoForge first: a NeoForge 1.20.1 pack also contains a "forge-1.20.1-
+    # 47.1.x" jar whose build number doesn't exist on Forge's maven.
+    neo = _detect_neoforge(names)
+    if neo:
+        return neo
     forge = _first_match(_FORGE_LIB_RE, names) or _first_match(_FORGE_JAR_RE, names)
     if forge:
         return "Forge", forge.group(1), forge.group(2)
-    if _first_match(_NEOFORGE_RE, names):
-        return "NeoForge", None, None
     if _first_match(_QUILT_RE, names):
         return "Quilt", None, None
     loader_m = _first_match(_FABRIC_LOADER_RE, names)
@@ -438,6 +468,8 @@ def _apply_variables(info: ModpackInfo, variables: dict) -> None:
     if loader_var:
         info.loader = _VARIABLE_LOADERS.get(loader_var.lower(), loader_var)
         info.loader_version = variables.get("MODLOADER_VERSION") or None
+    if info.loader == "NeoForge" and not info.mc_version and info.loader_version:
+        info.mc_version = neoforge.mc_version(info.loader_version)
 
 
 def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackInfo:
@@ -482,10 +514,25 @@ def _is_curseforge_client(names: list) -> bool:
     return False
 
 
+def _resolve_neoforge(info: ModpackInfo) -> None:
+    """Fill a NeoForge pack's Minecraft version from its build number, and
+    send NeoForge 1.20.1 packs (a Forge fork) to Forge 1.20.1. The NeoForge
+    1.20.1 build (47.1.x) isn't a Forge build, so Forge isn't pinned: the
+    recommended Forge 1.20.1 build runs those mods."""
+    if info.loader != "NeoForge":
+        return
+    if not info.mc_version and info.loader_version:
+        info.mc_version = neoforge.mc_version(info.loader_version)
+    if info.mc_version == _NEOFORGE_FORGE_COMPAT_MC:
+        info.loader, info.loader_version = "Forge", None
+        info.notes.append("Built for NeoForge 1.20.1, which runs Forge mods: "
+                          "ZeroBlockBridge installs Forge 1.20.1 for it.")
+
+
 def modpack_mismatch(info: ModpackInfo, engine: str, mc_version: str) -> Optional[str]:
     """Why `info` can't run on an `engine` server for `mc_version`, or None."""
     if engine not in SUPPORTED_LOADERS:
-        return f"Modpacks need a {' or '.join(SUPPORTED_LOADERS)} server, not {engine}."
+        return f"Modpacks need a {supported_loaders_text()} server, not {engine}."
     if info.loader and info.loader != engine:
         return f"This modpack needs a {info.loader} server, not {engine}."
     if info.mc_version and info.mc_version != mc_version:
@@ -507,6 +554,7 @@ def inspect_modpack(path: str) -> ModpackInfo:
         else:
             info = _inspect_serverpack(path, zf, names)
 
+    _resolve_neoforge(info)
     if not info.supported:
         raise ContentImportError(
             f"This modpack needs {info.loader}, which ZeroBlockBridge doesn't support yet "

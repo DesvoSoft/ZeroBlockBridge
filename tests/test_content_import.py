@@ -119,8 +119,13 @@ def test_mrpack_reports_loader_version_and_server_mods(tmp_path):
 
 
 def test_mrpack_for_unsupported_loader_is_rejected(tmp_path):
-    with pytest.raises(ContentImportError, match="NeoForge"):
-        inspect_modpack(_mrpack(tmp_path, {"minecraft": "1.21.1", "neoforge": "21.1.1"}))
+    with pytest.raises(ContentImportError, match="Quilt"):
+        inspect_modpack(_mrpack(tmp_path, {"minecraft": "1.21.1", "quilt-loader": "0.26.0"}))
+
+
+def test_neoforge_mrpack_pins_its_build(tmp_path):
+    info = inspect_modpack(_mrpack(tmp_path, {"minecraft": "1.21.1", "neoforge": "21.1.77"}))
+    assert (info.loader, info.mc_version, info.pinned_loader_version) == ("NeoForge", "1.21.1", "21.1.77")
 
 
 def test_mrpack_install_applies_server_overrides_last(tmp_path):
@@ -293,10 +298,15 @@ def test_forge_root_jar_detected_anywhere_in_the_archive(tmp_path, jar, mc, forg
     "libraries/net/neoforged/neoforge/20.4.237/neoforge-20.4.237-universal.jar",
     "neoforge-21.1.77-installer.jar",
 ])
-def test_neoforge_server_pack_is_rejected(tmp_path, marker):
+def test_neoforge_server_pack_is_detected_with_its_build(tmp_path, marker):
+    """Was rejected before NeoForge support; the build number carries the
+    Minecraft version (20.4.237 -> 1.20.4, 21.1.77 -> 1.21.1)."""
     archive = _zip(tmp_path / "pack.zip", {"mods/a.jar": "a", marker: "x", "run.sh": "java"})
-    with pytest.raises(ContentImportError, match="NeoForge"):
-        inspect_modpack(archive)
+    info = inspect_modpack(archive)
+    build = "20.4.237" if "20.4" in marker else "21.1.77"
+    assert (info.loader, info.loader_version) == ("NeoForge", build)
+    assert info.mc_version == ("1.20.4" if build.startswith("20.4") else "1.21.1")
+    assert info.notes == []
 
 
 def test_wrapper_folder_with_readme_and_macosx_junk(tmp_path):
@@ -422,7 +432,7 @@ def test_modpack_mismatch_messages():
     assert modpack_mismatch(info, "Fabric", "1.20.1") is None
     assert "Fabric server" in modpack_mismatch(info, "Forge", "1.20.1")
     assert "Minecraft 1.20.1" in modpack_mismatch(info, "Fabric", "1.21")
-    assert "Fabric or Forge" in modpack_mismatch(info, "Paper", "1.20.1")
+    assert "Fabric, Forge or NeoForge" in modpack_mismatch(info, "Paper", "1.20.1")
 
 
 # ----------------------------------------------------------------------
@@ -598,7 +608,7 @@ def test_modpack_step_error_enforces_engine_and_version():
     assert modpack_step_error({**base, "modpack_path": None, "type": "Paper"}) is None
     assert "1.20.1" in modpack_step_error({**base, "version": "1.21.4"})
     assert "Forge server" in modpack_step_error({**base, "type": "Fabric"})
-    assert "Fabric or Forge" in modpack_step_error({**base, "type": "Vanilla", "modpack_loader": None})
+    assert "Fabric, Forge or NeoForge" in modpack_step_error({**base, "type": "Vanilla", "modpack_loader": None})
 
 
 def test_world_step_error_blocks_import_without_a_world():
