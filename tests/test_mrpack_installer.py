@@ -197,3 +197,77 @@ def test_unsafe_path_rejected_before_any_download(tmp_path):
         with _pytest.raises(ValueError):
             m._download_all(entries, str(tmp_path), lambda msg: None)
     download.assert_not_called()
+
+
+def test_closing_the_app_mid_install_does_not_keep_the_process_alive(tmp_path):
+    """Review #1: executor workers are joined at interpreter exit and drain
+    the queue first, keeping a hidden process downloading after the window
+    closed. The install runs in a daemon thread (as in the app); the main
+    thread exits at once -- the process must too."""
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    code = (
+        "import threading, time\n"
+        "from app.services import mrpack_installer as m\n"
+        "m._download_entry = lambda entry, d: time.sleep(1) or True\n"
+        "entries = [{'path': f'mods/m{i}.jar'} for i in range(30)]\n"
+        f"t = threading.Thread(target=m._download_all, args=(entries, r'{tmp_path}', lambda s: None), daemon=True)\n"
+        "t.start(); time.sleep(0.3)\n"
+    )
+    start = time.monotonic()
+    subprocess.run([sys.executable, "-c", code], cwd=root, check=True, timeout=30)
+    assert time.monotonic() - start < 4  # 30 one-second jobs / 6 workers would take ~5s+
+
+
+def test_duplicate_paths_are_downloaded_once(tmp_path):
+    from unittest.mock import patch
+    from app.services import mrpack_installer as m
+    entries = [{"path": "mods/a.jar"}, {"path": "mods/A.jar"}, {"path": "mods/b.jar"}]
+    with patch.object(m, "_download_entry", return_value=True) as download:
+        result = m._download_all(entries, str(tmp_path), lambda msg: None)
+    import os
+    expected = 2 if os.path.normcase("A") == os.path.normcase("a") else 3
+    assert result == (expected, 0) and download.call_count == expected
+
+
+def test_any_per_mod_error_counts_as_failure_not_abort(tmp_path):
+    from unittest.mock import patch
+    from app.services import mrpack_installer as m
+
+    def broken(entry, server_dir):
+        if entry["path"] == "mods/x.jar":
+            raise RuntimeError("hash mismatch")
+        return True
+    entries = [{"path": "mods/x.jar"}, {"path": "mods/y.jar"}]
+    with patch.object(m, "_download_entry", side_effect=broken):
+        assert m._download_all(entries, str(tmp_path), lambda msg: None) == (1, 1)
+
+
+def test_caller_giving_up_stops_new_downloads(tmp_path):
+    """If progress reporting fails (window destroyed), no new jobs start."""
+    import threading
+    import time
+    from unittest.mock import patch
+    import pytest as _pytest
+    from app.services import mrpack_installer as m
+    started = []
+    lock = threading.Lock()
+
+    def slow(entry, server_dir):
+        with lock:
+            started.append(entry["path"])
+        time.sleep(0.05)
+        return True
+
+    def dead_progress(msg):
+        raise RuntimeError("main thread is not in main loop")
+
+    entries = [{"path": f"mods/m{i}.jar"} for i in range(60)]
+    with patch.object(m, "_download_entry", side_effect=slow):
+        with _pytest.raises(RuntimeError):
+            m._download_all(entries, str(tmp_path), dead_progress)
+        time.sleep(0.3)
+    assert len(started) <= m.DOWNLOAD_WORKERS * 2

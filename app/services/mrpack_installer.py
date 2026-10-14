@@ -13,7 +13,8 @@ import json
 import logging
 import os
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
+import threading
 from typing import Callable, Optional
 
 from app.core.constants import SERVERS_DIR
@@ -132,26 +133,63 @@ def install_mrpack(
 DOWNLOAD_WORKERS = 6
 
 
+def _unique_entries(entries: list, server_dir: str) -> list:
+    """Validate every path (rejecting traversal before anything downloads)
+    and drop entries that would write the same file -- concurrent writers
+    to one path could leave a mix of both downloads on disk."""
+    seen, unique = set(), []
+    for entry in entries:
+        dest = os.path.normcase(_safe_dest(server_dir, entry.get("path", "") or "mods/unknown.jar"))
+        if dest in seen:
+            logger.warning("mrpack: duplicate path %s skipped", entry.get("path"))
+            continue
+        seen.add(dest)
+        unique.append(entry)
+    return unique
+
+
 def _download_all(entries: list, server_dir: str, progress: Callable[[str], None]) -> tuple:
     """Download entries concurrently; returns (installed, failed). Progress
-    is only ever reported from the calling thread."""
-    for entry in entries:
-        # Reject a malicious path before downloading anything at all.
-        _safe_dest(server_dir, entry.get("path", "") or "mods/unknown.jar")
-    total, installed, failed = len(entries), 0, 0
+    is only ever reported from the calling thread.
+
+    Plain daemon threads, not a ThreadPoolExecutor: an executor's workers
+    are joined at interpreter exit and drain the whole queue first, so
+    closing the app mid-install would leave a hidden process downloading
+    for minutes after the single-instance lock was released."""
+    pending = queue.Queue()
+    unique = _unique_entries(entries, server_dir)
+    for entry in unique:
+        pending.put(entry)
+    total = len(unique)
     if not total:
         return 0, 0
-    with ThreadPoolExecutor(max_workers=min(DOWNLOAD_WORKERS, total), thread_name_prefix="mrpack") as pool:
-        futures = [pool.submit(_download_entry, entry, server_dir) for entry in entries]
-        for done, future in enumerate(as_completed(futures), 1):
+    results: queue.Queue = queue.Queue()
+    stop = threading.Event()
+
+    def worker():
+        while not stop.is_set():
             try:
-                ok = future.result()
-            except OSError as e:
-                logger.error("mrpack download failed: %s", e)
+                entry = pending.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                ok = bool(_download_entry(entry, server_dir))
+            except Exception as e:  # one bad mod must not abort the pack
+                logger.error("mrpack download failed for %s: %s", entry.get("path", "?"), e)
                 ok = False
-            installed += bool(ok)
+            results.put(ok)
+
+    for i in range(min(DOWNLOAD_WORKERS, total)):
+        threading.Thread(target=worker, daemon=True, name=f"mrpack-dl-{i}").start()
+    installed = failed = 0
+    try:
+        for done in range(1, total + 1):
+            ok = results.get()
+            installed += ok
             failed += not ok
             progress(f"Downloading mods {done}/{total}…")
+    finally:
+        stop.set()  # caller gave up (e.g. the window closed): take no new jobs
     return installed, failed
 
 

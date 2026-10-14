@@ -180,6 +180,13 @@ class TestServerMeta:
                 result = set_server_meta("test_server", "ram", 2048)
                 assert result is False
 
+    def test_metadata_write_never_recreates_a_deleted_server(self):
+        """Review #2: the atomic writer creates missing folders, so a late
+        write after delete_server resurrected it as a ghost server."""
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            assert update_server_meta("deleted_one", {"ram": 2048}) is False
+        assert not os.path.exists(os.path.join(self.tmpdir, "deleted_one"))
+
     def test_failed_metadata_write_keeps_the_previous_file(self):
         """A crash mid-write must not leave a truncated metadata.json."""
         server_dir = os.path.join(self.tmpdir, "crashy")

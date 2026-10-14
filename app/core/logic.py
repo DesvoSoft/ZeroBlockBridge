@@ -97,7 +97,13 @@ def set_server_meta(server_name: str, key: str, value: Any) -> bool:
 
 def update_server_meta(server_name: str, updates: dict) -> bool:
     """Atomic multi-key update for server metadata.json with write-through cache."""
-    meta_path = os.path.join(SERVERS_DIR, server_name, "metadata.json")
+    server_dir = os.path.join(SERVERS_DIR, server_name)
+    meta_path = os.path.join(server_dir, "metadata.json")
+    if not os.path.isdir(server_dir):
+        # Deleted (or mid-restore): a late write must not resurrect the
+        # folder as a ghost server. The atomic writer would create it.
+        logger.warning("Not writing metadata for %s: server folder is gone", server_name)
+        return False
     with _meta_lock:
         try:
             if server_name in _meta_cache:
@@ -168,7 +174,7 @@ def _version_from_jar(jar_path: str) -> Optional[str]:
                 match = _VERSIONS_LIST_RE.search(listing)
                 if match:
                     return match.group(1)
-    except (OSError, zipfile.BadZipFile, ValueError, KeyError, AttributeError) as e:
+    except Exception as e:  # odd compression/encryption too: inference must never block an import
         logger.debug("No version info in %s: %s", jar_path, e)
     return None
 
@@ -184,8 +190,15 @@ def _version_from_libraries(server_dir: str) -> Optional[str]:
         except OSError:
             continue
         if entries:
-            return entries[-1].split("-")[0] if split else entries[-1]
+            # Upgraded-in-place servers keep old folders: newest by number,
+            # not by text ("1.21.10" > "1.21.9", "1.12.2" > "1.9.4").
+            newest = max(entries, key=_numeric_key)
+            return newest.split("-")[0] if split else newest
     return None
+
+
+def _numeric_key(name: str) -> tuple:
+    return tuple(int(n) for n in re.findall(r"\d+", name))
 
 
 def infer_server_version(server_dir: str, jar_name: Optional[str] = None) -> str:

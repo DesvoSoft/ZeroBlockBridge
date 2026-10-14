@@ -7,6 +7,23 @@ resolved; `app.core.constants` re-exports both helpers for everything else.
 import json
 import os
 import tempfile
+import time
+
+# Windows refuses os.replace while any other handle has the target open
+# (antivirus, OneDrive sync, a backup zipping the folder): retry briefly.
+_REPLACE_ATTEMPTS = 6
+_REPLACE_BACKOFF_S = 0.05
+
+
+def _replace_with_retry(src: str, dst: str) -> None:
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BACKOFF_S * (attempt + 1))
 
 
 def atomic_write_text(path, write_fn, *, suffix: str = "") -> None:
@@ -25,7 +42,7 @@ def atomic_write_text(path, write_fn, *, suffix: str = "") -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             write_fn(f)
-        os.replace(tmp_path, path)
+        _replace_with_retry(tmp_path, path)
     except BaseException:
         try:
             os.remove(tmp_path)

@@ -87,3 +87,22 @@ def test_load_server_manually_records_inferred_type_and_version(tmp_path):
         meta = json.loads((servers / "MyFabric" / "metadata.json").read_text(encoding="utf-8"))
 
     assert meta["type"] == "Fabric" and meta["version"] == "1.20.1"
+
+
+def test_newest_version_folder_wins_numerically(tmp_path):
+    """Review #4: text sort reported 1.21.9 over 1.21.10 (and 1.9.4 over 1.12.2)."""
+    for v in ("1.21.9", "1.21.10"):
+        (tmp_path / "fabric/libraries/net/fabricmc/intermediary" / v).mkdir(parents=True)
+    for v in ("1.9.4-12.17.0.2317", "1.12.2-14.23.5.2860"):
+        (tmp_path / "forge/libraries/net/minecraftforge/forge" / v).mkdir(parents=True)
+    assert infer_server_version(str(tmp_path / "fabric")) == "1.21.10"
+    assert infer_server_version(str(tmp_path / "forge")) == "1.12.2"
+
+
+def test_unreadable_jar_never_blocks_inference(tmp_path):
+    """Review #5: odd compression/encryption raised past the probe and made
+    the whole folder import fail."""
+    import zipfile as _zip
+    _jar(tmp_path / "server.jar", {"version.json": "{}"})
+    with patch.object(_zip.ZipFile, "read", side_effect=NotImplementedError("compression type 99")):
+        assert infer_server_version(str(tmp_path)) == "Unknown"
