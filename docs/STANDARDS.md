@@ -354,3 +354,24 @@ pytest tests/ -q
 ```
 
 **Current score (2026-09-14): 97/100** — F401 clean, no banned patterns, no color/radius literals outside documented exceptions. Known deduction: `_kill_orphan_processes` (`main.py`) swallows `Exception` without logging on app exit (commented as intentional, but still breaks §2.2).
+
+---
+
+## 8. Definition of Done (per iteration)
+
+Every change ships as one iteration: one backlog item, one `feature/<name>` branch from `dev`, one PR. It is done only when **all** of these hold:
+
+| # | Gate | How it is measured |
+|---|------|--------------------|
+| 1 | Automated gate green | `python tools/qa_gate.py` prints `READY` (also runs on every PR in CI, Windows job) |
+| 2 | Tests | Full suite passes on Ubuntu **and** Windows CI |
+| 3 | Diff coverage | ≥ 85% of new/changed executable lines in `app/` (excluding `app/ui/`, see §5) |
+| 4 | Complexity | New functions ≤ 10; existing over-limit functions may not get more complex |
+| 5 | Static checks | 0 syntax/undefined-name errors; 0 dead imports/unused variables in changed files; no banned patterns on added lines (`os.startfile`, `_winapi`, swallowed exceptions, `print(`, native `messagebox`) |
+| 6 | Regression tests | Every bug fix has a test that fails without the fix (verified by reverting the fix once) |
+| 7 | Independent review | A fresh-context reviewer audits the diff for correctness, data-loss and edge cases; every finding is fixed (with a test) or explicitly rejected with a reason in the PR |
+| 8 | Visual pass | Changed windows/dialogs screenshotted in Dark and Light and checked against §3 |
+| 9 | Docs | `docs/changelog.md` `[Unreleased]` updated; README/ARCHITECTURE updated when behavior or structure changes |
+| 10 | Commit hygiene | Conventional subjects, author `DesvoSoft`, no attribution lines (checked by the gate) |
+
+Merging to `dev` requires gates 1–10 and green CI. `dev` → `main` (release) only with the owner's explicit go-ahead.

@@ -99,3 +99,8 @@ rebuild_exe.bat
 *.key
 *.pfx
 *.p12
+
+# Coverage data (tools/qa_gate.py)
+.coverage
+.coverage.*
+coverage.json
