@@ -118,12 +118,22 @@ def update_server_meta(server_name: str, updates: dict) -> bool:
             return False
 
 
+def _has_library(server_dir: str, *parts: str) -> bool:
+    return os.path.isdir(os.path.join(server_dir, "libraries", *parts))
+
+
 def _infer_server_type(server_dir: str) -> str:
     """Infer server type from files present in the server directory."""
     try:
         files = [f.lower() for f in os.listdir(server_dir)]
     except OSError:
         return "Vanilla"
+    # Modern Forge/Fabric installs keep the loader under libraries/, with no
+    # telltale jar name at the root (Forge 1.17+ ships run.bat instead).
+    if _has_library(server_dir, "net", "minecraftforge", "forge"):
+        return "Forge"
+    if _has_library(server_dir, "net", "fabricmc", "fabric-loader"):
+        return "Fabric"
     for f in files:
         if "fabric" in f and f.endswith(".jar"):
             return "Fabric"
@@ -136,6 +146,69 @@ def _infer_server_type(server_dir: str) -> str:
         if "spigot" in f and f.endswith(".jar"):
             return "Paper"
     return "Vanilla"
+
+
+_VERSIONS_LIST_RE = re.compile(r"versions/([^/\s]+)/")
+
+
+def _version_from_jar(jar_path: str) -> Optional[str]:
+    """Minecraft version stamped inside a server jar: version.json (vanilla
+    1.14+, Fabric's downloaded server.jar) or META-INF/versions.list
+    (Paper/Purpur paperclip jars)."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(jar_path) as zf:
+            names = set(zf.namelist())
+            if "version.json" in names:
+                data = json.loads(zf.read("version.json").decode("utf-8"))
+                found = data.get("id") or data.get("name")
+                if found:
+                    return str(found)
+            if "META-INF/versions.list" in names:
+                listing = zf.read("META-INF/versions.list").decode("utf-8", "replace")
+                match = _VERSIONS_LIST_RE.search(listing)
+                if match:
+                    return match.group(1)
+    except (OSError, zipfile.BadZipFile, ValueError, KeyError, AttributeError) as e:
+        logger.debug("No version info in %s: %s", jar_path, e)
+    return None
+
+
+def _version_from_libraries(server_dir: str) -> Optional[str]:
+    """Forge: libraries/net/minecraftforge/forge/<mc>-<forge>/;
+    Fabric: libraries/net/fabricmc/intermediary/<mc>/."""
+    for parts, split in ((("net", "minecraftforge", "forge"), True),
+                         (("net", "fabricmc", "intermediary"), False)):
+        folder = os.path.join(server_dir, "libraries", *parts)
+        try:
+            entries = sorted(e for e in os.listdir(folder) if os.path.isdir(os.path.join(folder, e)))
+        except OSError:
+            continue
+        if entries:
+            return entries[-1].split("-")[0] if split else entries[-1]
+    return None
+
+
+def infer_server_version(server_dir: str, jar_name: Optional[str] = None) -> str:
+    """Best-effort Minecraft version of an existing server folder, or
+    "Unknown". Used when adding a server ZBB didn't create, so Java and mod
+    compatibility checks have something to go on."""
+    found = _version_from_libraries(server_dir)
+    if found:
+        return found
+    try:
+        root_jars = sorted(f for f in os.listdir(server_dir)
+                           if f.lower().endswith(".jar") and "installer" not in f.lower())
+    except OSError:
+        root_jars = []
+    candidates = [j for j in (jar_name, "server.jar") if j] + root_jars
+    for jar in dict.fromkeys(candidates):
+        path = os.path.join(server_dir, jar)
+        if os.path.isfile(path):
+            found = _version_from_jar(path)
+            if found:
+                return found
+    return "Unknown"
 
 
 def migrate_legacy_metadata() -> None:

@@ -13,7 +13,7 @@ import datetime
 from app.core.logic import (
     ServerRunner, ServerStartError, load_config, save_config, Scheduler, BackupScheduler,
     get_server_meta, update_server_meta, migrate_legacy_metadata,
-    invalidate_meta_cache, create_junction,
+    invalidate_meta_cache, create_junction, _infer_server_type, infer_server_version,
 )
 from app.services.watchdog import Watchdog
 from app.services.lag_monitor import LagMonitor
@@ -331,8 +331,8 @@ class ZBBManager:
                     if jars: jar_name = jars[0]
                 update_server_meta(server_name, {
                     "name": server_name,
-                    "type": "Vanilla",
-                    "version": "Unknown",
+                    "type": _infer_server_type(link_path),
+                    "version": infer_server_version(link_path, jar_name),
                     "java_path": "auto",
                     "advanced_mode": False,
                     "use_aikars": True,
