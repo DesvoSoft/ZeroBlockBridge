@@ -640,6 +640,9 @@ class AppSettingsDialog(ZBBToplevel):
             loc_row, "Open Folder", self._open_data_dir, icon_name="folder", width=120,
         ).grid(row=0, column=1, sticky="e")
 
+        if sys.platform == "win32" and getattr(sys, "frozen", False):
+            self._build_install_card(scroll)
+
         card = self._card(
             scroll, "Disk usage",
             "Space used by ZBB data on this machine.",
@@ -658,6 +661,54 @@ class AppSettingsDialog(ZBBToplevel):
             icon_name="trash", width=160,
         )
         self.btn_clear_reports.pack(side="left", padx=(8, 0))
+
+    def _build_install_card(self, parent):
+        from app.core.bootstrap import MODE_INSTALLED, PORTABLE_FLAG, read_marker
+
+        exe = Path(sys.executable).resolve()
+        marker = read_marker()
+        installed = marker.get("exe_path") if marker.get("mode") == MODE_INSTALLED else None
+        if (exe.parent / PORTABLE_FLAG).exists():
+            status = f"Portable copy, running from {exe.parent}"
+        elif installed:
+            status = f"Installed at {installed}"
+        else:
+            status = f"Not installed. Running {exe}"
+        self._shortcut_target = Path(installed) if installed else exe
+
+        card = self._card(parent, "Installation", status)
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 12))
+        self._ghost_button(
+            row, "Add to Start Menu", lambda: self._add_shortcut(start_menu=True),
+            icon_name="plus", width=150,
+        ).pack(side="left")
+        self._ghost_button(
+            row, "Add Desktop Shortcut", lambda: self._add_shortcut(desktop=True),
+            icon_name="plus", width=170,
+        ).pack(side="left", padx=(8, 0))
+        if installed:
+            ctk.CTkLabel(
+                card, text="To uninstall: Windows Settings > Apps > Installed apps > ZeroBlockBridge.",
+                font=AppConfig.FONT_BODY_SMALL, text_color=AppConfig.COLOR_TEXT_MUTED, anchor="w",
+            ).grid(row=3, column=0, sticky="ew", padx=15, pady=(0, 12))
+
+    def _add_shortcut(self, start_menu: bool = False, desktop: bool = False):
+        from app.core import installer
+
+        def _work():
+            failures = installer.add_shortcuts(self._shortcut_target, start_menu=start_menu, desktop=desktop)
+            where = "Start menu" if start_menu else "desktop"
+
+            def _report():
+                if not self.winfo_exists():
+                    return
+                if failures:
+                    Toast.show(self, f"Couldn't add the shortcut: {failures[0]}", toast_type="error")
+                else:
+                    Toast.show(self, f"Shortcut added to the {where}.", toast_type="success")
+            self.after(0, _report)
+        threading.Thread(target=_work, daemon=True).start()
 
     def _open_data_dir(self):
         self._open_dir(BASE_DIR)

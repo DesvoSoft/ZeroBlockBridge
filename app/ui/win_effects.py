@@ -126,9 +126,12 @@ def _apply_app_icon(window) -> None:
     blue logo ~200ms after creation unless iconbitmap() was called on it.
     """
     import tkinter
-    from app.core.constants import ASSETS_DIR
+    # Not app.core.constants.ASSETS_DIR: the first-run/setup dialogs call this
+    # before the data dir is resolved, and importing constants then would pin
+    # every path to the wrong folder for the whole session.
+    from app.core.resources import assets_dir
     try:
-        window.iconbitmap(str(ASSETS_DIR / "logo.ico"))
+        window.iconbitmap(str(assets_dir() / "logo.ico"))
     except tkinter.TclError as e:
         logger.debug("Window icon unavailable: %s", e)
 

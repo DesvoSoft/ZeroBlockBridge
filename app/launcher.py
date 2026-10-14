@@ -6,6 +6,13 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from app.core.installer import UNINSTALL_ARG
+
+if UNINSTALL_ARG in sys.argv:
+    # Settings > Apps > Uninstall runs `ZeroBlockBridge.exe --uninstall`.
+    from app.ui.first_run_dialog import run_uninstall
+    sys.exit(run_uninstall())
+
 # Must resolve before any `app.core.constants` import -- it fixes
 # BASE_DIR (and everything derived from it) at import time.
 from app.core.bootstrap import resolve_data_dir

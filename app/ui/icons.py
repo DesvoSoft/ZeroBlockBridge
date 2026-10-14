@@ -232,3 +232,11 @@ def icon(name: str, size: int = 16, color=None) -> ctk.CTkImage:
             size=(size, size),
         )
     return _cache[key]
+
+
+def clear_cache() -> None:
+    """Forget every cached icon. Tk images belong to the root window that
+    created them; call this when a root is destroyed before another one is
+    created (the pre-app setup dialogs), or a reused icon would point at a
+    dead "pyimageN"."""
+    _cache.clear()
