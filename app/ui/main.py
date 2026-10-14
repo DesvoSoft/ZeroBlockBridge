@@ -1200,12 +1200,10 @@ class MCTunnelApp(ctk.CTk):
     def _on_provision_failed(self, dialog, result):
         dialog.close()
         self.load_servers()  # a rolled-back server must not linger in the list
-        ZBBDialog.info(
-            self, "Server not created",
-            f"'{result.name}' could not be created:\n\n{result.error or 'Unknown error.'}\n\n"
-            "What was created for it has been removed, so you can try again with the same name.",
-            kind="error",
-        )
+        message = f"'{result.name}' could not be created:\n\n{result.error or 'Unknown error.'}"
+        if result.rolled_back:
+            message += "\n\nThe partly created server was removed, so you can try again with the same name."
+        ZBBDialog.info(self, "Server not created", message, kind="error")
 
     def _on_download_complete(self, dialog, name, start_after_creation=False, warnings=None):
         self.load_servers()

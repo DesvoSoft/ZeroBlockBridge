@@ -380,6 +380,8 @@ class _AlreadyInstalledDialog(_BootDialog):
         self.destroy()
 
     def _run(self):
+        if self._busy:  # an update is copying over the installed exe
+            return
         self.result = "run"
         self.destroy()
 
@@ -468,7 +470,8 @@ class _UninstallDialog(_BootDialog):
         row = self.button_row()
         self._btn_uninstall = self.primary(row, "Uninstall", self._uninstall, danger=True, width=140)
         self._btn_uninstall.pack(side="right")
-        self.ghost(row, "Cancel", self.destroy, width=100).pack(side="right", padx=(0, 8))
+        # Through _on_close: ignored while removing, like the window's X.
+        self.ghost(row, "Cancel", self._on_close, width=100).pack(side="right", padx=(0, 8))
 
     def _uninstall(self):
         self._btn_uninstall.configure(text="Removing...", state="disabled")

@@ -44,6 +44,8 @@ class ProvisionResult:
     required_java: Optional[int] = None
     # Created, but the user should know (e.g. modpack mods that failed to download).
     warnings: list = field(default_factory=list)
+    # Something was created and then removed again (vs. failing up front).
+    rolled_back: bool = False
 
 
 def resolve_required_java(bytecode_java: Optional[int], version_map_java: int) -> int:
@@ -111,8 +113,9 @@ class ServerProvisioner:
             self._log(f"[Error] Installation failed: {e}")
             error = str(e)
         if error:
+            rolled_back = bool(self._created)
             self._rollback(name)
-            return ProvisionResult(False, name, error)
+            return ProvisionResult(False, name, error, rolled_back=rolled_back)
 
         required_java = self._required_java
         try:
@@ -177,6 +180,14 @@ class ServerProvisioner:
 
         custom_loc = config.get("location") or self._servers_dir
         if os.path.normpath(custom_loc) == os.path.normpath(self._servers_dir):
+            # Claim the name atomically: a second creation with the same name
+            # (the progress dialog isn't modal) fails here instead of sharing
+            # -- and on rollback deleting -- this run's folder.
+            try:
+                os.makedirs(self._servers_dir, exist_ok=True)
+                os.mkdir(link_path)
+            except FileExistsError:
+                return f"Server '{name}' already exists."
             self._created.append(("dir", link_path))
             return None
         target_path = os.path.join(custom_loc, name)

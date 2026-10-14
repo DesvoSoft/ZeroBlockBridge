@@ -1,7 +1,7 @@
 import json
 import zipfile
 from contextlib import ExitStack
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -505,12 +505,58 @@ def test_scaffold_override_existing_replaces_only_wizard_keys(tmp_path):
     props = tmp_path / "server.properties"
     props.write_text("gamemode=creative\nlevel-type=skyblock\nmotd=Pack MOTD\n", encoding="utf-8")
 
-    pre_boot_scaffold(str(tmp_path), port=25570, config={"game_mode": "survival"}, override_existing=True)
+    pre_boot_scaffold(str(tmp_path), port=25570, config={"game_mode": "adventure"}, override_existing=True)
 
     text = props.read_text(encoding="utf-8")
-    assert "gamemode=survival" in text and "gamemode=creative" not in text
+    assert "gamemode=adventure" in text and "gamemode=creative" not in text
     assert "level-type=skyblock" in text and "motd=Pack MOTD" in text
     assert "server-port=25570" in text
+
+
+def test_scaffold_override_keeps_pack_values_for_untouched_wizard_defaults(tmp_path):
+    """Review N1: the wizard always sends every key; defaults the user never
+    changed (allow-flight=false, view-distance=10...) must not clobber a
+    pack's tuning, or jetpack/flight mods get players kicked."""
+    from app.services.scaffolder import PROPERTY_DEFAULTS, pre_boot_scaffold
+    props = tmp_path / "server.properties"
+    props.write_text("allow-flight=true\nview-distance=6\nmax-players=50\ngamemode=adventure\n"
+                     "difficulty=peaceful\nlevel-seed=\n", encoding="utf-8")
+    config = dict(PROPERTY_DEFAULTS, difficulty="hard", seed="12345")
+
+    pre_boot_scaffold(str(tmp_path), port=25565, config=config, override_existing=True)
+
+    text = props.read_text(encoding="utf-8")
+    for kept in ("allow-flight=true", "view-distance=6", "max-players=50", "gamemode=adventure"):
+        assert kept in text, kept
+    assert "difficulty=hard" in text            # changed by the user: wins
+    assert "level-seed=12345" in text           # typed by the user: wins
+    assert "level-seed=\n" not in text
+
+
+def test_wizard_defaults_come_from_the_scaffolder():
+    """One source of truth, so 'did the user change it?' can't drift."""
+    import inspect
+    from app.ui import server_wizard
+    assert "**PROPERTY_DEFAULTS" in inspect.getsource(server_wizard.ServerWizard.__init__)
+
+
+def test_same_name_claimed_atomically(tmp_path):
+    """Review N3: a second creation with the same name must fail up front
+    instead of sharing (and on rollback deleting) the first run's folder."""
+    from app.core.provisioning import ServerProvisioner
+    servers = tmp_path / "servers"
+    prov = ServerProvisioner(log=lambda m: None, get_server_port=lambda n: 25565,
+                             create_tunnel=lambda n: None, jdk_manager=MagicMock(),
+                             servers_dir=str(servers))
+    prov._created = []
+    assert prov._prepare_location({"name": "srv", "location": str(servers)}) is None
+    assert (servers / "srv").is_dir()
+    other = ServerProvisioner(log=lambda m: None, get_server_port=lambda n: 25565,
+                              create_tunnel=lambda n: None, jdk_manager=MagicMock(),
+                              servers_dir=str(servers))
+    other._created = []
+    assert "already exists" in other._prepare_location({"name": "srv", "location": str(servers)})
+    assert other._created == []
 
 
 def test_scaffold_keeps_existing_values_without_override(tmp_path):

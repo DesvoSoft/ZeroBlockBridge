@@ -6,6 +6,7 @@ from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
+from app.services.scaffolder import PROPERTY_DEFAULTS
 from app.services.template_manager import list_templates, load_template, save_template
 from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
@@ -104,20 +105,7 @@ class ServerWizard(ZBBToplevel):
             "version": "",
             "ram": 2048,
             "seed": "",
-            "game_mode": "survival",
-            "difficulty": "normal",
-            "hardcore": False,
-            "whitelist": False,
-            "enforce_whitelist": False,
-            "pvp": True,
-            "online_mode": True,
-            "max_players": 20,
-            "spawn_protection": 16,
-            "enable_command_block": False,
-            "allow_flight": False,
-            "enforce_secure_profile": True,
-            "view_distance": "10",
-            "simulation_distance": "10",
+            **PROPERTY_DEFAULTS,
             "location": str(SERVERS_DIR),
             "icon_path": None,
             "auto_install_jdk": True,
@@ -388,8 +376,8 @@ class ServerWizard(ZBBToplevel):
     def _build_modpack_card(self, parent):
         card = self._content_card(
             parent, "Modpack (optional)",
-            "Import a Modrinth .mrpack or a modpack's Server Pack .zip. "
-            "Engine and version are set for you.")
+            "Import a Modrinth .mrpack or a modpack's Server Pack .zip. Engine and version are "
+            "set for you. Rules you change in the next steps override the pack's; the rest keep its settings.")
         row = ctk.CTkFrame(card, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(0, 10))
         self.btn_modpack = self._small_button(row, "Import modpack...", self._browse_modpack,
@@ -400,7 +388,10 @@ class ServerWizard(ZBBToplevel):
         self.lbl_modpack = ctk.CTkLabel(row, text="", font=AppConfig.FONT_CAPTION, anchor="w",
                                         justify="left", wraplength=340)
         self.lbl_modpack.pack(side="left", fill="x", expand=True, padx=(10, 0))
-        if self.wizard_data["modpack_path"]:
+        if self._modpack_busy():
+            self.btn_modpack.configure(state="disabled")
+            self._set_modpack_status("Reading modpack...")
+        elif self.wizard_data["modpack_path"]:
             self._set_modpack_status(self.wizard_data["modpack_label"])
 
     def _set_modpack_status(self, text, error=False):
@@ -419,6 +410,10 @@ class ServerWizard(ZBBToplevel):
                        ("Server pack", "*.zip")])
         if not path:
             return
+        # Sequence token: a slower earlier read (e.g. started before going
+        # Back and choosing again) must never overwrite a newer choice.
+        self._modpack_seq = getattr(self, "_modpack_seq", 0) + 1
+        seq = self._modpack_seq
         self._inspecting_modpack = True
         self.btn_modpack.configure(state="disabled")
         self._set_modpack_status("Reading modpack...")
@@ -432,14 +427,19 @@ class ServerWizard(ZBBToplevel):
             except Exception as e:
                 logger.exception("Modpack inspection failed")
                 info, error = None, f"Couldn't read that modpack: {e}"
-            self.after(0, lambda: self._on_modpack_inspected(info, error))
+            self.after(0, lambda: self._on_modpack_inspected(info, error, seq))
         threading.Thread(target=_work, daemon=True).start()
 
-    def _on_modpack_inspected(self, info, error):
+    def _on_modpack_inspected(self, info, error, seq=None):
+        if seq is not None and seq != getattr(self, "_modpack_seq", 0):
+            return  # superseded by a newer choice
         self._inspecting_modpack = False
-        if not self.winfo_exists() or self.current_step != 2:
+        if not self.winfo_exists():
             return
+        on_step = self.current_step == 2
         if error:
+            if not on_step:
+                return
             self.btn_modpack.configure(state="normal")
             if self.wizard_data["modpack_path"]:
                 # The earlier pack is still selected (and still locks engine/version).
@@ -457,6 +457,8 @@ class ServerWizard(ZBBToplevel):
             self.wizard_data["version"] = info.mc_version
         self.wizard_data["ram"] = modpack_ram_mb(
             self.wizard_data["ram"], info.mod_count, psutil.virtual_memory().total // (1024 * 1024))
+        if not on_step:
+            return  # kept in wizard_data; step 2 shows it when revisited
         self.show_step_2()  # re-render with engine/version locked
         if info.notes:
             self._set_modpack_status(label + "\n" + " ".join(info.notes))
@@ -510,7 +512,9 @@ class ServerWizard(ZBBToplevel):
         self.lbl_world = ctk.CTkLabel(self.world_import_frame, text="", font=AppConfig.FONT_CAPTION,
                                       anchor="w", justify="left", wraplength=520)
         self.lbl_world.pack(fill="x", padx=(28, 0), pady=(6, 0))
-        if self.wizard_data["world_path"]:
+        if getattr(self, "_inspecting_world", False):
+            self.lbl_world.configure(text="Reading world...", text_color=AppConfig.COLOR_TEXT_GRAY)
+        elif self.wizard_data["world_path"]:
             self._show_world(self.wizard_data["world_label"], self.wizard_data["world_path"])
         self._on_world_mode()
 
@@ -534,6 +538,8 @@ class ServerWizard(ZBBToplevel):
                                               filetypes=[("World archive", "*.zip")])
         if not path:
             return
+        self._world_seq = getattr(self, "_world_seq", 0) + 1
+        seq = self._world_seq
         self._inspecting_world = True
         self.lbl_world.configure(text="Reading world...", text_color=AppConfig.COLOR_TEXT_GRAY)
 
@@ -546,19 +552,25 @@ class ServerWizard(ZBBToplevel):
             except Exception as e:
                 logger.exception("World inspection failed")
                 info, error = None, f"Couldn't read that world: {e}"
-            self.after(0, lambda: self._on_world_inspected(info, error))
+            self.after(0, lambda: self._on_world_inspected(info, error, seq))
         threading.Thread(target=_work, daemon=True).start()
 
-    def _on_world_inspected(self, info, error):
+    def _on_world_inspected(self, info, error, seq=None):
+        if seq is not None and seq != getattr(self, "_world_seq", 0):
+            return  # superseded by a newer choice
         self._inspecting_world = False
-        if not self.winfo_exists() or self.current_step != 5 or not self.lbl_world.winfo_exists():
+        if not self.winfo_exists():
             return
         if error:
             self.wizard_data.update(world_path=None, world_label="")
+        else:
+            self.wizard_data.update(world_path=info.path, world_label=info.name)
+        if self.current_step != 5 or not self.lbl_world.winfo_exists():
+            return  # kept in wizard_data; step 5 shows it when revisited
+        if error:
             self.lbl_world.configure(text=error, text_color=AppConfig.COLOR_STATUS_ERROR)
-            return
-        self.wizard_data.update(world_path=info.path, world_label=info.name)
-        self._show_world(info.name, info.path)
+        else:
+            self._show_world(info.name, info.path)
 
     # --- Step 3: Resources (RAM + Java) ---
     def show_step_3(self):

@@ -91,6 +91,35 @@ _CONFIG_PROPERTY_MAP = {
 }
 
 
+# The wizard's starting values for the keys above (single source: the
+# wizard builds its defaults from this). With a modpack, only values the user
+# changed from these override the pack's server.properties -- a default the
+# user never touched (e.g. allow-flight=false) must not clobber a pack that
+# needs allow-flight=true for jetpacks.
+PROPERTY_DEFAULTS = {
+    "game_mode": "survival",
+    "difficulty": "normal",
+    "hardcore": False,
+    "whitelist": False,
+    "enforce_whitelist": False,
+    "pvp": True,
+    "online_mode": True,
+    "max_players": 20,
+    "spawn_protection": 16,
+    "enable_command_block": False,
+    "allow_flight": False,
+    "enforce_secure_profile": True,
+    "view_distance": "10",
+    "simulation_distance": "10",
+}
+
+
+def _user_changed(config_key: str, value, transform) -> bool:
+    if config_key not in PROPERTY_DEFAULTS:
+        return True
+    return transform(value) != transform(PROPERTY_DEFAULTS[config_key])
+
+
 def _desired_properties(port: int, config: dict = None, override_existing: bool = False):
     """(values to write, keys that replace a value already in the file)."""
     props = {
@@ -103,10 +132,12 @@ def _desired_properties(port: int, config: dict = None, override_existing: bool 
     if config:
         if config.get("seed"):
             props["level-seed"] = str(config["seed"])
+            if override_existing:
+                forced.add("level-seed")  # typed by the user: beats the pack's
         for config_key, (props_key, transform) in _CONFIG_PROPERTY_MAP.items():
             if config_key in config:
                 props[props_key] = transform(config[config_key])
-                if override_existing:
+                if override_existing and _user_changed(config_key, config[config_key], transform):
                     forced.add(props_key)
     return props, forced
 
