@@ -484,24 +484,23 @@ class ServerWizard(ZBBToplevel):
         body = ctk.CTkFrame(card, fg_color="transparent")
         body.pack(fill="x", padx=12, pady=(0, 10))
 
-        ctk.CTkRadioButton(body, text="New world", variable=self.var_world_mode, value="new",
-                           command=self._on_world_mode).pack(anchor="w", pady=(0, 4))
-        # Each option's details live in a slot that stays packed, so showing
-        # or hiding them never reorders the radios.
-        new_slot = ctk.CTkFrame(body, fg_color="transparent", height=1)
-        new_slot.pack(fill="x")
-        self.world_new_frame = ctk.CTkFrame(new_slot, fg_color="transparent")
+        self.rb_world_new = ctk.CTkRadioButton(body, text="New world", variable=self.var_world_mode, value="new",
+                                               command=self._on_world_mode)
+        self.rb_world_new.pack(anchor="w", pady=(0, 4))
+        # Each option's details pack right after its own radio (never an
+        # empty placeholder frame: a CTkFrame keeps its default height when
+        # emptied, leaving a gap).
+        self.world_new_frame = ctk.CTkFrame(body, fg_color="transparent")
         self.entry_seed = ctk.CTkEntry(self.world_new_frame, placeholder_text="Seed (optional, blank = random)",
                                        corner_radius=AppConfig.RADIUS_BTN, height=34)
         self.entry_seed.pack(fill="x", padx=(28, 0))
         if self.wizard_data["seed"]:
             self.entry_seed.insert(0, self.wizard_data["seed"])
 
-        ctk.CTkRadioButton(body, text="Import existing world", variable=self.var_world_mode, value="import",
-                           command=self._on_world_mode).pack(anchor="w", pady=(8, 4))
-        import_slot = ctk.CTkFrame(body, fg_color="transparent", height=1)
-        import_slot.pack(fill="x")
-        self.world_import_frame = ctk.CTkFrame(import_slot, fg_color="transparent")
+        self.rb_world_import = ctk.CTkRadioButton(body, text="Import existing world", variable=self.var_world_mode,
+                                                  value="import", command=self._on_world_mode)
+        self.rb_world_import.pack(anchor="w", pady=(8, 4))
+        self.world_import_frame = ctk.CTkFrame(body, fg_color="transparent")
         buttons = ctk.CTkFrame(self.world_import_frame, fg_color="transparent")
         buttons.pack(fill="x", padx=(28, 0))
         self._small_button(buttons, "Choose folder...", lambda: self._browse_world(folder=True),
@@ -518,10 +517,10 @@ class ServerWizard(ZBBToplevel):
     def _on_world_mode(self):
         if self.var_world_mode.get() == "import":
             self.world_new_frame.pack_forget()
-            self.world_import_frame.pack(fill="x")
+            self.world_import_frame.pack(fill="x", after=self.rb_world_import)
         else:
             self.world_import_frame.pack_forget()
-            self.world_new_frame.pack(fill="x")
+            self.world_new_frame.pack(fill="x", after=self.rb_world_new)
 
     def _show_world(self, name, path):
         self.lbl_world.configure(text=f"{name}\n{path}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
