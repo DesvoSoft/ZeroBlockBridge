@@ -73,6 +73,8 @@ class WorldInfo:
     name: str
     is_zip: bool
     root: str  # folder holding level.dat: a path, or an in-zip prefix ("" or "x/")
+    mc_version: Optional[str] = None  # level.dat Data.Version.Name, e.g. "1.21.4"
+    snapshot: bool = False
 
 
 @dataclass
@@ -203,7 +205,9 @@ def inspect_world(path: str) -> WorldInfo:
             raise ContentImportError(
                 "No Minecraft world found in that folder (it needs a level.dat). "
                 "Pick the world's own folder, e.g. .minecraft/saves/<world>.")
-        return WorldInfo(path=path, name=os.path.basename(root.rstrip("\\/")), is_zip=False, root=root)
+        info = WorldInfo(path=path, name=os.path.basename(root.rstrip("\\/")), is_zip=False, root=root)
+        _read_world_version(info, lambda: _read_capped(os.path.join(root, "level.dat")))
+        return info
 
     if os.path.isfile(path):
         with _open_zip(path) as zf:
@@ -215,9 +219,70 @@ def inspect_world(path: str) -> WorldInfo:
         best = min(candidates, key=lambda n: n.count("/"))
         prefix = best[: -len("level.dat")]
         name = prefix.rstrip("/").split("/")[-1] if prefix else _stem(path)
-        return WorldInfo(path=path, name=name, is_zip=True, root=prefix)
+        info = WorldInfo(path=path, name=name, is_zip=True, root=prefix)
+        _read_world_version(info, lambda: _read_zip_member_capped(path, best))
+        return info
 
     raise ContentImportError("That world file or folder doesn't exist.")
+
+
+def _read_capped(path: str) -> bytes:
+    from app.services import nbt
+    with open(path, "rb") as f:
+        return f.read(nbt.MAX_BYTES + 1)
+
+
+def _read_zip_member_capped(zip_path: str, member: str) -> bytes:
+    from app.services import nbt
+    with _open_zip(zip_path) as zf:
+        if zf.getinfo(member).file_size > nbt.MAX_BYTES:
+            raise ValueError("level.dat too large")
+        return zf.read(member)
+
+
+def _read_world_version(info: WorldInfo, read_bytes) -> None:
+    """Fill the Minecraft version the world was last saved with, from
+    level.dat (Data.Version, present since 1.9). Best effort: an unreadable
+    level.dat leaves it unknown rather than blocking the import."""
+    from app.services import nbt
+    try:
+        data = nbt.parse(read_bytes()).get("Data", {})
+        version = data.get("Version") or {}
+    except Exception as e:  # corrupt, encrypted zip member, unknown compression...
+        logger.info("Could not read the world's level.dat version: %s", e)
+        return
+    if isinstance(version, dict) and version.get("Name"):
+        info.mc_version = str(version["Name"])
+        info.snapshot = bool(version.get("Snapshot"))
+
+
+def _release_key(version: Optional[str]):
+    """(1, 21, 4) for a release like "1.21.4" or "26.3"; None otherwise
+    (snapshots, pre-releases, "Unknown")."""
+    if not version or not re.fullmatch(r"\d+(?:\.\d+)+", version):
+        return None
+    return tuple(int(part) for part in version.split("."))
+
+
+def world_version_check(world: WorldInfo, server_version: Optional[str]):
+    """(level, message) about running `world` on `server_version`, or None.
+    level is "error" (would damage the world: refuse), "warning" or "info"."""
+    if not world.mc_version:
+        return None
+    if world.snapshot:
+        return ("warning", f"This world was saved with snapshot {world.mc_version}. It may not load on a "
+                           "regular release; keep a copy of it.")
+    world_key, server_key = _release_key(world.mc_version), _release_key(server_version)
+    if world_key is None or server_key is None:
+        return None
+    if world_key > server_key:
+        return ("error", f"This world was saved with Minecraft {world.mc_version}, newer than this server "
+                         f"({server_version}). An older version can corrupt it: choose Minecraft "
+                         f"{world.mc_version} or newer in the Engine & Version step.")
+    if world_key < server_key:
+        return ("info", f"Saved with Minecraft {world.mc_version}: the server will upgrade it to {server_version} "
+                        "on first start. Your original world isn't changed.")
+    return ("info", f"Saved with Minecraft {world.mc_version}, the same version as this server.")
 
 
 def _world_members(info: WorldInfo, zf: zipfile.ZipFile) -> list:

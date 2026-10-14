@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Per-server imports: never saved into a template.
 _CONTENT_KEYS = ("modpack_path", "modpack_label", "modpack_mc", "modpack_loader",
-                 "loader_version", "world_path", "world_label")
+                 "loader_version", "world_path", "world_label", "world_mc", "world_snapshot")
 
 
 def summary_value(value) -> str:
@@ -66,15 +66,31 @@ def modpack_step_error(data: dict) -> str | None:
     return None
 
 
-def world_step_error(mode: str, world_path: str | None, busy: bool) -> str | None:
-    """Why the World step can't continue with "Import existing world"."""
+def world_step_error(mode: str, world_path: str | None, busy: bool,
+                     version_check=None) -> str | None:
+    """Why the World step can't continue with "Import existing world".
+    `version_check` is content_import.world_version_check's result."""
     if mode != "import":
         return None
     if busy:
         return "Still reading the world, one moment..."
     if not world_path:
         return "Choose a world folder or .zip, or switch to New world."
+    if version_check and version_check[0] == "error":
+        return version_check[1]
     return None
+
+
+def imported_world_check(wizard_data: dict):
+    """world_version_check for the world chosen in the wizard, against the
+    server version chosen in step 2."""
+    if not wizard_data.get("world_path"):
+        return None
+    from app.services.content_import import WorldInfo, world_version_check
+    world = WorldInfo(path=wizard_data["world_path"], name=wizard_data.get("world_label", ""), is_zip=False,
+                      root="", mc_version=wizard_data.get("world_mc"),
+                      snapshot=bool(wizard_data.get("world_snapshot")))
+    return world_version_check(world, wizard_data.get("version"))
 
 
 def modpack_ram_mb(current: int, mod_count: int, system_mb: int) -> int:
@@ -120,6 +136,8 @@ class ServerWizard(ZBBToplevel):
             "loader_version": None,
             "world_path": None,
             "world_label": "",
+            "world_mc": None,
+            "world_snapshot": False,
         }
         
         # Layout
@@ -526,8 +544,16 @@ class ServerWizard(ZBBToplevel):
             self.world_import_frame.pack_forget()
             self.world_new_frame.pack(fill="x", after=self.rb_world_new)
 
+    _CHECK_COLORS = {"error": AppConfig.COLOR_STATUS_ERROR, "warning": AppConfig.COLOR_ACCENT_AMBER}
+
     def _show_world(self, name, path):
-        self.lbl_world.configure(text=f"{name}\n{path}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        lines = [name, path]
+        check = imported_world_check(self.wizard_data)
+        color = AppConfig.COLOR_TEXT_PRIMARY
+        if check:
+            lines.append(check[1])
+            color = self._CHECK_COLORS.get(check[0], color)
+        self.lbl_world.configure(text="\n".join(lines), text_color=color)
 
     def _browse_world(self, folder):
         from tkinter import filedialog
@@ -562,9 +588,10 @@ class ServerWizard(ZBBToplevel):
         if not self.winfo_exists():
             return
         if error:
-            self.wizard_data.update(world_path=None, world_label="")
+            self.wizard_data.update(world_path=None, world_label="", world_mc=None, world_snapshot=False)
         else:
-            self.wizard_data.update(world_path=info.path, world_label=info.name)
+            self.wizard_data.update(world_path=info.path, world_label=info.name,
+                                    world_mc=info.mc_version, world_snapshot=info.snapshot)
         if self.current_step != 5 or not self.lbl_world.winfo_exists():
             return  # kept in wizard_data; step 5 shows it when revisited
         if error:
@@ -987,7 +1014,8 @@ class ServerWizard(ZBBToplevel):
         ])
         section("Content", [
             ("Modpack", d["modpack_label"] or "None"),
-            ("World", d["world_label"] or "New world"),
+            ("World", (f"{d['world_label']} (Minecraft {d['world_mc']})" if d.get("world_mc")
+                       else d["world_label"]) or "New world"),
         ])
         section("Rules", [
             ("Game Mode", d["game_mode"]),
@@ -1056,10 +1084,15 @@ class ServerWizard(ZBBToplevel):
 
     def _leave_step_5(self):
         self._collect_step5_fields()
+        check = imported_world_check(self.wizard_data)
         error = world_step_error(self.var_world_mode.get(), self.wizard_data["world_path"],
-                                 getattr(self, "_inspecting_world", False))
+                                 getattr(self, "_inspecting_world", False), check)
         if error:
-            self.lbl_world.configure(text=error, text_color=AppConfig.COLOR_STATUS_ERROR)
+            if check and check[0] == "error":
+                # Keep showing which world is selected; _show_world adds the red reason.
+                self._show_world(self.wizard_data["world_label"], self.wizard_data["world_path"])
+            else:
+                self.lbl_world.configure(text=error, text_color=AppConfig.COLOR_STATUS_ERROR)
             return False
         return True
 

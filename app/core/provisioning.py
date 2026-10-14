@@ -223,6 +223,9 @@ class ServerProvisioner:
                 self._modpack = info
             if config.get("world_path"):
                 world = content_import.inspect_world(config["world_path"])
+                problem = content_import.world_version_check(world, config["version"])
+                if problem and problem[0] == "error":
+                    return problem[1]  # e.g. version changed in step 2 after picking the world
                 content_import.validate_world(world, dest)
                 self._world = world
         except content_import.ContentImportError as e:
