@@ -2,6 +2,7 @@ import customtkinter as ctk
 import logging
 import psutil
 import threading
+import webbrowser
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
@@ -14,6 +15,8 @@ from app.ui.icons import icon
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+CURSEFORGE_WORLDS_URL = "https://www.curseforge.com/minecraft/worlds"
 
 # Per-server imports: never saved into a template.
 _CONTENT_KEYS = ("modpack_path", "modpack_label", "modpack_mc", "modpack_loader",
@@ -51,14 +54,18 @@ def version_sort_key(v: str) -> tuple:
         return (0, 0, 0)
 
 
+# Engines that load mods (modpacks need one of these).
+MODDED_ENGINES = ("Fabric", "Forge", "NeoForge")
+
+
 def modpack_step_error(data: dict) -> str | None:
     """Why the Engine & Version choice can't run the imported modpack."""
     if not data.get("modpack_path"):
         return None
     engine, version = data.get("type"), data.get("version")
     loader, mc = data.get("modpack_loader"), data.get("modpack_mc")
-    if engine not in ("Fabric", "Forge"):
-        return "Modpacks need a Fabric or Forge server. Pick one below."
+    if engine not in MODDED_ENGINES:
+        return "Modpacks need a Fabric, Forge or NeoForge server. Pick one below."
     if loader and engine != loader:
         return f"This modpack needs a {loader} server."
     if mc and version != mc:
@@ -325,15 +332,20 @@ class ServerWizard(ZBBToplevel):
         ctk.CTkLabel(p, text="Server Engine:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
 
         self.engine_var = ctk.StringVar(value=self.wizard_data["type"])
-        engines = [("Vanilla", "Vanilla"), ("Paper", "Paper"), ("Purpur", "Purpur"), ("Fabric", "Fabric"), ("Forge", "Forge")]
+        engines = [("Vanilla", "Vanilla"), ("Paper", "Paper"), ("Purpur", "Purpur"), ("Fabric", "Fabric"),
+                   ("Forge", "Forge"), ("NeoForge", "NeoForge")]
 
+        # Six engines don't fit packed side by side at the wizard's 650px:
+        # an even grid with compact radios keeps them on one row.
         engine_row = ctk.CTkFrame(p, fg_color="transparent")
         engine_row.pack(fill="x", pady=(0, 15))
+        engine_row.grid_columnconfigure(tuple(range(len(engines))), weight=1, uniform="engines")
 
         self._engine_radios = []
-        for val, name in engines:
-            rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=AppConfig.FONT_BODY)
-            rb.pack(side="left", padx=(0, 12))
+        for column, (val, name) in enumerate(engines):
+            rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, width=1,
+                                    command=self._on_engine_change, font=AppConfig.FONT_BODY)
+            rb.grid(row=0, column=column, sticky="w")
             self._engine_radios.append(rb)
         self._apply_modpack_lock()
 
@@ -499,7 +511,7 @@ class ServerWizard(ZBBToplevel):
         card = self._content_card(
             parent, "World",
             "Start a new world, or bring one you already have: a world folder "
-            "(e.g. from .minecraft/saves) or a .zip of it.")
+            "(e.g. from .minecraft/saves) or a .zip of it, like the ones you download from CurseForge.")
         self.var_world_mode = ctk.StringVar(value="import" if self.wizard_data["world_path"] else "new")
         body = ctk.CTkFrame(card, fg_color="transparent")
         body.pack(fill="x", padx=12, pady=(0, 10))
@@ -527,6 +539,14 @@ class ServerWizard(ZBBToplevel):
                            primary=True).pack(side="left")
         self._small_button(buttons, "Choose .zip...", lambda: self._browse_world(folder=False)
                            ).pack(side="left", padx=(8, 0))
+        # No CurseForge API here (it needs an approved key): open the site,
+        # the user downloads a world .zip and picks it with "Choose .zip...".
+        ctk.CTkButton(
+            buttons, text="Browse worlds on CurseForge", image=icon("link", 12, AppConfig.COLOR_LINK),
+            compound="left", command=lambda: webbrowser.open(CURSEFORGE_WORLDS_URL),
+            fg_color="transparent", hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, text_color=AppConfig.COLOR_LINK,
+            height=30, width=10, corner_radius=AppConfig.RADIUS_BTN,
+        ).pack(side="left", padx=(8, 0))
         self.lbl_world = ctk.CTkLabel(self.world_import_frame, text="", font=AppConfig.FONT_CAPTION,
                                       anchor="w", justify="left", wraplength=520)
         self.lbl_world.pack(fill="x", padx=(28, 0), pady=(6, 0))
@@ -698,7 +718,8 @@ class ServerWizard(ZBBToplevel):
 
     def _update_ram_hint(self):
         engine = self.engine_var.get()
-        hints = {"Vanilla": "512 MB min", "Paper": "1 GB min", "Purpur": "1 GB min", "Fabric": "1 GB min", "Forge": "2 GB min"}
+        hints = {"Vanilla": "512 MB min", "Paper": "1 GB min", "Purpur": "1 GB min", "Fabric": "1 GB min",
+                 "Forge": "2 GB min", "NeoForge": "2 GB min"}
         hint = hints.get(engine, "1 GB min")
         self.lbl_ram_hint.configure(text=f"Recommended: {hint}")
 
