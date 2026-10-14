@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import requests
 import threading
 import datetime
@@ -16,6 +17,16 @@ from app.core.constants import (
     FORGE_PROMOTIONS_URL,
     atomic_write_json,
 )
+from app.core import neoforge
+
+# A Minecraft version id: "1.21.4", or the year-based scheme from 2026
+# ("26.3", "26.1.2", Paper's "26.3-rc-3"). Loader build numbers cached by
+# old releases ("0.15.7" Fabric, "47.2.0" Forge) don't match.
+_MC_VERSION_RE = re.compile(r"^(1|2[4-9])\.\d+")
+
+
+def _looks_like_mc_versions(versions) -> bool:
+    return not versions or bool(_MC_VERSION_RE.match(str(versions[0])))
 
 class VersionManager:
     """
@@ -99,16 +110,10 @@ class VersionManager:
                     logger.info("Detected stale Fabric loader versions in cache. Forcing refresh.")
                     return self._get_default_cache()
 
-                forge_versions = data.get("Forge", [])
-                if forge_versions:
-                    first = forge_versions[0]
-                    if not first.startswith("1."):
-                        logger.info("Detected stale Forge loader versions in cache. Forcing refresh.")
-                        return self._fetch_defaults_sync()
-
-                for key in ("Paper", "Purpur"):
-                    versions = data.get(key, [])
-                    if versions and not versions[0].startswith("1."):
+                # startswith("1.") flagged every 26.x list as stale, forcing
+                # a synchronous network refresh on each launch.
+                for key in ("Forge", "Paper", "Purpur", "NeoForge"):
+                    if not _looks_like_mc_versions(data.get(key, [])):
                         logger.info("Detected stale %s versions in cache. Forcing refresh.", key)
                         return self._fetch_defaults_sync()
 
@@ -197,7 +202,25 @@ class VersionManager:
                 "1.17.1",
                 "1.16.5",
             ],
+            "NeoForge": [
+                "1.21.11", "1.21.10", "1.21.8", "1.21.5", "1.21.4",
+                "1.21.3", "1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2",
+            ],
         }
+
+    def _with_all_engines(self, data: dict) -> dict:
+        """A cache written before an engine existed (e.g. NeoForge) gets the
+        built-in list for it and is marked stale, so a background refresh
+        fills the real one instead of the wizard showing nothing."""
+        defaults = self._get_default_cache()
+        missing = [key for key in defaults if key != "last_updated" and key not in data]
+        if not missing:
+            return data
+        data = dict(data)
+        for key in missing:
+            data[key] = defaults[key]
+        data["last_updated"] = None
+        return data
 
     @staticmethod
     def _fetch_vanilla(timeout=10):
@@ -237,6 +260,33 @@ class VersionManager:
         return sorted(forge_versions, key=version_key, reverse=True)[:100]
 
     @staticmethod
+    def _fetch_neoforge_builds(timeout=10):
+        """Every published NeoForge build ("21.1.77", "26.3.0.77", ...)."""
+        resp = requests.get(neoforge.VERSIONS_API, headers={"User-Agent": AppConfig.USER_AGENT},
+                            timeout=timeout)
+        resp.raise_for_status()
+        return [str(v) for v in resp.json().get("versions", [])]
+
+    @classmethod
+    def _fetch_neoforge(cls, timeout=10):
+        return neoforge.supported_mc_versions(cls._fetch_neoforge_builds(timeout))[:100]
+
+    def _get_neoforge_installer_url(self, version, loader_version=None):
+        """Installer for a pinned build, else the newest stable build for MC
+        `version` (newest beta when it has no stable build yet)."""
+        if loader_version:
+            return neoforge.installer_url(loader_version)
+        try:
+            build = neoforge.best_build(self._fetch_neoforge_builds(), version)
+        except Exception as e:
+            logger.error("Failed to resolve NeoForge build for %s: %s", version, e)
+            return None
+        if build is None:
+            logger.error("No NeoForge build for Minecraft %s", version)
+            return None
+        return neoforge.installer_url(build)
+
+    @staticmethod
     def _fetch_paper(timeout=10):
         # Fill API v3 (api.papermc.io/v2 returns 410 Gone). Response is
         # newest-first: {"versions": [{"version": {"id": "1.21.8", ...}}]}.
@@ -270,9 +320,10 @@ class VersionManager:
             "Forge": self._fetch_forge,
             "Paper": self._fetch_paper,
             "Purpur": self._fetch_purpur,
+            "NeoForge": self._fetch_neoforge,
         }
         results = {}
-        with ThreadPoolExecutor(max_workers=5) as exe:
+        with ThreadPoolExecutor(max_workers=len(fetchers)) as exe:
             future_map = {exe.submit(fn, timeout=timeout): key for key, fn in fetchers.items()}
             for future in as_completed(future_map, timeout=timeout + 2):
                 key = future_map[future]
@@ -296,7 +347,7 @@ class VersionManager:
         if not self._cache_loaded:
             with self._load_lock:
                 if not self._cache_loaded:
-                    loaded = self._load_cache()
+                    loaded = self._with_all_engines(self._load_cache())
                     with self.cache_lock:
                         self.cache = loaded
                         self._cache_loaded = True
@@ -344,10 +395,10 @@ class VersionManager:
         Resolves download URL for a specific server type and version.
         
         Args:
-            server_type (str): One of "Vanilla", "Fabric", or "Forge"
+            server_type (str): "Vanilla", "Fabric", "Forge", "NeoForge", "Paper" or "Purpur"
             version (str): Minecraft version (e.g., "1.20.1")
-            loader_version (str): Exact Forge version (e.g. "47.2.0") a modpack
-                requires; None picks the recommended/latest one.
+            loader_version (str): Exact Forge/NeoForge build (e.g. "47.2.0",
+                "21.1.77") a modpack requires; None picks the recommended/latest one.
         
         Returns:
             str: Direct download URL for the server installer/jar, or None if not found
@@ -360,6 +411,8 @@ class VersionManager:
             if loader_version:
                 return self.forge_installer_url(version, loader_version)
             return self._get_forge_installer_url(version)
+        elif server_type == "NeoForge":
+            return self._get_neoforge_installer_url(version, loader_version)
         elif server_type == "Paper":
             return self._get_paper_url(version)
         elif server_type == "Purpur":

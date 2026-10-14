@@ -33,7 +33,10 @@ _P_TUNNEL = 0.90
 _P_DONE = 1.0
 
 SIMPLE_JAR_ENGINES = ("Vanilla", "Paper", "Purpur")
-INSTALLER_ENGINES = ("Fabric", "Forge")
+# Engine -> logic function that runs its installer. Looked up by name at
+# call time so tests (and callers) can patch app.core.logic.
+INSTALLER_FUNCTIONS = {"Fabric": "install_fabric", "Forge": "install_forge", "NeoForge": "install_neoforge"}
+INSTALLER_ENGINES = tuple(INSTALLER_FUNCTIONS)
 
 
 class ProvisionCancelled(Exception):
@@ -329,7 +332,7 @@ class ServerProvisioner:
             self._log(f"[System] Installing {engine} {version}...")
             from app.services.java_detector import get_required_java
             java_bin = self._ensure_java(get_required_java(version)) or "java"
-            installer = logic.install_fabric if engine == "Fabric" else logic.install_forge
+            installer = getattr(logic, INSTALLER_FUNCTIONS[engine])
             # A modpack pins its loader build; otherwise the installer picks one.
             extra = {"loader_version": config["loader_version"]} \
                 if config.get("loader_version") and engine == config.get("modpack_loader", engine) else {}

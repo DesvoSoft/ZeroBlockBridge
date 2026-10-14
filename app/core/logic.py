@@ -129,13 +129,18 @@ def _has_library(server_dir: str, *parts: str) -> bool:
     return os.path.isdir(os.path.join(server_dir, "libraries", *parts))
 
 
-# Modern Forge/Fabric installs keep the loader under libraries/, with no
-# telltale jar name at the root (Forge 1.17+ ships run.bat instead).
-_LIBRARY_ENGINES = ((("net", "minecraftforge", "forge"), "Forge"),
+# Modern Forge/NeoForge/Fabric installs keep the loader under libraries/,
+# with no telltale jar name at the root (they ship run.bat instead).
+# NeoForge for 1.20.1 (net/neoforged/forge) is a Forge fork: run as Forge.
+# Quilt (org/quiltmc) isn't a ZBB engine and stays unrecognised.
+_LIBRARY_ENGINES = ((("net", "neoforged", "neoforge"), "NeoForge"),
+                    (("net", "neoforged", "forge"), "Forge"),
+                    (("net", "minecraftforge", "forge"), "Forge"),
                     (("net", "fabricmc", "fabric-loader"), "Fabric"))
-# Root jar name fragment -> engine, checked in this order per jar.
-_JAR_NAME_ENGINES = (("fabric", "Fabric"), ("forge", "Forge"), ("purpur", "Purpur"),
-                     ("paper", "Paper"), ("spigot", "Paper"))
+# Root jar name fragment -> engine, checked in this order per jar
+# ("neoforge" before "forge": the substring would misread NeoForge).
+_JAR_NAME_ENGINES = (("fabric", "Fabric"), ("neoforge", "NeoForge"), ("forge", "Forge"),
+                     ("purpur", "Purpur"), ("paper", "Paper"), ("spigot", "Paper"))
 
 
 def _infer_server_type(server_dir: str) -> str:
@@ -180,11 +185,25 @@ def _version_from_jar(jar_path: str) -> Optional[str]:
     return None
 
 
+def _mc_before_dash(name: str) -> str:
+    return name.split("-")[0]
+
+
+def _library_versions():
+    """(libraries/ sub-path, folder name -> Minecraft version), checked in order."""
+    from app.core import neoforge
+    return (
+        (("net", "neoforged", "neoforge"), neoforge.mc_version),   # <build>, e.g. 21.1.77 -> 1.21.1
+        (("net", "neoforged", "forge"), _mc_before_dash),          # 1.20.1-47.1.106
+        (("net", "minecraftforge", "forge"), _mc_before_dash),     # <mc>-<forge>
+        (("net", "fabricmc", "intermediary"), lambda name: name),  # <mc>
+    )
+
+
 def _version_from_libraries(server_dir: str) -> Optional[str]:
-    """Forge: libraries/net/minecraftforge/forge/<mc>-<forge>/;
-    Fabric: libraries/net/fabricmc/intermediary/<mc>/."""
-    for parts, split in ((("net", "minecraftforge", "forge"), True),
-                         (("net", "fabricmc", "intermediary"), False)):
+    """Minecraft version from the loader's library folders (NeoForge, Forge,
+    Fabric)."""
+    for parts, to_mc in _library_versions():
         folder = os.path.join(server_dir, "libraries", *parts)
         try:
             entries = sorted(e for e in os.listdir(folder) if os.path.isdir(os.path.join(folder, e)))
@@ -193,8 +212,9 @@ def _version_from_libraries(server_dir: str) -> Optional[str]:
         if entries:
             # Upgraded-in-place servers keep old folders: newest by number,
             # not by text ("1.21.10" > "1.21.9", "1.12.2" > "1.9.4").
-            newest = max(entries, key=_numeric_key)
-            return newest.split("-")[0] if split else newest
+            found = to_mc(max(entries, key=_numeric_key))
+            if found:
+                return found
     return None
 
 
@@ -602,6 +622,27 @@ def install_forge(server_name: str, mc_version: str, progress_callback: Optional
         return "FORGE_MODERN"
 
     return None
+
+
+def install_neoforge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None,
+                     java_bin: str = "java", loader_version: Optional[str] = None,
+                     cancel_event=None) -> Optional[str]:
+    """Installs NeoForge (MC 1.20.2+). Like modern Forge, the installer
+    leaves run.bat/run.sh plus an @args file under
+    libraries/net/neoforged/neoforge/<build>/ that ServerRunner launches.
+    `loader_version` pins an exact NeoForge build (modpacks need theirs)."""
+    server_path = _run_installer(
+        server_name, "NeoForge", mc_version, "neoforge-installer.jar",
+        ["--installServer"], progress_callback, java_bin=java_bin, loader_version=loader_version,
+        cancel_event=cancel_event,
+    )
+    if not server_path:
+        return None
+    if any(os.path.exists(os.path.join(server_path, script)) for script in ("run.bat", "run.sh")):
+        return "NEOFORGE_MODERN"
+    logger.error("NeoForge installer finished without run.bat/run.sh in %s", server_path)
+    return None
+
 
 class ServerRunner:
     _CONSOLE_BUFFER_MAX = 200
