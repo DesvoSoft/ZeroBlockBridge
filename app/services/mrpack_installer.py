@@ -4,6 +4,7 @@ Modrinth .mrpack modpack installer for ZeroBlockBridge.
 A .mrpack file is a ZIP archive containing:
   - modrinth.index.json  — manifest with mod download URLs
   - overrides/           — files to copy directly into the server dir
+  - server-overrides/    — server-only files, applied after overrides/
 
 Format spec: https://support.modrinth.com/en/articles/8802351-modrinth-modpack-format-mrpack
 """
@@ -41,6 +42,7 @@ def install_mrpack(
     progress_callback: Optional[Callable[[str], None]] = None,
     server_type: Optional[str] = None,
     mc_version: Optional[str] = None,
+    server_dir: Optional[str] = None,
 ) -> dict:
     """
     Install a .mrpack modpack into a server directory.
@@ -49,7 +51,7 @@ def install_mrpack(
       1. Extract and parse modrinth.index.json
       2. Validate pack loader + MC version against the target server
       3. Download each server-side mod file (client-only entries are skipped)
-      4. Copy overrides/* into the server dir
+      4. Copy overrides/* then server-overrides/* into the server dir
 
     Args:
         mrpack_path: Absolute path to the .mrpack file.
@@ -60,6 +62,7 @@ def install_mrpack(
             raised before anything is downloaded.
         mc_version: Server MC version. When given, must match the pack's
             declared minecraft dependency.
+        server_dir: Install here instead of SERVERS_DIR/<server_name>.
 
     Returns:
         Summary dict: {"installed": int, "skipped_client": int, "failed": int}.
@@ -74,7 +77,7 @@ def install_mrpack(
         if progress_callback:
             progress_callback(msg)
 
-    server_dir = os.path.join(SERVERS_DIR, server_name)
+    server_dir = server_dir or os.path.join(SERVERS_DIR, server_name)
     if not os.path.isdir(server_dir):
         raise ValueError(f"Server directory does not exist: {server_dir}")
 
@@ -117,11 +120,12 @@ def install_mrpack(
             else:
                 summary["failed"] += 1
 
-        # 4. Copy overrides into server dir
-        overrides_prefix = "overrides/"
-        override_files = [n for n in zf.namelist() if n.startswith(overrides_prefix) and not n.endswith("/")]
-        if override_files:
-            _progress(f"Copying {len(override_files)} override file(s)…")
+        # 4. Copy overrides into server dir (server-specific ones win)
+        for overrides_prefix in ("overrides/", "server-overrides/"):
+            override_files = [n for n in zf.namelist() if n.startswith(overrides_prefix) and not n.endswith("/")]
+            if not override_files:
+                continue
+            _progress(f"Copying {len(override_files)} {overrides_prefix.rstrip('/')} file(s)…")
             for name in override_files:
                 rel = name[len(overrides_prefix):]
                 if not rel:

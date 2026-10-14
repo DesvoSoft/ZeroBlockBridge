@@ -21,24 +21,8 @@ from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
 from app.services.http_download import stream_to_file
+from app.core.fs_links import create_junction  # noqa: F401  (re-exported; patched in tests)
 import re
-
-def create_junction(source: str, dest: str) -> None:
-    """Link an external server folder into SERVERS_DIR.
-
-    On Windows use a real junction (mklink /J): unlike symlinks it requires
-    no admin rights or Developer Mode, so imports work on stock machines.
-    Elsewhere a plain directory symlink works.
-    """
-    if sys.platform == "win32":
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", dest, source],
-            capture_output=True, text=True, **subprocess_flags()
-        )
-        if result.returncode != 0:
-            raise OSError(f"mklink /J failed: {(result.stderr or result.stdout).strip()}")
-    else:
-        os.symlink(source, dest, target_is_directory=True)
 
 logger = logging.getLogger(__name__)
 
@@ -280,10 +264,11 @@ def accept_eula(server_name: str) -> None:
     server_path = os.path.join(SERVERS_DIR, server_name)
     _generate_eula(server_path, accepted=True)
 
-def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
+def _run_installer(server_name: str, server_type: str, mc_version: str, installer_name: str, installer_args: list[str], progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
     server_path = create_server_directory(server_name, server_type, mc_version)
     vm = VersionManager()
-    installer_url = vm.get_download_url(server_type, mc_version)
+    installer_url = (vm.get_download_url(server_type, mc_version, loader_version)
+                     if loader_version else vm.get_download_url(server_type, mc_version))
 
     if not installer_url:
         return None
@@ -331,9 +316,13 @@ def _run_installer(server_name: str, server_type: str, mc_version: str, installe
         return None
 
 
-def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
+def install_fabric(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
+    args = ["server", "-mcversion", mc_version, "-downloadMinecraft"]
+    if loader_version:
+        # A modpack pins its Fabric Loader; the installer otherwise takes the latest.
+        args += ["-loader", loader_version]
     server_path = _run_installer(server_name, "Fabric", mc_version, "fabric-installer.jar",
-                                  ["server", "-mcversion", mc_version, "-downloadMinecraft"], progress_callback, java_bin=java_bin)
+                                  args, progress_callback, java_bin=java_bin)
     if server_path and os.path.exists(os.path.join(server_path, "fabric-server-launch.jar")):
         return os.path.join(server_path, "fabric-server-launch.jar")
     return None
@@ -443,11 +432,12 @@ def normalize_server_jar(server_dir: str) -> bool:
     return False
 
 
-def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java") -> Optional[str]:
-    """Installs Forge by delegating to the unified installer runner."""
+def install_forge(server_name: str, mc_version: str, progress_callback: Optional[Callable] = None, java_bin: str = "java", loader_version: Optional[str] = None) -> Optional[str]:
+    """Installs Forge by delegating to the unified installer runner.
+    `loader_version` pins an exact Forge build (modpacks need theirs)."""
     server_path = _run_installer(
         server_name, "Forge", mc_version, "forge-installer.jar",
-        ["--installServer"], progress_callback, java_bin=java_bin
+        ["--installServer"], progress_callback, java_bin=java_bin, loader_version=loader_version,
     )
     if not server_path:
         return None

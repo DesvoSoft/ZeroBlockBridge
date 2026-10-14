@@ -22,6 +22,8 @@ ProgressFn = Callable[[float, Optional[str]], None]
 
 # Progress bands, so the bar only ever moves forward.
 _JAR_BAND = (0.0, 0.25)
+_P_MODPACK = 0.26
+_P_WORLD = 0.28
 _P_ICON = 0.30
 _P_SCAFFOLD = 0.35
 _P_ANALYZE = 0.50
@@ -98,6 +100,7 @@ class ServerProvisioner:
                 self._log(f"[Error] {error}")
                 return ProvisionResult(False, name, error)
 
+            self._import_content(config, progress)
             self._log("[System] Installation success. Applying settings...")
             self._apply_settings(config, progress)
             required_java = self._resolve_and_install_java(config, progress)
@@ -152,9 +155,33 @@ class ServerProvisioner:
             from app.services.java_detector import get_required_java
             java_bin = self.jdk_manager.ensure_java(get_required_java(version)) or "java"
             installer = logic.install_fabric if engine == "Fabric" else logic.install_forge
-            return bool(installer(name, version, jar_progress, java_bin=java_bin))
+            # A modpack pins its loader build; otherwise the installer picks one.
+            pinned = {"loader_version": config["loader_version"]} if config.get("loader_version") else {}
+            return bool(installer(name, version, jar_progress, java_bin=java_bin, **pinned))
         self._log(f"[Error] Unknown server type: {engine}")
         return False
+
+    def _import_content(self, config: dict, progress: ProgressFn) -> None:
+        """Modpack first (its overrides may ship a world), then the
+        imported world, which replaces whatever is there."""
+        from app.services import content_import
+
+        name, server_dir = config["name"], self._server_dir(config["name"])
+        if config.get("modpack_path"):
+            info = content_import.inspect_modpack(config["modpack_path"])
+            progress(_P_MODPACK, f"Installing modpack {info.name}...")
+            self._log(f"[System] Installing modpack '{info.name}'...")
+            summary = content_import.install_modpack(
+                info, server_dir, config["type"], config["version"],
+                progress=lambda msg: progress(_P_MODPACK, msg),
+            )
+            self._log(f"[System] Modpack ready: {summary}.")
+            logic.update_server_meta(name, {"modpack": info.name})
+        if config.get("world_path"):
+            info = content_import.inspect_world(config["world_path"])
+            progress(_P_WORLD, f"Importing world {info.name}...")
+            content_import.import_world(info, server_dir)
+            self._log(f"[System] World '{info.name}' imported.")
 
     def _apply_settings(self, config: dict, progress: ProgressFn) -> None:
         name = config["name"]

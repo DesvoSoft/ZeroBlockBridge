@@ -14,6 +14,10 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+# Per-server imports: never saved into a template.
+_CONTENT_KEYS = ("modpack_path", "modpack_label", "modpack_mc", "modpack_loader",
+                 "loader_version", "world_path", "world_label")
+
 
 def summary_value(value) -> str:
     """Display form of a wizard value on the Summary step (bools as Yes/No)."""
@@ -27,6 +31,14 @@ def java_summary(java_path: str, mc_version: str) -> str:
     if java_path == "auto":
         return f"Auto (Java {get_required_java(mc_version)})"
     return java_path
+
+
+def modpack_ram_mb(current: int, mod_count: int, system_mb: int) -> int:
+    """RAM to suggest once a modpack is picked: modded servers need far more
+    than the vanilla default. Never lowers a bigger choice, and leaves the
+    system at least 2 GB."""
+    wanted = 6144 if mod_count >= 100 else 4096
+    return max(current, min(wanted, max(system_mb - 2048, 1024)))
 
 
 class ServerWizard(ZBBToplevel):
@@ -69,6 +81,14 @@ class ServerWizard(ZBBToplevel):
             "java_path": "auto",
             "playit_port": "25565",
             "start_after_creation": False,
+            # Imported content (see app.services.content_import)
+            "modpack_path": None,
+            "modpack_label": "",
+            "modpack_mc": None,
+            "modpack_loader": None,
+            "loader_version": None,
+            "world_path": None,
+            "world_label": "",
         }
         
         # Layout
@@ -238,9 +258,11 @@ class ServerWizard(ZBBToplevel):
 
         p = self.content_frame
 
+        self._build_modpack_card(p)
+
         # Start from template
         templates = list_templates()
-        if templates:
+        if templates and not self.wizard_data["modpack_path"]:
             ctk.CTkLabel(p, text="Start from template (optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
             template_row = ctk.CTkFrame(p, fg_color="transparent")
             template_row.pack(fill="x", pady=(0, 15))
@@ -259,9 +281,12 @@ class ServerWizard(ZBBToplevel):
         engine_row = ctk.CTkFrame(p, fg_color="transparent")
         engine_row.pack(fill="x", pady=(0, 15))
 
+        self._engine_radios = []
         for val, name in engines:
             rb = ctk.CTkRadioButton(engine_row, text=name, variable=self.engine_var, value=val, command=self._on_engine_change, font=AppConfig.FONT_BODY)
             rb.pack(side="left", padx=(0, 12))
+            self._engine_radios.append(rb)
+        self._apply_modpack_lock()
 
         self.lbl_ram_hint = ctk.CTkLabel(p, text="", text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_CAPTION)
         self.lbl_ram_hint.pack(anchor="w", pady=(0, 5))
@@ -280,6 +305,8 @@ class ServerWizard(ZBBToplevel):
         self.btn_refresh.pack(side="right")
 
         # Versions List
+        if self.wizard_data["modpack_mc"]:
+            self.entry_search.insert(0, self.wizard_data["modpack_mc"])
         self.scroll_versions = ScrollableFrame(p, corner_radius=AppConfig.RADIUS_CARD,
                                                        fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.scroll_versions.pack(fill="both", expand=True, pady=(0, 5))
@@ -294,6 +321,197 @@ class ServerWizard(ZBBToplevel):
             self._update_ram_hint()
         if hasattr(self, "java_options_frame") and self.java_options_frame.winfo_exists():
             self._update_java_check()
+
+    # --- Imported content: modpack (step 2) and world (step 5) ---
+    def _content_card(self, parent, title, hint):
+        card = ctk.CTkFrame(parent, corner_radius=AppConfig.RADIUS_CARD,
+                            fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
+        card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(card, text=title, font=AppConfig.FONT_LABEL, anchor="w").pack(fill="x", padx=12, pady=(10, 0))
+        ctk.CTkLabel(card, text=hint, font=AppConfig.FONT_CAPTION, text_color=AppConfig.COLOR_TEXT_GRAY,
+                     anchor="w", justify="left", wraplength=560).pack(fill="x", padx=12, pady=(2, 6))
+        return card
+
+    @staticmethod
+    def _small_button(parent, text, command, primary=False, width=130):
+        if primary:
+            colors = dict(fg_color=AppConfig.COLOR_BTN_PRIMARY, hover_color=AppConfig.COLOR_BTN_PRIMARY_HOVER)
+        else:
+            colors = dict(fg_color=AppConfig.COLOR_BTN_GHOST, hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
+                          text_color=AppConfig.COLOR_TEXT_PRIMARY)
+        return ctk.CTkButton(parent, text=text, command=command, width=width, height=30,
+                             corner_radius=AppConfig.RADIUS_BTN, **colors)
+
+    def _build_modpack_card(self, parent):
+        card = self._content_card(
+            parent, "Modpack (optional)",
+            "Import a Modrinth .mrpack or a modpack's Server Pack .zip. "
+            "Engine and version are set for you.")
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=12, pady=(0, 10))
+        self.btn_modpack = self._small_button(row, "Import modpack...", self._browse_modpack,
+                                              primary=True, width=150)
+        self.btn_modpack.pack(side="left")
+        if self.wizard_data["modpack_path"]:
+            self._small_button(row, "Remove", self._clear_modpack, width=80).pack(side="right")
+        self.lbl_modpack = ctk.CTkLabel(row, text="", font=AppConfig.FONT_CAPTION, anchor="w",
+                                        justify="left", wraplength=340)
+        self.lbl_modpack.pack(side="left", fill="x", expand=True, padx=(10, 0))
+        if self.wizard_data["modpack_path"]:
+            self._set_modpack_status(self.wizard_data["modpack_label"])
+
+    def _set_modpack_status(self, text, error=False):
+        if hasattr(self, "lbl_modpack") and self.lbl_modpack.winfo_exists():
+            self.lbl_modpack.configure(
+                text=text, text_color=AppConfig.COLOR_STATUS_ERROR if error else AppConfig.COLOR_TEXT_PRIMARY)
+
+    def _modpack_busy(self):
+        return getattr(self, "_inspecting_modpack", False)
+
+    def _browse_modpack(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            parent=self, title="Choose a modpack",
+            filetypes=[("Modpacks", "*.mrpack *.zip"), ("Modrinth modpack", "*.mrpack"),
+                       ("Server pack", "*.zip")])
+        if not path:
+            return
+        self._inspecting_modpack = True
+        self.btn_modpack.configure(state="disabled")
+        self._set_modpack_status("Reading modpack...")
+
+        def _work():
+            from app.services.content_import import ContentImportError, inspect_modpack
+            try:
+                info, error = inspect_modpack(path), None
+            except ContentImportError as e:
+                info, error = None, str(e)
+            except Exception as e:
+                logger.exception("Modpack inspection failed")
+                info, error = None, f"Couldn't read that modpack: {e}"
+            self.after(0, lambda: self._on_modpack_inspected(info, error))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_modpack_inspected(self, info, error):
+        self._inspecting_modpack = False
+        if not self.winfo_exists() or self.current_step != 2:
+            return
+        if error:
+            self.btn_modpack.configure(state="normal")
+            self._set_modpack_status(error, error=True)
+            return
+        label = info.name + (f" ({info.describe()})" if info.describe() else "")
+        self.wizard_data.update(
+            modpack_path=info.path, modpack_label=label, modpack_mc=info.mc_version,
+            modpack_loader=info.loader, loader_version=info.loader_version,
+        )
+        if info.loader:
+            self.wizard_data["type"] = info.loader
+        if info.mc_version:
+            self.wizard_data["version"] = info.mc_version
+        self.wizard_data["ram"] = modpack_ram_mb(
+            self.wizard_data["ram"], info.mod_count, psutil.virtual_memory().total // (1024 * 1024))
+        self.show_step_2()  # re-render with engine/version locked
+        if info.notes:
+            self._set_modpack_status(label + "\n" + " ".join(info.notes))
+
+    def _clear_modpack(self):
+        self.wizard_data.update(modpack_path=None, modpack_label="", modpack_mc=None,
+                                modpack_loader=None, loader_version=None)
+        self.show_step_2()
+
+    def _apply_modpack_lock(self):
+        """Engine radios follow the modpack's loader and can't be changed."""
+        loader = self.wizard_data["modpack_loader"]
+        if not loader:
+            return
+        self.engine_var.set(loader)
+        for rb in self._engine_radios:
+            rb.configure(state="disabled")
+
+    def _build_world_card(self, parent):
+        card = self._content_card(
+            parent, "World",
+            "Start a new world, or bring one you already have: a world folder "
+            "(e.g. from .minecraft/saves) or a .zip of it.")
+        self.var_world_mode = ctk.StringVar(value="import" if self.wizard_data["world_path"] else "new")
+        body = ctk.CTkFrame(card, fg_color="transparent")
+        body.pack(fill="x", padx=12, pady=(0, 10))
+
+        ctk.CTkRadioButton(body, text="New world", variable=self.var_world_mode, value="new",
+                           command=self._on_world_mode).pack(anchor="w", pady=(0, 4))
+        # Each option's details live in a slot that stays packed, so showing
+        # or hiding them never reorders the radios.
+        new_slot = ctk.CTkFrame(body, fg_color="transparent", height=1)
+        new_slot.pack(fill="x")
+        self.world_new_frame = ctk.CTkFrame(new_slot, fg_color="transparent")
+        self.entry_seed = ctk.CTkEntry(self.world_new_frame, placeholder_text="Seed (optional, blank = random)",
+                                       corner_radius=AppConfig.RADIUS_BTN, height=34)
+        self.entry_seed.pack(fill="x", padx=(28, 0))
+        if self.wizard_data["seed"]:
+            self.entry_seed.insert(0, self.wizard_data["seed"])
+
+        ctk.CTkRadioButton(body, text="Import existing world", variable=self.var_world_mode, value="import",
+                           command=self._on_world_mode).pack(anchor="w", pady=(8, 4))
+        import_slot = ctk.CTkFrame(body, fg_color="transparent", height=1)
+        import_slot.pack(fill="x")
+        self.world_import_frame = ctk.CTkFrame(import_slot, fg_color="transparent")
+        buttons = ctk.CTkFrame(self.world_import_frame, fg_color="transparent")
+        buttons.pack(fill="x", padx=(28, 0))
+        self._small_button(buttons, "Choose folder...", lambda: self._browse_world(folder=True),
+                           primary=True).pack(side="left")
+        self._small_button(buttons, "Choose .zip...", lambda: self._browse_world(folder=False)
+                           ).pack(side="left", padx=(8, 0))
+        self.lbl_world = ctk.CTkLabel(self.world_import_frame, text="", font=AppConfig.FONT_CAPTION,
+                                      anchor="w", justify="left", wraplength=520)
+        self.lbl_world.pack(fill="x", padx=(28, 0), pady=(6, 0))
+        if self.wizard_data["world_path"]:
+            self._show_world(self.wizard_data["world_label"], self.wizard_data["world_path"])
+        self._on_world_mode()
+
+    def _on_world_mode(self):
+        if self.var_world_mode.get() == "import":
+            self.world_new_frame.pack_forget()
+            self.world_import_frame.pack(fill="x")
+        else:
+            self.world_import_frame.pack_forget()
+            self.world_new_frame.pack(fill="x")
+
+    def _show_world(self, name, path):
+        self.lbl_world.configure(text=f"{name}\n{path}", text_color=AppConfig.COLOR_TEXT_PRIMARY)
+
+    def _browse_world(self, folder):
+        from tkinter import filedialog
+        if folder:
+            path = filedialog.askdirectory(parent=self, title="Choose the world folder")
+        else:
+            path = filedialog.askopenfilename(parent=self, title="Choose a world .zip",
+                                              filetypes=[("World archive", "*.zip")])
+        if not path:
+            return
+        self.lbl_world.configure(text="Reading world...", text_color=AppConfig.COLOR_TEXT_GRAY)
+
+        def _work():
+            from app.services.content_import import ContentImportError, inspect_world
+            try:
+                info, error = inspect_world(path), None
+            except ContentImportError as e:
+                info, error = None, str(e)
+            except Exception as e:
+                logger.exception("World inspection failed")
+                info, error = None, f"Couldn't read that world: {e}"
+            self.after(0, lambda: self._on_world_inspected(info, error))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_world_inspected(self, info, error):
+        if not self.winfo_exists() or self.current_step != 5 or not self.lbl_world.winfo_exists():
+            return
+        if error:
+            self.wizard_data.update(world_path=None, world_label="")
+            self.lbl_world.configure(text=error, text_color=AppConfig.COLOR_STATUS_ERROR)
+            return
+        self.wizard_data.update(world_path=info.path, world_label=info.name)
+        self._show_world(info.name, info.path)
 
     # --- Step 3: Resources (RAM + Java) ---
     def show_step_3(self):
@@ -379,7 +597,7 @@ class ServerWizard(ZBBToplevel):
         name = name.strip().lower().replace(" ", "-")
         if not name:
             return
-        save_template(name, self.wizard_data)
+        save_template(name, {k: v for k, v in self.wizard_data.items() if k not in _CONTENT_KEYS})
 
     def _on_template_selected(self, template_name):
         if template_name == "None":
@@ -547,7 +765,12 @@ class ServerWizard(ZBBToplevel):
                     rb.pack(anchor="w", padx=10, pady=5)
 
                 # Reset version selection when engine changes — each engine has its own list
-                if self.wizard_data.get("_last_engine") != engine:
+                if self.wizard_data["modpack_mc"]:
+                    # A modpack only runs on the Minecraft version it was built for.
+                    self.wizard_data["_last_engine"] = engine
+                    self.wizard_data["version"] = self.wizard_data["modpack_mc"]
+                    self.version_var.set(self.wizard_data["version"])
+                elif self.wizard_data.get("_last_engine") != engine:
                     self.wizard_data["_last_engine"] = engine
                     self.wizard_data["version"] = filtered[0] if filtered else ""
                     self.version_var.set(self.wizard_data["version"])
@@ -648,12 +871,7 @@ class ServerWizard(ZBBToplevel):
         scroll = self._scroll_body()
         p = scroll
 
-        # Seed
-        ctk.CTkLabel(p, text="Seed (Optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
-        self.entry_seed = ctk.CTkEntry(p, placeholder_text="Leave blank for random", corner_radius=AppConfig.RADIUS_BTN, height=36)
-        self.entry_seed.pack(fill="x", pady=(0, 10))
-        if self.wizard_data["seed"]:
-            self.entry_seed.insert(0, self.wizard_data["seed"])
+        self._build_world_card(p)
 
         # Playit.gg Port
         ctk.CTkLabel(p, text="Playit.gg Tunnel Port:", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
@@ -723,6 +941,10 @@ class ServerWizard(ZBBToplevel):
             ("RAM", f"{d['ram']} MB ({d['ram'] // 1024} GB)"),
             ("Java", java_summary(d["java_path"], d["version"])),
         ])
+        section("Content", [
+            ("Modpack", d["modpack_label"] or "None"),
+            ("World", d["world_label"] or "New world"),
+        ])
         section("Rules", [
             ("Game Mode", d["game_mode"]),
             ("Difficulty", d["difficulty"]),
@@ -732,7 +954,7 @@ class ServerWizard(ZBBToplevel):
             ("Max Players", d["max_players"]),
         ])
         section("World & Network", [
-            ("Seed", d["seed"] or "(random)"),
+            ("Seed", "(imported world)" if d["world_path"] else (d["seed"] or "(random)")),
             ("Playit Port", d["playit_port"]),
             ("View Distance", d["view_distance"]),
             ("Simulation Distance", d["simulation_distance"]),
@@ -756,9 +978,14 @@ class ServerWizard(ZBBToplevel):
             self.wizard_data["location"] = loc
             
         elif self.current_step == 2:
+            if self._modpack_busy():
+                return
             self.wizard_data["type"] = self.engine_var.get()
             self.wizard_data["version"] = self.version_var.get()
             if not self.wizard_data["version"]:
+                return
+            if self.wizard_data["modpack_path"] and self.wizard_data["type"] not in ("Fabric", "Forge"):
+                self._set_modpack_status("Modpacks need a Fabric or Forge server. Pick one below.", error=True)
                 return
 
         elif self.current_step == 3:
@@ -823,6 +1050,8 @@ class ServerWizard(ZBBToplevel):
             self.wizard_data["spawn_protection"] = 16
 
     def _collect_step5_fields(self):
+        if self.var_world_mode.get() == "new":
+            self.wizard_data.update(world_path=None, world_label="")
         self.wizard_data["seed"] = self.entry_seed.get().strip()
         port_val = self.entry_port.get().strip()
         self.wizard_data["playit_port"] = port_val if port_val else "25565"

@@ -340,13 +340,15 @@ class VersionManager:
         logger.info("Server versions refreshed.")
         self._notify_callbacks()
 
-    def get_download_url(self, server_type, version):
+    def get_download_url(self, server_type, version, loader_version=None):
         """
         Resolves download URL for a specific server type and version.
         
         Args:
             server_type (str): One of "Vanilla", "Fabric", or "Forge"
             version (str): Minecraft version (e.g., "1.20.1")
+            loader_version (str): Exact Forge version (e.g. "47.2.0") a modpack
+                requires; None picks the recommended/latest one.
         
         Returns:
             str: Direct download URL for the server installer/jar, or None if not found
@@ -356,6 +358,8 @@ class VersionManager:
         elif server_type == "Fabric":
             return self._get_fabric_installer_url(version)
         elif server_type == "Forge":
+            if loader_version:
+                return self.forge_installer_url(version, loader_version)
             return self._get_forge_installer_url(version)
         elif server_type == "Paper":
             return self._get_paper_url(version)
@@ -408,13 +412,15 @@ class VersionManager:
             forge_ver = promos.get(f"{version}-recommended") or promos.get(f"{version}-latest")
             
             if forge_ver:
-                # Construct Maven URL
-                # Format: https://maven.minecraftforge.net/net/minecraftforge/forge/{mc_ver}-{forge_ver}/forge-{mc_ver}-{forge_ver}-installer.jar
-                # Sometimes it's just {forge_ver} if it includes mc_ver? No, usually {mc}-{forge}
-                return f"https://maven.minecraftforge.net/net/minecraftforge/forge/{version}-{forge_ver}/forge-{version}-{forge_ver}-installer.jar"
+                return self.forge_installer_url(version, forge_ver)
         except Exception as e:
             logger.error("Failed to resolve Forge installer URL for %s: %s", version, e)
         return None
+
+    @staticmethod
+    def forge_installer_url(mc_version, forge_version):
+        return (f"https://maven.minecraftforge.net/net/minecraftforge/forge/{mc_version}-{forge_version}/"
+                f"forge-{mc_version}-{forge_version}-installer.jar")
 
     def _get_paper_url(self, version):
         try:
