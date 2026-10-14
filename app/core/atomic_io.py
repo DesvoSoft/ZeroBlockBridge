@@ -15,7 +15,7 @@ _REPLACE_ATTEMPTS = 6
 _REPLACE_BACKOFF_S = 0.05
 
 
-def _replace_with_retry(src: str, dst: str) -> None:
+def replace_with_retry(src: str, dst: str) -> None:
     for attempt in range(_REPLACE_ATTEMPTS):
         try:
             os.replace(src, dst)
@@ -42,7 +42,7 @@ def atomic_write_text(path, write_fn, *, suffix: str = "") -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             write_fn(f)
-        _replace_with_retry(tmp_path, path)
+        replace_with_retry(tmp_path, path)
     except BaseException:
         try:
             os.remove(tmp_path)

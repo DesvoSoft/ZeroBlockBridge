@@ -99,12 +99,13 @@ def update_server_meta(server_name: str, updates: dict) -> bool:
     """Atomic multi-key update for server metadata.json with write-through cache."""
     server_dir = os.path.join(SERVERS_DIR, server_name)
     meta_path = os.path.join(server_dir, "metadata.json")
-    if not os.path.isdir(server_dir):
-        # Deleted (or mid-restore): a late write must not resurrect the
-        # folder as a ghost server. The atomic writer would create it.
-        logger.warning("Not writing metadata for %s: server folder is gone", server_name)
-        return False
     with _meta_lock:
+        if not os.path.isdir(server_dir):
+            # Deleted (or mid-restore): a late write must not resurrect the
+            # folder as a ghost server. The atomic writer would create it.
+            # Checked under the lock delete_server also holds.
+            logger.warning("Not writing metadata for %s: server folder is gone", server_name)
+            return False
         try:
             if server_name in _meta_cache:
                 meta = _meta_cache[server_name].copy()
@@ -197,8 +198,22 @@ def _version_from_libraries(server_dir: str) -> Optional[str]:
     return None
 
 
+_RELEASE_PREFIX_RE = re.compile(r"^(\d+(?:\.\d+)+)(.*)$")
+_PRERELEASE_RE = re.compile(r"(?:^|-)(?:pre|rc|snapshot)", re.I)
+
+
 def _numeric_key(name: str) -> tuple:
-    return tuple(int(n) for n in re.findall(r"\d+", name))
+    """Sort key for version folder names: releases by number, a release
+    above its own -pre/-rc builds, and anything that isn't a dotted release
+    (snapshots like 24w14a) below every release. Forge's "-47.2.0" build
+    suffix orders builds of the same release."""
+    match = _RELEASE_PREFIX_RE.match(name)
+    if not match:
+        return (0,)
+    release = tuple(int(n) for n in match.group(1).split("."))
+    rest = match.group(2)
+    stable = 0 if _PRERELEASE_RE.search(rest) else 1
+    return (1, release, stable, tuple(int(n) for n in re.findall(r"\d+", rest)))
 
 
 def infer_server_version(server_dir: str, jar_name: Optional[str] = None) -> str:
@@ -330,16 +345,19 @@ def delete_server(server_name: str) -> None:
     OSError and falls through to rmtree.
     """
     path = os.path.join(SERVERS_DIR, server_name)
-    if not os.path.exists(path):
-        return
-    if os.path.islink(path):
-        os.unlink(path)
-    else:
-        try:
-            os.rmdir(path)
-        except OSError:
-            shutil.rmtree(path)
-    invalidate_meta_cache(server_name)
+    # Under the metadata lock, so no update_server_meta can slip in between
+    # the removal and the cache drop and resurrect the folder.
+    with _meta_lock:
+        if not os.path.exists(path):
+            return
+        if os.path.islink(path):
+            os.unlink(path)
+        else:
+            try:
+                os.rmdir(path)
+            except OSError:
+                shutil.rmtree(path)
+        _meta_cache.pop(server_name, None)  # not invalidate_meta_cache(): the lock isn't reentrant
     logger.info("Deleted server '%s'", server_name)
 
 

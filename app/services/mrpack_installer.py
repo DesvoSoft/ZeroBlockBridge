@@ -154,12 +154,13 @@ def _download_worker(pending: queue.Queue, results: queue.Queue, stop: threading
             entry = pending.get_nowait()
         except queue.Empty:
             return
+        ok = False
         try:
             ok = bool(_download_entry(entry, server_dir))
         except Exception as e:  # one bad mod must not abort the pack
             logger.error("mrpack download failed for %s: %s", entry.get("path", "?"), e)
-            ok = False
-        results.put(ok)
+        finally:
+            results.put(ok)  # always, or the caller would wait forever
 
 
 def _download_all(entries: list, server_dir: str, progress: Callable[[str], None]) -> tuple:
@@ -179,11 +180,11 @@ def _download_all(entries: list, server_dir: str, progress: Callable[[str], None
         return 0, 0
     results: queue.Queue = queue.Queue()
     stop = threading.Event()
-    for i in range(min(DOWNLOAD_WORKERS, total)):
-        threading.Thread(target=_download_worker, args=(pending, results, stop, server_dir),
-                         daemon=True, name=f"mrpack-dl-{i}").start()
     installed = failed = 0
     try:
+        for i in range(min(DOWNLOAD_WORKERS, total)):
+            threading.Thread(target=_download_worker, args=(pending, results, stop, server_dir),
+                             daemon=True, name=f"mrpack-dl-{i}").start()
         for done in range(1, total + 1):
             ok = results.get()
             installed += ok

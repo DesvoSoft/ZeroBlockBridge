@@ -106,3 +106,18 @@ def test_unreadable_jar_never_blocks_inference(tmp_path):
     _jar(tmp_path / "server.jar", {"version.json": "{}"})
     with patch.object(_zip.ZipFile, "read", side_effect=NotImplementedError("compression type 99")):
         assert infer_server_version(str(tmp_path)) == "Unknown"
+
+
+@pytest.mark.parametrize("folders, newest", [
+    (["1.20.1", "1.20.1-pre1"], "1.20.1"),            # release beats its pre-release
+    (["1.20.4-rc1", "1.20.4"], "1.20.4"),
+    (["24w14a", "1.20.5"], "1.20.5"),                 # snapshots rank below releases
+    (["1.20.1-47.1.0", "1.20.1-47.2.0"], "1.20.1"),   # newer Forge build, same MC
+])
+def test_prereleases_and_snapshots_rank_below_releases(tmp_path, folders, newest):
+    base = tmp_path / "libraries/net/fabricmc/intermediary"
+    if "-47." in folders[0]:
+        base = tmp_path / "libraries/net/minecraftforge/forge"
+    for name in folders:
+        (base / name).mkdir(parents=True)
+    assert infer_server_version(str(tmp_path)) == newest

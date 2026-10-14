@@ -31,6 +31,11 @@ def _safe_remove(path: str) -> None:
         logger.warning("Could not remove %s: %s", path, exc)
 
 
+def _publish(part_path: str, dest_path: str) -> None:
+    from app.core.atomic_io import replace_with_retry
+    replace_with_retry(part_path, dest_path)
+
+
 def download_with_verification(
     url: str,
     dest_path: str,
@@ -40,6 +45,10 @@ def download_with_verification(
 ) -> tuple:
     """
     Download a file with SHA1 verification and automatic retry.
+
+    Bytes go to `<dest>.part` and only replace `dest_path` once complete and
+    verified: a download interrupted by the app closing (or a crash) never
+    leaves a truncated jar where the server would load it.
 
     Args:
         url: Download URL.
@@ -51,53 +60,57 @@ def download_with_verification(
     Returns:
         (success: bool, file_path: str | None, error: str | None)
     """
+    part_path = f"{dest_path}.part"
     for attempt in range(1, max_retries + 1):
         try:
             try:
-                actual = stream_to_file(url, dest_path, timeout=60, progress_callback=progress_callback)
+                actual = stream_to_file(url, part_path, timeout=60, progress_callback=progress_callback)
             except PermissionError as exc:
+                _safe_remove(part_path)
                 return False, None, (
                     f"Permission denied writing to {dest_path}. Close any program "
                     f"using this file (e.g. antivirus scan) or check folder permissions: {exc}"
                 )
             except OSError as exc:
+                _safe_remove(part_path)
                 return False, None, f"Failed to write {dest_path}: {exc}"
 
             if progress_callback:
                 progress_callback(1.0)
 
             # SHA1 verification
+            if expected_sha1 and actual != expected_sha1.lower():
+                logger.warning(
+                    "SHA1 mismatch (attempt %d/%d) for %s: expected=%s, actual=%s",
+                    attempt, max_retries, os.path.basename(dest_path),
+                    expected_sha1, actual,
+                )
+                _safe_remove(part_path)
+                if attempt < max_retries:
+                    time.sleep(RETRY_DELAY)
+                    continue
+                return False, None, (
+                    f"Download corruption persisted after {max_retries} attempts. "
+                    f"Expected SHA1: {expected_sha1}, got: {actual}"
+                )
             if expected_sha1:
-                if actual != expected_sha1.lower():
-                    logger.warning(
-                        "SHA1 mismatch (attempt %d/%d) for %s: expected=%s, actual=%s",
-                        attempt, max_retries, os.path.basename(dest_path),
-                        expected_sha1, actual,
-                    )
-                    if attempt < max_retries:
-                        _safe_remove(dest_path)
-                        time.sleep(RETRY_DELAY)
-                        continue
-                    else:
-                        _safe_remove(dest_path)
-                        return False, None, (
-                            f"Download corruption persisted after {max_retries} attempts. "
-                            f"Expected SHA1: {expected_sha1}, got: {actual}"
-                        )
-                else:
-                    logger.info("SHA1 verified: %s (attempt %d)", os.path.basename(dest_path), attempt)
+                logger.info("SHA1 verified: %s (attempt %d)", os.path.basename(dest_path), attempt)
             else:
                 logger.warning(
                     "SHA1 not provided for %s — skipping verification",
                     os.path.basename(dest_path),
                 )
-
+            try:
+                _publish(part_path, dest_path)
+            except OSError as exc:
+                _safe_remove(part_path)
+                return False, None, f"Failed to write {dest_path}: {exc}"
             return True, dest_path, None
 
         except requests.RequestException as exc:
             logger.error("Download failed (attempt %d/%d): %s", attempt, max_retries, exc)
-            if os.path.exists(dest_path):
-                _safe_remove(dest_path)
+            if os.path.exists(part_path):
+                _safe_remove(part_path)
             if attempt < max_retries:
                 time.sleep(RETRY_DELAY)
             else:

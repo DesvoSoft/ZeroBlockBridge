@@ -271,3 +271,26 @@ def test_caller_giving_up_stops_new_downloads(tmp_path):
             m._download_all(entries, str(tmp_path), dead_progress)
         time.sleep(0.3)
     assert len(started) <= m.DOWNLOAD_WORKERS * 2
+
+
+import pytest as _pytest_mod  # noqa: E402
+
+
+@_pytest_mod.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_worker_dying_on_base_exception_still_reports(tmp_path):
+    """Review B: a BaseException in a worker must not leave the caller
+    waiting forever on a result that never comes."""
+    import threading
+    from unittest.mock import patch
+    from app.services import mrpack_installer as m
+
+    def dies(entry, server_dir):
+        raise SystemExit("worker killed")
+
+    result = {}
+    with patch.object(m, "_download_entry", side_effect=dies):
+        t = threading.Thread(target=lambda: result.update(r=m._download_all(
+            [{"path": "mods/a.jar"}], str(tmp_path), lambda msg: None)), daemon=True)
+        t.start()
+        t.join(timeout=5)
+    assert result.get("r") == (0, 1)

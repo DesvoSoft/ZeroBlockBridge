@@ -187,6 +187,17 @@ class TestServerMeta:
             assert update_server_meta("deleted_one", {"ram": 2048}) is False
         assert not os.path.exists(os.path.join(self.tmpdir, "deleted_one"))
 
+    def test_delete_then_late_write_leaves_no_ghost_or_stale_cache(self):
+        """Review C: delete_server and update_server_meta share the lock."""
+        from app.core.logic import delete_server
+        with patch("app.core.logic.SERVERS_DIR", self.tmpdir):
+            os.makedirs(os.path.join(self.tmpdir, "gone"))
+            assert update_server_meta("gone", {"ram": 1024}) is True
+            delete_server("gone")
+            assert update_server_meta("gone", {"ram": 2048}) is False
+            assert get_server_meta("gone") == {}
+        assert not os.path.exists(os.path.join(self.tmpdir, "gone"))
+
     def test_failed_metadata_write_keeps_the_previous_file(self):
         """A crash mid-write must not leave a truncated metadata.json."""
         server_dir = os.path.join(self.tmpdir, "crashy")
