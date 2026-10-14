@@ -54,6 +54,13 @@ class CloseChoiceDialog(ZBBToplevel):
         self.update_idletasks()
         center_on_parent(self, parent, self.winfo_reqwidth(), self.winfo_reqheight())
         self.transient(parent)
+        # Tk grabs don't stack: remember a modal's grab (e.g. the creation
+        # progress dialog) and give it back when this closes.
+        self._prev_grab = None
+        try:
+            self._prev_grab = self.grab_current()
+        except Exception as e:
+            logger.debug("Close dialog could not read current grab: %s", e)
         try:
             self.wait_visibility()
             self.grab_set()
@@ -75,6 +82,11 @@ class CloseChoiceDialog(ZBBToplevel):
         except Exception as e:
             logger.debug("Close dialog grab release failed: %s", e)
         self.destroy()
+        try:
+            if self._prev_grab is not None and self._prev_grab.winfo_exists():
+                self._prev_grab.grab_set()
+        except Exception as e:
+            logger.debug("Close dialog could not restore grab: %s", e)
 
     @classmethod
     def ask(cls, parent, running: list):

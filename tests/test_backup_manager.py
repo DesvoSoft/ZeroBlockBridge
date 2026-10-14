@@ -198,3 +198,45 @@ class TestBackupManager:
         bm = BackupManager("test_server")
         with patch.object(bm, "backup_dir", tmp_path):
             assert bm.delete_backup(str(tmp_path / "2025-01-01_00-00-00.zip")) == (True, None)
+
+
+# ----------------------------------------------------------------------
+# Review: an exit mid-backup must never leave a truncated zip
+# ----------------------------------------------------------------------
+def test_backup_is_written_under_part_and_renamed(tmp_path):
+    import zipfile
+    from unittest.mock import patch as _patch
+    from app.services.backup_manager import BackupManager
+
+    server = tmp_path / "servers" / "srv"
+    (server / "world").mkdir(parents=True)
+    (server / "world" / "level.dat").write_text("x")
+    with _patch("app.services.backup_manager.SERVERS_DIR", tmp_path / "servers"), \
+            _patch("app.services.backup_manager.BASE_DIR", tmp_path):
+        manager = BackupManager("srv")
+        seen_during_write = []
+        real_write = zipfile.ZipFile.write
+
+        def spy(self, *a, **k):
+            seen_during_write.append(sorted(p.name for p in manager.backup_dir.iterdir()))
+            return real_write(self, *a, **k)
+        with _patch.object(zipfile.ZipFile, "write", spy):
+            path, err = manager.create_backup(reason="auto")
+    assert err is None and path.exists() and path.suffix == ".zip"
+    assert all(name.endswith(".zip.part") for names in seen_during_write for name in names)
+    assert [p.name for p in manager.backup_dir.iterdir()] == [path.name]
+
+
+def test_unfinished_backup_from_a_previous_run_is_cleaned_and_never_listed(tmp_path):
+    from unittest.mock import patch as _patch
+    from app.services.backup_manager import BackupManager
+
+    (tmp_path / "servers" / "srv").mkdir(parents=True)
+    with _patch("app.services.backup_manager.SERVERS_DIR", tmp_path / "servers"), \
+            _patch("app.services.backup_manager.BASE_DIR", tmp_path):
+        manager = BackupManager("srv")
+        stale = manager.backup_dir / "2026-10-14_01-00-00__auto.zip.part"
+        stale.write_bytes(b"truncated")
+        assert manager.list_backups() == []
+        manager.create_backup(reason="auto")
+    assert not stale.exists()

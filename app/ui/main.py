@@ -1478,7 +1478,10 @@ class MCTunnelApp(ctk.CTk):
         cancel_tasks = getattr(self, "cancel_active_tasks", None)
         if cancel_tasks:
             cancel_tasks()  # e.g. a server being created: stop and roll back
-        self._save_window_state()
+        if self.state() != "withdrawn":
+            # Hidden in the tray: hide_to_tray already saved the real state;
+            # a withdrawn window would read as not maximized.
+            self._save_window_state()
         self.withdraw()
 
         # SettingsManager debounces writes 500ms — a change right before

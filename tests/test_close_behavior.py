@@ -102,3 +102,26 @@ def test_assets_never_resolve_under_a_relocated_data_dir(tmp_path):
                          capture_output=True, text=True, timeout=60).stdout.strip()
     assert Path(out) == ROOT / "assets"
     assert (Path(out) / "logo.png").exists()
+
+
+def test_tray_notification_waits_until_the_icon_exists():
+    """Review #4: notify() right after run_detached() hit an icon Windows
+    hadn't added yet; it now runs from pystray's setup callback, once."""
+    app = MagicMock()
+    t = tray.TrayIcon(app, lambda: None, lambda: None)
+    icon = MagicMock()
+    t._icon = icon
+    t._on_ready(icon)
+    t._on_ready(icon)
+    assert icon.visible is True
+    icon.notify.assert_called_once()
+    icon.stop.assert_not_called()
+
+
+def test_icon_hidden_before_it_was_up_is_stopped_when_ready():
+    t = tray.TrayIcon(MagicMock(), lambda: None, lambda: None)
+    icon = MagicMock()
+    t._icon = None  # hide() already ran
+    t._on_ready(icon)
+    icon.stop.assert_called_once()
+    icon.notify.assert_not_called()

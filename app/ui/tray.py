@@ -62,12 +62,21 @@ class TrayIcon:
         )
         title = "ZeroBlockBridge" + (f" - {status}" if status else "")
         self._icon = pystray.Icon("ZeroBlockBridge", image, title, menu)
-        self._icon.run_detached()
+        # setup runs once the icon really exists: a notify() right after
+        # run_detached() targets an icon Windows hasn't added yet and is lost.
+        self._icon.run_detached(setup=self._on_ready)
+
+    def _on_ready(self, icon) -> None:
+        icon.visible = True
+        if self._icon is not icon:
+            # hide() ran before the icon was up (stop() was a no-op then).
+            icon.stop()
+            return
         if not self._notified:
             self._notified = True
             try:
-                self._icon.notify("ZeroBlockBridge is still running here. "
-                                  "Right-click the icon to open or exit.", "ZeroBlockBridge")
+                icon.notify("ZeroBlockBridge is still running here. "
+                            "Right-click the icon to open or exit.", "ZeroBlockBridge")
             except Exception as e:  # notifications are optional
                 logger.debug("Tray notification failed: %s", e)
 

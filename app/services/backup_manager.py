@@ -33,11 +33,16 @@ class BackupManager:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{timestamp}.zip" if reason == "manual" else f"{timestamp}__{reason}.zip"
         backup_path = self.backup_dir / filename
+        # Written under a .part name and renamed when complete: an exit or
+        # crash mid-backup must never leave a truncated zip that lists (and
+        # counts toward retention) as a good backup.
+        part_path = backup_path.with_name(filename + ".part")
+        self._remove_stale_parts()
         abs_backup_dir = self.backup_dir.resolve()
         skipped_files = []
 
         try:
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(part_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(self.server_path):
                     root_path = os.path.abspath(root)
                     if "backups" in os.path.relpath(root_path, self.server_path).split(os.sep):
@@ -56,17 +61,29 @@ class BackupManager:
                             else:
                                 raise
 
+            from app.core.atomic_io import replace_with_retry
+            replace_with_retry(str(part_path), str(backup_path))
             self._apply_retention(self._resolve_retention(retention_count, reason), reason=reason)
             if skipped_files:
                 return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
             return backup_path, None
         except Exception as e:
-            if backup_path.exists():
-                try:
-                    backup_path.unlink()
-                except OSError as unlink_err:
-                    logger.warning("Failed to clean up failed backup: %s", unlink_err)
+            for leftover in (part_path, backup_path):
+                if leftover.exists():
+                    try:
+                        leftover.unlink()
+                    except OSError as unlink_err:
+                        logger.warning("Failed to clean up failed backup: %s", unlink_err)
             return None, str(e)
+
+    def _remove_stale_parts(self) -> None:
+        """Drop half-written backups left by an earlier exit or crash."""
+        for stale in self.backup_dir.glob("*.zip.part"):
+            try:
+                stale.unlink()
+                logger.info("Removed unfinished backup %s", stale.name)
+            except OSError as e:
+                logger.warning("Could not remove unfinished backup %s: %s", stale.name, e)
 
     def _resolve_retention(self, retention_count: int | None, reason: str) -> int | None:
         """Tagged backups default to a bounded retention even when the

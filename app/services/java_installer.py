@@ -52,6 +52,10 @@ class JdkIntegrityError(JdkError):
     pass
 
 
+class JdkCancelled(JdkError):
+    """The caller (a server creation being cancelled) stopped the download."""
+
+
 def _platform_os() -> str:
     return _OS_MAP.get(sys.platform, "linux")
 
@@ -211,7 +215,9 @@ class JdkManager:
             return None
         return str(binary)
 
-    def ensure_java(self, version: int) -> str:
+    def ensure_java(self, version: int, cancel_event=None) -> str:
+        """Path to a java binary for `version`, downloading it if needed.
+        Setting `cancel_event` aborts a download in progress (JdkCancelled)."""
         cached = self.get_java_path(version)
         if cached:
             logger.info("Using cached JDK %d at %s", version, cached)
@@ -226,7 +232,7 @@ class JdkManager:
                 return cached
 
             logger.info("JDK %d not in cache — downloading", version)
-            path = self._download_and_install(version)
+            path = self._download_and_install(version, cancel_event)
 
         binary = _find_java_binary(Path(path))
         if binary is None:
@@ -238,7 +244,7 @@ class JdkManager:
         logger.info("JDK %d installed at %s", version, binary)
         return str(binary)
 
-    def _download_and_install(self, version: int) -> str:
+    def _download_and_install(self, version: int, cancel_event=None) -> str:
         info = _fetch_asset_info(version)
         url = info["url"]
         expected_checksum = info["checksum"]
@@ -257,7 +263,7 @@ class JdkManager:
         last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                self._download_file(url, archive_path)
+                self._download_file(url, archive_path, cancel_event)
                 if expected_checksum:
                     if not _verify_checksum(archive_path, expected_checksum):
                         archive_path.unlink(missing_ok=True)
@@ -270,6 +276,9 @@ class JdkManager:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
                 return str(cache_dir)
 
+            except JdkCancelled:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                raise
             except (JdkDownloadError, JdkIntegrityError):
                 raise
             except Exception as exc:
@@ -283,9 +292,12 @@ class JdkManager:
 
         raise JdkDownloadError(f"JDK download failed: {last_error}")
 
-    def _download_file(self, url: str, dest: Path):
+    def _download_file(self, url: str, dest: Path, cancel_event=None):
+        def check_cancel(_fraction):
+            if cancel_event is not None and cancel_event.is_set():
+                raise JdkCancelled("JDK download cancelled")
         try:
-            stream_to_file(url, dest, timeout=120)
+            stream_to_file(url, dest, timeout=120, progress_callback=check_cancel if cancel_event else None)
         except requests.ConnectionError:
             raise JdkDownloadError("No internet connection during JDK download")
         except requests.Timeout:

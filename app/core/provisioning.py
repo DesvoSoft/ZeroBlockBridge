@@ -109,7 +109,8 @@ class ServerProvisioner:
     # Entry point
     # ------------------------------------------------------------------
     def provision(self, config: dict, progress: Optional[ProgressFn] = None) -> ProvisionResult:
-        progress = self._cancellable(progress or (lambda value, text=None: None))
+        raw_progress = progress or (lambda value, text=None: None)
+        progress = self._cancellable(raw_progress)
         name = config["name"]
         self._modpack = self._world = None
         self._created, self._warnings = [], []
@@ -122,6 +123,9 @@ class ServerProvisioner:
         except ProvisionCancelled:
             return self._cancelled(name)
         except Exception as e:
+            if self._cancel_requested():
+                # e.g. an interrupted JDK download: a cancel, not a failure.
+                return self._cancelled(name)
             logger.exception("Provisioning failed for %s", name)
             self._log(f"[Error] Installation failed: {e}")
             error = str(e)
@@ -130,17 +134,21 @@ class ServerProvisioner:
             self._rollback(name)
             return ProvisionResult(False, name, error, rolled_back=rolled_back)
 
+        # Point of no return: the server is complete. Report with the raw
+        # callback -- the cancellable one would raise here, and the tunnel
+        # handler below would mistake that for a tunnel failure.
         required_java = self._required_java
         try:
-            progress(_P_TUNNEL, "Setting up Playit tunnel...")
+            raw_progress(_P_TUNNEL, "Setting up Playit tunnel...")
             self._log(f"[System] Server '{name}' created successfully.")
             self._create_tunnel(name)
-            progress(_P_DONE, "Server ready!")
+            raw_progress(_P_DONE, "Server ready!")
         except Exception as e:
             # The server itself is complete; a tunnel can be set up later.
             logger.exception("Tunnel setup failed for %s", name)
-            self._log(f"[Warning] Tunnel setup failed: {e}")
-            self._warnings.append(f"The Playit tunnel couldn't be set up ({e}). Start it from the Tunnel panel.")
+            reason = str(e) or type(e).__name__
+            self._log(f"[Warning] Tunnel setup failed: {reason}")
+            self._warnings.append(f"The Playit tunnel couldn't be set up ({reason}). Start it from the Tunnel panel.")
         return ProvisionResult(True, name, required_java=required_java, warnings=list(self._warnings))
 
     def _build(self, config: dict, progress: ProgressFn) -> Optional[str]:
@@ -163,15 +171,24 @@ class ServerProvisioner:
             step(config, progress)
         self._check_cancel()
         self._required_java = self._resolve_and_install_java(config, progress)
-        self._check_cancel()  # the JDK download can't be interrupted; honour a cancel made meanwhile
+        self._check_cancel()  # a cancel during the (swallowed-on-failure) JDK step
         return None
 
     # ------------------------------------------------------------------
     # Cancellation
     # ------------------------------------------------------------------
+    def _cancel_requested(self) -> bool:
+        return self._cancel_event is not None and self._cancel_event.is_set()
+
     def _check_cancel(self) -> None:
-        if self._cancel_event is not None and self._cancel_event.is_set():
+        if self._cancel_requested():
             raise ProvisionCancelled()
+
+    def _ensure_java(self, version: int) -> str:
+        """JDK install that a cancel interrupts mid-download."""
+        if self._cancel_event is None:
+            return self.jdk_manager.ensure_java(version)
+        return self.jdk_manager.ensure_java(version, cancel_event=self._cancel_event)
 
     def _cancellable(self, progress: ProgressFn) -> ProgressFn:
         """Progress reporting doubles as a cancellation point: downloads call
@@ -308,7 +325,7 @@ class ServerProvisioner:
         if engine in INSTALLER_ENGINES:
             self._log(f"[System] Installing {engine} {version}...")
             from app.services.java_detector import get_required_java
-            java_bin = self.jdk_manager.ensure_java(get_required_java(version)) or "java"
+            java_bin = self._ensure_java(get_required_java(version)) or "java"
             installer = logic.install_fabric if engine == "Fabric" else logic.install_forge
             # A modpack pins its loader build; otherwise the installer picks one.
             extra = {"loader_version": config["loader_version"]} \
@@ -392,7 +409,7 @@ class ServerProvisioner:
             progress(_P_JDK, f"Installing {label}...")
             self._log(f"[System] Installing {label}...")
             try:
-                self.jdk_manager.ensure_java(final_java)
+                self._ensure_java(final_java)
                 self._log(f"[System] {label} ready.")
             except Exception as e:
                 # Not fatal: the server can still be started later, when

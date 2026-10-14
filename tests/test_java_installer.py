@@ -141,7 +141,7 @@ class TestJdkManager:
         cache_dir = tmp_path / "jdks"
         jdk_dir = cache_dir / "jdk17"
 
-        def fake_download(version):
+        def fake_download(version, cancel_event=None):
             bin_dir = jdk_dir / "bin"
             bin_dir.mkdir(parents=True)
             (bin_dir / _java_exe_name()).write_text("")
@@ -152,7 +152,7 @@ class TestJdkManager:
         with patch("app.services.java_installer._JDK_CACHE_DIR", cache_dir):
             mgr = JdkManager()
             result = mgr.ensure_java(17)
-            mock_dl.assert_called_once_with(17)
+            mock_dl.assert_called_once_with(17, None)
             assert result == str(jdk_dir / "bin" / _java_exe_name())
 
     @patch("app.services.java_installer._fetch_asset_info")

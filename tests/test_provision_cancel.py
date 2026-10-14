@@ -221,3 +221,71 @@ def test_run_installer_skips_spawn_when_already_cancelled(tmp_path):
         assert logic._run_installer("srv", "Forge", "1.20.1", "forge-installer.jar", [],
                                     cancel_event=cancel) is None
     spawn.assert_not_called()
+
+
+# ----------------------------------------------------------------------
+# Review round: late cancels, JDK downloads
+# ----------------------------------------------------------------------
+def test_cancel_once_the_server_is_complete_is_ignored_cleanly(tmp_path):
+    """Review #1: a cancel landing during tunnel setup made the cancellable
+    progress raise inside the tunnel handler -> server kept but reported a
+    bogus "tunnel couldn't be set up ()" warning."""
+    cancel = threading.Event()
+    with ExitStack() as stack:
+        env = _env(tmp_path, stack, cancel)
+
+        def tunnel_then_cancel(name):
+            env.tunnels.append(name)
+            cancel.set()  # user clicks Cancel right at the end
+        env.provisioner._create_tunnel = tunnel_then_cancel
+        result = env.run()
+    assert result.ok and not result.cancelled
+    assert result.warnings == []
+    assert (env.servers_dir / "srv").is_dir()
+
+
+def test_tunnel_failure_without_message_names_the_error(tmp_path):
+    with ExitStack() as stack:
+        env = _env(tmp_path, stack, None)
+
+        def boom(name):
+            raise TimeoutError()
+        env.provisioner._create_tunnel = boom
+        result = env.run()
+    assert result.ok and "TimeoutError" in result.warnings[0]
+
+
+def test_cancel_during_jdk_download_is_a_cancel_not_an_error(tmp_path):
+    """Review #3: the JDK download couldn't be interrupted, so exiting during
+    it killed the process before rollback ran."""
+    cancel = threading.Event()
+    with ExitStack() as stack:
+        env = _env(tmp_path, stack, cancel)
+
+        def jdk_cancelled(version, cancel_event=None):
+            assert cancel_event is cancel  # the event reaches the JDK download
+            cancel.set()
+            raise RuntimeError("JDK download cancelled")
+        env.jdk.ensure_java.side_effect = jdk_cancelled
+        result = env.run(type="Fabric", version="1.20.1")
+    assert result.cancelled and not result.ok
+    assert not (env.servers_dir / "srv").exists()
+
+
+def test_jdk_download_stops_mid_stream_and_cleans_temp(tmp_path):
+    from app.services import java_installer as ji
+    cancel = threading.Event()
+
+    def stream(url, dest, timeout, progress_callback=None):
+        dest.write_bytes(b"partial")
+        cancel.set()
+        progress_callback(0.4)
+        pytest.fail("download continued after cancel")
+
+    with patch.object(ji, "_JDK_CACHE_DIR", tmp_path / "jdks"), \
+            patch.object(ji, "_fetch_asset_info", return_value={"url": "https://x/jdk.zip", "checksum": None}), \
+            patch.object(ji, "stream_to_file", side_effect=stream):
+        with pytest.raises(ji.JdkCancelled):
+            ji.JdkManager().ensure_java(21, cancel_event=cancel)
+    leftovers = [p for p in (tmp_path / "jdks").rglob("*")] if (tmp_path / "jdks").exists() else []
+    assert leftovers == []
