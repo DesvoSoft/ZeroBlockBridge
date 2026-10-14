@@ -62,6 +62,7 @@ class _BootDialog(ctk.CTk):
         self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.page = None
+        self._busy = False
 
     # -- layout helpers --------------------------------------------------
     def new_page(self):
@@ -120,6 +121,7 @@ class _BootDialog(ctk.CTk):
         """Run `work()` off the Tk thread; `on_done(error_or_None, value)`
         runs back on it."""
         box = {}
+        self._busy = True
 
         def _worker():
             try:
@@ -135,6 +137,7 @@ class _BootDialog(ctk.CTk):
             if thread.is_alive():
                 self.after(100, _poll)
             else:
+                self._busy = False
                 on_done(box.get("error"), box.get("value"))
         self.after(100, _poll)
 
@@ -154,7 +157,10 @@ class _BootDialog(ctk.CTk):
             logger.debug("Setup dialog centering failed: %s", e)
 
     def _on_close(self):
-        self.destroy()
+        # Closing mid-install/uninstall would kill the (daemon) worker half
+        # way and leave a partial copy or a half-deleted folder.
+        if not self._busy:
+            self.destroy()
 
     def destroy(self):
         super().destroy()
@@ -420,11 +426,20 @@ def _app_is_running(data_dir: Path | None) -> bool:
     return SingleInstanceLock._is_pid_alive(pid)
 
 
+def uninstall_target(running_exe: Path, marker: dict) -> Path:
+    """The exe to remove: the recorded install, even when the uninstall was
+    started from some other copy."""
+    if marker.get("mode") == MODE_INSTALLED and marker.get("exe_path"):
+        return Path(marker["exe_path"])
+    return running_exe
+
+
 class _UninstallDialog(_BootDialog):
     def __init__(self, exe: Path, marker: dict):
         super().__init__("Uninstall")
         self.exit_code = 1
-        self._exe = exe
+        self.remove_on_exit: Path | None = None
+        self._exe = uninstall_target(exe, marker)
         self._marker = marker
         self._data_dir = Path(marker["data_dir"]) if marker.get("data_dir") else None
         self._var_delete_data = ctk.BooleanVar(value=False)
@@ -471,7 +486,8 @@ class _UninstallDialog(_BootDialog):
             # Keep pointing at the data so a later download finds the servers.
             keep = {k: v for k, v in self._marker.items() if k not in ("mode", "exe_path", "version")}
             write_marker(keep, marker_path)
-        installer.schedule_removal(self._exe)
+        # The exe is deleted once this process has exited (see run_uninstall).
+        self.remove_on_exit = self._exe
 
     def _on_done(self, error, _value):
         if error is not None:
@@ -490,4 +506,6 @@ def run_uninstall() -> int:
     _init_theme()
     dialog = _UninstallDialog(Path(sys.executable).resolve(), read_marker())
     dialog.show()
+    if dialog.remove_on_exit is not None:
+        installer.schedule_removal(dialog.remove_on_exit)
     return dialog.exit_code

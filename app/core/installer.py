@@ -53,7 +53,12 @@ def standard_data_dir() -> Path:
 
 
 def same_path(a, b) -> bool:
-    return os.path.normcase(os.path.abspath(str(a))) == os.path.normcase(os.path.abspath(str(b)))
+    """Same file or folder, following junctions/symlinks (a relocated
+    %LOCALAPPDATA% must still match the installed exe)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:  # one side missing: compare canonical spellings
+        return os.path.normcase(os.path.realpath(str(a))) == os.path.normcase(os.path.realpath(str(b)))
 
 
 # ----------------------------------------------------------------------
@@ -224,29 +229,52 @@ def update(src_exe: Path, installed_exe: Path, version: str) -> None:
         logger.warning("Could not update uninstall entry: %s", e)
 
 
+# What ZBB itself creates inside a data folder -- the only things uninstall
+# may delete. The folder may be one the user already had (Documents, D:\...).
+ZBB_DATA_ENTRIES = ("servers", "backups", "config", "bin", "logs", ".zbb_cache", "install.json")
+
+
 def remove_data_dir(data_dir: Path) -> None:
-    """Delete ZBB's data folder. Servers created in a custom location are
-    linked into servers/ with junctions: unlink those first so deleting the
-    data folder can never reach into the user's own folders."""
+    """Delete ZBB's data from `data_dir`, then the folder only if that left
+    it empty. Servers created in a custom location are linked into servers/
+    with junctions: unlink those first so the delete never reaches into the
+    user's own folders."""
     servers = data_dir / "servers"
-    if servers.is_dir():
+    if servers.is_dir() and not is_link(servers):
         for entry in servers.iterdir():
             if is_link(entry):
                 remove_link(entry)
-    shutil.rmtree(data_dir, ignore_errors=True)
+    for name in ZBB_DATA_ENTRIES:
+        path = data_dir / name
+        if is_link(path):
+            remove_link(path)
+        elif path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        elif path.exists():
+            path.unlink(missing_ok=True)
+    try:
+        data_dir.rmdir()
+    except OSError:
+        pass  # holds the user's own files too: keep it
+
+
+def removal_command(exe: Path) -> str:
+    """cmd line that deletes the installed exe (its whole folder when it's
+    the standard install folder) once nothing holds it open: it retries for
+    ~30s, so it works however long this process takes to exit."""
+    if same_path(exe.parent, default_install_dir()):
+        target, remove = exe.parent, f'rmdir /s /q "{exe.parent}"'
+    else:
+        target, remove = exe, f'del /f /q "{exe}"'
+    return (f'cmd /c for /l %i in (1,1,30) do '
+            f'(ping -n 2 127.0.0.1 >nul & {remove} 2>nul & if not exist "{target}" exit /b 0)')
 
 
 def schedule_removal(exe: Path) -> None:
-    """Delete the installed exe (its whole folder when it's the standard
-    install folder) a few seconds after this process exits -- a running exe
-    can't delete its own file."""
-    if same_path(exe.parent, default_install_dir()):
-        remove = f'rmdir /s /q "{exe.parent}"'
-    else:
-        remove = f'del /f /q "{exe}"'
+    """Delete the installed exe after this process exits -- a running exe
+    can't delete its own file. Call it right before exiting."""
     subprocess.Popen(
-        f"cmd /c ping 127.0.0.1 -n 4 >nul & {remove}",
-        cwd=str(exe.parent.parent), close_fds=True,
+        removal_command(exe), cwd=str(exe.parent.parent), close_fds=True,
         creationflags=_CREATE_NO_WINDOW | _CREATE_NEW_PROCESS_GROUP,
     )
 

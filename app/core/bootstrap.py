@@ -95,7 +95,55 @@ def is_writable_dir(path: Path) -> bool:
 
 
 def _same_path(a, b) -> bool:
-    return os.path.normcase(os.path.abspath(str(a))) == os.path.normcase(os.path.abspath(str(b)))
+    from app.core.installer import same_path
+    return same_path(a, b)
+
+
+# ----------------------------------------------------------------------
+# Is a folder ZBB's?
+# ----------------------------------------------------------------------
+def looks_like_zbb_data(folder: Path) -> bool:
+    """True when `folder` holds ZBB data (not just any config/ or servers/
+    that happens to sit next to the exe, e.g. in Downloads)."""
+    config = folder / "config"
+    if (config / "zbb_settings.json").is_file():
+        return True
+    try:
+        with open(config / "config.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and "java_path" in data and "accepted_eula" in data
+
+
+def _in_use(folder: Path) -> bool:
+    """Another ZBB instance is running from this data folder."""
+    try:
+        pid = int((folder / "config" / ".zbb.lock").read_text().strip())
+    except (OSError, ValueError):
+        return False
+    if pid == os.getpid():
+        return False
+    try:
+        import psutil
+        name = psutil.Process(pid).name().lower()
+    except Exception:  # gone, or not ours to inspect: not in use
+        return False
+    # A stale lock whose PID was reused by an unrelated program doesn't count.
+    return "zeroblockbridge" in name or name.startswith("python")
+
+
+def _is_app_folder(folder: Path) -> bool:
+    """A folder an older build adopted as data dir because it was a portable
+    copy: the exe itself lives there."""
+    try:
+        return any(folder.glob("ZeroBlockBridge*.exe"))
+    except OSError:
+        return False
+
+
+def _looks_like_server(entry: Path) -> bool:
+    return is_link(entry) or (entry / "metadata.json").is_file() or (entry / "server.properties").is_file()
 
 
 def _use(data_dir: Path) -> Path:
@@ -124,8 +172,11 @@ def _move_entry(src: Path, dest: Path) -> None:
             target = os.path.join(str(src.parent), target)
         create_junction(target, str(dest))
         remove_link(src)
-    else:
-        shutil.move(str(src), str(dest))
+        return
+    try:
+        os.rename(src, dest)  # same volume: atomic, nothing copied
+    except OSError:
+        shutil.move(str(src), str(dest))  # other volume; caller checked nothing uses it
 
 
 def _remove_if_empty(path: Path) -> None:
@@ -154,36 +205,47 @@ def _rescue_config(src_cfg: Path, dest_cfg: Path) -> list[str]:
     return moved
 
 
+def _rescue_entries(src_root: Path, dest_root: Path, servers: bool) -> list[str]:
+    """Move each entry of servers/ or backups/ that isn't in the data dir yet."""
+    moved = []
+    if not src_root.is_dir() or is_link(src_root):
+        return moved
+    for entry in list(src_root.iterdir()):
+        if servers and not _looks_like_server(entry):
+            continue
+        dest = dest_root / entry.name
+        if os.path.lexists(dest):
+            logger.warning("Not moving %s: %s already exists", entry, dest)
+            continue
+        try:
+            dest_root.mkdir(parents=True, exist_ok=True)
+            _move_entry(entry, dest)
+            moved.append(f"{src_root.name}/{entry.name}")
+        except OSError as e:
+            logger.warning("Could not move %s to %s: %s", entry, dest, e)
+    _remove_if_empty(src_root)
+    return moved
+
+
 def rescue_stray_data(exe_dir: Path, data_dir: Path) -> list[str]:
     """Move servers/backups/config written next to the exe into `data_dir`.
 
     Older builds imported `app.core.constants` while the first-run dialog
     was still open, so the whole first session wrote next to the exe while
     every later session read the chosen folder -- servers created that first
-    time vanished from the list. Entries already present in `data_dir` are
-    left alone. Returns the names of what was moved.
+    time vanished from the list. Only runs when the exe folder really holds
+    ZBB data and no other instance uses it; only server-looking entries
+    move, and entries already present in `data_dir` are left alone.
+    Returns the names of what was moved.
     """
-    if _same_path(exe_dir, data_dir):
+    if _same_path(exe_dir, data_dir) or not looks_like_zbb_data(exe_dir):
+        return []
+    if _in_use(exe_dir):
+        logger.warning("Not moving data from %s: another ZBB instance is using it", exe_dir)
         return []
     moved = []
     for sub in ("servers", "backups"):
-        src_root = exe_dir / sub
-        if not src_root.is_dir() or is_link(src_root):
-            continue
-        dest_root = data_dir / sub
-        for entry in list(src_root.iterdir()):
-            dest = dest_root / entry.name
-            if os.path.lexists(dest):
-                logger.warning("Not moving %s: %s already exists", entry, dest)
-                continue
-            try:
-                dest_root.mkdir(parents=True, exist_ok=True)
-                _move_entry(entry, dest)
-                moved.append(f"{sub}/{entry.name}")
-            except OSError as e:
-                logger.warning("Could not move %s to %s: %s", entry, dest, e)
-        _remove_if_empty(src_root)
-
+        moved += _rescue_entries(exe_dir / sub, data_dir / sub, servers=(sub == "servers"))
     moved += _rescue_config(exe_dir / "config", data_dir / "config")
 
     if moved:
@@ -258,6 +320,14 @@ def _reconcile_install(marker: dict, marker_path: Path, exe: Path, data_dir: Pat
     return _apply_setup(result, exe, marker, marker_path, data_dir=data_dir)
 
 
+def _adopt_portable(exe_dir: Path) -> Path:
+    try:
+        write_portable_flag(exe_dir)
+    except OSError as e:
+        logger.debug("Could not write portable flag: %s", e)
+    return _use(exe_dir)
+
+
 def resolve_data_dir() -> Path:
     """Return the directory ZBB should use for servers/config/etc.,
     setting ZBB_DATA_DIR so `app.core.constants` picks it up. May instead
@@ -275,19 +345,19 @@ def resolve_data_dir() -> Path:
     marker = read_marker(marker_path)
     data_dir = Path(marker["data_dir"]) if marker.get("data_dir") else None
     if data_dir is not None and is_writable_dir(data_dir):
+        if looks_like_zbb_data(exe_dir) and not _same_path(exe_dir, data_dir) and _is_app_folder(data_dir):
+            # Two portable copies from before install support: the marker
+            # points at the other copy's folder. Keep this one separate.
+            return _adopt_portable(exe_dir)
         rescue_stray_data(exe_dir, data_dir)
         if sys.platform != "win32":
             return _use(data_dir)
         return _reconcile_install(marker, marker_path, exe, data_dir)
 
-    if (exe_dir / "servers").exists() or (exe_dir / "config").exists():
+    if looks_like_zbb_data(exe_dir):
         # Pre-dates the data-dir choice: it already writes next to the exe.
         # Keep it that way -- no dialog, no disruption.
-        try:
-            write_portable_flag(exe_dir)
-        except OSError as e:
-            logger.debug("Could not write portable flag: %s", e)
-        return _use(exe_dir)
+        return _adopt_portable(exe_dir)
 
     from app.ui import first_run_dialog as ui
     result = ui.ask_setup(exe, data_dir=None)

@@ -71,6 +71,19 @@ def _run_exe(monkeypatch, exe: Path):
     return exe
 
 
+def _zbb_folder(folder: Path) -> Path:
+    """Make `folder` look like ZBB data (as a real session leaves it)."""
+    (folder / "config").mkdir(parents=True, exist_ok=True)
+    (folder / "config" / "zbb_settings.json").write_text("{}", encoding="utf-8")
+    return folder
+
+
+def _server(folder: Path) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "server.properties").write_text("motd=x", encoding="utf-8")
+    return folder
+
+
 # ----------------------------------------------------------------------
 # Data dir resolution
 # ----------------------------------------------------------------------
@@ -210,6 +223,7 @@ def test_deleted_install_offers_setup_again(monkeypatch, tmp_path, env):
 
 def test_no_marker_but_existing_servers_dir_adopts_as_portable(monkeypatch, tmp_path, env):
     exe = _run_exe(monkeypatch, tmp_path / "exe" / "ZeroBlockBridge.exe")
+    _zbb_folder(exe.parent)
     (exe.parent / "servers").mkdir()
 
     assert bootstrap.resolve_data_dir() == exe.parent
@@ -275,7 +289,7 @@ def test_is_writable_dir_true_for_new_and_existing_dir(tmp_path):
 # ----------------------------------------------------------------------
 def test_rescue_moves_servers_backups_and_missing_config(tmp_path):
     exe_dir, data = tmp_path / "Downloads", tmp_path / "data"
-    (exe_dir / "servers" / "OneBlock").mkdir(parents=True)
+    _server(exe_dir / "servers" / "OneBlock")
     (exe_dir / "servers" / "OneBlock" / "server.jar").write_text("jar")
     (exe_dir / "backups" / "OneBlock").mkdir(parents=True)
     (exe_dir / "config").mkdir()
@@ -296,20 +310,20 @@ def test_rescue_moves_servers_backups_and_missing_config(tmp_path):
 
 
 def test_rescue_never_overwrites_an_existing_server(tmp_path):
-    exe_dir, data = tmp_path / "Downloads", tmp_path / "data"
-    (exe_dir / "servers" / "srv").mkdir(parents=True)
+    exe_dir, data = _zbb_folder(tmp_path / "Downloads"), tmp_path / "data"
+    _server(exe_dir / "servers" / "srv")
     (exe_dir / "servers" / "srv" / "a.txt").write_text("stray")
     (data / "servers" / "srv").mkdir(parents=True)
     (data / "servers" / "srv" / "a.txt").write_text("real")
 
-    assert bootstrap.rescue_stray_data(exe_dir, data) == []
+    assert "servers/srv" not in bootstrap.rescue_stray_data(exe_dir, data)
     assert (data / "servers" / "srv" / "a.txt").read_text() == "real"
     assert (exe_dir / "servers" / "srv" / "a.txt").read_text() == "stray"
 
 
 def test_rescue_relinks_custom_location_servers_without_touching_them(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", REAL_PLATFORM)  # real junction/symlink
-    exe_dir, data = tmp_path / "Downloads", tmp_path / "data"
+    exe_dir, data = _zbb_folder(tmp_path / "Downloads"), tmp_path / "data"
     custom = tmp_path / "Minecraft Servers" / "OneBlock"
     custom.mkdir(parents=True)
     (custom / "level.txt").write_text("keep me")
@@ -334,7 +348,8 @@ def test_rescue_is_a_noop_when_data_lives_next_to_exe(tmp_path):
 
 def test_stray_data_is_rescued_on_startup(monkeypatch, tmp_path, env):
     exe = _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
-    (exe.parent / "servers" / "OneBlock").mkdir(parents=True)
+    _zbb_folder(exe.parent)
+    _server(exe.parent / "servers" / "OneBlock")
     data = tmp_path / "data"
     _write_marker(tmp_path, {"data_dir": str(data), "mode": MODE_MANUAL})
 
@@ -371,3 +386,106 @@ def test_is_newer_compares_versions():
     assert not is_newer("2.2.0", "2.2.0")
     assert not is_newer("2.1.0", "2.2.0")
     assert is_newer("2.2.0", None)
+
+
+# ----------------------------------------------------------------------
+# Review regressions: never move or adopt folders that aren't ZBB's
+# ----------------------------------------------------------------------
+def test_rescue_ignores_folders_that_are_not_zbb_data(tmp_path):
+    """Downloads/Desktop often already have their own config/ or backups/."""
+    exe_dir, data = tmp_path / "Downloads", tmp_path / "data"
+    (exe_dir / "config").mkdir(parents=True)
+    (exe_dir / "config" / "settings.ini").write_text("not ours")
+    (exe_dir / "backups" / "photos").mkdir(parents=True)
+
+    assert bootstrap.rescue_stray_data(exe_dir, data) == []
+    assert (exe_dir / "config" / "settings.ini").exists()
+    assert (exe_dir / "backups" / "photos").is_dir()
+    assert not data.exists()
+
+
+def test_rescue_only_moves_server_looking_entries(tmp_path):
+    exe_dir, data = _zbb_folder(tmp_path / "Downloads"), tmp_path / "data"
+    _server(exe_dir / "servers" / "real")
+    (exe_dir / "servers" / "notes").mkdir(parents=True)
+
+    moved = bootstrap.rescue_stray_data(exe_dir, data)
+
+    assert "servers/real" in moved
+    assert (exe_dir / "servers" / "notes").is_dir()
+    assert not (data / "servers" / "notes").exists()
+
+
+def test_rescue_skips_folder_used_by_a_running_instance(monkeypatch, tmp_path):
+    exe_dir, data = _zbb_folder(tmp_path / "Downloads"), tmp_path / "data"
+    _server(exe_dir / "servers" / "srv")
+    monkeypatch.setattr(bootstrap, "_in_use", lambda folder: True)
+
+    assert bootstrap.rescue_stray_data(exe_dir, data) == []
+    assert (exe_dir / "servers" / "srv").is_dir()
+
+
+def test_in_use_ignores_own_dead_and_garbage_pids(tmp_path):
+    lock = _zbb_folder(tmp_path) / "config" / ".zbb.lock"
+    for content in (str(os.getpid()), "999999999", "garbage"):
+        lock.write_text(content)
+        assert bootstrap._in_use(tmp_path) is False, content
+
+
+def test_in_use_detects_a_live_zbb_process(monkeypatch, tmp_path):
+    lock = _zbb_folder(tmp_path) / "config" / ".zbb.lock"
+    lock.write_text("4242")
+
+    class _Proc:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def name(self):
+            return "ZeroBlockBridge.exe"
+    monkeypatch.setattr("psutil.Process", _Proc)
+    assert bootstrap._in_use(tmp_path) is True
+
+
+def test_second_legacy_portable_copy_stays_separate(monkeypatch, tmp_path, env):
+    """v2.2.0 wrote the marker pointing at the first portable copy's folder;
+    a second portable copy must not have its servers moved into it."""
+    copy_a = _zbb_folder(tmp_path / "CopyA")
+    (copy_a / "ZeroBlockBridge.exe").write_bytes(b"exe")
+    _write_marker(tmp_path, {"data_dir": str(copy_a)})
+    exe_b = _run_exe(monkeypatch, tmp_path / "CopyB" / "ZeroBlockBridge.exe")
+    _zbb_folder(exe_b.parent)
+    _server(exe_b.parent / "servers" / "b-server")
+
+    assert bootstrap.resolve_data_dir() == exe_b.parent
+    assert (exe_b.parent / "servers" / "b-server").is_dir()
+    assert not (copy_a / "servers").exists()
+    assert (exe_b.parent / PORTABLE_FLAG).exists()
+    assert env.setup == []
+
+
+def test_unrelated_config_folder_next_to_download_still_shows_setup(monkeypatch, tmp_path, env):
+    exe = _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    (exe.parent / "config").mkdir()
+    env.setup_result = SetupResult("portable", exe.parent)
+
+    bootstrap.resolve_data_dir()
+
+    assert env.setup == [(exe, None)]
+
+
+def test_installed_exe_behind_a_junction_still_matches(monkeypatch, tmp_path, env):
+    """%LOCALAPPDATA% relocated with a junction: the running exe and the
+    recorded path are spelled differently but are the same file."""
+    monkeypatch.setattr(sys, "platform", REAL_PLATFORM)
+    real = tmp_path / "D" / "Programs"
+    real.mkdir(parents=True)
+    create_junction(str(real), str(tmp_path / "Programs"))
+    monkeypatch.setattr(sys, "platform", "win32")
+    _run_exe(monkeypatch, real / "ZeroBlockBridge.exe")
+    data = tmp_path / "data"
+    _write_marker(tmp_path, {"data_dir": str(data), "mode": MODE_INSTALLED,
+                             "exe_path": str(tmp_path / "Programs" / "ZeroBlockBridge.exe"),
+                             "version": AppConfig.APP_VERSION})
+
+    assert bootstrap.resolve_data_dir() == data
+    assert env.already == []
