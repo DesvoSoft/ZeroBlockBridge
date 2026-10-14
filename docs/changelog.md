@@ -16,7 +16,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Import an existing world while creating a server** — the World & Network step can bring in a world folder (e.g. from `.minecraft/saves`) or a `.zip` of one instead of generating a new world.
 - `.mrpack` imports also apply the pack's `server-overrides/` folder.
 
+### Changed
+- Modpack (`.mrpack`) mods download in parallel (6 at a time) instead of one by one, so big packs install several times faster.
+- Adding an existing server with **From Folder** now detects its engine (Forge and Fabric included, from `libraries/`) and Minecraft version (from the server jar or libraries) instead of always recording "Vanilla / Unknown".
+
 ### Fixed
+- `metadata.json`, `config.json`, the versions cache and the install marker are written atomically: a crash or power loss mid-save can no longer leave a truncated file that makes a server lose its type, version and settings.
 - **Servers created on the first launch disappeared from the list** — the data-folder dialog loaded the app's paths before the choice was saved, so that whole first session wrote servers, config and the Playit agent next to the `.exe` while every later launch read the chosen folder. Paths are now resolved only after the choice, and on the next launch anything left next to the exe (servers, backups, config such as `playit.toml`) is moved into the data folder automatically — servers in custom folders are re-linked, never copied.
 
 ## [2.2.0] — 2026-09-20
