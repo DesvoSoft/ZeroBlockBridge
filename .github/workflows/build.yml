@@ -37,7 +37,7 @@ jobs:
             ASSET_NAME: ZeroBlockBridge
     steps:
       # 1. Checkout code
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 2. Set up Python
       - name: Set up Python
@@ -126,7 +126,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
