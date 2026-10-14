@@ -264,13 +264,7 @@ class JdkManager:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 self._download_file(url, archive_path, cancel_event)
-                if expected_checksum:
-                    if not _verify_checksum(archive_path, expected_checksum):
-                        archive_path.unlink(missing_ok=True)
-                        raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
-                else:
-                    logger.warning("No checksum available for JDK %d — skipping verification", version)
-
+                self._verify_archive(archive_path, expected_checksum, version)
                 self._extract_archive(archive_path, cache_dir)
                 archive_path.unlink(missing_ok=True)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -291,6 +285,15 @@ class JdkManager:
                     raise JdkDownloadError(f"JDK download failed after {MAX_RETRIES} attempts: {last_error}")
 
         raise JdkDownloadError(f"JDK download failed: {last_error}")
+
+    @staticmethod
+    def _verify_archive(archive_path: Path, expected_checksum, version: int) -> None:
+        if not expected_checksum:
+            logger.warning("No checksum available for JDK %d — skipping verification", version)
+            return
+        if not _verify_checksum(archive_path, expected_checksum):
+            archive_path.unlink(missing_ok=True)
+            raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
 
     def _download_file(self, url: str, dest: Path, cancel_event=None):
         def check_cancel(_fraction):

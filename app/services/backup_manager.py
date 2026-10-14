@@ -68,13 +68,16 @@ class BackupManager:
                 return backup_path, f"Backup created with warnings. Skipped {len(skipped_files)} locked files."
             return backup_path, None
         except Exception as e:
-            for leftover in (part_path, backup_path):
-                if leftover.exists():
-                    try:
-                        leftover.unlink()
-                    except OSError as unlink_err:
-                        logger.warning("Failed to clean up failed backup: %s", unlink_err)
+            self._discard(part_path, backup_path)
             return None, str(e)
+
+    @staticmethod
+    def _discard(*paths: Path) -> None:
+        for leftover in paths:
+            try:
+                leftover.unlink(missing_ok=True)
+            except OSError as unlink_err:
+                logger.warning("Failed to clean up failed backup: %s", unlink_err)
 
     def _remove_stale_parts(self) -> None:
         """Drop half-written backups left by an earlier exit or crash."""

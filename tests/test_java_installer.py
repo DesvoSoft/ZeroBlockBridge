@@ -17,7 +17,6 @@ from app.services.java_installer import (
     _get_common_prefix,
     _fetch_asset_info,
     get_release_label,
-    MAX_RETRIES,
 )
 
 
