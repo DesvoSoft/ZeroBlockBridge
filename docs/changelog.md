@@ -8,20 +8,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+---
+
+## [2.3.0] — 2026-10-15
+
+Start a server from a modpack or a world you already have, run NeoForge, and install ZeroBlockBridge like any other Windows app. Closing the window can now keep your servers running in the system tray.
+
 ### Added
 - **NeoForge servers** — NeoForge is a new engine in the creation wizard (Minecraft 1.20.2 and newer, including the 26.x releases). ZBB picks the newest stable NeoForge build for the chosen version (a beta when no stable build exists yet), installs it with the matching Java and launches it like modern Forge.
+- **NeoForge servers get mods and modpacks like Forge:** Modrinth search, installs, updates, auto-install of missing mods and the Optimizer Bundle use the `neoforge` loader; NeoForge `.mrpack`s and server packs are accepted with their exact NeoForge build (its number gives the Minecraft version); "Add Server → From Folder" recognises NeoForge folders and their version (a `neoforge-*.jar` was misread as Forge). NeoForge 1.20.1 packs, a Forge fork, are installed on Forge 1.20.1.
 - **Install on this PC** — the first launch offers to install ZeroBlockBridge (per-user, no admin rights): the app is copied to `%LOCALAPPDATA%\Programs\ZeroBlockBridge`, with optional Start menu and Desktop shortcuts, and an entry in Windows Settings → Apps with a proper uninstaller (which can keep or delete your servers; servers in other folders are never touched). The finish screen says which app to open from now on and that the downloaded file can be deleted. **Portable** mode (data next to the exe) is still available.
 - **Already installed?** — opening another downloaded copy shows where the installed app is and offers **Open installed app**, or **Update to X** when the download is newer (the shortcuts and servers stay the same). Data folders chosen by older builds get a one-time offer to install.
 - Settings → Storage shows how the app is installed and can add Start menu / Desktop shortcuts.
 - **Import a modpack while creating a server** — the wizard's Engine & Version step takes a Modrinth `.mrpack` or a modpack's Server Pack `.zip`; the engine, Minecraft version and exact Fabric/Forge loader build are set from the pack, RAM is raised for modded play, and mods/configs are installed during creation. CurseForge client exports explain how to get the Server Pack instead. The pack is checked before anything is created (loader, Minecraft version, file names, disk space); if creation fails anyway, the half-built server is removed and the reason is shown. The wizard's settings (game mode, difficulty, whitelist...) override the pack's server.properties, an imported world follows its level-name, and mods that fail to download are reported.
 - **World version check on import** — the wizard reads the Minecraft version a world was last saved with (from `level.dat`) and refuses to create the server when the world is newer than the server version (an older version can corrupt it), explaining which version to pick; older worlds show that they'll be upgraded on first start (the original stays untouched), and snapshot worlds get a warning.
 - **Import an existing world while creating a server** — the World & Network step can bring in a world folder (e.g. from `.minecraft/saves`) or a `.zip` of one instead of generating a new world.
+- **Browse worlds on CurseForge** — the World step links to CurseForge's world catalogue; download a world `.zip` there and pick it with *Choose .zip...*.
 - `.mrpack` imports also apply the pack's `server-overrides/` folder.
+- **Closing the window asks what to do:** minimize to the system tray (servers and the tunnel keep running; the tray icon has Open and Exit) or exit completely, with "Don't ask again". The choice can be changed in Settings → General → Closing the window. On Linux, where a tray may not exist, closing always exits.
 
 ### Changed
-- **Browse worlds on CurseForge** — the World step links to CurseForge's world catalogue; download a world `.zip` there and pick it with *Choose .zip...*.
-- **NeoForge servers get mods and modpacks like Forge:** Modrinth search, installs, updates, auto-install of missing mods and the Optimizer Bundle use the `neoforge` loader; NeoForge `.mrpack`s and server packs are accepted with their exact NeoForge build (its number gives the Minecraft version); "Add Server → From Folder" recognises NeoForge folders and their version (a `neoforge-*.jar` was misread as Forge). NeoForge 1.20.1 packs, a Forge fork, are installed on Forge 1.20.1.
-- **Closing the window asks what to do:** minimize to the system tray (servers and the tunnel keep running; the tray icon has Open and Exit) or exit completely, with "Don't ask again". The choice can be changed in Settings → General → Closing the window. On Linux, where a tray may not exist, closing always exits.
 - Modpack (`.mrpack`) mods download in parallel (6 at a time) instead of one by one, so big packs install several times faster.
 - Adding an existing server with **From Folder** now detects its engine (Forge and Fabric included, from `libraries/`) and Minecraft version (from the server jar or libraries) instead of always recording "Vanilla / Unknown".
 
