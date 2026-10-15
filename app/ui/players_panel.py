@@ -13,6 +13,7 @@ import customtkinter as ctk
 from PIL import Image
 
 from app.core.app_config import AppConfig
+from app.core.i18n import _
 from app.core.players import OP_LEVELS
 from app.core.server_events import ServerEvent
 from app.services.player_heads import fetch_head
@@ -327,15 +328,17 @@ class PlayersPanel(ctk.CTkFrame):
     @staticmethod
     def _detail(player: dict) -> tuple:
         if player["banned"] and player["ban_reason"]:
-            return f"Banned: {player['ban_reason']}", AppConfig.COLOR_TEXT_GRAY
+            return _("Banned: {reason}").format(reason=player["ban_reason"]), AppConfig.COLOR_TEXT_GRAY
         if player["online"]:
-            return "Online now", AppConfig.COLOR_STATUS_ONLINE
+            return _("Online now"), AppConfig.COLOR_STATUS_ONLINE
         parts = []
         if player["last_seen"]:
-            parts.append(f"Last seen {format_relative(player['last_seen'], datetime.datetime.now())}")
+            parts.append(_("Last seen {when}").format(
+                when=format_relative(player["last_seen"], datetime.datetime.now())))
         if player["playtime_seconds"]:
-            parts.append(f"{format_duration(player['playtime_seconds'])} played")
-        return (" · ".join(parts) if parts else "Hasn't joined since ZBB started tracking"), AppConfig.COLOR_TEXT_GRAY
+            parts.append(_("{duration} played").format(duration=format_duration(player["playtime_seconds"])))
+        return (" · ".join(parts) if parts else _("Hasn't joined since ZBB started tracking")), \
+            AppConfig.COLOR_TEXT_GRAY
 
     # ------------------------------------------------------------------ heads
     def _load_heads(self):

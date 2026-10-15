@@ -19,6 +19,7 @@ import gettext
 import locale
 import logging
 import os
+import struct
 import sys
 
 from app.core.resources import assets_dir
@@ -106,7 +107,7 @@ def set_language(code) -> str:
     if lang != DEFAULT_LANGUAGE:
         try:
             translations = gettext.translation(DOMAIN, localedir=str(locale_dir()), languages=[lang])
-        except (OSError, ValueError) as e:  # missing or corrupt catalog: English
+        except (OSError, ValueError, struct.error) as e:  # missing, corrupt or truncated: English
             logger.warning("No usable %s catalog, using English: %s", lang, e)
             lang = DEFAULT_LANGUAGE
     _translations, _language = translations, lang

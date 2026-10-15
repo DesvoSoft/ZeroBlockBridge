@@ -343,7 +343,7 @@ These rules must never be violated:
 
 **Files:** `app/core/i18n.py`, `app/core/bootstrap.py`, `assets/locales/`, `tools/i18n.py`
 
-- Plain gettext. English is the source language; `assets/locales/<lang>/LC_MESSAGES/zbb.po` holds each translation and the compiled `zbb.mo` beside it is committed (no build step; both packaging specs bundle `assets/`). `tools/i18n.py extract|update|compile` wraps Babel (dev dependency). `tests/test_i18n.py` fails when a `.mo` is stale, a marked string is untranslated or a translation drops a `{placeholder}`.
+- Plain gettext. English is the source language; `assets/locales/<lang>/LC_MESSAGES/zbb.po` holds each translation and the compiled `zbb.mo` beside it is committed (no build step; both packaging specs bundle `assets/`). `tools/i18n.py extract|update|compile` wraps Babel (dev dependency). `tests/test_i18n.py` fails when a `.mo` differs from what its `.po` compiles to, a marked string is untranslated or a translation drops a `{placeholder}`.
 - Code uses `_()`, `ngettext()`, `pgettext()` from `app.core.i18n`, with named `str.format` placeholders and whole sentences (no fragments joined in code). Module-level text is marked with `N_()` and translated where it is shown, because the language is set after modules are imported. A function that calls `_()` must not also assign `_` (e.g. `a, _, _ = ...`): Python would make `_` local and the call fails (`test_no_function_shadows_the_translation_function`).
 - The language is fixed for the run (`i18n.set_language`); changing it in Settings → General takes effect on the next start.
 - Where it is resolved and stored:
@@ -352,13 +352,13 @@ These rules must never be violated:
 |--------|---------------------------|------|
 | Pre-app dialogs (setup, already installed, install offer, uninstall) | `install.json` `language` → the marker's data folder `config/zbb_settings.json` (plain JSON, no `SettingsManager`) → Windows UI language (`GetUserDefaultUILanguage`) → process locale → English | `bootstrap.use_stored_language` |
 | First setup page | Picker (top right, native language names) rebuilds the page in the chosen language; the choice travels in `SetupResult.language` | `first_run_dialog._SetupDialog` |
-| End of setup | Written to `install.json` (`installed`/`manual`); a portable copy has no marker, so into its own `config/zbb_settings.json` | `bootstrap._apply_setup` |
-| Main app start | `SettingsManager` `language`; on the first launch copied from the marker (only if the marker's `data_dir` is this data folder) or the OS language | `bootstrap.startup_language`, called first in `main()` |
+| End of setup | Written to `install.json` (`installed`/`manual`) and into the data folder's settings if they already exist (install offer); a portable copy has no marker, so into its own `config/zbb_settings.json` | `bootstrap._apply_setup` |
+| Main app start | `SettingsManager` `language`; on the first launch the marker's (only if its `data_dir` is this data folder) or the OS language, saved into the settings once the single-instance lock is held | `bootstrap.startup_language` (first thing in `main()`), `bootstrap.keep_language` |
 | Settings → General → Language | Saved to `SettingsManager` and to the marker when it belongs to this data folder | `bootstrap.remember_language` |
 
 - Locale-aware formatting lives in `app.core.i18n` (`format_number`, `format_percent`, `format_size`, `format_count`, `format_datetime` with month names from the catalog, never `strftime("%b")`); `app/ui/formatting.py` builds the uptime, relative-time and RAM readouts on them.
 - Never translated: logs, ZBB console prefixes (`[Security]`, `[System]`, `[Error]`...), patterns matched against Minecraft or Playit agent output, file contents (server.properties, eula.txt, crash reports), product names. Discord webhook messages stay English for now.
-- Translated so far: the pre-app dialogs, EULA, close dialog, tray menu and notification, single-instance message, installer shortcut failures and the formatting helpers. The CustomTkinter screens are translated as each one is ported to Qt (`docs/ROADMAP.md` 8d).
+- Translated so far: the pre-app dialogs, EULA, close dialog, tray menu and notification, single-instance message, installer shortcut failures, the formatting helpers and the few labels built around them (server uptime, player last seen/playtime, shortcut toasts), so no label mixes languages. The CustomTkinter screens are translated as each one is ported to Qt (`docs/ROADMAP.md` 8d).
 
 ---
 

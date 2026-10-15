@@ -118,11 +118,15 @@ def use_stored_language(marker: dict) -> str:
     return i18n.set_language(stored_language(marker) or i18n.system_language())
 
 
-def _save_settings_language(data_dir: Path, language: str) -> None:
+def _save_settings_language(data_dir: Path, language: str, create: bool = True) -> None:
+    """Put `language` into the data folder's settings file; with
+    create=False only when that file already exists."""
+    if not create and not (Path(data_dir) / _SETTINGS_FILE).is_file():
+        return
     settings = _read_settings(data_dir)
     if settings is None:
         return  # unreadable: never overwrite the user's settings to add this
-    atomic_write_json(data_dir / _SETTINGS_FILE, dict(settings, language=language))
+    atomic_write_json(Path(data_dir) / _SETTINGS_FILE, dict(settings, language=language))
 
 
 def _marker_language_for(data_dir: Path, marker_path: Path | None = None) -> str | None:
@@ -134,13 +138,21 @@ def _marker_language_for(data_dir: Path, marker_path: Path | None = None) -> str
 
 def startup_language(settings, data_dir: Path, marker_path: Path | None = None) -> str:
     """Main-app start: the saved setting; on the first launch, the language
-    picked during setup (copied into `settings`), else the OS language.
-    `settings` is the SettingsManager. Returns the language in use."""
+    picked during setup, else the OS language. `settings` is the
+    SettingsManager. Only switches the language -- `keep_language` saves it
+    once this process owns the data folder. Returns the language in use."""
     language = i18n.normalize(settings.get("language"))
     if language is None:
         language = _marker_language_for(data_dir, marker_path) or i18n.system_language()
-        settings.set("language", language)
     return i18n.set_language(language)
+
+
+def keep_language(settings, language: str) -> None:
+    """First launch: copy the language in use into the settings. Called
+    after the single-instance lock, so a second process exiting right away
+    never writes a stale copy of the settings."""
+    if i18n.normalize(settings.get("language")) != language:
+        settings.set("language", language)
 
 
 def remember_language(language: str, data_dir: Path, marker_path: Path | None = None) -> None:
@@ -150,7 +162,10 @@ def remember_language(language: str, data_dir: Path, marker_path: Path | None = 
     marker_path = marker_path or _marker_path()
     marker = read_marker(marker_path)
     if marker.get("data_dir") and _same_path(marker["data_dir"], data_dir):
-        write_marker(dict(marker, language=language), marker_path)
+        try:
+            write_marker(dict(marker, language=language), marker_path)
+        except OSError as e:  # the setting itself is saved; only the dialogs lag
+            logger.warning("Could not save the language in %s: %s", marker_path, e)
 
 
 def is_writable_dir(path: Path) -> bool:
@@ -349,6 +364,9 @@ def _apply_setup(result: SetupResult | None, exe: Path, marker: dict, marker_pat
         _save_settings_language(exe.parent, result.language)
         return _use(exe.parent)
     marker = dict(marker, data_dir=str(result.data_dir), mode=result.mode, language=result.language)
+    # An install offer for an existing data folder: its settings (which the
+    # main app reads first) must not keep the old language.
+    _save_settings_language(result.data_dir, result.language, create=False)
     if result.mode == MODE_INSTALLED and result.exe_path is not None:
         marker.update(exe_path=str(result.exe_path), version=AppConfig.APP_VERSION)
     write_marker(marker, marker_path)

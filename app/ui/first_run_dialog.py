@@ -202,11 +202,16 @@ class _SetupDialog(_BootDialog):
         )
         menu.set(i18n.LANGUAGES[i18n.get_language()])
         menu.pack(side="right")
+        self._language_menu = menu
         ctk.CTkLabel(row, text=_("Language"), font=AppConfig.FONT_BODY_SMALL,
                      text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="right", padx=(0, 8))
 
     def _on_language(self, name: str):
         code = i18n.code_for_name(name)
+        if self._busy:
+            # Installing: a rebuilt page would re-enable Install mid-copy.
+            self._language_menu.set(i18n.LANGUAGES[i18n.get_language()])
+            return
         if code is None or code == i18n.get_language():
             return
         i18n.set_language(code)
@@ -279,6 +284,8 @@ class _SetupDialog(_BootDialog):
         return card
 
     def _on_pick(self, value):
+        if self._busy:
+            return
         self._error.configure(text="")
         if value == "custom":
             self._pick_data_dir()
@@ -308,6 +315,8 @@ class _SetupDialog(_BootDialog):
             self._custom_card.subtitle.configure(text=str(self._data_dir))
 
     def _confirm(self):
+        if self._busy:  # already installing
+            return
         choice = self._choice.get()
         language = i18n.get_language()
         if choice == "portable":

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 13:11-0600\n"
+"POT-Creation-Date: 2026-10-15 13:29-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -42,6 +42,10 @@ msgstr "abr"
 
 msgid "Aug"
 msgstr "ago"
+
+#, python-brace-format
+msgid "Banned: {reason}"
+msgstr "Baneado: {reason}"
 
 #, python-brace-format
 msgid "Can't write to {path}. Move the app to another folder or install it instead."
@@ -81,6 +85,10 @@ msgstr "¿Cerrar ZeroBlockBridge?"
 msgid "Continue"
 msgstr "Continuar"
 
+#, python-brace-format
+msgid "Couldn't add the shortcut: {error}"
+msgstr "No se pudo añadir el acceso directo: {error}"
+
 msgid "Dec"
 msgstr "dic"
 
@@ -101,13 +109,16 @@ msgstr "Salir"
 
 #, python-brace-format
 msgid "Exiting will stop: {items}."
-msgstr "Al salir se detendrá: {items}."
+msgstr "Al salir se detendrá lo siguiente: {items}."
 
 msgid "Feb"
 msgstr "feb"
 
 msgid "From now on, open it from the Start menu or the desktop shortcut."
 msgstr "A partir de ahora, ábralo desde el menú Inicio o el acceso directo del escritorio."
+
+msgid "Hasn't joined since ZBB started tracking"
+msgstr "No ha entrado desde que ZBB lleva el registro"
 
 msgid "I Accept the EULA"
 msgstr "Acepto el EULA"
@@ -172,6 +183,10 @@ msgstr "Seguir usando este archivo. No se le volverá a preguntar."
 msgid "Language"
 msgstr "Idioma"
 
+#, python-brace-format
+msgid "Last seen {when}"
+msgstr "Visto por última vez {when}"
+
 msgid "Mar"
 msgstr "mar"
 
@@ -202,6 +217,9 @@ msgstr "Aceptar"
 msgid "Oct"
 msgstr "oct"
 
+msgid "Online now"
+msgstr "En línea ahora"
+
 msgid "Open ZeroBlockBridge"
 msgstr "Abrir ZeroBlockBridge"
 
@@ -230,7 +248,7 @@ msgid "Removes the app, its shortcuts and its entry in Windows Settings."
 msgstr "Quita la aplicación, sus accesos directos y su entrada en Configuración de Windows."
 
 msgid "Removing..."
-msgstr "Quitando..."
+msgstr "Desinstalando..."
 
 msgid "Restart ZeroBlockBridge to use the new language."
 msgstr "Reinicie ZeroBlockBridge para usar el nuevo idioma."
@@ -244,6 +262,10 @@ msgid ""
 msgstr ""
 "Para ejecutar un servidor de Minecraft hay que aceptar el Contrato de licencia de usuario final "
 "(EULA) de Mojang. Si lo acepta, ZBB pondrá eula=true automáticamente en los servidores que cree."
+
+#, python-brace-format
+msgid "Running · {elapsed}"
+msgstr "En marcha · {elapsed}"
 
 #, python-brace-format
 msgid ""
@@ -261,7 +283,13 @@ msgid "Servers and backups: {path}"
 msgstr "Servidores y copias de seguridad: {path}"
 
 msgid "Setup"
-msgstr "Configuración"
+msgstr "Instalación"
+
+msgid "Shortcut added to the Start menu."
+msgstr "Acceso directo añadido al menú Inicio."
+
+msgid "Shortcut added to the desktop."
+msgstr "Acceso directo añadido al escritorio."
 
 #, python-brace-format
 msgid ""
@@ -279,6 +307,10 @@ msgstr "Menú Inicio"
 
 msgid "Start menu shortcut"
 msgstr "Acceso directo en el menú Inicio"
+
+#, python-brace-format
+msgid "Starting… {elapsed}"
+msgstr "Iniciando… {elapsed}"
 
 msgid "Takes effect the next time you open ZeroBlockBridge."
 msgstr "Se aplica la próxima vez que abra ZeroBlockBridge."
@@ -379,6 +411,10 @@ msgstr "hace {days} d"
 #, python-brace-format
 msgid "{days}d {hours}h"
 msgstr "{days} d {hours} h"
+
+#, python-brace-format
+msgid "{duration} played"
+msgstr "{duration} jugado"
 
 #, python-brace-format
 msgid "{hours}h ago"
