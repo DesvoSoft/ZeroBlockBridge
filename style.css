@@ -463,6 +463,36 @@ body {
   margin-right: 0.3rem;
 }
 
+.coming-next {
+  margin: 1.25rem auto 0;
+  padding: 1.25rem 1.5rem;
+  max-width: 760px;
+  border: 1px dashed rgba(52,211,153,0.22);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.coming-next ul {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.coming-next li {
+  font-size: 0.85rem;
+  color: var(--vitra-color-text-secondary);
+}
+
+.coming-next li strong { color: var(--vitra-color-text-primary); font-weight: 600; }
+
+.coming-next code {
+  font-family: var(--zbb-mono);
+  font-size: 0.85em;
+  color: var(--zbb-green);
+}
+
 .mc-tag-pill {
   margin-top: 1rem;
   font-family: var(--zbb-mono);
@@ -562,7 +592,18 @@ body {
 }
 
 .download-left h2 { font-size: 1.75rem; font-weight: 700; margin: 0 0 0.4rem; }
-.dl-meta { color: var(--vitra-color-text-secondary); font-size: 0.92rem; margin: 0 0 1rem; }
+.dl-meta { color: var(--vitra-color-text-secondary); font-size: 0.92rem; margin: 0 0 0.4rem; }
+.dl-release { font-family: var(--zbb-mono); font-size: 0.78rem; margin: 0 0 1rem; }
+.dl-release a { color: var(--zbb-green); text-decoration: none; }
+.dl-release a:hover { text-decoration: underline; }
+
+.release-tag {
+  font-family: var(--zbb-mono);
+  font-size: 0.72em;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-left: 0.15rem;
+}
 .download-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .download-right {
@@ -611,7 +652,7 @@ body {
 
 .docs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 1.25rem;
   max-width: 900px;
   margin: 0 auto;
@@ -698,6 +739,10 @@ body {
   .download-right { align-items: center; width: 100%; text-align: center; }
   .download-badges { justify-content: center; }
   .install-block code { white-space: normal; word-break: break-all; }
+
+  .more-features { flex-direction: column; align-items: flex-start; padding: 1rem 1.1rem; }
+  .more-features li { white-space: normal; }
+  .coming-next { padding: 1rem 1.1rem; }
 }
 
 @media (max-width: 480px) {
