@@ -91,6 +91,12 @@ def make_api(manager=None, **kw):
 
 
 class TestServers:
+    def test_valid_name_lets_the_ui_ask_again_instead_of_crashing(self):
+        api, _ = make_api()
+        assert api.servers.valid_name("Survival 2")
+        assert not api.servers.valid_name("a/b")
+        assert not api.servers.valid_name("x.")
+
     def test_list_creates_the_folder_and_lists_only_folders(self, servers_dir):
         api, _ = make_api()
         assert api.servers.list() == []
@@ -394,18 +400,37 @@ class TestModsApi:
             mods.installed_slugs("srv")
             mods.installed_filename("srv", "x")
             mods.uninstall("srv", "x")
-            mods.delete_file("srv", "p")
             mods.delete_files("srv", ["p"])
             mods.install_version({"id": 1}, "srv", "fabric", "x")
             mods.install_latest("x", "srv", "1.21", "fabric")
             mods.install_modpack({"id": 1}, "srv")
         content.installed_jar_files.assert_called_once_with("srv")
         content.uninstall.assert_called_once_with("srv", "x")
-        content.delete_content_file.assert_called_once_with("srv", "p")
         content.delete_content_files.assert_called_once_with("srv", ["p"])
         assert content.install_version.called and content.install_latest.called and content.install_modpack.called
         tracker.get_installed_slugs.assert_called_once_with("srv")
         tracker.get_installed_filename.assert_called_once_with("srv", "x")
+
+
+class TestModsApiDeleteFile:
+    """Regression: a single delete must report the slug it forgot, or the
+    browser keeps showing the mod as installed (and Uninstall does nothing)."""
+
+    def test_returns_the_forgotten_slug(self, tmp_path):
+        root = tmp_path / "servers"
+        mods_dir = root / "srv" / "mods"
+        mods_dir.mkdir(parents=True)
+        (mods_dir / "sodium.jar").write_bytes(b"x")
+        (mods_dir / "manual.jar").write_bytes(b"x")
+        with patch("app.services.mod_content.SERVERS_DIR", str(root)),                 patch("app.services.mod_install_tracker.SERVERS_DIR", str(root)):
+            from app.services import mod_install_tracker
+            mod_install_tracker.record_install("srv", "sodium", "sodium.jar")
+            assert ModsApi.delete_file("srv", str(mods_dir / "sodium.jar")) == "sodium"
+            assert ModsApi.delete_file("srv", str(mods_dir / "manual.jar")) is None
+            assert mod_install_tracker.get_installed_slugs("srv") == set()
+            with pytest.raises(UnsafePathError):
+                ModsApi.delete_file("srv", str(root / "srv" / "server.properties"))
+        assert not list(mods_dir.iterdir())
 
 
 def _png_bytes():

@@ -12,7 +12,7 @@ from app.core.provisioning import ProvisionResult
 from app.core.server_events import ServerEvent
 from app.services import migration
 from app.services.modrinth import loader_for_server_type
-from app.services.server_paths import check_server_name
+from app.services.server_paths import check_server_name, is_valid_server_name
 from app.services.server_properties import load_server_properties
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,11 @@ class ServersApi:
         """Server folder names (creates the servers folder on first use)."""
         os.makedirs(SERVERS_DIR, exist_ok=True)
         return [d for d in os.listdir(SERVERS_DIR) if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+
+    @staticmethod
+    def valid_name(name: str) -> bool:
+        """Whether ``name`` can be a server folder (ask before create/import)."""
+        return is_valid_server_name(name)
 
     def exists(self, name: str) -> bool:
         return os.path.isdir(os.path.join(SERVERS_DIR, check_server_name(name)))
