@@ -27,6 +27,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - **Built-in server templates were missing from the app.** The four templates the wizard offers (Lite SMP, Modded Fabric, Paper Performance, Vanilla Plus) were never packaged into the `.exe`, so "Start from template" didn't appear. They now ship with the app; a template you save with the same name takes precedence.
+- **Save as Template** checks the name: one with slashes, a drive letter or a leading dot could write outside the templates folder (`../config` overwrote the app's settings). Replacing an existing template asks first, and a save that fails says why instead of failing silently.
 - Exiting with a server running no longer logs an error from a status refresh that ran after shutdown, and closing the creation wizard no longer logs one about focusing a closed window.
 - An `install.json` saved by a Windows tool that adds a byte-order mark is read correctly instead of being treated as a first run.
 - **Exiting no longer leaves a hidden ZeroBlockBridge process behind.** A task still running when the window closed (a server download or install, a Java install, a backup) kept the process alive in the background until it finished — minutes, with the window already gone. Exiting now cancels a creation in progress and gives other work 3 seconds before the process ends; opening ZBB again while it sits in the tray says where to find it.

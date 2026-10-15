@@ -106,3 +106,42 @@ def test_shipped_builtin_templates_are_valid():
     for path in shipped:
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["type"] in {"Vanilla", "Paper", "Purpur", "Fabric", "Forge", "NeoForge"}
+
+
+def test_corrupt_user_template_falls_back_to_the_builtin(dirs):
+    user, builtin = dirs
+    _write(builtin, "lite-smp", {"type": "Paper"})
+    user.mkdir(parents=True, exist_ok=True)
+    (user / "lite-smp.json").write_text("{not json", encoding="utf-8")
+    assert template_manager.load_template("lite-smp")["type"] == "Paper"
+    assert [t["name"] for t in template_manager.list_templates()] == ["lite-smp"]
+
+
+@pytest.mark.parametrize("raw, name", [
+    ("My Template", "my-template"),
+    ("  lite smp  ", "lite-smp"),
+    ("pack_1.20", "pack_1.20"),
+])
+def test_template_name_is_normalised(raw, name):
+    assert template_manager.normalize_template_name(raw) == name
+
+
+@pytest.mark.parametrize("raw", ["../config", "a/b", "a\\b", "a:b", ".hidden", "", "   ", "x" * 65])
+def test_unsafe_template_names_are_rejected(raw):
+    assert template_manager.normalize_template_name(raw) is None
+
+
+def test_save_refuses_a_name_that_escapes_the_templates_folder(dirs):
+    user, _ = dirs
+    with pytest.raises(ValueError):
+        template_manager.save_template("../config", {"type": "Vanilla"})
+    assert not (user.parent / "config.json").exists()
+
+
+def test_template_exists_covers_user_and_builtin(dirs):
+    user, builtin = dirs
+    _write(builtin, "lite-smp", {"type": "Paper"})
+    _write(user, "mine", {"type": "Vanilla"})
+    assert template_manager.template_exists("lite-smp")
+    assert template_manager.template_exists("mine")
+    assert not template_manager.template_exists("other")
