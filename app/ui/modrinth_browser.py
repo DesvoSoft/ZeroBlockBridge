@@ -1515,7 +1515,8 @@ class ModrinthBrowser(ctk.CTkFrame):
         if not ctx:
             return
         try:
-            self.mods.delete_file(ctx[0], filepath)
+            removed_slug = self.mods.delete_file(ctx[0], filepath)
+            self._installed_slugs_cache.discard(removed_slug)
             self._set_status(f"Deleted {fname}", kind="success")
             self._render_installed()  # refresh inline
         except (OSError, UnsafePathError) as exc:

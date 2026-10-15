@@ -767,7 +767,7 @@ class MCTunnelApp(ctk.CTk):
         def _delete():
             try:
                 self.api.servers.delete(server_name)
-            except (OSError, ServerRunningError) as e:
+            except (OSError, ValueError, ServerRunningError) as e:
                 self.after(0, lambda e=e: Toast.show(self, f"Delete failed: {e}", toast_type="error"))
                 return
             self.after(0, lambda: self._on_server_deleted(server_name))
@@ -845,6 +845,10 @@ class MCTunnelApp(ctk.CTk):
             if entered is None:
                 return
             entered = entered.strip() or suggested_name
+            if not self.api.servers.valid_name(entered):
+                Toast.show(self, f"'{entered}' can't be used as a server name", toast_type="error")
+                initial = entered
+                continue
             if self.api.servers.exists(entered):
                 Toast.show(self, f"A server named '{entered}' already exists", toast_type="error")
                 initial = entered

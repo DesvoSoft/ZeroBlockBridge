@@ -2,6 +2,7 @@
 server's content files. Every method blocks (network or disk): call it
 off the UI thread."""
 
+import os
 import threading
 from typing import Callable, Optional
 
@@ -93,8 +94,14 @@ class ModsApi:
         return mod_content.uninstall(server_name, slug)
 
     @staticmethod
-    def delete_file(server_name: str, path: str) -> str:
-        return mod_content.delete_content_file(server_name, path)
+    def delete_file(server_name: str, path: str) -> Optional[str]:
+        """Delete one mod/plugin file. Returns the Modrinth slug it was
+        installed as (now forgotten), or None. Raises OSError/UnsafePathError."""
+        fname = os.path.basename(path)
+        slug = next((s for s in mod_install_tracker.get_installed_slugs(server_name)
+                     if mod_install_tracker.get_installed_filename(server_name, s) == fname), None)
+        mod_content.delete_content_file(server_name, path)
+        return slug
 
     @staticmethod
     def delete_files(server_name: str, paths) -> DeleteResult:
