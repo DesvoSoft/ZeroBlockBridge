@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from app.api.tasks import Task, TaskRunner
 from app.core import logic
@@ -13,6 +13,7 @@ from app.core.constants import SERVERS_DIR
 from app.core.provisioning import ProvisionResult
 from app.core.server_events import ServerEvent
 from app.services import migration
+from app.services.migration import MigrationError  # noqa: F401  (re-exported for UIs)
 from app.services.modrinth import loader_for_server_type
 from app.services.server_paths import check_server_name, is_valid_server_name
 from app.services.server_properties import load_server_properties
@@ -127,8 +128,10 @@ class ServersApi:
         if self._manager.current_server == name:
             self._manager.current_server = None
 
-    def export(self, name: str, dest_path: str) -> str:
-        return migration.export_server(check_server_name(name), dest_path)
+    def export(self, name: str, dest_path: str,
+               progress: Optional[Callable[[str], None]] = None) -> str:
+        """Write a .zbbpack; ``progress(text)`` per archived file. Blocking."""
+        return migration.export_server(check_server_name(name), dest_path, progress_callback=progress)
 
     def import_pack(self, src_path: str, name: str) -> dict:
         return migration.import_server(src_path, check_server_name(name))

@@ -3,10 +3,15 @@ from tkinter import filedialog
 import logging
 import os
 import threading
-from app.api.storage import open_in_file_manager
+from app.api.areas import dropdown_labels
+from app.api.mods import MrpackCompatibilityError
+from app.api.property_catalog import (  # noqa: F401  (TAB_LAYOUTS, property_label: also used by tests)
+    IMPACT_LABELS as _IMPACT_LABELS, SETTINGS_METADATA, TAB_LAYOUTS, property_control, property_label,
+)
+from app.api.server_config import LaunchSettings
+from app.api.servers import MigrationError
 from app.core.app_config import AppConfig
 from app.core import i18n
-from app.core.constants import SERVERS_DIR
 from app.core.i18n import _, N_
 
 logger = logging.getLogger(__name__)
@@ -14,120 +19,8 @@ from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_bu
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.formatting import engine_name
 from app.ui.icons import icon
-from app.services.backup_manager import BackupManager
-from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
-from app.core import logic
-from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
-from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 
 
-SETTINGS_METADATA = {
-    # General
-    "max-players": {"desc": "Maximum number of players allowed online.", "impact": "Low"},
-    "gamemode": {"desc": "The default game mode for new players.", "impact": "Low"},
-    "force-gamemode": {"desc": "Forces players to join in the default game mode.", "impact": "Low"},
-    "difficulty": {"desc": "Overall game difficulty. Affects damage and mob behavior.", "impact": "Low"},
-    "hardcore": {"desc": "Players are banned upon death. One life only.", "impact": "Medium"},
-    "enable-command-block": {"desc": "Allows the use of command blocks in-game.", "impact": "Low"},
-    
-    # World
-    "level-seed": {"desc": "The unique code used to generate the world. Leave empty for random.", "impact": "Low"},
-    "level-name": {"desc": "The name of the world folder on disk.", "impact": "Low"},
-    "level-type": {"desc": "The type of world generation (Flat, Large Biomes, etc).", "impact": "Medium"},
-    "generate-structures": {"desc": "Whether to generate villages, dungeons, etc.", "impact": "Medium"},
-    "spawn-npcs": {"desc": "Whether to spawn villagers.", "impact": "Low"},
-    "spawn-animals": {"desc": "Whether to spawn passive mobs like cows and sheep.", "impact": "Medium"},
-    "spawn-monsters": {"desc": "Whether to spawn hostile mobs.", "impact": "Medium"},
-    "view-distance": {"desc": "How many chunks are visible to players. Higher = More RAM usage.", "impact": "High"},
-    "simulation-distance": {"desc": "How many chunks process active ticks (crops, mobs).", "impact": "High"},
-    
-    # Network
-    "server-port": {"desc": "The port the server listens on (Default: 25565).", "impact": "Low"},
-    "server-ip": {"desc": "The network interface to bind to. Leave empty to listen on all interfaces.", "impact": "Medium"},
-    "white-list": {"desc": "Only allowed players can join the server.", "impact": "Low"},
-    "enforce-whitelist": {"desc": "Kicks non-whitelisted players immediately when the whitelist is reloaded, instead of waiting for their next join attempt.", "impact": "Medium"},
-    "online-mode": {"desc": "Checks players against Mojang accounts. Disable for 'cracked' servers.", "impact": "Medium"},
-    "network-compression-threshold": {"desc": "Size at which packets are compressed. Lower = More CPU usage.", "impact": "Medium"},
-    "rcon.password": {"desc": "Password required to authenticate remote console (RCON) connections.", "impact": "Medium"},
-    "rcon.port": {"desc": "The port used for remote console (RCON) connections (Default: 25575).", "impact": "Low"},
-
-    # Advanced
-    "sync-chunk-writes": {"desc": "Ensures world data is saved safely. Disabling can boost performance but risks corruption.", "impact": "High"},
-    "op-permission-level": {"desc": "Default permission level for operators: 1 bypasses spawn protection, 2 unlocks cheat commands and command blocks, 3 adds player management (kick/ban/op), 4 grants full access including /stop.", "impact": "Medium"},
-    "prevent-proxy-connections": {"desc": "Blocks players using VPNs or Proxies.", "impact": "Low"},
-    "enforce-secure-profile": {"desc": "Requires Mojang-signed public keys for players.", "impact": "Low"},
-    "enable-rcon": {"desc": "Allows remote console access (for bots/panels).", "impact": "Medium"},
-    "enable-query": {"desc": "Allows external tools to see server status.", "impact": "Low"},
-
-    # Other Properties (vanilla keys with no dedicated tab section)
-    "pvp": {"desc": "Allows players to damage each other.", "impact": "Medium"},
-    "allow-flight": {"desc": "Allows use of flight mods/hacks in Survival. Disabling risks kicking legitimate players with high-latency connections (anti-cheat false positives).", "impact": "High"},
-    "allow-nether": {"desc": "Allows players to travel to the Nether dimension.", "impact": "Low"},
-    "spawn-protection": {"desc": "Radius around spawn (in blocks) where only operators can build. A large value can lock new players out of building anywhere reachable.", "impact": "High"},
-    "max-tick-time": {"desc": "Milliseconds a single tick can take before the server watchdog force-kills it as hung. Setting to -1 disables the watchdog entirely, letting a frozen server run forever undetected.", "impact": "High"},
-    "player-idle-timeout": {"desc": "Minutes of inactivity before an idle player is kicked. 0 disables the timeout.", "impact": "Low"},
-    "max-world-size": {"desc": "Maximum radius (in blocks) the world border can expand to.", "impact": "Medium"},
-    "entity-broadcast-range-percentage": {"desc": "Percentage of the default entity tracking range. Lower values reduce network traffic but may make entities pop in late.", "impact": "Medium"},
-    "rate-limit": {"desc": "Maximum packets per second a player can send before being kicked. 0 disables the limit.", "impact": "Medium"},
-    "function-permission-level": {"desc": "Permission level (1-4) required for datapack functions to run operator-level commands.", "impact": "Medium"},
-    "hide-online-players": {"desc": "Hides the player list from the server status response (server list ping).", "impact": "Low"},
-    "log-ips": {"desc": "Whether player IP addresses are written to the server log.", "impact": "Low"},
-    "broadcast-console-to-ops": {"desc": "Sends console command output to online operators as chat messages.", "impact": "Low"},
-    "broadcast-rcon-to-ops": {"desc": "Sends RCON command output to online operators as chat messages.", "impact": "Low"},
-    "max-chained-neighbor-updates": {"desc": "Limits chained block updates (e.g. large redstone contraptions) before the server stops propagating them, to prevent lag or crashes.", "impact": "Medium"},
-    "require-resource-pack": {"desc": "Forces players to accept the server resource pack or be disconnected.", "impact": "Medium"},
-    "resource-pack": {"desc": "URL of a resource pack players will be prompted to download when joining.", "impact": "Low"},
-    "resource-pack-prompt": {"desc": "Custom message shown in the resource pack download prompt.", "impact": "Low"},
-    "motd": {"desc": "Message shown in the multiplayer server list. Supports § color codes.", "impact": "Low"},
-    "use-native-transport": {"desc": "Uses optimized Linux network transport (epoll) when available. Has no effect on Windows.", "impact": "Low"},
-    "enable-jmx-monitoring": {"desc": "Exposes server metrics via JMX for monitoring tools.", "impact": "Low"},
-    "enable-status": {"desc": "Whether the server responds to server list pings (status queries).", "impact": "Low"},
-    "pause-when-empty-seconds": {"desc": "Seconds of no players online before the server pauses ticking to save CPU. 0 disables pausing.", "impact": "Medium"},
-    "accepts-transfers": {"desc": "Allows players to be transferred in from other servers via the transfer packet.", "impact": "Low"},
-    "region-file-compression": {"desc": "Compression algorithm used for region files on disk (e.g. deflate, none).", "impact": "Medium"},
-    "entity-activation-range": {"desc": "Distance around a player at which entities become active and start ticking.", "impact": "Medium"},
-}
-
-# Define the layout for the complex tabs
-TAB_LAYOUTS = {
-    "World": {
-        "Environment & Generation": [
-            "level-seed", "level-name", "level-type", "generate-structures"
-        ],
-        "Entities & Spawning": [
-            "spawn-npcs", "spawn-animals", "spawn-monsters"
-        ],
-        "Performance": [
-            "view-distance", "simulation-distance"
-        ]
-    },
-    "Network": {
-        "Connectivity": ["server-port", "server-ip"],
-        "Access Control": ["white-list", "enforce-whitelist", "online-mode"],
-        "Optimization": ["network-compression-threshold"],
-        "Remote Access": ["enable-rcon", "rcon.password", "rcon.port"]
-    },
-    "Advanced": {
-        "Gameplay Rules": ["pvp", "allow-flight", "allow-nether", "spawn-protection"],
-        "Server Behavior": [
-            "max-tick-time", "player-idle-timeout", "function-permission-level",
-            "hide-online-players", "log-ips", "broadcast-console-to-ops",
-            "broadcast-rcon-to-ops", "require-resource-pack",
-        ],
-        "System Performance": ["sync-chunk-writes"],
-        "Security & Permissions": [
-            "op-permission-level", "prevent-proxy-connections", "enforce-secure-profile"
-        ]
-    }
-}
-
-_LABEL_WORDS = {
-    "npcs": "NPCs", "ip": "IP", "ips": "IPs", "rcon": "RCON", "pvp": "PvP",
-    "op": "Operator", "ops": "Operators", "to": "to",
-}
-_LABEL_OVERRIDES = {"white-list": "Whitelist"}
-# SETTINGS_METADATA "impact" keys -> labels shown in the impact dot's tooltip.
-_IMPACT_LABELS = {"Low": N_("Low"), "Medium": N_("Medium"), "High": N_("High")}
 # (restart schedule "type", label shown in the Schedule Mode menu)
 _SCHEDULE_MODES = (("interval", N_("Interval")), ("time", N_("Daily Time")))
 
@@ -150,17 +43,8 @@ def _bare_switch(parent, **kwargs) -> ctk.CTkSwitch:
     return switch
 
 
-def property_label(key: str) -> str:
-    """Human label for a server.properties key ("spawn-npcs" -> "Spawn NPCs")."""
-    if key in _LABEL_OVERRIDES:
-        return _LABEL_OVERRIDES[key]
-    words = [_LABEL_WORDS.get(w, w.capitalize()) for w in key.replace(".", "-").split("-")]
-    label = " ".join(words)
-    return label[0].upper() + label[1:]
-
-
 class ServerPropertiesEditor(ZBBToplevel):
-    def __init__(self, parent, server_name, logic_module=None, zbb_manager=None):
+    def __init__(self, parent, server_name, api):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")
         self.geometry("700x600")
@@ -168,9 +52,9 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.resizable(True, True)
 
         self.server_name = server_name
-        self.logic = logic_module or logic
-        self.zbb_manager = zbb_manager
-        self.properties = load_server_properties(server_name)
+        self.api = api
+        self.config = api.config
+        self.properties = self.config.properties(server_name)
         
         # Shared Fonts
         self.font_bold = AppConfig.FONT_LABEL
@@ -179,13 +63,12 @@ class ServerPropertiesEditor(ZBBToplevel):
         
         # Layout: header / [running banner] / tabs / buttons
         self.grid_columnconfigure(0, weight=1)
-        meta = get_server_meta(server_name) or {}
+        meta = self.config.meta(server_name)
         engine = f"{engine_name(meta.get('type'))} {meta.get('version', '')}".strip()
         header, _, _ = dialog_header(self, "Server Properties", f"{server_name} · {engine}")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 0))
         
-        self._running_locked = bool(self.zbb_manager and self.zbb_manager.is_running()
-                                     and self.zbb_manager.current_server == server_name)
+        self._running_locked = api.servers.running_server() == server_name
 
         if self._running_locked:
             banner = ctk.CTkLabel(
@@ -326,8 +209,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.backup_list_frame = ScrollableFrame(self.frame_backups)
         self.backup_list_frame.pack(fill="both", expand=True)
         
-        self.backup_manager = BackupManager(self.server_name)
-        self._backup_scheduler_ui = BackupScheduler(self.server_name)
+        self.backups = self.api.backups
         self._next_backup_lbl = ctk.CTkLabel(
             self.frame_backups, text="", anchor="w",
             text_color=AppConfig.COLOR_TEXT_GRAY, font=AppConfig.FONT_CAPTION
@@ -345,7 +227,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         loading_lbl.pack(pady=20)
         
         def load():
-            backups = self.backup_manager.list_backups()
+            backups = self.backups.list(self.server_name)
             if self.winfo_exists():
                 self.after(0, lambda: self._populate_backups(backups, loading_lbl))
             
@@ -402,7 +284,6 @@ class ServerPropertiesEditor(ZBBToplevel):
             corner_radius=AppConfig.RADIUS_BTN,
             fg_color=AppConfig.COLOR_BTN_DANGER, hover_color=AppConfig.COLOR_BTN_DANGER_HOVER,
             command=lambda p=backup["path"], n=backup["date"]: self.delete_backup(p, n),
-            state="normal" if self.zbb_manager else "disabled",
         )
         btn_delete.grid(row=0, column=5, padx=(0, 12), pady=10)
         ToolTip(btn_delete, "Delete this backup")
@@ -414,17 +295,15 @@ class ServerPropertiesEditor(ZBBToplevel):
         ).grid(row=0, column=4, padx=(0, 8), pady=10)
 
     def _open_backups_folder(self):
-        self._open_path(str(self.backup_manager.backup_dir))
+        self._open_path(self.backups.folder(self.server_name))
 
     def delete_backup(self, path: str, label: str):
-        if not self.zbb_manager:
-            return
         if not ZBBDialog.confirm(self, "Delete Backup", f"Delete the backup from {label}?\n\nThis can't be undone.",
                                  confirm_text="Delete", danger=True):
             return
 
         def worker():
-            ok, error = self.zbb_manager.delete_backup(self.server_name, path)
+            ok, error = self.backups.delete(self.server_name, path)
             if self.winfo_exists():
                 self.after(0, lambda: self._on_backup_deleted(ok, error))
 
@@ -437,7 +316,7 @@ class ServerPropertiesEditor(ZBBToplevel):
 
     def create_backup(self):
         def worker():
-            path, error = self.backup_manager.create_backup()
+            path, error = self.backups.create(self.server_name)
             if self.winfo_exists():
                 self.after(0, lambda: self._on_backup_created(path, error))
 
@@ -451,8 +330,6 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.refresh_backups()
 
     def export_zbbpack(self):
-        from app.services.migration import export_server, MigrationError
-
         dest_path = filedialog.asksaveasfilename(
             defaultextension=".zbbpack",
             initialfile=f"{self.server_name}.zbbpack",
@@ -465,12 +342,12 @@ class ServerPropertiesEditor(ZBBToplevel):
 
         def _export():
             try:
-                export_server(
+                self.api.servers.export(
                     self.server_name, dest_path,
-                    progress_callback=lambda msg: self.after(
+                    progress=lambda msg: self.after(
                         0, lambda m=msg: self.btn_export_pack.configure(text=m[:28])),
                 )
-            except (MigrationError, OSError) as e:
+            except (MigrationError, OSError, ValueError) as e:
                 self.after(0, lambda e=e: ZBBDialog.info(self, "Export Failed", str(e), kind="error"))
                 return
             finally:
@@ -481,8 +358,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         threading.Thread(target=_export, daemon=True).start()
 
     def _server_is_running(self) -> bool:
-        runner = getattr(self.zbb_manager, "server_runner", None) if self.zbb_manager else None
-        return bool(runner and runner.running)
+        return self.api.servers.is_running()
 
     def restore_backup(self, path: str):
 
@@ -502,7 +378,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             return
 
         def worker():
-            success = self.backup_manager.restore_backup(path)
+            success = self.backups.restore(self.server_name, path)
             if self.winfo_exists():
                 self.after(0, lambda: self._on_backup_restored(success))
 
@@ -518,7 +394,7 @@ class ServerPropertiesEditor(ZBBToplevel):
     def _refresh_backup_countdown(self):
         if not self.winfo_exists():
             return
-        secs = self._backup_scheduler_ui.seconds_until_next()
+        secs = self.backups.seconds_until_auto(self.server_name)
         if secs is None:
             self._next_backup_lbl.configure(text="Auto-backup: disabled")
         elif secs == 0.0:
@@ -530,8 +406,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.after(60_000, self._refresh_backup_countdown)
 
     def setup_automation_tab(self):
-        self.scheduler = self.logic.Scheduler(self.server_name)
-        schedule = self.scheduler.get_schedule()
+        schedule = self.config.restart_schedule(self.server_name)
         
         card = self.create_section_frame(self.frame_automation, "Automated Restarts")
 
@@ -565,8 +440,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self._grid_control(card, self.entry_time)
 
         # Auto-Backups card (P0.2)
-        backup_sched = BackupScheduler(self.server_name)
-        bk_cfg = backup_sched.get_config()
+        bk_cfg = self.backups.auto_config(self.server_name)
 
         card_bk = self.create_section_frame(self.frame_automation, "Auto-Backups")
 
@@ -614,10 +488,12 @@ class ServerPropertiesEditor(ZBBToplevel):
                 interval = int(self.entry_interval.get())
             except ValueError:
                 logger.warning("Invalid interval input, using default 6")
-            self.scheduler.set_restart_schedule(enabled, interval_hours=interval, backup_on_restart=backup)
+            self.config.set_restart_schedule(self.server_name, enabled, interval_hours=interval,
+                                             backup_on_restart=backup)
         else:
             time_val = self.entry_time.get()
-            self.scheduler.set_restart_schedule(enabled, restart_time=time_val, backup_on_restart=backup)
+            self.config.set_restart_schedule(self.server_name, enabled, restart_time=time_val,
+                                             backup_on_restart=backup)
 
         # Save auto-backup config
         if hasattr(self, "var_auto_backup"):
@@ -630,7 +506,7 @@ class ServerPropertiesEditor(ZBBToplevel):
                 bk_retention = int(self.entry_bk_retention.get())
             except (ValueError, AttributeError):
                 bk_retention = 10
-            BackupScheduler(self.server_name).set_config(bk_enabled, interval_hours=bk_interval, retention_count=bk_retention)
+            self.backups.set_auto_config(self.server_name, bk_enabled, bk_interval, bk_retention)
 
     def validate_int(self, P):
         """Callback to allow only digits."""
@@ -737,12 +613,6 @@ class ServerPropertiesEditor(ZBBToplevel):
 
     # Keys where the enable/spawn/white-list/... substring heuristic below
     # doesn't apply but the value is still a vanilla true/false toggle.
-    _BOOLEAN_KEY_OVERRIDES = {
-        "pvp", "allow-flight", "allow-nether", "hide-online-players", "log-ips",
-        "broadcast-console-to-ops", "broadcast-rcon-to-ops", "require-resource-pack",
-        "generate-structures", "sync-chunk-writes", "prevent-proxy-connections",
-    }
-
     def _build_tab_from_config(self, parent_frame, tab_name):
         """Generates UI sections dynamically based on TAB_LAYOUTS config."""
         layout = TAB_LAYOUTS.get(tab_name, {})
@@ -752,22 +622,9 @@ class ServerPropertiesEditor(ZBBToplevel):
             for key in keys:
                 label = property_label(key)
 
-                # Determine widget type and options
-                widget_type = "entry"
-                options = None
-
-                if key in self._BOOLEAN_KEY_OVERRIDES:
-                    widget_type = "checkbox"
-                elif any(x in key for x in ["enable", "spawn-npcs", "spawn-animals", "spawn-monsters", "white-list", "hardcore", "enforce", "online"]):
-                    widget_type = "checkbox"
-                elif key in ["gamemode", "difficulty", "level-type", "op-permission-level", "function-permission-level"]:
-                    widget_type = "dropdown"
-                    if key == "gamemode": options = ["survival", "creative", "adventure", "spectator"]
-                    elif key == "difficulty": options = ["peaceful", "easy", "normal", "hard"]
-                    elif key == "level-type": options = ["minecraft:normal", "minecraft:flat", "minecraft:large_biomes"]
-                    elif key in ("op-permission-level", "function-permission-level"): options = ["1", "2", "3", "4"]
-                elif key == "level-name":
-                    worlds = list_worlds(self.server_name)
+                widget_type, options = property_control(key)
+                if key == "level-name":
+                    worlds = self.api.config.worlds(self.server_name)
                     current = self.properties.get("level-name", "world")
                     if worlds:
                         widget_type = "dropdown"
@@ -834,7 +691,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         
         vcmd = (self.register(self.validate_int), '%P')
         self.entry_ram = ctk.CTkEntry(ram_ctrl, height=28, validate="key", validatecommand=vcmd)
-        self.entry_ram.insert(0, str(self.logic.get_server_ram(self.server_name)))
+        self.entry_ram.insert(0, str(self.config.ram_mb(self.server_name)))
         self.entry_ram.pack(fill="x")
 
         # 3. Gameplay Section
@@ -875,7 +732,7 @@ class ServerPropertiesEditor(ZBBToplevel):
                 text=text, text_color=colors.get(kind, AppConfig.COLOR_TEXT_GRAY))
 
     def _on_import_mrpack(self):
-        meta = get_server_meta(self.server_name)
+        meta = self.config.meta(self.server_name)
         loader = meta.get("type", "vanilla")
         if loader in (None, "vanilla"):
             ZBBDialog.info(
@@ -904,12 +761,9 @@ class ServerPropertiesEditor(ZBBToplevel):
 
         def _import():
             try:
-                summary = install_mrpack(
-                    mrpack_path=mrpack_path,
-                    server_name=self.server_name,
-                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_mrpack_status(m)),
-                    server_type=meta.get("type"),
-                    mc_version=meta.get("version"),
+                summary = self.config.import_modpack(
+                    self.server_name, mrpack_path,
+                    on_status=lambda msg: self.after(0, lambda m=msg: self._set_mrpack_status(m)),
                 )
                 parts = [f"{summary['installed']} mods installed"]
                 if summary.get("skipped_client"):
@@ -960,8 +814,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
         )
         if file_path:
-            if self.logic.save_server_icon(self.server_name, file_path):
-                pass
+            self.config.set_icon(self.server_name, file_path)
 
     def _update_motd_preview(self, event=None):
         text = self.entry_motd.get()
@@ -993,7 +846,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             
             try:
                 ram = int(ram_input)
-                self.logic.set_server_ram(self.server_name, ram)
+                self.config.set_ram_mb(self.server_name, ram)
             except ValueError:
                 logger.warning("Invalid RAM input: %s", ram_input)
 
@@ -1018,7 +871,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             elif w_type == "dropdown":
                 new_props[key] = widget.get()
                 
-        save_server_properties(self.server_name, new_properties=new_props)
+        self.config.save_properties(self.server_name, new_props)
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()
@@ -1033,8 +886,6 @@ class ServerPropertiesEditor(ZBBToplevel):
 
     def setup_launch_tab(self):
         """Setup Java and Launch arguments tab."""
-        from app.services.java_detector import JavaDetector, dropdown_labels
-
         card = self.create_section_frame(self.frame_launch, "Java & Runtime")
 
         # Java Path
@@ -1050,9 +901,9 @@ class ServerPropertiesEditor(ZBBToplevel):
         self._java_label_to_path = {"Auto-Detect": "auto"}
         self._java_path_to_label = {"auto": "Auto-Detect"}
 
-        meta = get_server_meta(self.server_name)
+        launch = self.config.launch_settings(self.server_name)
 
-        saved_path = meta.get("java_path", "auto")
+        saved_path = launch.java_path
         # Placeholder mapping so a previously saved path stays selectable
         # (and saveable) while detection runs in the background
         if saved_path != "auto":
@@ -1067,7 +918,7 @@ class ServerPropertiesEditor(ZBBToplevel):
 
         # detect_all() scans registry + filesystem — keep it off the UI thread
         def _load_javas():
-            javas = JavaDetector().detect_all()
+            javas = self.api.java.installations()
 
             def _apply():
                 if not self.combo_java.winfo_exists():
@@ -1093,7 +944,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             "that reduce lag spikes on Minecraft servers. Recommended: on.\n"
             "When off, only the basic memory flags (-Xms/-Xmx) are used."
         ))
-        self.var_use_aikars = ctk.BooleanVar(value=meta.get("use_aikars", True))
+        self.var_use_aikars = ctk.BooleanVar(value=launch.use_aikars)
         self.chk_aikars = _bare_switch(card, variable=self.var_use_aikars)
         self._grid_control(card, self.chk_aikars, row=row)
 
@@ -1106,7 +957,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             "the server from starting."
         ))
         self.entry_jvm_flags = ctk.CTkEntry(card, height=28, width=_CONTROL_WIDTH)
-        self.entry_jvm_flags.insert(0, meta.get("jvm_custom_flags", ""))
+        self.entry_jvm_flags.insert(0, launch.jvm_custom_flags)
         self._grid_control(card, self.entry_jvm_flags, row=row)
         ctk.CTkLabel(card, text="e.g. -XX:+UseG1GC -Dfoo=bar", font=self.font_small,
                      text_color=AppConfig.COLOR_TEXT_GRAY,
@@ -1136,27 +987,18 @@ class ServerPropertiesEditor(ZBBToplevel):
             btn.tooltip_ref = ToolTip(btn, tip)
 
     def open_folder(self, subpath=None):
-        server_path = os.path.join(str(SERVERS_DIR), self.server_name)
-        if subpath:
-            server_path = os.path.join(server_path, subpath)
-        self._open_path(server_path)
+        self._open_path(self.api.storage.server_dir(self.server_name, subpath or ""))
 
-    def _open_path(self, server_path: str):
+    def _open_path(self, server_path):
         if not os.path.exists(server_path):
             ZBBDialog.info(self, "Nothing Here Yet",
                            "That folder does not exist yet - it is created the first time it is needed.",
                            kind="info")
             return
-        open_in_file_manager(server_path)
+        self.api.storage.open_folder(server_path)
 
     def save_launch_settings(self):
-        meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
-        if not os.path.exists(meta_path): return
-
         label = self.var_java_path.get()
         path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-        update_server_meta(self.server_name, {
-            "java_path": path,
-            "use_aikars": self.var_use_aikars.get(),
-            "jvm_custom_flags": self.entry_jvm_flags.get().strip(),
-        })
+        self.config.save_launch_settings(self.server_name, LaunchSettings(
+            path, self.var_use_aikars.get(), self.entry_jvm_flags.get().strip()))

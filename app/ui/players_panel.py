@@ -10,14 +10,12 @@ import hashlib
 import logging
 
 import customtkinter as ctk
-from PIL import Image
 
 from app.core.app_config import AppConfig
 from app.core import i18n
 from app.core.i18n import _, N_
-from app.core.players import OP_LEVELS
-from app.core.server_events import ServerEvent
-from app.services.player_heads import fetch_head
+from app.api import ServerEvent
+from app.api.players import OP_LEVELS
 from app.ui.formatting import format_duration, format_relative
 from app.ui.icons import icon
 from app.ui.ui_components import ScrollableFrame, ToolTip, ZBBDialog, add_danger_command, themed_menu
@@ -54,13 +52,13 @@ class PlayersPanel(ctk.CTkFrame):
         "warning": (AppConfig.COLOR_STATUS_STARTING, "warning"),
     }
 
-    def __init__(self, master, zbb_manager, event_bus, run_async, get_server=None, **kwargs):
+    def __init__(self, master, api, run_async, get_server=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
-        self.zbb = zbb_manager
+        self.api = api
+        self.players = api.players
         # The server whose players are shown (the selected one — not
         # necessarily the one running).
-        self.get_server = get_server or (lambda: zbb_manager.current_server)
-        self.events = event_bus
+        self.get_server = get_server or (lambda: api.servers.active)
         self.run_async = run_async
 
         self._roster: list[dict] = []
@@ -79,13 +77,15 @@ class PlayersPanel(ctk.CTkFrame):
         self._build_list()
         self._build_footer()
 
-        for event in (ServerEvent.PLAYER_LIST, ServerEvent.READY, ServerEvent.STOPPED):
-            self.events.subscribe(event, self._on_server_event)
+        # _on_server_event marshals itself, so take events on the emitting thread.
+        self._subscriptions = [
+            api.events.subscribe(event, self._on_server_event, dispatcher=lambda fn: fn())
+            for event in (ServerEvent.PLAYER_LIST, ServerEvent.READY, ServerEvent.STOPPED)]
         self.refresh()
 
     def destroy(self):
-        for event in (ServerEvent.PLAYER_LIST, ServerEvent.READY, ServerEvent.STOPPED):
-            self.events.unsubscribe(event, self._on_server_event)
+        for sub in self._subscriptions:
+            sub.cancel()
         super().destroy()
 
     # ------------------------------------------------------------------ layout
@@ -196,19 +196,16 @@ class PlayersPanel(ctk.CTkFrame):
         if not server:
             self._apply_refresh(gen, None, [], True, False, False, 4)
             return
-        players = self.zbb.players
+        players = self.players
 
         def work():
             try:
-                roster = players.roster(server)
-                online_mode = players.online_mode(server)
-                whitelist = players.whitelist_enabled(server)
-                live = players.is_live(server)
-                level = players.default_op_level(server)
+                snap = players.snapshot(server)
             except Exception:
                 logger.exception("Loading players for %s failed", server)
                 return
-            self.after(0, lambda: self._apply_refresh(gen, server, roster, online_mode, whitelist, live, level))
+            self.after(0, lambda: self._apply_refresh(gen, server, snap.roster, snap.online_mode,
+                                                      snap.whitelist_enabled, snap.live, snap.default_op_level))
 
         self.run_async(work)
 
@@ -356,16 +353,9 @@ class PlayersPanel(ctk.CTkFrame):
             self.run_async(lambda u=player_uuid: self._fetch_head(u))
 
     def _fetch_head(self, player_uuid: str):
-        image = None
-        path = fetch_head(player_uuid, 64)
-        if path:
-            try:
-                with Image.open(path) as raw:
-                    # Pixel art: scale with nearest-neighbor, 2x for HiDPI.
-                    face = raw.convert("RGBA").resize((self._HEAD_SIZE * 2,) * 2, Image.NEAREST)
-                image = ctk.CTkImage(face, size=(self._HEAD_SIZE, self._HEAD_SIZE))
-            except OSError as exc:
-                logger.debug("Unreadable head image %s: %s", path, exc)
+        # 2x for HiDPI.
+        face = self.players.head_image(player_uuid, self._HEAD_SIZE * 2)
+        image = ctk.CTkImage(face, size=(self._HEAD_SIZE, self._HEAD_SIZE)) if face is not None else None
 
         def apply():
             self._heads_pending.discard(player_uuid)
@@ -401,11 +391,11 @@ class PlayersPanel(ctk.CTkFrame):
             self.after(self._RESYNC_MS, self.refresh)
 
     def _toggle_whitelist(self):
-        self._run_action(self.zbb.players.set_whitelist_enabled, bool(self.switch_whitelist.get()))
+        self._run_action(self.players.set_whitelist_enabled, bool(self.switch_whitelist.get()))
 
     def _op_menu(self, parent_menu, name, clear_entry=False):
         """Operator entry: one fixed level while live (/op), a level submenu otherwise."""
-        players = self.zbb.players
+        players = self.players
         if self._live:
             parent_menu.add_command(
                 label=f"Make operator (level {self._default_level})", icon_name="user",
@@ -425,7 +415,7 @@ class PlayersPanel(ctk.CTkFrame):
             self._set_status("Type a player name first.", kind="warning")
             self.entry_add.focus_set()
             return
-        players = self.zbb.players
+        players = self.players
         menu = themed_menu(self)
         menu.add_command(label="Add to whitelist", icon_name="check",
                          command=lambda: self._run_action(players.whitelist_add, name, clear_entry=True))
@@ -435,7 +425,7 @@ class PlayersPanel(ctk.CTkFrame):
         self._popup(menu, self.btn_add)
 
     def _open_row_menu(self, button, player: dict):
-        players = self.zbb.players
+        players = self.players
         name = player["name"]
         menu = themed_menu(self)
         if self._live and player["online"]:
@@ -479,13 +469,13 @@ class PlayersPanel(ctk.CTkFrame):
         reason = ZBBDialog.ask_string(self.winfo_toplevel(), f"Kick {name}", "Reason shown to the player (optional):",
                                       placeholder="e.g. AFK too long", confirm_text="Kick")
         if reason is not None:
-            self._run_action(self.zbb.players.kick, name, reason)
+            self._run_action(self.players.kick, name, reason)
 
     def _ban(self, name, clear_entry=False):
         reason = ZBBDialog.ask_string(self.winfo_toplevel(), f"Ban {name}", "Reason (optional):",
                                       placeholder="e.g. Griefing", confirm_text="Ban")
         if reason is not None:
-            self._run_action(self.zbb.players.ban, name, reason, clear_entry=clear_entry)
+            self._run_action(self.players.ban, name, reason, clear_entry=clear_entry)
 
     def _copy(self, text):
         self.clipboard_clear()

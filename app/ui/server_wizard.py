@@ -1,15 +1,10 @@
 import customtkinter as ctk
 import logging
-import psutil
 import threading
 import webbrowser
-from app.core.constants import SERVERS_DIR
-from app.core.version_manager import VersionManager
+from app.api.areas import JavaApi, dropdown_labels
+from app.api.creation import ContentImportError, CreationApi, WorldInfo
 from app.core.app_config import AppConfig
-from app.services.java_detector import JavaDetector, dropdown_labels, get_required_java
-from app.services.scaffolder import PROPERTY_DEFAULTS
-from app.services.template_manager import (list_templates, load_template, normalize_template_name,
-                                            save_template, template_exists)
 from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
@@ -34,7 +29,7 @@ def summary_value(value) -> str:
 def java_summary(java_path: str, mc_version: str) -> str:
     """Summary text for the Java choice: a path, or what "auto" will fetch."""
     if java_path == "auto":
-        return f"Auto (Java {get_required_java(mc_version)})"
+        return f"Auto (Java {JavaApi.required(mc_version)})"
     return java_path
 
 
@@ -94,11 +89,10 @@ def imported_world_check(wizard_data: dict):
     server version chosen in step 2."""
     if not wizard_data.get("world_path"):
         return None
-    from app.services.content_import import WorldInfo, world_version_check
     world = WorldInfo(path=wizard_data["world_path"], name=wizard_data.get("world_label", ""), is_zip=False,
                       root="", mc_version=wizard_data.get("world_mc"),
                       snapshot=bool(wizard_data.get("world_snapshot")))
-    return world_version_check(world, wizard_data.get("version"))
+    return CreationApi.world_version_check(world, wizard_data.get("version"))
 
 
 def modpack_ram_mb(current: int, mod_count: int, system_mb: int) -> int:
@@ -110,7 +104,7 @@ def modpack_ram_mb(current: int, mod_count: int, system_mb: int) -> int:
 
 
 class ServerWizard(ZBBToplevel):
-    def __init__(self, parent, on_complete_callback):
+    def __init__(self, parent, api, on_complete_callback):
         super().__init__(parent)
         self.title("Create New Server - Zero Block Bridge")
         self.geometry("650x650")
@@ -118,6 +112,8 @@ class ServerWizard(ZBBToplevel):
         self.resizable(True, True)
         self.minsize(650, 650)
 
+        self.api = api
+        self.creation = api.creation
         self.on_complete_callback = on_complete_callback
         self.current_step = 1
         self.total_steps = 6
@@ -129,8 +125,8 @@ class ServerWizard(ZBBToplevel):
             "version": "",
             "ram": 2048,
             "seed": "",
-            **PROPERTY_DEFAULTS,
-            "location": str(SERVERS_DIR),
+            **self.creation.property_defaults(),
+            "location": self.creation.default_location(),
             "icon_path": None,
             "auto_install_jdk": True,
             "java_path": "auto",
@@ -193,8 +189,7 @@ class ServerWizard(ZBBToplevel):
         )
         # packed/unpacked per-step in _update_nav()
 
-        self.vm = VersionManager()
-        self.vm.add_callback(self.on_versions_refreshed)
+        self._versions_listener = self.creation.on_versions_refreshed(self.on_versions_refreshed)
         
         self.show_step_1()
         
@@ -204,7 +199,7 @@ class ServerWizard(ZBBToplevel):
         self.grab_set()
 
     def destroy(self):
-        self.vm.remove_callback(self.on_versions_refreshed)
+        self._versions_listener.cancel()
         super().destroy()
 
     def update_header(self, title):
@@ -234,8 +229,8 @@ class ServerWizard(ZBBToplevel):
             widget.destroy()
 
     def on_versions_refreshed(self):
-        if self.current_step == 2:
-            self.after(0, self._render_versions)
+        if self.current_step == 2 and self.winfo_exists():
+            self._render_versions()
 
     def _force_refresh_versions(self):
         self.btn_refresh.configure(state="disabled", text="...")
@@ -243,7 +238,7 @@ class ServerWizard(ZBBToplevel):
 
     def _do_force_refresh(self):
         try:
-            self.vm.refresh_versions()
+            self.creation.refresh_versions()
         finally:
             self.after(0, lambda: self.btn_refresh.configure(state="normal", text="Refresh"))
 
@@ -318,7 +313,7 @@ class ServerWizard(ZBBToplevel):
         self._build_modpack_card(p)
 
         # Start from template
-        templates = list_templates()
+        templates = self.creation.templates()
         if templates and not self.wizard_data["modpack_path"]:
             ctk.CTkLabel(p, text="Start from template (optional):", font=AppConfig.FONT_LABEL).pack(anchor="w", pady=(0, 5))
             template_row = ctk.CTkFrame(p, fg_color="transparent")
@@ -450,9 +445,8 @@ class ServerWizard(ZBBToplevel):
         self._set_modpack_status("Reading modpack...")
 
         def _work():
-            from app.services.content_import import ContentImportError, inspect_modpack
             try:
-                info, error = inspect_modpack(path), None
+                info, error = self.creation.inspect_modpack(path), None
             except ContentImportError as e:
                 info, error = None, str(e)
             except Exception as e:
@@ -487,7 +481,7 @@ class ServerWizard(ZBBToplevel):
         if info.mc_version:
             self.wizard_data["version"] = info.mc_version
         self.wizard_data["ram"] = modpack_ram_mb(
-            self.wizard_data["ram"], info.mod_count, psutil.virtual_memory().total // (1024 * 1024))
+            self.wizard_data["ram"], info.mod_count, int(self.creation.system_ram_mb()))
         if not on_step:
             return  # kept in wizard_data; step 2 shows it when revisited
         self.show_step_2()  # re-render with engine/version locked
@@ -591,9 +585,8 @@ class ServerWizard(ZBBToplevel):
         self.lbl_world.configure(text="Reading world...", text_color=AppConfig.COLOR_TEXT_GRAY)
 
         def _work():
-            from app.services.content_import import ContentImportError, inspect_world
             try:
-                info, error = inspect_world(path), None
+                info, error = self.creation.inspect_world(path), None
             except ContentImportError as e:
                 info, error = None, str(e)
             except Exception as e:
@@ -628,7 +621,7 @@ class ServerWizard(ZBBToplevel):
         p = self.content_frame
 
         # RAM Memory
-        total_ram = psutil.virtual_memory().total / (1024 * 1024)
+        total_ram = self.creation.system_ram_mb()
         max_slider = min(16384, total_ram - 1024)
         min_ram = 512
 
@@ -701,26 +694,26 @@ class ServerWizard(ZBBToplevel):
         )
         if not name or not name.strip():
             return
-        safe_name = normalize_template_name(name)
+        safe_name = self.creation.normalize_template_name(name)
         if safe_name is None:
             ZBBDialog.info(self, "Save as Template",
                            "Use letters, numbers, dashes, dots or underscores (up to 64), "
                            "starting with a letter or number.", kind="error")
             return
-        if template_exists(safe_name) and not ZBBDialog.confirm(
+        if self.creation.template_exists(safe_name) and not ZBBDialog.confirm(
                 self, "Save as Template",
                 f"A template named \"{safe_name}\" already exists. Replace it?",
                 confirm_text="Replace"):
             return
         try:
-            save_template(safe_name, {k: v for k, v in self.wizard_data.items() if k not in _CONTENT_KEYS})
+            self.creation.save_template(safe_name, {k: v for k, v in self.wizard_data.items() if k not in _CONTENT_KEYS})
         except OSError as e:
             ZBBDialog.info(self, "Save as Template", f"Couldn't save the template: {e}", kind="error")
 
     def _on_template_selected(self, template_name):
         if template_name == "None":
             return
-        template = load_template(template_name)
+        template = self.creation.load_template(template_name)
         if not template:
             return
         self.wizard_data.update({k: v for k, v in template.items() if not k.startswith("_")})
@@ -750,8 +743,8 @@ class ServerWizard(ZBBToplevel):
         self.lbl_java_status.configure(text="Detecting Java...", text_color=AppConfig.COLOR_TEXT_GRAY)
 
         def _detect():
-            installations = JavaDetector().detect_all()
-            required = get_required_java(version)
+            installations = self.api.java.installations()
+            required = self.api.java.required(version)
 
             def _apply():
                 if seq != self._java_check_seq or not self.lbl_java_status.winfo_exists():
@@ -796,7 +789,7 @@ class ServerWizard(ZBBToplevel):
         use_detected = self.java_choice_var.get() == "detected"
         self.java_detected_menu.configure(state="normal" if use_detected and self._detected_java else "disabled")
         if not use_detected:
-            required = get_required_java(self.version_var.get())
+            required = self.api.java.required(self.version_var.get())
             self.lbl_java_status.configure(
                 text=f"Will auto-download Java {required} for this server.",
                 text_color=AppConfig.COLOR_TEXT_GRAY
@@ -809,7 +802,7 @@ class ServerWizard(ZBBToplevel):
                 self.slider_ram.set(val)
                 self.wizard_data["ram"] = val
                 self.lbl_ram_value.configure(text=f"{val} MB ({val//1024} GB)")
-                total = psutil.virtual_memory().total / (1024 * 1024)
+                total = self.creation.system_ram_mb()
                 pct = val / total
                 self.lbl_ram_util.configure(text=f"{pct*100:.0f}% of system RAM")
                 self.lbl_ram_error.configure(text="")
@@ -822,7 +815,7 @@ class ServerWizard(ZBBToplevel):
         self.entry_ram.delete(0, "end")
         self.entry_ram.insert(0, str(ram))
         self.lbl_ram_value.configure(text=f"{ram} MB ({ram//1024} GB)")
-        total = psutil.virtual_memory().total / (1024 * 1024)
+        total = self.creation.system_ram_mb()
         pct = ram / total
         self.lbl_ram_util.configure(text=f"{pct*100:.0f}% of system RAM")
 
@@ -846,7 +839,7 @@ class ServerWizard(ZBBToplevel):
         self.scroll_versions.update_idletasks()
 
         def fetch_and_render():
-            versions = sorted(self.vm.get_versions(engine), key=version_sort_key, reverse=True)
+            versions = sorted(self.creation.versions(engine), key=version_sort_key, reverse=True)
             search_q = self.entry_search.get().lower()
             filtered = [v for v in versions if search_q in v.lower()]
 

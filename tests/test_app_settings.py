@@ -30,7 +30,7 @@ def _dialog(url=VALID_URL, role="", name="ZBB", avatar="", templates=None, templ
                      "ready": MagicMock(get=MagicMock(return_value=False))},
         _webhook_templates=dict(templates or {}),
         _settings=MagicMock(),
-        zbb_manager=MagicMock(),
+        api=MagicMock(),
     )
     d._current_url = lambda: AppSettingsDialog._current_url(d)
     d._validate = lambda u: AppSettingsDialog._validate(d, u)
@@ -54,13 +54,13 @@ class TestSaveNotifications:
         assert saved["discord_webhook_url"] == VALID_URL
         assert saved["webhook_events"] == {"crashed": True, "ready": False}
         assert saved["webhook_crash_mention_role"] == "987654321"
-        d.zbb_manager.reload_discord_webhook.assert_called_once()
+        d._settings.reload_notifications.assert_called_once()
         assert ui.toast.call_args.kwargs["toast_type"] == "success"
 
     def test_empty_url_disables_notifications(self, ui):
         d = _dialog(url="")
         AppSettingsDialog._save_notifications(d)
-        d.zbb_manager.reload_discord_webhook.assert_called_once()
+        d._settings.reload_notifications.assert_called_once()
         assert ui.toast.call_args.kwargs["toast_type"] == "info"
 
     @pytest.mark.parametrize("url", ["http://discord.com/api/webhooks/1/x", "https://example.com/hook"])
