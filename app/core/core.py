@@ -229,9 +229,10 @@ class ZBBManager:
         if not all_javas:
             return self._auto_install_or_fail(
                 required_java, auto_install_jdk,
-                attempt=f"No Java installation found. Attempting to auto-install JDK {required_java}...",
-                disabled="No Java installation found and auto-install is disabled in server settings.",
-                failed=f"No Java found and auto-install JDK {required_java} failed.",
+                attempt=_("No Java installation found. Attempting to auto-install JDK {required}...").format(
+                    required=required_java),
+                disabled=_("No Java installation found and auto-install is disabled in server settings."),
+                failed=_("No Java found and auto-install JDK {required} failed.").format(required=required_java),
             )
 
         exact = sorted((j for j in all_javas if j.major == required_java), key=lambda j: j.is_jdk, reverse=True)
@@ -243,7 +244,8 @@ class ZBBManager:
         best = max(all_javas, key=lambda j: j.major)
         if required_java < best.major <= AppConfig.MAX_SUPPORTED_JAVA:
             self._jdk_source = "system"
-            msg = f"Running with Java {best.major}. Recommended: Java {required_java}."
+            msg = _("Running with Java {detected}. Recommended: Java {required}.").format(
+                detected=best.major, required=required_java)
             self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": "warning"})
             self.events.emit(ServerEvent.CONSOLE_LINE, f"[Warning] {msg}")
             return (best.path, required_java)
@@ -251,15 +253,21 @@ class ZBBManager:
         if best.major > AppConfig.MAX_SUPPORTED_JAVA:
             return self._auto_install_or_fail(
                 required_java, auto_install_jdk,
-                attempt=f"Java {best.major} detected but unstable. Attempting to auto-install JDK {required_java}...",
-                disabled=f"Java {best.major} detected (experimental). Auto-install disabled. Install Java {required_java} manually.",
-                failed=f"Java {best.major} detected (experimental). This server needs Java {required_java}, and auto-install failed.",
+                attempt=_("Java {detected} detected but unstable. Attempting to auto-install JDK {required}...").format(
+                    detected=best.major, required=required_java),
+                disabled=_("Java {detected} detected (experimental). Auto-install disabled. "
+                           "Install Java {required} manually.").format(detected=best.major, required=required_java),
+                failed=_("Java {detected} detected (experimental). This server needs Java {required}, "
+                         "and auto-install failed.").format(detected=best.major, required=required_java),
             )
         return self._auto_install_or_fail(
             required_java, auto_install_jdk,
-            attempt=f"Java {best.major} too low. Attempting to auto-install JDK {required_java}...",
-            disabled=f"Java {best.major} too low. Auto-install disabled. Install Java {required_java} manually.",
-            failed=f"Java version too low. Required Java {required_java}, detected Java {best.major}. Auto-install failed.",
+            attempt=_("Java {detected} too low. Attempting to auto-install JDK {required}...").format(
+                detected=best.major, required=required_java),
+            disabled=_("Java {detected} too low. Auto-install disabled. Install Java {required} manually.").format(
+                detected=best.major, required=required_java),
+            failed=_("Java version too low. Required Java {required}, detected Java {detected}. "
+                     "Auto-install failed.").format(detected=best.major, required=required_java),
         )
 
     def _required_java_for_launch(self, server_dir: str, mc_version: str,
@@ -319,7 +327,7 @@ class ZBBManager:
         link_path = os.path.join(SERVERS_DIR, server_name)
 
         if os.path.exists(link_path):
-            raise ServerExistsError(f"A server named '{server_name}' already exists.")
+            raise ServerExistsError(_("A server named '{name}' already exists.").format(name=server_name))
 
         try:
             create_junction(folder_path, link_path)
@@ -609,7 +617,7 @@ class ZBBManager:
                 loader = loader_for_server_type(meta.get("type", "Vanilla"))
                 if loader not in MOD_LOADERS:
                     self.events.emit(ServerEvent.NOTIFICATION, {
-                        "msg": "Cannot auto-install mods: server is not Fabric, Forge or NeoForge.", "type": "error"
+                        "msg": _("Cannot auto-install mods: server is not Fabric, Forge or NeoForge."), "type": "error"
                     })
                     return
 
@@ -621,11 +629,19 @@ class ZBBManager:
                 if installed:
                     self.events.emit(ServerEvent.CONSOLE_LINE, f"[ModInstall] Installed: {', '.join(installed)}")
 
+                # Complete sentences, joined with spaces (never fragments).
                 parts = []
-                if installed: parts.append(f"{len(installed)} installed")
-                if failed: parts.append(f"{len(failed)} failed")
-                if unresolved: parts.append(f"{len(unresolved)} not found on Modrinth")
-                msg = "Mod auto-install: " + ", ".join(parts) if parts else "No mods were installed."
+                if installed:
+                    parts.append(ngettext("{count} mod was installed.", "{count} mods were installed.",
+                                          len(installed)).format(count=len(installed)))
+                if failed:
+                    parts.append(ngettext("{count} mod failed to install.", "{count} mods failed to install.",
+                                          len(failed)).format(count=len(failed)))
+                if unresolved:
+                    parts.append(ngettext("{count} mod was not found on Modrinth.",
+                                          "{count} mods were not found on Modrinth.",
+                                          len(unresolved)).format(count=len(unresolved)))
+                msg = " ".join(parts) if parts else _("No mods were installed.")
                 toast_type = "success" if installed and not failed and not unresolved else ("warning" if installed else "error")
                 self.events.emit(ServerEvent.NOTIFICATION, {"msg": msg, "type": toast_type})
 

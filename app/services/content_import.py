@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from app.core import neoforge
+from app.core.i18n import _, ngettext
 from app.core.fs_links import is_link, remove_link
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,10 @@ _NEOFORGE_FORGE_COMPAT_MC = "1.20.1"
 
 def supported_loaders_text() -> str:
     """'Fabric, Forge or NeoForge' for user-facing messages."""
-    return ", ".join(SUPPORTED_LOADERS[:-1]) + " or " + SUPPORTED_LOADERS[-1]
+    # Translators: a list of server types, e.g. "Fabric, Forge or NeoForge".
+    return _("{first} or {last}").format(first=", ".join(SUPPORTED_LOADERS[:-1]),
+                                         last=SUPPORTED_LOADERS[-1])
+
 
 # mrpack dependency key -> loader display name
 _MRPACK_LOADERS = {
@@ -117,7 +121,7 @@ class ModpackInfo:
         if self.mc_version:
             parts.append(f"Minecraft {self.mc_version}")
         if self.mod_count:
-            parts.append(f"{self.mod_count} mods")
+            parts.append(ngettext("{count} mod", "{count} mods", self.mod_count).format(count=self.mod_count))
         return " · ".join(parts)
 
 
@@ -129,13 +133,13 @@ def _safe_dest(base_dir: str, rel_path: str) -> str:
     base = os.path.realpath(base_dir)
     dest = os.path.realpath(os.path.join(base, rel_path.replace("\\", "/")))
     if os.path.commonpath([base, dest]) != base:
-        raise ContentImportError(f"Unsafe path in archive: {rel_path}")
+        raise ContentImportError(_("Unsafe path in archive: {path}").format(path=rel_path))
     return dest
 
 
 def _open_zip(path: str) -> zipfile.ZipFile:
     if not zipfile.is_zipfile(path):
-        raise ContentImportError("That file isn't a valid .zip archive.")
+        raise ContentImportError(_("That file isn't a valid .zip archive."))
     return zipfile.ZipFile(path, "r")
 
 
@@ -156,11 +160,12 @@ def check_members(members: list, dest_dir: str) -> None:
         for part in member.filename.replace("\\", "/").split("/"):
             if part and _invalid_component(part):
                 raise ContentImportError(
-                    f"The archive contains a file name Windows can't create: {member.filename}")
+                    _("The archive contains a file name Windows can't create: {name}").format(
+                        name=member.filename))
     if total > MAX_UNPACKED_BYTES:
         raise ContentImportError(
-            f"The archive unpacks to {total / 1024 ** 3:.1f} GB, more than the "
-            f"{MAX_UNPACKED_BYTES // 1024 ** 3} GB limit.")
+            _("The archive unpacks to {size} GB, more than the {limit} GB limit.").format(
+                size=f"{total / 1024 ** 3:.1f}", limit=MAX_UNPACKED_BYTES // 1024 ** 3))
     probe = dest_dir
     while probe and not os.path.exists(probe):
         parent = os.path.dirname(probe)
@@ -173,8 +178,8 @@ def check_members(members: list, dest_dir: str) -> None:
         return
     if total + _DISK_MARGIN_BYTES > free:
         raise ContentImportError(
-            f"Not enough disk space: the archive needs {total / 1024 ** 3:.1f} GB "
-            f"and only {free / 1024 ** 3:.1f} GB is free.")
+            _("Not enough disk space: the archive needs {needed} GB and only {free} GB is free.").format(
+                needed=f"{total / 1024 ** 3:.1f}", free=f"{free / 1024 ** 3:.1f}"))
 
 
 def _stem(path: str) -> str:
@@ -214,8 +219,8 @@ def inspect_world(path: str) -> WorldInfo:
         root = _find_world_dir(path)
         if root is None:
             raise ContentImportError(
-                "No Minecraft world found in that folder (it needs a level.dat). "
-                "Pick the world's own folder, e.g. .minecraft/saves/<world>.")
+                _("No Minecraft world found in that folder (it needs a level.dat). "
+                  "Pick the world's own folder, e.g. .minecraft/saves/<world>."))
         info = WorldInfo(path=path, name=os.path.basename(root.rstrip("\\/")), is_zip=False, root=root)
         _read_world_version(info, lambda: _read_capped(os.path.join(root, "level.dat")))
         return info
@@ -225,7 +230,7 @@ def inspect_world(path: str) -> WorldInfo:
             candidates = [n for n in (x.replace("\\", "/") for x in zf.namelist())
                           if n.split("/")[-1] == "level.dat" and not n.startswith(_MACOS_JUNK)]
         if not candidates:
-            raise ContentImportError("No Minecraft world found in that .zip (it needs a level.dat).")
+            raise ContentImportError(_("No Minecraft world found in that .zip (it needs a level.dat)."))
         # Shallowest level.dat is the world root (DIM folders hold none).
         best = min(candidates, key=lambda n: n.count("/"))
         prefix = best[: -len("level.dat")]
@@ -234,7 +239,7 @@ def inspect_world(path: str) -> WorldInfo:
         _read_world_version(info, lambda: _read_zip_member_capped(path, best))
         return info
 
-    raise ContentImportError("That world file or folder doesn't exist.")
+    raise ContentImportError(_("That world file or folder doesn't exist."))
 
 
 def _read_capped(path: str) -> bytes:
@@ -287,22 +292,27 @@ def world_version_check(world: WorldInfo, server_version: Optional[str]):
         # (block, like a release), fine for 1.21.5 or later.
         base = re.match(r"(\d+(?:\.\d+)+)-(?:pre|rc)\d*$", world.mc_version)
         if base and server_key and _release_key(base.group(1)) > server_key:
-            return ("error", f"This world was saved with Minecraft {world.mc_version}, newer than this server "
-                             f"({server_version}). An older version can corrupt it: choose Minecraft "
-                             f"{base.group(1)} or newer in the Engine & Version step.")
-        return ("warning", f"This world was saved with snapshot {world.mc_version}. It may not load on a "
-                           "regular release; keep a copy of it.")
+            return ("error", _newer_world_message(world.mc_version, server_version, base.group(1)))
+        return ("warning", _("This world was saved with snapshot {version}. It may not load on a "
+                             "regular release; keep a copy of it.").format(version=world.mc_version))
     world_key = _release_key(world.mc_version)
     if world_key is None or server_key is None:
         return None
     if world_key > server_key:
-        return ("error", f"This world was saved with Minecraft {world.mc_version}, newer than this server "
-                         f"({server_version}). An older version can corrupt it: choose Minecraft "
-                         f"{world.mc_version} or newer in the Engine & Version step.")
+        return ("error", _newer_world_message(world.mc_version, server_version, world.mc_version))
     if world_key < server_key:
-        return ("info", f"Saved with Minecraft {world.mc_version}: the server will upgrade it to {server_version} "
-                        "on first start. Your original world isn't changed.")
-    return ("info", f"Saved with Minecraft {world.mc_version}, the same version as this server.")
+        return ("info", _("Saved with Minecraft {version}: the server will upgrade it to {server_version} "
+                          "on first start. Your original world isn't changed.").format(
+                              version=world.mc_version, server_version=server_version))
+    return ("info", _("Saved with Minecraft {version}, the same version as this server.").format(
+        version=world.mc_version))
+
+
+def _newer_world_message(world_version: str, server_version: Optional[str], minimum: str) -> str:
+    return _("This world was saved with Minecraft {version}, newer than this server "
+             "({server_version}). An older version can corrupt it: choose Minecraft "
+             "{minimum} or newer in the Engine & Version step.").format(
+                 version=world_version, server_version=server_version, minimum=minimum)
 
 
 def _world_members(info: WorldInfo, zf: zipfile.ZipFile) -> list:
@@ -332,9 +342,10 @@ def import_world(info: WorldInfo, server_dir: str, level_name: str = "world",
     server folder like any archive path."""
     dest = _safe_dest(server_dir, level_name or "world")
     if os.path.normcase(dest) == os.path.normcase(os.path.realpath(server_dir)):
-        raise ContentImportError(f"Invalid level-name in server.properties: {level_name!r}")
+        raise ContentImportError(_("Invalid level-name in server.properties: {name}").format(
+            name=repr(level_name)))
     if progress:
-        progress(f"Importing world '{info.name}'...")
+        progress(_("Importing world '{name}'...").format(name=info.name))
 
     if not info.is_zip:
         _clear_dir(dest)
@@ -343,7 +354,7 @@ def import_world(info: WorldInfo, server_dir: str, level_name: str = "world",
 
     with _open_zip(info.path) as zf:
         members = _world_members(info, zf)
-        check_members([m for m, _ in members], server_dir)
+        check_members([m for m, _unused in members], server_dir)
         _clear_dir(dest)
         os.makedirs(dest, exist_ok=True)
         for member, rel in members:
@@ -360,7 +371,7 @@ def _inspect_mrpack(path: str, zf: zipfile.ZipFile) -> ModpackInfo:
     try:
         manifest = json.loads(zf.read("modrinth.index.json").decode("utf-8"))
     except (KeyError, ValueError) as e:
-        raise ContentImportError(f"The modpack manifest is unreadable: {e}") from e
+        raise ContentImportError(_("The modpack manifest is unreadable: {error}").format(error=e)) from e
     deps = manifest.get("dependencies", {}) or {}
     loader = loader_version = None
     for key, display in _MRPACK_LOADERS.items():
@@ -502,8 +513,8 @@ def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackI
     mods = [n for n in rel_names if n.startswith("mods/") and n.endswith(".jar")]
     if not mods:
         raise ContentImportError(
-            "This .zip has no mods/ folder, so it doesn't look like a server pack. "
-            "Use a Modrinth .mrpack or the pack's \"Server Pack\" download.")
+            _("This .zip has no mods/ folder, so it doesn't look like a server pack. "
+              "Use a Modrinth .mrpack or the pack's \"Server Pack\" download."))
 
     info = ModpackInfo(path=path, kind="serverpack", name=_stem(path), mod_count=len(mods), root=root)
     _apply_variables(info, _read_variables(zf, root))
@@ -519,8 +530,8 @@ def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackI
         info.loader_version = info.loader_version[len(info.mc_version) + 1:]
 
     if info.loader is None or info.mc_version is None:
-        info.notes.append("Couldn't tell which loader/Minecraft version this pack needs. "
-                          "Pick the same ones the pack's page lists.")
+        info.notes.append(_("Couldn't tell which loader/Minecraft version this pack needs. "
+                            "Pick the same ones the pack's page lists."))
     return info
 
 
@@ -549,40 +560,42 @@ def _resolve_neoforge(info: ModpackInfo) -> None:
         info.mc_version = neoforge.mc_version(info.loader_version)
     if info.mc_version == _NEOFORGE_FORGE_COMPAT_MC:
         info.loader, info.loader_version = "Forge", None
-        info.notes.append("Built for NeoForge 1.20.1, which runs Forge mods: "
-                          "ZeroBlockBridge installs Forge 1.20.1 for it.")
+        info.notes.append(_("Built for NeoForge 1.20.1, which runs Forge mods: "
+                            "ZeroBlockBridge installs Forge 1.20.1 for it."))
 
 
 def modpack_mismatch(info: ModpackInfo, engine: str, mc_version: str) -> Optional[str]:
     """Why `info` can't run on an `engine` server for `mc_version`, or None."""
     if engine not in SUPPORTED_LOADERS:
-        return f"Modpacks need a {supported_loaders_text()} server, not {engine}."
+        return _("Modpacks need a {loaders} server, not {engine}.").format(
+            loaders=supported_loaders_text(), engine=engine)
     if info.loader and info.loader != engine:
-        return f"This modpack needs a {info.loader} server, not {engine}."
+        return _("This modpack needs a {loader} server, not {engine}.").format(loader=info.loader, engine=engine)
     if info.mc_version and info.mc_version != mc_version:
-        return f"This modpack needs Minecraft {info.mc_version}, not {mc_version}."
+        return _("This modpack needs Minecraft {version}, not {server_version}.").format(
+            version=info.mc_version, server_version=mc_version)
     return None
 
 
 def inspect_modpack(path: str) -> ModpackInfo:
     if not os.path.isfile(path):
-        raise ContentImportError("That modpack file doesn't exist.")
+        raise ContentImportError(_("That modpack file doesn't exist."))
     with _open_zip(path) as zf:
         names = [n.replace("\\", "/") for n in zf.namelist()]
         if "modrinth.index.json" in names:
             info = _inspect_mrpack(path, zf)
         elif _is_curseforge_client(names):
             raise ContentImportError(
-                "This is a CurseForge client modpack. On the pack's CurseForge page, open "
-                "Files, download the \"Server Pack\" and import that .zip instead.")
+                _("This is a CurseForge client modpack. On the pack's CurseForge page, open "
+                  "Files, download the \"Server Pack\" and import that .zip instead."))
         else:
             info = _inspect_serverpack(path, zf, names)
 
     _resolve_neoforge(info)
     if not info.supported:
         raise ContentImportError(
-            f"This modpack needs {info.loader}, which ZeroBlockBridge doesn't support yet "
-            f"(supported: {', '.join(SUPPORTED_LOADERS)}).")
+            _("This modpack needs {loader}, which ZeroBlockBridge doesn't support yet "
+              "(supported: {supported}).").format(loader=info.loader, supported=", ".join(SUPPORTED_LOADERS)))
     return info
 
 
@@ -623,7 +636,7 @@ def _copy_serverpack(info: ModpackInfo, server_dir: str, progress: Optional[Prog
     copied = 0
     with _open_zip(info.path) as zf:
         members = _serverpack_members(info, zf)
-        check_members([m for m, _ in members], server_dir)
+        check_members([m for m, _unused in members], server_dir)
         for member, rel in members:
             target = _safe_dest(server_dir, rel)
             os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -631,7 +644,7 @@ def _copy_serverpack(info: ModpackInfo, server_dir: str, progress: Optional[Prog
                 shutil.copyfileobj(src, dst)
             copied += 1
             if progress and copied % 50 == 0:
-                progress(f"Copying modpack files ({copied})...")
+                progress(_("Copying modpack files ({count})...").format(count=copied))
     return copied
 
 
@@ -657,6 +670,6 @@ def install_modpack(info: ModpackInfo, server_dir: str, server_type: str, mc_ver
         return ModpackInstall(text, summary["failed"])
 
     if progress:
-        progress("Copying modpack files...")
+        progress(_("Copying modpack files..."))
     copied = _copy_serverpack(info, server_dir, progress)
     return ModpackInstall(f"{info.mod_count} mods ({copied} files) copied")

@@ -585,7 +585,7 @@ def test_failed_mod_downloads_become_a_warning(tmp_path):
                                   return_value=content_import.ModpackInstall("1 mods installed", failed=2)))
         result = env.run(type="Forge", version="1.20.1", modpack_path=_pack_zip(tmp_path))
     assert result.ok
-    assert result.warnings and "2 mod(s)" in result.warnings[0]
+    assert result.warnings and "2 mods from the modpack" in result.warnings[0]
 
 
 def test_tunnel_failure_keeps_the_server_with_a_warning(tmp_path):

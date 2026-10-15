@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Optional
 from app.core.app_config import AppConfig
 from app.core.constants import CONFIG_DIR
+from app.core.i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class PlayitApiClient:
         """Helper to send requests to Playit API with error handling."""
         self.load_secret_key()
         if not self._secret_key:
-            raise PlayitApiException("No secret key loaded. Cannot authenticate.")
+            raise PlayitApiException(_("No secret key loaded. Cannot authenticate."))
             
         url = f"{self.api_base}/{endpoint.strip('/')}"
         headers = {
@@ -81,7 +82,7 @@ class PlayitApiClient:
         try:
             response = self.session.request(method, url, json=json_data, headers=headers, timeout=10)
         except requests.RequestException as e:
-            raise PlayitApiException(f"Network error communicating with Playit API: {e}")
+            raise PlayitApiException(_("Network error communicating with Playit API: {error}").format(error=e))
 
         status = response.status_code
         try:
@@ -95,18 +96,23 @@ class PlayitApiClient:
             if status in (401, 403):
                 self.consecutive_auth_failures += 1
             if "AgentDisabledOverLimit" in response.text:
-                raise PlayitApiException(
-                    "AgentDisabledOverLimit: Agent limit reached. Delete old agents at playit.gg/dashboard", status)
+                # The code prefix stays untranslated: callers match on it.
+                raise PlayitApiException(_(
+                    "{code}: Agent limit reached. Delete old agents at playit.gg/dashboard"
+                ).format(code="AgentDisabledOverLimit"), status)
             if "NotAllowedWithReadOnly" in response.text:
                 self.is_read_only = True
-                raise PlayitApiException(
-                    "NotAllowedWithReadOnly: Account is in Guest mode (Read-Only). Use CLI for tunnel management.", status)
+                raise PlayitApiException(_(
+                    "{code}: Account is in Guest mode (Read-Only). Use CLI for tunnel management."
+                ).format(code="NotAllowedWithReadOnly"), status)
             body = data if isinstance(data, dict) else {}
-            error_detail = body.get("error") or body.get("message") or body.get("detail") or response.text or "Unknown API error"
-            raise PlayitApiException(f"Playit API returned HTTP {status}: {error_detail}", status)
+            error_detail = body.get("error") or body.get("message") or body.get("detail") or response.text or _("Unknown API error")
+            raise PlayitApiException(_("Playit API returned HTTP {status}: {detail}").format(
+                status=status, detail=error_detail), status)
 
         if not isinstance(data, dict):
-            raise PlayitApiException(f"Invalid JSON response from Playit API (HTTP {status})", status)
+            raise PlayitApiException(_("Invalid JSON response from Playit API (HTTP {status})").format(
+                status=status), status)
         self.consecutive_auth_failures = 0
         return data
 
@@ -174,13 +180,15 @@ class PlayitApiClient:
             )
             data = response.json()
         except requests.RequestException as e:
-            raise PlayitApiException(f"Failed to connect to bridge: {e}")
+            raise PlayitApiException(_("Failed to connect to bridge: {error}").format(error=e))
         except ValueError:
-            raise PlayitApiException(f"Invalid JSON from bridge (HTTP {response.status_code}): {response.text[:500]}", response.status_code)
+            raise PlayitApiException(_("Invalid JSON from bridge (HTTP {status}): {detail}").format(
+                status=response.status_code, detail=response.text[:500]), response.status_code)
 
         if response.status_code >= 400 or data.get("status") == "fail":
             logger.error("Bridge returned HTTP %d: %s", response.status_code, response.text)
-            raise PlayitApiException(f"Bridge exchange failed (HTTP {response.status_code}): {response.text[:500]}", response.status_code)
+            raise PlayitApiException(_("Bridge exchange failed (HTTP {status}): {detail}").format(
+                status=response.status_code, detail=response.text[:500]), response.status_code)
 
         # Extract credentials
         result = data.get("data", data)
@@ -189,7 +197,7 @@ class PlayitApiClient:
 
         if not secret_key:
             logger.error("Bridge response body: %s", data)
-            raise PlayitApiException(f"Bridge did not return a secret key: {data}")
+            raise PlayitApiException(_("Bridge did not return a secret key: {detail}").format(detail=data))
 
         # Write playit.toml — critical persistence of the secret_key
         try:
@@ -199,10 +207,10 @@ class PlayitApiClient:
             if platform.system() != "Windows":
                 os.chmod(self.toml_path, 0o600)
         except OSError as e:
-            raise PlayitApiException(
-                f"Linked successfully but could not write {self.toml_path}: {e}. "
+            raise PlayitApiException(_(
+                "Linked successfully but could not write {path}: {error}. "
                 "Close any program using this file and try again."
-            )
+            ).format(path=self.toml_path, error=e))
 
         self._secret_key = secret_key
         self._agent_id = agent_id
@@ -246,7 +254,7 @@ class PlayitApiClient:
             agent_type = data["data"].get("agent_type")
             logger.info("Agent type from rundata: %s", agent_type)
             return data["data"]
-        raise PlayitApiException(f"Failed to get agent rundata: {data}")
+        raise PlayitApiException(_("Failed to get agent rundata: {detail}").format(detail=data))
 
     def proto_register(self) -> Optional[str]:
         """Register client protocol version with the playit server."""
@@ -371,7 +379,7 @@ class PlayitApiClient:
     def create_tunnel(self, port: int = 25565, tunnel_type: str = "minecraft-java", proxy_protocol: bool = False) -> Dict:
         agent_id = self.get_agent_id()
         if not agent_id:
-            raise PlayitApiException("Cannot create tunnel: no agent_id available. Ensure playit is linked.")
+            raise PlayitApiException(_("Cannot create tunnel: no agent_id available. Ensure playit is linked."))
         import random
         import string
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
@@ -400,12 +408,12 @@ class PlayitApiClient:
 
         data = self._request("tunnels/create", json_data=tunnel_data)
         if data.get("status") != "success":
-            raise PlayitApiException(f"Failed to create tunnel: {data}")
+            raise PlayitApiException(_("Failed to create tunnel: {detail}").format(detail=data))
 
         tunnel = data.get("data", {})
         tunnel_id = tunnel.get("id")
         if not tunnel_id:
-            raise PlayitApiException("Tunnel creation returned success but no ID.")
+            raise PlayitApiException(_("Tunnel creation returned success but no ID."))
 
         # Try address directly from create response
         address = self.get_tunnel_address(tunnel)
@@ -415,7 +423,7 @@ class PlayitApiClient:
 
         # Poll until assigned (typically takes 5-10s)
         logger.info("Tunnel %s pending, polling...", tunnel_id)
-        for _ in range(15):
+        for _attempt in range(15):
             time.sleep(1)
             tunnels = self.list_tunnels()
             for t in tunnels:

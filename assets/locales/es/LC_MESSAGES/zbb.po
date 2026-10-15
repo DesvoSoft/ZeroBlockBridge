@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 13:59-0600\n"
+"POT-Creation-Date: 2026-10-15 14:12-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -19,12 +19,34 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.17.0\n"
 
+#, python-brace-format
+msgid "'{name}' isn't a valid player name (3-16 letters, numbers or _)."
+msgstr "'{name}' no es un nombre de jugador válido (3-16 letras, números o _)."
+
 msgctxt "decimal separator"
 msgid "."
 msgstr ","
 
+#, python-brace-format
+msgid "A server named '{name}' already exists."
+msgstr "Ya existe un servidor llamado '{name}'."
+
 msgid "About"
 msgstr "Acerca de"
+
+#, python-brace-format
+msgid "Added {name} to the whitelist."
+msgstr "Se agregó a {name} a la lista blanca."
+
+#, python-brace-format
+msgid "Adoptium API request failed: {error}"
+msgstr "Falló la solicitud a la API de Adoptium: {error}"
+
+msgid "Adoptium API timed out"
+msgstr "Se agotó el tiempo de espera de la API de Adoptium"
+
+msgid "Adoptium response missing package link"
+msgstr "A la respuesta de Adoptium le falta el enlace del paquete"
 
 msgid "All"
 msgstr "Todos"
@@ -35,9 +57,20 @@ msgstr "Ya instalado"
 msgid "Also delete my servers, backups and settings"
 msgstr "Eliminar también mis servidores, copias de seguridad y ajustes"
 
+msgid "Analyzing Java requirements from server jar..."
+msgstr "Analizando los requisitos de Java del jar del servidor..."
+
+msgid "Another backup is already in progress. Try again shortly."
+msgstr ""
+"Ya hay otra copia de seguridad en curso. Inténtelo de nuevo en unos "
+"momentos."
+
 #, python-brace-format
 msgid "App: {path}"
 msgstr "Aplicación: {path}"
+
+msgid "Applying server icon..."
+msgstr "Aplicando el icono del servidor..."
 
 #, python-brace-format
 msgid "Apps list entry: {error}"
@@ -46,15 +79,48 @@ msgstr "Entrada en la lista de aplicaciones: {error}"
 msgid "Apr"
 msgstr "abr"
 
+msgid "Archive missing metadata.json"
+msgstr "Al archivo le falta metadata.json"
+
+#, python-brace-format
+msgid "Archiving {path}"
+msgstr "Archivando {path}"
+
 msgid "Aug"
 msgstr "ago"
+
+#, python-brace-format
+msgid "Auto-backup failed unexpectedly: {error}"
+msgstr "La copia de seguridad automática falló de forma inesperada: {error}"
+
+#, python-brace-format
+msgid "Backup created with warnings. Skipped {count} locked file."
+msgid_plural "Backup created with warnings. Skipped {count} locked files."
+msgstr[0] ""
+"Copia de seguridad creada con advertencias. Se omitió {count} archivo "
+"bloqueado."
+msgstr[1] ""
+"Copia de seguridad creada con advertencias. Se omitieron {count} archivos"
+" bloqueados."
 
 msgid "Banned"
 msgstr "Baneados"
 
 #, python-brace-format
+msgid "Banned {name}."
+msgstr "Se baneó a {name}."
+
+#, python-brace-format
 msgid "Banned: {reason}"
 msgstr "Baneado: {reason}"
+
+#, python-brace-format
+msgid ""
+"Bedrock player '{name}' hasn't joined this server yet — ask them to join "
+"once first."
+msgstr ""
+"El jugador de Bedrock '{name}' aún no ha entrado a este servidor: pídale "
+"que entre una vez primero."
 
 #, python-brace-format
 msgid "Blocked `{command}`: {reason}"
@@ -63,6 +129,21 @@ msgstr "Bloqueado `{command}`: {reason}"
 #, python-brace-format
 msgid "Blocked: {reason}"
 msgstr "Bloqueado: {reason}"
+
+#, python-brace-format
+msgid "Bridge did not return a secret key: {detail}"
+msgstr "El puente no devolvió una clave secreta: {detail}"
+
+#, python-brace-format
+msgid "Bridge exchange failed (HTTP {status}): {detail}"
+msgstr "Falló el intercambio con el puente (HTTP {status}): {detail}"
+
+msgid ""
+"Built for NeoForge 1.20.1, which runs Forge mods: ZeroBlockBridge "
+"installs Forge 1.20.1 for it."
+msgstr ""
+"Hecho para NeoForge 1.20.1, que ejecuta mods de Forge: ZeroBlockBridge "
+"instala Forge 1.20.1 para él."
 
 #, python-brace-format
 msgid ""
@@ -79,8 +160,35 @@ msgstr "No se puede escribir en {path}. Elija otra carpeta."
 msgid "Cancel"
 msgstr "Cancelar"
 
+msgid "Cannot auto-install mods: server is not Fabric, Forge or NeoForge."
+msgstr ""
+"No se pueden instalar mods automáticamente: el servidor no es Fabric, "
+"Forge ni NeoForge."
+
+#, python-brace-format
+msgid ""
+"Cannot create server directory {path}: permission denied. Check that "
+"ZeroBlockBridge has write access to this location."
+msgstr ""
+"No se puede crear la carpeta del servidor {path}: permiso denegado. "
+"Compruebe que ZeroBlockBridge tenga permiso de escritura en esa "
+"ubicación."
+
+msgid "Cannot create tunnel: no agent_id available. Ensure playit is linked."
+msgstr ""
+"No se puede crear el túnel: no hay un agent_id disponible. Asegúrese de "
+"que Playit esté vinculado."
+
+#, python-brace-format
+msgid "Cannot write {path}: permission denied ({error})"
+msgstr "No se puede escribir {path}: permiso denegado ({error})"
+
 msgid "Change data folder..."
 msgstr "Cambiar carpeta de datos..."
+
+#, python-brace-format
+msgid "Checksum mismatch for JDK {version}"
+msgstr "La suma de verificación del JDK {version} no coincide"
 
 msgid "Choose data folder"
 msgstr "Elegir carpeta de datos"
@@ -103,6 +211,9 @@ msgstr "Cierre ZeroBlockBridge primero"
 msgid "Close ZeroBlockBridge?"
 msgstr "¿Cerrar ZeroBlockBridge?"
 
+msgid "Configuring server environment..."
+msgstr "Configurando el entorno del servidor..."
+
 msgid "Console"
 msgstr "Consola"
 
@@ -110,8 +221,36 @@ msgid "Continue"
 msgstr "Continuar"
 
 #, python-brace-format
+msgid "Copying modpack files ({count})..."
+msgstr "Copiando archivos del modpack ({count})..."
+
+msgid "Copying modpack files..."
+msgstr "Copiando archivos del modpack..."
+
+#, python-brace-format
+msgid "Copying {count} file from {folder}…"
+msgid_plural "Copying {count} files from {folder}…"
+msgstr[0] "Copiando {count} archivo de {folder}…"
+msgstr[1] "Copiando {count} archivos de {folder}…"
+
+#, python-brace-format
 msgid "Couldn't add the shortcut: {error}"
 msgstr "No se pudo añadir el acceso directo: {error}"
+
+#, python-brace-format
+msgid ""
+"Couldn't look up '{name}' (no connection to Mojang). Try again, or add "
+"them while the server runs."
+msgstr ""
+"No se pudo buscar a '{name}' (sin conexión con Mojang). Inténtelo de "
+"nuevo o agréguelo mientras el servidor está en ejecución."
+
+msgid ""
+"Couldn't tell which loader/Minecraft version this pack needs. Pick the "
+"same ones the pack's page lists."
+msgstr ""
+"No se pudo determinar qué loader ni qué versión de Minecraft necesita "
+"este modpack. Elija los mismos que indica la página del modpack."
 
 msgid "Daily Time"
 msgstr "Hora diaria"
@@ -134,6 +273,14 @@ msgstr "Acceso directo en el escritorio"
 msgid "Don't ask again (change it in Settings > General)"
 msgstr "No volver a preguntar (se cambia en Settings > General)"
 
+#, python-brace-format
+msgid "Downloading mods {done}/{total}…"
+msgstr "Descargando mods {done}/{total}…"
+
+#, python-brace-format
+msgid "Downloading {engine} {version} server jar..."
+msgstr "Descargando el jar del servidor {engine} {version}..."
+
 msgid "Downloads"
 msgstr "Descargas"
 
@@ -147,11 +294,47 @@ msgstr "Salir"
 msgid "Exiting will stop: {items}."
 msgstr "Al salir se detendrá lo siguiente: {items}."
 
+#, python-brace-format
+msgid "Extracting {path}"
+msgstr "Extrayendo {path}"
+
+#, python-brace-format
+msgid "Failed to connect to bridge: {error}"
+msgstr "No se pudo conectar con el puente: {error}"
+
+#, python-brace-format
+msgid "Failed to create server '{name}'. Check the log for details."
+msgstr ""
+"No se pudo crear el servidor '{name}'. Revise el registro para ver los "
+"detalles."
+
+#, python-brace-format
+msgid "Failed to create tunnel: {detail}"
+msgstr "No se pudo crear el túnel: {detail}"
+
+#, python-brace-format
+msgid "Failed to get agent rundata: {detail}"
+msgstr "No se pudieron obtener los datos del agente: {detail}"
+
+#, python-brace-format
+msgid "Failed to map custom location: {error}"
+msgstr "No se pudo vincular la ubicación personalizada: {error}"
+
+#, python-brace-format
+msgid "Failed to start server: {error}"
+msgstr "No se pudo iniciar el servidor: {error}"
+
 msgid "Feb"
 msgstr "feb"
 
 msgid "Follows"
 msgstr "Seguidores"
+
+#, python-brace-format
+msgid "Found {count} file in the modpack."
+msgid_plural "Found {count} files in the modpack."
+msgstr[0] "Se encontró {count} archivo en el modpack."
+msgstr[1] "Se encontraron {count} archivos en el modpack."
 
 msgid "From now on, open it from the Start menu or the desktop shortcut."
 msgstr ""
@@ -176,6 +359,14 @@ msgstr "Si lo rechaza, la aplicación se cerrará."
 #, python-brace-format
 msgid "Impact: {level}"
 msgstr "Impacto: {level}"
+
+#, python-brace-format
+msgid "Importing world '{name}'..."
+msgstr "Importando el mundo '{name}'..."
+
+#, python-brace-format
+msgid "Importing world {name}..."
+msgstr "Importando el mundo {name}..."
 
 msgid "Install"
 msgstr "Instalar"
@@ -213,11 +404,61 @@ msgstr ""
 "Instalado en:\n"
 "{path}"
 
+#, python-brace-format
+msgid "Installing modpack {name}..."
+msgstr "Instalando el modpack {name}..."
+
+#, python-brace-format
+msgid "Installing {label}..."
+msgstr "Instalando {label}..."
+
 msgid "Installing..."
 msgstr "Instalando..."
 
 msgid "Interval"
 msgstr "Intervalo"
+
+msgid "Invalid JSON from Modrinth API"
+msgstr "JSON no válido de la API de Modrinth"
+
+#, python-brace-format
+msgid "Invalid JSON from bridge (HTTP {status}): {detail}"
+msgstr "JSON no válido del puente (HTTP {status}): {detail}"
+
+#, python-brace-format
+msgid "Invalid JSON response from Playit API (HTTP {status})"
+msgstr "Respuesta JSON no válida de la API de Playit (HTTP {status})"
+
+#, python-brace-format
+msgid "Invalid level-name in server.properties: {name}"
+msgstr "level-name no válido en server.properties: {name}"
+
+#, python-brace-format
+msgid "Invalid modrinth.index.json: {error}"
+msgstr "modrinth.index.json no válido: {error}"
+
+msgid "Invalid setup code."
+msgstr "Código de configuración no válido."
+
+msgid "JDK download cancelled"
+msgstr "Descarga del JDK cancelada"
+
+#, python-brace-format
+msgid "JDK download failed after {attempts} attempts: {error}"
+msgstr "La descarga del JDK falló tras {attempts} intentos: {error}"
+
+#, python-brace-format
+msgid "JDK download failed: {error}"
+msgstr "La descarga del JDK falló: {error}"
+
+msgid "JDK download timed out"
+msgstr "Se agotó el tiempo de espera de la descarga del JDK"
+
+#, python-brace-format
+msgid "JDK {version} extracted but no java binary found in {path}"
+msgstr ""
+"Se extrajo el JDK {version}, pero no se encontró el ejecutable de java en"
+" {path}"
 
 msgid "Jan"
 msgstr "ene"
@@ -227,6 +468,52 @@ msgstr "Java"
 
 msgid "Java could not start with these launch settings"
 msgstr "Java no pudo arrancar con esta configuración de inicio"
+
+#, python-brace-format
+msgid ""
+"Java version too low. Required Java {required}, detected Java {detected}."
+" Auto-install failed."
+msgstr ""
+"La versión de Java es demasiado antigua. Se requiere Java {required} y se"
+" detectó Java {detected}. La instalación automática falló."
+
+#, python-brace-format
+msgid ""
+"Java {detected} detected (experimental). Auto-install disabled. Install "
+"Java {required} manually."
+msgstr ""
+"Se detectó Java {detected} (experimental). La instalación automática está"
+" desactivada. Instale Java {required} manualmente."
+
+#, python-brace-format
+msgid ""
+"Java {detected} detected (experimental). This server needs Java "
+"{required}, and auto-install failed."
+msgstr ""
+"Se detectó Java {detected} (experimental). Este servidor necesita Java "
+"{required} y la instalación automática falló."
+
+#, python-brace-format
+msgid ""
+"Java {detected} detected but unstable. Attempting to auto-install JDK "
+"{required}..."
+msgstr ""
+"Se detectó Java {detected}, pero es inestable. Intentando instalar "
+"automáticamente el JDK {required}..."
+
+#, python-brace-format
+msgid "Java {detected} too low. Attempting to auto-install JDK {required}..."
+msgstr ""
+"Java {detected} es demasiado antiguo. Intentando instalar automáticamente"
+" el JDK {required}..."
+
+#, python-brace-format
+msgid ""
+"Java {detected} too low. Auto-install disabled. Install Java {required} "
+"manually."
+msgstr ""
+"Java {detected} es demasiado antiguo. La instalación automática está "
+"desactivada. Instale Java {required} manualmente."
 
 #, python-brace-format
 msgid "Java {major} ({kind}) — {source}"
@@ -244,6 +531,10 @@ msgstr "¿Mantener ZeroBlockBridge en la bandeja del sistema o salir por complet
 msgid "Keep running this file. You won't be asked again."
 msgstr "Seguir usando este archivo. No se le volverá a preguntar."
 
+#, python-brace-format
+msgid "Kicked {name}."
+msgstr "Se expulsó a {name}."
+
 msgid "Language"
 msgstr "Idioma"
 
@@ -254,8 +545,36 @@ msgstr "Visto por última vez {when}"
 msgid "Light"
 msgstr "Claro"
 
+#, python-brace-format
+msgid "Link failed: {error}"
+msgstr "No se pudo vincular: {error}"
+
+#, python-brace-format
+msgid ""
+"Linked successfully but could not write {path}: {error}. Close any "
+"program using this file and try again."
+msgstr ""
+"Se vinculó correctamente, pero no se pudo escribir {path}: {error}. "
+"Cierre cualquier programa que use este archivo e inténtelo de nuevo."
+
 msgid "Low"
 msgstr "Bajo"
+
+#, python-brace-format
+msgid ""
+"Made {name} an operator (level {default}, the server's op-permission-"
+"level; stop the server to set level {level})."
+msgstr ""
+"{name} ahora es operador (nivel {default}, el op-permission-level del "
+"servidor; detenga el servidor para asignar el nivel {level})."
+
+#, python-brace-format
+msgid "Made {name} an operator (level {level})."
+msgstr "{name} ahora es operador (nivel {level})."
+
+#, python-brace-format
+msgid "Made {name} an operator."
+msgstr "{name} ahora es operador."
 
 msgid "Mar"
 msgstr "mar"
@@ -275,14 +594,131 @@ msgstr "Contrato de licencia de usuario final de Minecraft"
 msgid "Minimize to tray"
 msgstr "Minimizar a la bandeja"
 
+msgid "Missing modrinth.index.json in modpack archive."
+msgstr "Falta modrinth.index.json en el archivo del modpack."
+
+#, python-brace-format
+msgid "Modpack installed: {count} mod."
+msgid_plural "Modpack installed: {count} mods."
+msgstr[0] "Modpack instalado: {count} mod."
+msgstr[1] "Modpack instalado: {count} mods."
+
+#, python-brace-format
+msgid "Modpacks for {loader} are not supported yet."
+msgstr "Los modpacks para {loader} aún no son compatibles."
+
+#, python-brace-format
+msgid "Modpacks need a {loaders} server, not {engine}."
+msgstr "Los modpacks necesitan un servidor {loaders}, no {engine}."
+
+#, python-brace-format
+msgid "Modrinth API error {status}: {detail}"
+msgstr "Error {status} de la API de Modrinth: {detail}"
+
 msgid "Mods"
 msgstr "Mods"
+
+#, python-brace-format
+msgid "Network error communicating with Playit API: {error}"
+msgstr "Error de red al comunicarse con la API de Playit: {error}"
+
+#, python-brace-format
+msgid "Network error on retry: {error}"
+msgstr "Error de red al reintentar: {error}"
+
+#, python-brace-format
+msgid "Network error: {error}"
+msgstr "Error de red: {error}"
 
 msgid "Newest"
 msgstr "Más nuevos"
 
+#, python-brace-format
+msgid "No JDK {version} asset found for {platform}"
+msgstr "No se encontró el JDK {version} para {platform}"
+
+#, python-brace-format
+msgid "No Java found and auto-install JDK {required} failed."
+msgstr "No se encontró Java y falló la instalación automática del JDK {required}."
+
+msgid ""
+"No Java installation found and auto-install is disabled in server "
+"settings."
+msgstr ""
+"No se encontró ninguna instalación de Java y la instalación automática "
+"está desactivada en la configuración del servidor."
+
+#, python-brace-format
+msgid "No Java installation found. Attempting to auto-install JDK {required}..."
+msgstr ""
+"No se encontró ninguna instalación de Java. Intentando instalar "
+"automáticamente el JDK {required}..."
+
+#, python-brace-format
+msgid "No Minecraft account named '{name}'."
+msgstr "No existe ninguna cuenta de Minecraft llamada '{name}'."
+
+msgid "No Minecraft world found in that .zip (it needs a level.dat)."
+msgstr ""
+"No se encontró ningún mundo de Minecraft en ese .zip (necesita un "
+"level.dat)."
+
+msgid ""
+"No Minecraft world found in that folder (it needs a level.dat). Pick the "
+"world's own folder, e.g. .minecraft/saves/<world>."
+msgstr ""
+"No se encontró ningún mundo de Minecraft en esa carpeta (necesita un "
+"level.dat). Seleccione la carpeta del propio mundo, p. ej. "
+".minecraft/saves/<mundo>."
+
 msgid "No folder selected yet"
 msgstr "Aún no hay carpeta elegida"
+
+msgid "No internet connection during JDK download"
+msgstr "Se perdió la conexión a internet durante la descarga del JDK"
+
+msgid "No internet connection — cannot download JDK"
+msgstr "Sin conexión a internet: no se puede descargar el JDK"
+
+msgid "No mods were installed."
+msgstr "No se instaló ningún mod."
+
+msgid "No secret key loaded. Cannot authenticate."
+msgstr "No hay una clave secreta cargada. No se puede autenticar."
+
+msgid "Not a backup of this server."
+msgstr "No es una copia de seguridad de este servidor."
+
+msgid "Not a valid .zbbpack archive"
+msgstr "No es un archivo .zbbpack válido"
+
+#, python-brace-format
+msgid "Not a valid ZIP/mrpack file: {path}"
+msgstr "No es un archivo ZIP/mrpack válido: {path}"
+
+msgid "Not enough disk space to create backup (>1GB required)."
+msgstr ""
+"No hay suficiente espacio en disco para crear la copia de seguridad (se "
+"requiere más de 1 GB)."
+
+#, python-brace-format
+msgid "Not enough disk space to import (need ~{size} GB free)"
+msgstr ""
+"No hay suficiente espacio en disco para importar (se necesitan ~{size} GB"
+" libres)"
+
+msgid "Not enough disk space to start server (>1GB required)."
+msgstr ""
+"No hay suficiente espacio en disco para iniciar el servidor (se requiere "
+"más de 1 GB)."
+
+#, python-brace-format
+msgid ""
+"Not enough disk space: the archive needs {needed} GB and only {free} GB "
+"is free."
+msgstr ""
+"No hay suficiente espacio en disco: el archivo comprimido necesita "
+"{needed} GB y solo hay {free} GB libres."
 
 msgid "Not now"
 msgstr "Ahora no"
@@ -321,11 +757,36 @@ msgstr ""
 "Abra la aplicación instalada desde el menú Inicio o el acceso directo del"
 " escritorio. Esa es la que debe usar."
 
+#, python-brace-format
+msgid "Operator level must be 1-4, not {level}."
+msgstr "El nivel de operador debe ser de 1 a 4, no {level}."
+
 msgid "Ops"
 msgstr "Operadores"
 
 msgid "Players"
 msgstr "Jugadores"
+
+#, python-brace-format
+msgid "Playit API returned HTTP {status}: {detail}"
+msgstr "La API de Playit devolvió HTTP {status}: {detail}"
+
+msgid "Playit account unlinked and reset."
+msgstr "Cuenta de Playit desvinculada y restablecida."
+
+msgid "Playit agent failed to start after multiple attempts."
+msgstr "El agente de Playit no pudo iniciarse tras varios intentos."
+
+msgid "Playit secret invalid. Use 'Reset Tunnel' to re-link."
+msgstr ""
+"El secreto de Playit no es válido. Use 'Restablecer túnel' para volver a "
+"vincular."
+
+#, python-brace-format
+msgid "Port {port} is already in use by another process. Close it and try again."
+msgstr ""
+"El puerto {port} ya está en uso por otro proceso. Ciérrelo e inténtelo de"
+" nuevo."
 
 msgid "Portable (next to the app)"
 msgstr "Portable (junto a la aplicación)"
@@ -340,8 +801,15 @@ msgstr "RAM {value} GB"
 msgid "Read the Minecraft EULA (aka.ms/MinecraftEULA)"
 msgstr "Leer el EULA de Minecraft (aka.ms/MinecraftEULA)"
 
+msgid "Reading modpack manifest…"
+msgstr "Leyendo el manifiesto del modpack…"
+
 msgid "Relevance"
 msgstr "Relevancia"
+
+#, python-brace-format
+msgid "Removed {name} from the whitelist."
+msgstr "Se quitó a {name} de la lista blanca."
 
 msgid "Removes the app, its shortcuts and its entry in Windows Settings."
 msgstr ""
@@ -367,6 +835,10 @@ msgstr ""
 "eula=true automáticamente en los servidores que cree."
 
 #, python-brace-format
+msgid "Running with Java {detected}. Recommended: Java {required}."
+msgstr "Ejecutando con Java {detected}. Recomendado: Java {required}."
+
+#, python-brace-format
 msgid "Running · {elapsed}"
 msgstr "En marcha · {elapsed}"
 
@@ -379,8 +851,38 @@ msgstr ""
 "aplicación:\n"
 "{path}"
 
+#, python-brace-format
+msgid "Saved with Minecraft {version}, the same version as this server."
+msgstr "Guardado con Minecraft {version}, la misma versión que este servidor."
+
+#, python-brace-format
+msgid ""
+"Saved with Minecraft {version}: the server will upgrade it to "
+"{server_version} on first start. Your original world isn't changed."
+msgstr ""
+"Guardado con Minecraft {version}: el servidor lo actualizará a "
+"{server_version} al iniciarse por primera vez. Su mundo original no se "
+"modifica."
+
+msgid "Scheduled restart was missed (system was busy). Next attempt tomorrow."
+msgstr ""
+"Se omitió el reinicio programado (el sistema estaba ocupado). El próximo "
+"intento será mañana."
+
 msgid "Sep"
 msgstr "sept"
+
+#, python-brace-format
+msgid "Server '{name}' already exists"
+msgstr "El servidor '{name}' ya existe"
+
+#, python-brace-format
+msgid "Server '{name}' already exists."
+msgstr "El servidor '{name}' ya existe."
+
+#, python-brace-format
+msgid "Server '{name}' does not exist"
+msgstr "El servidor '{name}' no existe"
 
 #, python-brace-format
 msgid "Server crashed: {cause} (attempt {attempt})."
@@ -391,8 +893,22 @@ msgid "Server crashed: {cause}."
 msgstr "El servidor falló: {cause}."
 
 #, python-brace-format
+msgid "Server directory does not exist: {path}"
+msgstr "La carpeta del servidor no existe: {path}"
+
+#, python-brace-format
+msgid "Server jar not found: {jar}"
+msgstr "No se encontró el jar del servidor: {jar}"
+
+msgid "Server ready!"
+msgstr "¡Servidor listo!"
+
+#, python-brace-format
 msgid "Servers and backups: {path}"
 msgstr "Servidores y copias de seguridad: {path}"
+
+msgid "Setting up Playit tunnel..."
+msgstr "Configurando el túnel de Playit..."
 
 msgid "Setup"
 msgstr "Instalación"
@@ -429,6 +945,11 @@ msgstr "Iniciando..."
 msgid "Starting… {elapsed}"
 msgstr "Iniciando… {elapsed}"
 
+msgid "Stop the server before updating mods (running server locks files)."
+msgstr ""
+"Detenga el servidor antes de actualizar los mods (el servidor en "
+"ejecución bloquea los archivos)."
+
 msgid "Storage"
 msgstr "Almacenamiento"
 
@@ -437,6 +958,40 @@ msgstr "Sistema"
 
 msgid "Takes effect the next time you open ZeroBlockBridge."
 msgstr "Se aplica la próxima vez que abra ZeroBlockBridge."
+
+msgid "That file isn't a valid .zip archive."
+msgstr "Ese archivo no es un .zip válido."
+
+msgid "That modpack file doesn't exist."
+msgstr "Ese archivo de modpack no existe."
+
+msgid "That world file or folder doesn't exist."
+msgstr "Ese archivo o carpeta del mundo no existe."
+
+msgid "The Playit account is read-only. Use a setup code to link it."
+msgstr ""
+"La cuenta de Playit es de solo lectura. Use un código de configuración "
+"para vincularla."
+
+#, python-brace-format
+msgid ""
+"The Playit tunnel couldn't be set up ({reason}). Start it from the Tunnel"
+" panel."
+msgstr ""
+"No se pudo configurar el túnel de Playit ({reason}). Inícielo desde el "
+"panel Túnel."
+
+#, python-brace-format
+msgid "The archive contains a file name Windows can't create: {name}"
+msgstr ""
+"El archivo comprimido contiene un nombre de archivo que Windows no puede "
+"crear: {name}"
+
+#, python-brace-format
+msgid "The archive unpacks to {size} GB, more than the {limit} GB limit."
+msgstr ""
+"El archivo comprimido ocupa {size} GB al descomprimirse, más que el "
+"límite de {limit} GB."
 
 #, python-brace-format
 msgid ""
@@ -452,8 +1007,102 @@ msgstr ""
 "La aplicación instalada está abierta. Cierre ZeroBlockBridge e inténtelo "
 "de nuevo."
 
+#, python-brace-format
+msgid "The modpack manifest is unreadable: {error}"
+msgstr "No se puede leer el manifiesto del modpack: {error}"
+
+msgid "The server isn't running."
+msgstr "El servidor no está en ejecución."
+
+msgid ""
+"This .zip has no mods/ folder, so it doesn't look like a server pack. Use"
+" a Modrinth .mrpack or the pack's \"Server Pack\" download."
+msgstr ""
+"Este .zip no tiene una carpeta mods/, así que no parece un paquete de "
+"servidor. Use un .mrpack de Modrinth o la descarga \"Server Pack\" del "
+"modpack."
+
+msgid ""
+"This is a CurseForge client modpack. On the pack's CurseForge page, open "
+"Files, download the \"Server Pack\" and import that .zip instead."
+msgstr ""
+"Este es un modpack de cliente de CurseForge. En la página del modpack en "
+"CurseForge, abra Files, descargue el \"Server Pack\" e importe ese .zip "
+"en su lugar."
+
+#, python-brace-format
+msgid "This modpack needs Minecraft {version}, not {server_version}."
+msgstr "Este modpack necesita Minecraft {version}, no {server_version}."
+
+#, python-brace-format
+msgid "This modpack needs a {loader} server, not {engine}."
+msgstr "Este modpack necesita un servidor {loader}, no {engine}."
+
+#, python-brace-format
+msgid ""
+"This modpack needs {loader}, which ZeroBlockBridge doesn't support yet "
+"(supported: {supported})."
+msgstr ""
+"Este modpack necesita {loader}, que ZeroBlockBridge aún no admite "
+"(compatibles: {supported})."
+
+#, python-brace-format
+msgid ""
+"This modpack requires a {loaders} server, but '{server_type}' cannot load"
+" its mods. Create a {loaders} server to use this pack."
+msgstr ""
+"Este modpack requiere un servidor {loaders}, pero '{server_type}' no "
+"puede cargar sus mods. Cree un servidor {loaders} para usar este modpack."
+
+#, python-brace-format
+msgid ""
+"This modpack targets Minecraft {version}, but the server runs "
+"{server_version}. Versions must match exactly."
+msgstr ""
+"Este modpack es para Minecraft {version}, pero el servidor usa "
+"{server_version}. Las versiones deben coincidir exactamente."
+
+#, python-brace-format
+msgid ""
+"This world was saved with Minecraft {version}, newer than this server "
+"({server_version}). An older version can corrupt it: choose Minecraft "
+"{minimum} or newer in the Engine & Version step."
+msgstr ""
+"Este mundo se guardó con Minecraft {version}, más reciente que este "
+"servidor ({server_version}). Una versión anterior puede dañarlo: elija "
+"Minecraft {minimum} o posterior en el paso Motor y versión."
+
+#, python-brace-format
+msgid ""
+"This world was saved with snapshot {version}. It may not load on a "
+"regular release; keep a copy of it."
+msgstr ""
+"Este mundo se guardó con la snapshot {version}. Puede que no cargue en "
+"una versión estable; guarde una copia."
+
 msgid "Tunnel Log"
 msgstr "Registro del túnel"
+
+msgid "Tunnel creation returned success but no ID."
+msgstr "La creación del túnel se completó, pero no devolvió un ID."
+
+#, python-brace-format
+msgid "Tunnel online: {address}"
+msgstr "Túnel en línea: {address}"
+
+msgid "Tunnel pending: no ports available. Check the playit.gg dashboard."
+msgstr "Túnel pendiente: no hay puertos disponibles. Revise el panel de playit.gg."
+
+msgid "Tunnels cleared. Click Start Tunnel to create a new tunnel."
+msgstr "Túneles eliminados. Haga clic en Iniciar túnel para crear un túnel nuevo."
+
+#, python-brace-format
+msgid "URL not found for {engine} {version}"
+msgstr "No se encontró la URL para {engine} {version}"
+
+#, python-brace-format
+msgid "Unbanned {name}."
+msgstr "Se desbaneó a {name}."
 
 msgid "Uninstall"
 msgstr "Desinstalar"
@@ -464,6 +1113,29 @@ msgstr "¿Desinstalar ZeroBlockBridge?"
 #, python-brace-format
 msgid "Uninstall failed: {error}"
 msgstr "Error al desinstalar: {error}"
+
+msgid "Unknown API error"
+msgstr "Error desconocido de la API"
+
+#, python-brace-format
+msgid "Unsafe path in archive: {path}"
+msgstr "Ruta no segura en el archivo comprimido: {path}"
+
+#, python-brace-format
+msgid "Unsafe path in modpack archive: {path}"
+msgstr "Ruta no segura en el archivo del modpack: {path}"
+
+#, python-brace-format
+msgid "Unsafe tar member path: {path}"
+msgstr "Ruta no segura en el archivo tar: {path}"
+
+#, python-brace-format
+msgid "Unsafe zip member path: {path}"
+msgstr "Ruta no segura en el archivo zip: {path}"
+
+#, python-brace-format
+msgid "Unsupported mrpack format version: {version}"
+msgstr "Versión de formato mrpack no compatible: {version}"
 
 #, python-brace-format
 msgid "Update failed: {error}"
@@ -479,8 +1151,17 @@ msgstr "Actualizados"
 msgid "Updating..."
 msgstr "Actualizando..."
 
+msgid "Use letters, numbers and basic punctuation in the reason (max 100)."
+msgstr "Use letras, números y puntuación básica en el motivo (máx. 100)."
+
 msgid "Welcome to ZeroBlockBridge"
 msgstr "Bienvenido a ZeroBlockBridge"
+
+msgid "Whitelist disabled."
+msgstr "Lista blanca desactivada."
+
+msgid "Whitelist enabled."
+msgstr "Lista blanca activada."
 
 msgid "Whitelisted"
 msgstr "En lista blanca"
@@ -572,6 +1253,9 @@ msgstr "ahora mismo"
 msgid "killed by the system, most likely out of memory"
 msgstr "el sistema lo cerró, probablemente por falta de memoria"
 
+msgid "modrinth.index.json missing 'files' key."
+msgstr "A modrinth.index.json le falta la clave 'files'."
+
 msgid "mods are missing or incompatible"
 msgstr "faltan mods o son incompatibles"
 
@@ -588,6 +1272,72 @@ msgid "unknown command with suspicious characters"
 msgstr "comando desconocido con caracteres sospechosos"
 
 #, python-brace-format
+msgid ""
+"{code}: Account is in Guest mode (Read-Only). Use CLI for tunnel "
+"management."
+msgstr ""
+"{code}: La cuenta está en modo invitado (solo lectura). Use la CLI para "
+"administrar túneles."
+
+#, python-brace-format
+msgid "{code}: Agent limit reached. Delete old agents at playit.gg/dashboard"
+msgstr ""
+"{code}: Se alcanzó el límite de agentes. Elimine los agentes antiguos en "
+"playit.gg/dashboard"
+
+#, python-brace-format
+msgid "{count} client-only mod skipped."
+msgid_plural "{count} client-only mods skipped."
+msgstr[0] "Se omitió {count} mod solo para cliente."
+msgstr[1] "Se omitieron {count} mods solo para cliente."
+
+#, python-brace-format
+msgid "{count} mod"
+msgid_plural "{count} mods"
+msgstr[0] "{count} mod"
+msgstr[1] "{count} mods"
+
+#, python-brace-format
+msgid "{count} mod failed to download."
+msgid_plural "{count} mods failed to download."
+msgstr[0] "No se pudo descargar {count} mod."
+msgstr[1] "No se pudieron descargar {count} mods."
+
+#, python-brace-format
+msgid "{count} mod failed to install."
+msgid_plural "{count} mods failed to install."
+msgstr[0] "No se pudo instalar {count} mod."
+msgstr[1] "No se pudieron instalar {count} mods."
+
+#, python-brace-format
+msgid ""
+"{count} mod from the modpack couldn't be downloaded, so the server may "
+"not start. Check the console, then retry by importing the pack again."
+msgid_plural ""
+"{count} mods from the modpack couldn't be downloaded, so the server may "
+"not start. Check the console, then retry by importing the pack again."
+msgstr[0] ""
+"No se pudo descargar {count} mod del modpack, así que es posible que el "
+"servidor no inicie. Revise la consola y vuelva a intentarlo importando el"
+" pack de nuevo."
+msgstr[1] ""
+"No se pudieron descargar {count} mods del modpack, así que es posible que"
+" el servidor no inicie. Revise la consola y vuelva a intentarlo "
+"importando el pack de nuevo."
+
+#, python-brace-format
+msgid "{count} mod was installed."
+msgid_plural "{count} mods were installed."
+msgstr[0] "Se instaló {count} mod."
+msgstr[1] "Se instalaron {count} mods."
+
+#, python-brace-format
+msgid "{count} mod was not found on Modrinth."
+msgid_plural "{count} mods were not found on Modrinth."
+msgstr[0] "No se encontró {count} mod en Modrinth."
+msgstr[1] "No se encontraron {count} mods en Modrinth."
+
+#, python-brace-format
 msgid "{days}d ago"
 msgstr "hace {days} d"
 
@@ -598,6 +1348,10 @@ msgstr "{days} d {hours} h"
 #, python-brace-format
 msgid "{duration} played"
 msgstr "{duration} jugado"
+
+#, python-brace-format
+msgid "{first} or {last}"
+msgstr "{first} o {last}"
 
 #, python-brace-format
 msgid "{hours}h ago"
@@ -622,6 +1376,10 @@ msgstr "{minutes} min"
 #, python-brace-format
 msgid "{minutes}m ago"
 msgstr "hace {minutes} min"
+
+#, python-brace-format
+msgid "{name} is no longer an operator."
+msgstr "{name} ya no es operador."
 
 #, python-brace-format
 msgid ""

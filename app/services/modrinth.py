@@ -19,6 +19,7 @@ import requests
 
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
+from app.core.i18n import _
 from app.services import mod_id_resolver, mod_install_tracker
 from app.services.sha1_validator import download_with_verification
 
@@ -83,7 +84,7 @@ class ModrinthClient:
         try:
             resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
-            raise ModrinthException(f"Network error: {exc}") from exc
+            raise ModrinthException(_("Network error: {error}").format(error=exc)) from exc
 
         # Rate-limit handling
         if resp.status_code == 429:
@@ -93,17 +94,16 @@ class ModrinthClient:
             try:
                 resp = self.session.request(method, url, params=params, json=json_body, timeout=REQUEST_TIMEOUT)
             except requests.RequestException as exc:
-                raise ModrinthException(f"Network error on retry: {exc}") from exc
+                raise ModrinthException(_("Network error on retry: {error}").format(error=exc)) from exc
 
         if resp.status_code >= 400:
-            raise ModrinthException(
-                f"Modrinth API {resp.status_code}: {resp.text[:200]}"
-            )
+            raise ModrinthException(_("Modrinth API error {status}: {detail}").format(
+                status=resp.status_code, detail=resp.text[:200]))
 
         try:
             return resp.json()
         except ValueError:
-            raise ModrinthException("Invalid JSON from Modrinth API")
+            raise ModrinthException(_("Invalid JSON from Modrinth API"))
 
     # ------------------------------------------------------------------
     # Public API — Search

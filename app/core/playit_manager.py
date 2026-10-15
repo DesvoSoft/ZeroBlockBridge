@@ -12,7 +12,7 @@ from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_W
 from app.services.playit_api import PlayitApiClient, PlayitApiException
 from app.services.http_download import stream_to_file
 from app.core.console_line import error_line
-from app.core.i18n import _, N_, ngettext
+from app.core.i18n import _, N_
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +287,7 @@ class PlayitManager:
                 self.console_callback("[Playit] Tunnel created but no public address was allocated after 15s.")
                 self.console_callback("[Playit] Port quota may be exhausted (free tier: 4 ports). Delete unused tunnels/agents at https://playit.gg/dashboard")
                 if self.notification_callback:
-                    self.notification_callback("Tunnel pending: no ports available. Check playit.gg dashboard.", "warning")
+                    self.notification_callback(_("Tunnel pending: no ports available. Check the playit.gg dashboard."), "warning")
             return None
 
         except PlayitApiException as e:
@@ -295,7 +295,7 @@ class PlayitManager:
                 self.console_callback(error_line("[Playit] ERROR: Account is in Guest mode (Read-Only)."))
                 self.console_callback("[Playit] Please use 'Get Code' + 'Link' with a Setup Code to enable tunnel creation.")
                 if self.notification_callback:
-                    self.notification_callback("Account Read-Only. Use Setup Code to link.", "error")
+                    self.notification_callback(_("The Playit account is read-only. Use a setup code to link it."), "error")
             else:
                 self.console_callback(error_line(f"[Playit] API Error: {e}"))
             return None
@@ -565,7 +565,7 @@ class PlayitManager:
                 self._api_dns = None
                 self.console_callback("[Playit] Tunnels cleared. Agent stays linked. Click Start Tunnel to create a new tunnel.")
                 if self.notification_callback:
-                    self.notification_callback("Tunnels cleared. Click Start Tunnel to create a new tunnel.", "success")
+                    self.notification_callback(_("Tunnels cleared. Click Start Tunnel to create a new tunnel."), "success")
         except Exception as e:
             self.console_callback(error_line(f"[Playit] Reset failed: {e}"))
 
@@ -617,13 +617,13 @@ class PlayitManager:
         self._api_dns = None
         self.console_callback("[Playit] Account unlinked and reset complete.")
         if self.notification_callback:
-            self.notification_callback("Playit account unlinked and reset.", "success")
+            self.notification_callback(_("Playit account unlinked and reset."), "success")
 
     def link_manually(self, setup_code: str) -> bool:
         if not setup_code or len(setup_code.strip()) < 8:
             self.console_callback("[Playit] Invalid setup code. Must be at least 8 characters.")
             if self.notification_callback:
-                self.notification_callback("Invalid setup code.", "error")
+                self.notification_callback(_("Invalid setup code."), "error")
             return False
 
         # Download binary proactively before linking
@@ -646,7 +646,7 @@ class PlayitManager:
         except Exception as e:
             self.console_callback(error_line(f"[Playit] Link failed: {e}"))
             if self.notification_callback:
-                self.notification_callback(f"Link failed: {e}", "error")
+                self.notification_callback(_("Link failed: {error}").format(error=e), "error")
         return False
 
     def _handle_auth_failure(self, reason: str) -> None:
@@ -665,7 +665,7 @@ class PlayitManager:
             self.console_callback("[Playit] Secret was revoked right after linking. Your account is likely over its agent/port limit.")
             self.console_callback("[Playit] Delete old agents and tunnels at https://playit.gg/dashboard/agents BEFORE re-linking.")
         if self.notification_callback:
-            self.notification_callback("Playit secret invalid. Use 'Reset Tunnel' to re-link.", "error")
+            self.notification_callback(_("Playit secret invalid. Use 'Reset Tunnel' to re-link."), "error")
 
     def _fix_permissions(self) -> None:
         if platform.system() != "Windows" and os.path.exists(self.toml_path):
@@ -723,7 +723,7 @@ class PlayitManager:
                         self.status_callback(TunnelStatus.ONLINE, address)
                         self.console_callback(f"[Playit] Public address: {address}")
                         if self.notification_callback:
-                            self.notification_callback(f"Tunnel online: {address}", "success")
+                            self.notification_callback(_("Tunnel online: {address}").format(address=address), "success")
                         if self.on_ready_callback:
                             self.on_ready_callback()
                         return
@@ -768,7 +768,7 @@ class PlayitManager:
                     if attempt_count >= max_attempts:
                         self.console_callback("[Playit] CRITICAL: Max restart attempts reached. Agent halted.")
                         if self.notification_callback:
-                            self.notification_callback("Playit agent failed to start after multiple attempts.", "error")
+                            self.notification_callback(_("Playit agent failed to start after multiple attempts."), "error")
                         break
                     else:
                         self.console_callback(f"[Playit] Agent dead. Restarting in {backoff}s (Attempt {attempt_count}/{max_attempts})...")
@@ -821,7 +821,7 @@ class PlayitManager:
                 self.status_callback(TunnelStatus.ONLINE, address)
                 self.console_callback(f"[Playit] Public address: {address}")
                 if self.notification_callback:
-                    self.notification_callback(f"Tunnel online: {address}", "success")
+                    self.notification_callback(_("Tunnel online: {address}").format(address=address), "success")
                 if self.on_ready_callback:
                     self.on_ready_callback()
                 return

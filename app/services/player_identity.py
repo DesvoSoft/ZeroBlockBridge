@@ -22,6 +22,7 @@ import requests
 
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
+from app.core.i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def resolve_player(server_name: str, name: str, online_mode: bool) -> PlayerIden
     name = name.strip()
     if not is_valid_player_name(name):
         raise PlayerLookupError(
-            f"'{name}' isn't a valid player name (3-16 letters, numbers or _).")
+            _("'{name}' isn't a valid player name (3-16 letters, numbers or _).").format(name=name))
 
     wanted = name.lower()
     for entry in load_usercache(server_name):
@@ -102,7 +103,8 @@ def resolve_player(server_name: str, name: str, online_mode: bool) -> PlayerIden
         # Floodgate players have no Java account; their UUID only exists once
         # they have joined (and then usercache has it).
         raise PlayerLookupError(
-            f"Bedrock player '{name}' hasn't joined this server yet — ask them to join once first.")
+            _("Bedrock player '{name}' hasn't joined this server yet — ask them to join once first.").format(
+                name=name))
 
     if not online_mode:
         return PlayerIdentity(name, offline_uuid(name), "offline")
@@ -112,7 +114,8 @@ def resolve_player(server_name: str, name: str, online_mode: bool) -> PlayerIden
     except (requests.RequestException, ValueError, KeyError) as exc:
         logger.warning("Mojang lookup failed for %s: %s", name, exc)
         raise PlayerLookupError(
-            f"Couldn't look up '{name}' (no connection to Mojang). Try again, or add them while the server runs.")
+            _("Couldn't look up '{name}' (no connection to Mojang). "
+              "Try again, or add them while the server runs.").format(name=name))
     if profile is None:
-        raise PlayerLookupError(f"No Minecraft account named '{name}'.")
+        raise PlayerLookupError(_("No Minecraft account named '{name}'.").format(name=name))
     return PlayerIdentity(profile[1], profile[0], "mojang")
