@@ -337,7 +337,28 @@ These rules must never be violated:
 - Handing over to another copy sets `PYINSTALLER_RESET_ENVIRONMENT=1` so the child onefile exe doesn't reuse this process's `_MEIPASS`.
 - Bundled read-only assets always come from the PyInstaller `_MEIPASS` dir, independent of `BASE_DIR`.
 - Settings → Storage shows the active location (with **Open Folder**) and disk usage for Servers, Backups, Java runtimes, Crash reports, and Versions cache, plus **Clear Crash Reports**. Managed JDK purge lives in Settings → Java.
-- `config/zbb_settings.json` (`SettingsManager`, 500ms debounced writes, flushed on close) also stores UI session state: `window_geometry` (logical `WxH+X+Y`, last normal — not maximized — size), `window_zoomed`, `last_server`, `last_console_tab`. On launch the geometry is restored only if it lands on the current virtual desktop (`window_state.restorable_geometry`).
+- `config/zbb_settings.json` (`SettingsManager`, 500ms debounced writes, flushed on close) also stores the UI `language` and UI session state: `window_geometry` (logical `WxH+X+Y`, last normal — not maximized — size), `window_zoomed`, `last_server`, `last_console_tab`. On launch the geometry is restored only if it lands on the current virtual desktop (`window_state.restorable_geometry`).
+
+## Language (i18n)
+
+**Files:** `app/core/i18n.py`, `app/core/bootstrap.py`, `assets/locales/`, `tools/i18n.py`
+
+- Plain gettext. English is the source language; `assets/locales/<lang>/LC_MESSAGES/zbb.po` holds each translation and the compiled `zbb.mo` beside it is committed (no build step; both packaging specs bundle `assets/`). `tools/i18n.py extract|update|compile` wraps Babel (dev dependency). `tests/test_i18n.py` fails when a `.mo` is stale, a marked string is untranslated or a translation drops a `{placeholder}`.
+- Code uses `_()`, `ngettext()`, `pgettext()` from `app.core.i18n`, with named `str.format` placeholders and whole sentences (no fragments joined in code). Module-level text is marked with `N_()` and translated where it is shown, because the language is set after modules are imported. A function that calls `_()` must not also assign `_` (e.g. `a, _, _ = ...`): Python would make `_` local and the call fails (`test_no_function_shadows_the_translation_function`).
+- The language is fixed for the run (`i18n.set_language`); changing it in Settings → General takes effect on the next start.
+- Where it is resolved and stored:
+
+| Moment | Source (first that is set) | Code |
+|--------|---------------------------|------|
+| Pre-app dialogs (setup, already installed, install offer, uninstall) | `install.json` `language` → the marker's data folder `config/zbb_settings.json` (plain JSON, no `SettingsManager`) → Windows UI language (`GetUserDefaultUILanguage`) → process locale → English | `bootstrap.use_stored_language` |
+| First setup page | Picker (top right, native language names) rebuilds the page in the chosen language; the choice travels in `SetupResult.language` | `first_run_dialog._SetupDialog` |
+| End of setup | Written to `install.json` (`installed`/`manual`); a portable copy has no marker, so into its own `config/zbb_settings.json` | `bootstrap._apply_setup` |
+| Main app start | `SettingsManager` `language`; on the first launch copied from the marker (only if the marker's `data_dir` is this data folder) or the OS language | `bootstrap.startup_language`, called first in `main()` |
+| Settings → General → Language | Saved to `SettingsManager` and to the marker when it belongs to this data folder | `bootstrap.remember_language` |
+
+- Locale-aware formatting lives in `app.core.i18n` (`format_number`, `format_percent`, `format_size`, `format_count`, `format_datetime` with month names from the catalog, never `strftime("%b")`); `app/ui/formatting.py` builds the uptime, relative-time and RAM readouts on them.
+- Never translated: logs, ZBB console prefixes (`[Security]`, `[System]`, `[Error]`...), patterns matched against Minecraft or Playit agent output, file contents (server.properties, eula.txt, crash reports), product names. Discord webhook messages stay English for now.
+- Translated so far: the pre-app dialogs, EULA, close dialog, tray menu and notification, single-instance message, installer shortcut failures and the formatting helpers. The CustomTkinter screens are translated as each one is ported to Qt (`docs/ROADMAP.md` 8d).
 
 ---
 
@@ -366,7 +387,8 @@ ZeroBlockBridge/
 │   │   └── ui_components.py           # ConsoleWidget, ServerListItem, ToolTip, ZBBDialog, EulaDialog, dialog_buttons
 │   │
 │   ├── core/                          # Orchestration & Business Logic
-│   │   ├── bootstrap.py               # Resolves data dir + install state before any other module reads a path
+│   │   ├── bootstrap.py               # Resolves data dir + install state (and the UI language) before any other module reads a path
+│   │   ├── i18n.py                    # gettext translations (_ / ngettext / N_), OS language detection, locale-aware formatting
 │   │   ├── installer.py               # Per-user Windows install: copy exe, shortcuts, Apps entry, uninstall
 │   │   ├── fs_links.py                # Junction/symlink helpers (custom server locations)
 │   │   ├── resources.py               # Bundled assets path, safe to import before the data dir is set

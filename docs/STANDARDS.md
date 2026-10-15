@@ -202,6 +202,14 @@ Roboto is not installed on stock Windows — never use it.
 - A scrollable frame holding aligned content uses `corner_radius=0` — a rounded one insets its content by the radius and shifts it off the column of the widgets above/below.
 - Readouts that don't fit at compact width (below `SIDEBAR_COMPACT_BELOW`) are hidden rather than squeezed (e.g. the header RAM label).
 
+### 3.7a User-facing text (i18n)
+
+- Wrap user-facing text in `_()` from `app.core.i18n` (`ngettext()` for counts, never `'s' if n != 1`), with named placeholders: `_("Installed at:\n{path}").format(path=p)`. Whole sentences only — never join translated fragments in code.
+- Module-level labels: `N_("...")`, translated with `_()` where shown (the language is set after import).
+- Never compare or persist display text: keep an internal key and map it to a label at display time.
+- Don't assign `_` (`a, _, _ = ...`) in a function that calls `_()`.
+- After changing strings: `py tools/i18n.py extract`, `update`, translate each `.po`, `compile`; commit `.po` and `.mo` together. See ARCHITECTURE "Language (i18n)".
+
 ### 3.8 UI Thread Safety
 
 Never read widgets from a background thread. Always `self.after(0, lambda: self.widget.configure(...))`.
