@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 13:29-0600\n"
+"POT-Creation-Date: 2026-10-15 13:59-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -22,6 +22,12 @@ msgstr ""
 msgctxt "decimal separator"
 msgid "."
 msgstr ","
+
+msgid "About"
+msgstr "Acerca de"
+
+msgid "All"
+msgstr "Todos"
 
 msgid "Already installed"
 msgstr "Ya instalado"
@@ -43,13 +49,28 @@ msgstr "abr"
 msgid "Aug"
 msgstr "ago"
 
+msgid "Banned"
+msgstr "Baneados"
+
 #, python-brace-format
 msgid "Banned: {reason}"
 msgstr "Baneado: {reason}"
 
 #, python-brace-format
-msgid "Can't write to {path}. Move the app to another folder or install it instead."
-msgstr "No se puede escribir en {path}. Mueva la aplicación a otra carpeta o instálela."
+msgid "Blocked `{command}`: {reason}"
+msgstr "Bloqueado `{command}`: {reason}"
+
+#, python-brace-format
+msgid "Blocked: {reason}"
+msgstr "Bloqueado: {reason}"
+
+#, python-brace-format
+msgid ""
+"Can't write to {path}. Move the app to another folder or install it "
+"instead."
+msgstr ""
+"No se puede escribir en {path}. Mueva la aplicación a otra carpeta o "
+"instálela."
 
 #, python-brace-format
 msgid "Can't write to {path}. Pick another folder."
@@ -82,12 +103,21 @@ msgstr "Cierre ZeroBlockBridge primero"
 msgid "Close ZeroBlockBridge?"
 msgstr "¿Cerrar ZeroBlockBridge?"
 
+msgid "Console"
+msgstr "Consola"
+
 msgid "Continue"
 msgstr "Continuar"
 
 #, python-brace-format
 msgid "Couldn't add the shortcut: {error}"
 msgstr "No se pudo añadir el acceso directo: {error}"
+
+msgid "Daily Time"
+msgstr "Hora diaria"
+
+msgid "Dark"
+msgstr "Oscuro"
 
 msgid "Dec"
 msgstr "dic"
@@ -104,6 +134,12 @@ msgstr "Acceso directo en el escritorio"
 msgid "Don't ask again (change it in Settings > General)"
 msgstr "No volver a preguntar (se cambia en Settings > General)"
 
+msgid "Downloads"
+msgstr "Descargas"
+
+msgid "Error"
+msgstr "Error"
+
 msgid "Exit"
 msgstr "Salir"
 
@@ -114,17 +150,32 @@ msgstr "Al salir se detendrá lo siguiente: {items}."
 msgid "Feb"
 msgstr "feb"
 
+msgid "Follows"
+msgstr "Seguidores"
+
 msgid "From now on, open it from the Start menu or the desktop shortcut."
-msgstr "A partir de ahora, ábralo desde el menú Inicio o el acceso directo del escritorio."
+msgstr ""
+"A partir de ahora, ábralo desde el menú Inicio o el acceso directo del "
+"escritorio."
+
+msgid "General"
+msgstr "General"
 
 msgid "Hasn't joined since ZBB started tracking"
 msgstr "No ha entrado desde que ZBB lleva el registro"
+
+msgid "High"
+msgstr "Alto"
 
 msgid "I Accept the EULA"
 msgstr "Acepto el EULA"
 
 msgid "If you decline, the application will close."
 msgstr "Si lo rechaza, la aplicación se cerrará."
+
+#, python-brace-format
+msgid "Impact: {level}"
+msgstr "Impacto: {level}"
 
 msgid "Install"
 msgstr "Instalar"
@@ -137,11 +188,11 @@ msgid "Install failed: {error}"
 msgstr "Error al instalar: {error}"
 
 msgid ""
-"Install it on this PC so it opens from the Start menu and always finds your servers. Nothing in "
-"your data folder changes."
+"Install it on this PC so it opens from the Start menu and always finds "
+"your servers. Nothing in your data folder changes."
 msgstr ""
-"Instálelo en este equipo para abrirlo desde el menú Inicio y que siempre encuentre sus "
-"servidores. Su carpeta de datos no cambia."
+"Instálelo en este equipo para abrirlo desde el menú Inicio y que siempre "
+"encuentre sus servidores. Su carpeta de datos no cambia."
 
 msgid "Install on this PC (recommended)"
 msgstr "Instalar en este equipo (recomendado)"
@@ -165,8 +216,21 @@ msgstr ""
 msgid "Installing..."
 msgstr "Instalando..."
 
+msgid "Interval"
+msgstr "Intervalo"
+
 msgid "Jan"
 msgstr "ene"
+
+msgid "Java"
+msgstr "Java"
+
+msgid "Java could not start with these launch settings"
+msgstr "Java no pudo arrancar con esta configuración de inicio"
+
+#, python-brace-format
+msgid "Java {major} ({kind}) — {source}"
+msgstr "Java {major} ({kind}) — {source}"
 
 msgid "Jul"
 msgstr "jul"
@@ -187,11 +251,20 @@ msgstr "Idioma"
 msgid "Last seen {when}"
 msgstr "Visto por última vez {when}"
 
+msgid "Light"
+msgstr "Claro"
+
+msgid "Low"
+msgstr "Bajo"
+
 msgid "Mar"
 msgstr "mar"
 
 msgid "May"
 msgstr "may"
+
+msgid "Medium"
+msgstr "Medio"
 
 msgid "Minecraft EULA"
 msgstr "EULA de Minecraft"
@@ -202,11 +275,20 @@ msgstr "Contrato de licencia de usuario final de Minecraft"
 msgid "Minimize to tray"
 msgstr "Minimizar a la bandeja"
 
+msgid "Mods"
+msgstr "Mods"
+
+msgid "Newest"
+msgstr "Más nuevos"
+
 msgid "No folder selected yet"
 msgstr "Aún no hay carpeta elegida"
 
 msgid "Not now"
 msgstr "Ahora no"
+
+msgid "Notifications"
+msgstr "Notificaciones"
 
 msgid "Nov"
 msgstr "nov"
@@ -217,6 +299,12 @@ msgstr "Aceptar"
 msgid "Oct"
 msgstr "oct"
 
+msgid "Offline"
+msgstr "Desconectado"
+
+msgid "Online"
+msgstr "En línea"
+
 msgid "Online now"
 msgstr "En línea ahora"
 
@@ -226,10 +314,18 @@ msgstr "Abrir ZeroBlockBridge"
 msgid "Open installed app"
 msgstr "Abrir la aplicación instalada"
 
-msgid "Open the installed app from the Start menu or the desktop shortcut. That's the one to use."
+msgid ""
+"Open the installed app from the Start menu or the desktop shortcut. "
+"That's the one to use."
 msgstr ""
-"Abra la aplicación instalada desde el menú Inicio o el acceso directo del escritorio. Esa es la "
-"que debe usar."
+"Abra la aplicación instalada desde el menú Inicio o el acceso directo del"
+" escritorio. Esa es la que debe usar."
+
+msgid "Ops"
+msgstr "Operadores"
+
+msgid "Players"
+msgstr "Jugadores"
 
 msgid "Portable (next to the app)"
 msgstr "Portable (junto a la aplicación)"
@@ -244,8 +340,13 @@ msgstr "RAM {value} GB"
 msgid "Read the Minecraft EULA (aka.ms/MinecraftEULA)"
 msgstr "Leer el EULA de Minecraft (aka.ms/MinecraftEULA)"
 
+msgid "Relevance"
+msgstr "Relevancia"
+
 msgid "Removes the app, its shortcuts and its entry in Windows Settings."
-msgstr "Quita la aplicación, sus accesos directos y su entrada en Configuración de Windows."
+msgstr ""
+"Quita la aplicación, sus accesos directos y su entrada en Configuración "
+"de Windows."
 
 msgid "Removing..."
 msgstr "Desinstalando..."
@@ -257,11 +358,13 @@ msgid "Run this copy"
 msgstr "Usar esta copia"
 
 msgid ""
-"Running a Minecraft server requires accepting Mojang's End User License Agreement (EULA). If you "
-"accept, ZBB will automatically set eula=true for the servers you create."
+"Running a Minecraft server requires accepting Mojang's End User License "
+"Agreement (EULA). If you accept, ZBB will automatically set eula=true for"
+" the servers you create."
 msgstr ""
-"Para ejecutar un servidor de Minecraft hay que aceptar el Contrato de licencia de usuario final "
-"(EULA) de Mojang. Si lo acepta, ZBB pondrá eula=true automáticamente en los servidores que cree."
+"Para ejecutar un servidor de Minecraft hay que aceptar el Contrato de "
+"licencia de usuario final (EULA) de Mojang. Si lo acepta, ZBB pondrá "
+"eula=true automáticamente en los servidores que cree."
 
 #, python-brace-format
 msgid "Running · {elapsed}"
@@ -272,11 +375,20 @@ msgid ""
 "Runs from this folder and keeps servers next to the app:\n"
 "{path}"
 msgstr ""
-"Se ejecuta desde esta carpeta y guarda los servidores junto a la aplicación:\n"
+"Se ejecuta desde esta carpeta y guarda los servidores junto a la "
+"aplicación:\n"
 "{path}"
 
 msgid "Sep"
 msgstr "sept"
+
+#, python-brace-format
+msgid "Server crashed: {cause} (attempt {attempt})."
+msgstr "El servidor falló: {cause} (intento {attempt})."
+
+#, python-brace-format
+msgid "Server crashed: {cause}."
+msgstr "El servidor falló: {cause}."
 
 #, python-brace-format
 msgid "Servers and backups: {path}"
@@ -293,10 +405,12 @@ msgstr "Acceso directo añadido al escritorio."
 
 #, python-brace-format
 msgid ""
-"Some shortcuts couldn't be created (you can add them later in Settings > Storage):\n"
+"Some shortcuts couldn't be created (you can add them later in Settings > "
+"Storage):\n"
 "{failures}"
 msgstr ""
-"No se pudieron crear algunos accesos directos (puede añadirlos después en Settings > Storage):\n"
+"No se pudieron crear algunos accesos directos (puede añadirlos después en"
+" Settings > Storage):\n"
 "{failures}"
 
 msgid "Standard (recommended)"
@@ -308,23 +422,38 @@ msgstr "Menú Inicio"
 msgid "Start menu shortcut"
 msgstr "Acceso directo en el menú Inicio"
 
+msgid "Starting..."
+msgstr "Iniciando..."
+
 #, python-brace-format
 msgid "Starting… {elapsed}"
 msgstr "Iniciando… {elapsed}"
+
+msgid "Storage"
+msgstr "Almacenamiento"
+
+msgid "System"
+msgstr "Sistema"
 
 msgid "Takes effect the next time you open ZeroBlockBridge."
 msgstr "Se aplica la próxima vez que abra ZeroBlockBridge."
 
 #, python-brace-format
 msgid ""
-"The file you opened is version {version}, newer than the installed one. Update to keep using the "
-"same shortcuts and servers."
+"The file you opened is version {version}, newer than the installed one. "
+"Update to keep using the same shortcuts and servers."
 msgstr ""
-"El archivo que abrió es la versión {version}, más reciente que la instalada. Actualice para "
-"seguir usando los mismos accesos directos y servidores."
+"El archivo que abrió es la versión {version}, más reciente que la "
+"instalada. Actualice para seguir usando los mismos accesos directos y "
+"servidores."
 
 msgid "The installed app is open. Close ZeroBlockBridge and try again."
-msgstr "La aplicación instalada está abierta. Cierre ZeroBlockBridge e inténtelo de nuevo."
+msgstr ""
+"La aplicación instalada está abierta. Cierre ZeroBlockBridge e inténtelo "
+"de nuevo."
+
+msgid "Tunnel Log"
+msgstr "Registro del túnel"
 
 msgid "Uninstall"
 msgstr "Desinstalar"
@@ -344,11 +473,17 @@ msgstr "Error al actualizar: {error}"
 msgid "Update to {version}"
 msgstr "Actualizar a {version}"
 
+msgid "Updated"
+msgstr "Actualizados"
+
 msgid "Updating..."
 msgstr "Actualizando..."
 
 msgid "Welcome to ZeroBlockBridge"
 msgstr "Bienvenido a ZeroBlockBridge"
+
+msgid "Whitelisted"
+msgstr "En lista blanca"
 
 #, python-brace-format
 msgid ""
@@ -377,32 +512,80 @@ msgstr "ZeroBlockBridge ya está instalado"
 msgid ""
 "ZeroBlockBridge is already running.\n"
 "\n"
-"If you don't see its window, look for its icon in the system tray (next to the clock) and choose "
-"Open."
+"If you don't see its window, look for its icon in the system tray (next "
+"to the clock) and choose Open."
 msgstr ""
 "ZeroBlockBridge ya se está ejecutando.\n"
 "\n"
-"Si no ve su ventana, busque su icono en la bandeja del sistema (junto al reloj) y elija Abrir."
+"Si no ve su ventana, busque su icono en la bandeja del sistema (junto al "
+"reloj) y elija Abrir."
 
 msgid "ZeroBlockBridge is installed"
 msgstr "ZeroBlockBridge está instalado"
 
-msgid "ZeroBlockBridge is running. Close it (and stop any server), then uninstall again."
+msgid ""
+"ZeroBlockBridge is running. Close it (and stop any server), then "
+"uninstall again."
 msgstr ""
-"ZeroBlockBridge se está ejecutando. Ciérrelo (y detenga cualquier servidor) y vuelva a "
-"desinstalar."
+"ZeroBlockBridge se está ejecutando. Ciérrelo (y detenga cualquier "
+"servidor) y vuelva a desinstalar."
 
-msgid "ZeroBlockBridge is still running here. Right-click the icon to open or exit."
-msgstr "ZeroBlockBridge sigue ejecutándose aquí. Haga clic derecho en el icono para abrirlo o salir."
+msgid ""
+"ZeroBlockBridge is still running here. Right-click the icon to open or "
+"exit."
+msgstr ""
+"ZeroBlockBridge sigue ejecutándose aquí. Haga clic derecho en el icono "
+"para abrirlo o salir."
 
 msgid "ZeroBlockBridge was uninstalled"
 msgstr "ZeroBlockBridge se desinstaló"
 
+msgid "contains shell injection pattern"
+msgstr "contiene un patrón de inyección de shell"
+
+msgid "contains shell metacharacters"
+msgstr "contiene metacaracteres de shell"
+
+msgid "empty command"
+msgstr "comando vacío"
+
+#, python-brace-format
+msgid "ended by signal {number}"
+msgstr "terminado por la señal {number}"
+
+#, python-brace-format
+msgid "exited with code {code}"
+msgstr "salió con el código {code}"
+
+msgid "it stopped responding"
+msgstr "dejó de responder"
+
+msgid "it stopped while running"
+msgstr "se detuvo mientras estaba en marcha"
+
+msgid "it stopped while starting"
+msgstr "se detuvo durante el arranque"
+
 msgid "just now"
 msgstr "ahora mismo"
 
+msgid "killed by the system, most likely out of memory"
+msgstr "el sistema lo cerró, probablemente por falta de memoria"
+
+msgid "mods are missing or incompatible"
+msgstr "faltan mods o son incompatibles"
+
+msgid "out of memory"
+msgstr "se quedó sin memoria"
+
 msgid "unknown"
 msgstr "desconocida"
+
+msgid "unknown cause"
+msgstr "causa desconocida"
+
+msgid "unknown command with suspicious characters"
+msgstr "comando desconocido con caracteres sospechosos"
 
 #, python-brace-format
 msgid "{days}d ago"
@@ -451,6 +634,10 @@ msgstr ""
 #, python-brace-format
 msgid "{seconds}s"
 msgstr "{seconds} s"
+
+#, python-brace-format
+msgid "{tab} ({count})"
+msgstr "{tab} ({count})"
 
 #, python-brace-format
 msgid "{value}%"

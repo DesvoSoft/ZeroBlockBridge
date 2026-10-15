@@ -6,7 +6,9 @@ import subprocess
 import sys
 import threading
 from app.core.app_config import AppConfig
+from app.core import i18n
 from app.core.constants import SERVERS_DIR
+from app.core.i18n import _, N_
 
 logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, StackedTabview, ZBBToplevel
@@ -124,6 +126,10 @@ _LABEL_WORDS = {
     "op": "Operator", "ops": "Operators", "to": "to",
 }
 _LABEL_OVERRIDES = {"white-list": "Whitelist"}
+# SETTINGS_METADATA "impact" keys -> labels shown in the impact dot's tooltip.
+_IMPACT_LABELS = {"Low": N_("Low"), "Medium": N_("Medium"), "High": N_("High")}
+# (restart schedule "type", label shown in the Schedule Mode menu)
+_SCHEDULE_MODES = (("interval", N_("Interval")), ("time", N_("Daily Time")))
 
 
 # Control column: every settings row right-aligns its control in a column of
@@ -540,11 +546,10 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.chk_backup_restart = _bare_switch(card, variable=self.var_backup_restart)
         self._grid_control(card, self.chk_backup_restart)
 
-        self.var_schedule_mode = ctk.StringVar(value="Interval")
-        if schedule and schedule.get("type") == "time":
-            self.var_schedule_mode.set("Daily Time")
+        mode = "time" if schedule and schedule.get("type") == "time" else "interval"
+        self.var_schedule_mode = ctk.StringVar(value=i18n.choice_label(_SCHEDULE_MODES, mode))
         _, self.lbl_schedule_mode = self._start_row(card, "Schedule Mode")
-        self.combo_mode = ctk.CTkOptionMenu(card, values=["Interval", "Daily Time"], variable=self.var_schedule_mode,
+        self.combo_mode = ctk.CTkOptionMenu(card, values=i18n.choice_labels(_SCHEDULE_MODES), variable=self.var_schedule_mode,
                                             command=self.toggle_automation_inputs, height=28, width=_CONTROL_WIDTH)
         self._grid_control(card, self.combo_mode)
 
@@ -584,7 +589,7 @@ class ServerPropertiesEditor(ZBBToplevel):
 
     def toggle_automation_inputs(self, *args):
         enabled = self.var_auto_restart.get()
-        interval = self.var_schedule_mode.get() == "Interval"
+        interval = self._schedule_mode() == "interval"
         on, off = AppConfig.COLOR_TEXT_PRIMARY, AppConfig.COLOR_TEXT_GRAY
         self.combo_mode.configure(state="normal" if enabled else "disabled")
         self.chk_backup_restart.configure(state="normal" if enabled else "disabled")
@@ -595,14 +600,15 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.lbl_interval.configure(text_color=on if enabled and interval else off)
         self.lbl_time.configure(text_color=on if enabled and not interval else off)
 
+    def _schedule_mode(self) -> str:
+        return i18n.choice_key(_SCHEDULE_MODES, self.var_schedule_mode.get(), "interval")
+
     def save_automation(self):
         if not self.var_auto_restart: return
 
         enabled = self.var_auto_restart.get()
         backup = self.var_backup_restart.get()
-        mode = self.var_schedule_mode.get()
-
-        if mode == "Interval":
+        if self._schedule_mode() == "interval":
             interval = 6
             try:
                 interval = int(self.entry_interval.get())
@@ -700,7 +706,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         impact = meta.get("impact")
         
         # 1-2. Separator + label
-        current_row, _ = self._start_row(parent_card, label_text)
+        current_row, _label = self._start_row(parent_card, label_text)
 
         # 3. Help Icon (?)
         if description:
@@ -715,7 +721,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             colors = {"Medium": AppConfig.COLOR_STATUS_STARTING, "High": AppConfig.COLOR_STATUS_ERROR}
             dot = ctk.CTkFrame(parent_card, width=8, height=8, corner_radius=4, fg_color=colors[impact])
             dot.grid(row=current_row, column=2, sticky="w", padx=2)
-            dot.tooltip_ref = ToolTip(dot, f"Impact: {impact}")
+            dot.tooltip_ref = ToolTip(dot, _("Impact: {level}").format(level=_(_IMPACT_LABELS[impact])))
 
         # 5. Control Frame (for alignment)
         ctrl_frame = ctk.CTkFrame(parent_card, fg_color="transparent", width=_CONTROL_WIDTH, height=28)
@@ -1027,7 +1033,7 @@ class ServerPropertiesEditor(ZBBToplevel):
 
     def setup_launch_tab(self):
         """Setup Java and Launch arguments tab."""
-        from app.services.java_detector import JavaDetector
+        from app.services.java_detector import JavaDetector, dropdown_labels
 
         card = self.create_section_frame(self.frame_launch, "Java & Runtime")
 
@@ -1066,9 +1072,9 @@ class ServerPropertiesEditor(ZBBToplevel):
             def _apply():
                 if not self.combo_java.winfo_exists():
                     return
-                for j in javas:
-                    self._java_label_to_path[j.label] = j.path
-                    self._java_path_to_label[j.path] = j.label
+                for j, label in zip(javas, dropdown_labels(javas)):
+                    self._java_label_to_path[label] = j.path
+                    self._java_path_to_label[j.path] = label
                 if saved_path != "auto" and self._java_path_to_label.get(saved_path) != saved_path:
                     # Real label now known — replace the raw-path placeholder
                     self._java_label_to_path.pop(saved_path, None)

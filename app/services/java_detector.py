@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from app.core.constants import JDK_CACHE_DIR, subprocess_flags
+from app.core.i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,19 @@ class JavaInstallation:
 
     @property
     def label(self) -> str:
-        """Human-readable label for UI dropdowns."""
+        """Human-readable (translated) label. Not unique and not stable across
+        languages: map a dropdown choice back with dropdown_labels()."""
         jdk_tag = "JDK" if self.is_jdk else "JRE"
-        return f"Java {self.major} ({jdk_tag}) — {self.source}"
+        return _("Java {major} ({kind}) — {source}").format(major=self.major, kind=jdk_tag, source=self.source)
+
+
+def dropdown_labels(installations) -> list[str]:
+    """One label per installation, in order and all different, so the
+    chosen label (or its index) always leads back to one installation:
+    installations that read the same get their path added."""
+    plain = [inst.label for inst in installations]
+    return [label if plain.count(label) == 1 else f"{label} · {inst.path}"
+            for label, inst in zip(plain, installations)]
 
 
 # ---------------------------------------------------------------------------

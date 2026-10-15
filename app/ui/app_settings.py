@@ -19,7 +19,7 @@ import customtkinter as ctk
 from app.core import i18n
 from app.core.app_config import AppConfig
 from app.core.bootstrap import remember_language
-from app.core.i18n import _
+from app.core.i18n import _, N_
 from app.core.constants import BASE_DIR, JDK_CACHE_DIR, LOGS_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
 from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
 from app.services.disk_usage import dir_size, format_size
@@ -52,6 +52,12 @@ _WEBHOOK_EVENT_LABELS = [
 
 
 class AppSettingsDialog(ZBBToplevel):
+    # (key, label): keys are what code uses and stores, labels are shown.
+    _TABS = (("General", N_("General")), ("Notifications", N_("Notifications")), ("Java", N_("Java")),
+             ("Storage", N_("Storage")), ("About", N_("About")))
+    # Theme keys are stored as-is and passed to CTk's set_appearance_mode.
+    _THEMES = (("Dark", N_("Dark")), ("Light", N_("Light")), ("System", N_("System")))
+
     def __init__(self, master, zbb_manager, **kwargs):
         super().__init__(master, **kwargs)
         self.title("Settings")
@@ -75,15 +81,15 @@ class AppSettingsDialog(ZBBToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        header, _, _ = dialog_header(self, "Settings", f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
+        header, _title, _subtitle = dialog_header(self, "Settings", f"{AppConfig.WINDOW_TITLE} v{AppConfig.APP_VERSION}")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
 
         # Transparent: the section cards are the elevated surfaces. A card-colored
         # tab view made every card indistinguishable from its background.
         self.tabview = StackedTabview(self, corner_radius=AppConfig.RADIUS_CARD, fg_color="transparent")
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
-        for name in ("General", "Notifications", "Java", "Storage", "About"):
-            self.tabview.add(name)
+        for name, label in self._TABS:
+            self.tabview.add_labeled(name, _(label))
 
         self._build_general_tab(self.tabview.tab("General"))
         self._build_notifications_tab(self.tabview.tab("Notifications"))
@@ -153,11 +159,11 @@ class AppSettingsDialog(ZBBToplevel):
             "Interface color mode — Dark, Light, or follow the system setting.",
         )
         self._theme_selector = ctk.CTkSegmentedButton(
-            card, values=["Dark", "Light", "System"],
+            card, values=i18n.choice_labels(self._THEMES),
             command=self._on_theme_selected, height=32,
             font=AppConfig.FONT_CAPTION,
         )
-        self._theme_selector.set(self._settings.get("theme", "Dark"))
+        self._theme_selector.set(i18n.choice_label(self._THEMES, self._settings.get("theme", "Dark")))
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
 
         self._build_language_card(scroll)
@@ -226,9 +232,12 @@ class AppSettingsDialog(ZBBToplevel):
         lbl_allowlist.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 14))
         self._wrap_to_card(card, lbl_allowlist)
 
-    def _on_theme_selected(self, choice: str):
-        self._settings.set("theme", choice)
-        ctk.set_appearance_mode(choice)
+    def _on_theme_selected(self, label: str):
+        theme = i18n.choice_key(self._THEMES, label)
+        if theme is None:
+            return
+        self._settings.set("theme", theme)
+        ctk.set_appearance_mode(theme)
         # CTkToplevel reacts to the switch with a withdraw/deiconify dance to
         # recolor the titlebar; its revert can lose the race and leave this
         # dialog withdrawn forever. Re-show once the dust settles.

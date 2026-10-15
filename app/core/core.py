@@ -5,6 +5,7 @@ import os
 from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 
+from app.core.i18n import _, ngettext
 from app.core.server_events import EventBus, ServerEvent
 from app.core.constants import ServerState, SERVERS_DIR
 from app.services.backup_manager import BackupManager
@@ -15,10 +16,10 @@ from app.core.logic import (
     get_server_meta, update_server_meta, migrate_legacy_metadata,
     invalidate_meta_cache, create_junction, _infer_server_type, infer_server_version,
 )
-from app.services.watchdog import Watchdog
+from app.services.watchdog import Watchdog, crash_reason_label
 from app.services.lag_monitor import LagMonitor
 from app.services.heartbeat import HeartbeatMonitor
-from app.core.playit_manager import PlayitManager
+from app.core.playit_manager import PlayitManager, TunnelStatus
 
 from app.services.console_buffer import CircularBuffer
 from app.core.app_config import AppConfig
@@ -153,7 +154,7 @@ class ZBBManager:
                 dns = ip
                 display_ip = ""
         # Saved DNS from config is the last-resort fallback, not the override
-        if status == "Online" and not dns and config.get("playit_dns"):
+        if status == TunnelStatus.ONLINE and not dns and config.get("playit_dns"):
             dns = config["playit_dns"]
             display_ip = config["playit_dns"]
         
@@ -444,10 +445,12 @@ class ZBBManager:
         retry = payload.get("retry")
         detail = payload.get("detail")
         logger.error("[ZBBManager] Server crashed: reason=%s retry=%s detail=%s", reason, retry, detail)
-        msg = f"Server crashed: {reason}"
+        cause = crash_reason_label(reason)
         if retry is not None:
-            msg += f" (attempt {retry})"
-        if detail:
+            msg = _("Server crashed: {cause} (attempt {attempt}).").format(cause=cause, attempt=retry)
+        else:
+            msg = _("Server crashed: {cause}.").format(cause=cause)
+        if detail:  # the mod loader's own words, on a line of their own
             msg += f"\n{detail}"
         notification = {"msg": msg, "type": "error"}
         missing_mod_ids = payload.get("missing_mod_ids") or []

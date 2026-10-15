@@ -20,7 +20,8 @@ from typing import Callable, Optional
 from PIL import Image
 
 from app.core.app_config import AppConfig
-from app.core.i18n import format_count
+from app.core import i18n
+from app.core.i18n import N_, format_count
 from app.core.constants import BASE_DIR, SERVERS_DIR
 from app.services.modrinth import (MOD_LOADERS, PLUGIN_LOADERS, ModrinthClient, ModrinthException,
                                    loader_display)
@@ -138,13 +139,14 @@ class ModrinthBrowser(ctk.CTkFrame):
         bundle = ModrinthBrowser.optimizer_bundle(loader) or []
         return f"{loader_display(loader)}: " + ", ".join(mod["name"] for mod in bundle)
 
-    _SORT_OPTIONS = {
-        "Relevance": "relevance",
-        "Downloads": "downloads",
-        "Follows": "follows",
-        "Newest": "newest",
-        "Updated": "updated",
-    }
+    # (Modrinth API sort index, label shown in the combo box)
+    _SORT_OPTIONS = (
+        ("relevance", N_("Relevance")),
+        ("downloads", N_("Downloads")),
+        ("follows", N_("Follows")),
+        ("newest", N_("Newest")),
+        ("updated", N_("Updated")),
+    )
 
     def __init__(self, master, get_server_info: Callable = None,
                  create_snapshot: Callable = None, is_server_running: Callable = None,
@@ -405,12 +407,12 @@ class ModrinthBrowser(ctk.CTkFrame):
         # Sort dropdown (M.7)
         self.combo_sort = ctk.CTkComboBox(
             bar,
-            values=list(self._SORT_OPTIONS.keys()),
+            values=i18n.choice_labels(self._SORT_OPTIONS),
             width=115, height=28,
             command=self._on_filter_changed,
             **_combo_style,
         )
-        self.combo_sort.set("Relevance")
+        self.combo_sort.set(i18n.choice_label(self._SORT_OPTIONS, "relevance"))
         self.combo_sort.grid(row=0, column=3, padx=4, pady=(8, 6))
         self.combo_sort._entry.bind("<Button-1>", lambda e: self.combo_sort._open_dropdown_menu())
         self.combo_sort._entry.configure(cursor="arrow")
@@ -793,8 +795,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _run_search(self):
         query = self.entry_search.get().strip()
         project_type = self.combo_type.get()
-        sort_label = self.combo_sort.get()
-        sort = self._SORT_OPTIONS.get(sort_label, "relevance")
+        sort = i18n.choice_key(self._SORT_OPTIONS, self.combo_sort.get(), "relevance")
 
         mc_version = None
         loader = None

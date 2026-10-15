@@ -13,7 +13,8 @@ import customtkinter as ctk
 from PIL import Image
 
 from app.core.app_config import AppConfig
-from app.core.i18n import _
+from app.core import i18n
+from app.core.i18n import _, N_
 from app.core.players import OP_LEVELS
 from app.core.server_events import ServerEvent
 from app.services.player_heads import fetch_head
@@ -23,7 +24,16 @@ from app.ui.ui_components import ScrollableFrame, ToolTip, ZBBDialog, add_danger
 
 logger = logging.getLogger(__name__)
 
-_FILTERS = ("All", "Online", "Ops", "Whitelisted", "Banned")
+# (key, label): the segmented button shows the labels, _visible() uses the key.
+_FILTERS = (("all", N_("All")), ("online", N_("Online")), ("ops", N_("Ops")),
+            ("whitelisted", N_("Whitelisted")), ("banned", N_("Banned")))
+_FILTER_TESTS = {
+    "all": lambda p: True,
+    "online": lambda p: p["online"],
+    "ops": lambda p: p["op_level"] is not None,
+    "whitelisted": lambda p: p["whitelisted"],
+    "banned": lambda p: p["banned"],
+}
 _OP_LEVEL_LABELS = {
     1: "Level 1 · Bypass spawn protection",
     2: "Level 2 · Cheats and command blocks",
@@ -95,10 +105,10 @@ class PlayersPanel(ctk.CTkFrame):
         self.entry_search.bind("<KeyRelease>", lambda e: self._render())
 
         self.filter = ctk.CTkSegmentedButton(
-            bar, values=list(_FILTERS), height=28, font=AppConfig.FONT_BODY_SMALL,
+            bar, values=i18n.choice_labels(_FILTERS), height=28, font=AppConfig.FONT_BODY_SMALL,
             command=lambda _v: self._render(),
         )
-        self.filter.set("All")
+        self.filter.set(i18n.choice_label(_FILTERS, "all"))
         self.filter.grid(row=0, column=2, padx=(4, 12), pady=(8, 6))
 
         ctk.CTkFrame(bar, height=1, fg_color=(AppConfig.COLOR_BORDER_LIGHT, AppConfig.COLOR_BORDER_DARK)).grid(
@@ -224,14 +234,7 @@ class PlayersPanel(ctk.CTkFrame):
     # ------------------------------------------------------------------ rendering
     def _visible(self) -> list[dict]:
         query = self.entry_search.get().strip().lower()
-        mode = self.filter.get()
-        keep = {
-            "All": lambda p: True,
-            "Online": lambda p: p["online"],
-            "Ops": lambda p: p["op_level"] is not None,
-            "Whitelisted": lambda p: p["whitelisted"],
-            "Banned": lambda p: p["banned"],
-        }[mode]
+        keep = _FILTER_TESTS[i18n.choice_key(_FILTERS, self.filter.get(), "all")]
         return [p for p in self._roster if keep(p) and query in p["name"].lower()]
 
     def _row_state(self, player: dict) -> tuple:
