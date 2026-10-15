@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from app.core import logic
+from app.core.i18n import _, ngettext
 from app.core.constants import SERVERS_DIR
 
 logger = logging.getLogger(__name__)
@@ -142,16 +143,17 @@ class ServerProvisioner:
         # handler below would mistake that for a tunnel failure.
         required_java = self._required_java
         try:
-            raw_progress(_P_TUNNEL, "Setting up Playit tunnel...")
+            raw_progress(_P_TUNNEL, _("Setting up Playit tunnel..."))
             self._log(f"[System] Server '{name}' created successfully.")
             self._create_tunnel(name)
-            raw_progress(_P_DONE, "Server ready!")
+            raw_progress(_P_DONE, _("Server ready!"))
         except Exception as e:
             # The server itself is complete; a tunnel can be set up later.
             logger.exception("Tunnel setup failed for %s", name)
             reason = str(e) or type(e).__name__
             self._log(f"[Warning] Tunnel setup failed: {reason}")
-            self._warnings.append(f"The Playit tunnel couldn't be set up ({reason}). Start it from the Tunnel panel.")
+            self._warnings.append(_("The Playit tunnel couldn't be set up ({reason}). "
+                                    "Start it from the Tunnel panel.").format(reason=reason))
         return ProvisionResult(True, name, required_java=required_java, warnings=list(self._warnings))
 
     def _build(self, config: dict, progress: ProgressFn) -> Optional[str]:
@@ -166,7 +168,7 @@ class ServerProvisioner:
         self._check_cancel()
         if not self._install_server_jar(config, progress):
             self._check_cancel()  # a cancelled installer reports failure: say why
-            return f"Failed to create server '{config['name']}'. Check the log for details."
+            return _("Failed to create server '{name}'. Check the log for details.").format(name=config["name"])
         for step in (self._import_content, self._apply_settings):
             self._check_cancel()
             if step is self._apply_settings:
@@ -242,7 +244,7 @@ class ServerProvisioner:
         name = config["name"]
         link_path = os.path.join(self._servers_dir, name)
         if os.path.lexists(link_path):
-            return f"Server '{name}' already exists."
+            return _("Server '{name}' already exists.").format(name=name)
 
         custom_loc = config.get("location") or self._servers_dir
         if os.path.normpath(custom_loc) == os.path.normpath(self._servers_dir):
@@ -253,7 +255,7 @@ class ServerProvisioner:
                 os.makedirs(self._servers_dir, exist_ok=True)
                 os.mkdir(link_path)
             except FileExistsError:
-                return f"Server '{name}' already exists."
+                return _("Server '{name}' already exists.").format(name=name)
             self._created.append(("dir", link_path))
             return None
         target_path = os.path.join(custom_loc, name)
@@ -268,7 +270,7 @@ class ServerProvisioner:
             logic.create_junction(target_path, link_path)
             self._created.append(("link", link_path))
         except OSError as e:
-            return f"Failed to map custom location: {e}"
+            return _("Failed to map custom location: {error}").format(error=e)
         self._log(f"[System] Created link for custom location: {target_path}")
         return None
 
@@ -319,10 +321,10 @@ class ServerProvisioner:
     def _install_server_jar(self, config: dict, progress: ProgressFn) -> bool:
         name, version, engine = config["name"], config["version"], config["type"]
         low, high = _JAR_BAND
-        label = f"Downloading {engine} {version} server jar..."
+        label = _("Downloading {engine} {version} server jar...").format(engine=engine, version=version)
         progress(low, label)
 
-        def jar_progress(value, *_):
+        def jar_progress(value, *_unused):
             progress(low + (high - low) * max(0.0, min(float(value), 1.0)), label)
 
         if engine in SIMPLE_JAR_ENGINES:
@@ -351,7 +353,7 @@ class ServerProvisioner:
         name, server_dir = config["name"], self._server_dir(config["name"])
         if self._modpack is not None:
             info = self._modpack
-            progress(_P_MODPACK, f"Installing modpack {info.name}...")
+            progress(_P_MODPACK, _("Installing modpack {name}...").format(name=info.name))
             self._log(f"[System] Installing modpack '{info.name}'...")
             installed = content_import.install_modpack(
                 info, server_dir, config["type"], config["version"],
@@ -360,23 +362,26 @@ class ServerProvisioner:
             self._log(f"[System] Modpack ready: {installed.summary}.")
             if installed.failed:
                 self._log(f"[Warning] {installed.failed} modpack mod(s) failed to download.")
-                self._warnings.append(
-                    f"{installed.failed} mod(s) from the modpack couldn't be downloaded, so the server "
-                    "may not start. Check the console, then retry by importing the pack again.")
+                self._warnings.append(ngettext(
+                    "{count} mod from the modpack couldn't be downloaded, so the server may not "
+                    "start. Check the console, then retry by importing the pack again.",
+                    "{count} mods from the modpack couldn't be downloaded, so the server may not "
+                    "start. Check the console, then retry by importing the pack again.",
+                    installed.failed).format(count=installed.failed))
             logic.update_server_meta(name, {"modpack": info.name})
         if self._world is not None:
             level_name = load_server_properties(server_dir=server_dir).get("level-name") or "world"
-            progress(_P_WORLD, f"Importing world {self._world.name}...")
+            progress(_P_WORLD, _("Importing world {name}...").format(name=self._world.name))
             content_import.import_world(self._world, server_dir, level_name=level_name)
             self._log(f"[System] World '{self._world.name}' imported as '{level_name}'.")
 
     def _apply_settings(self, config: dict, progress: ProgressFn) -> None:
         name = config["name"]
         if config.get("icon_path"):
-            progress(_P_ICON, "Applying server icon...")
+            progress(_P_ICON, _("Applying server icon..."))
             logic.save_server_icon(name, config["icon_path"])
 
-        progress(_P_SCAFFOLD, "Configuring server environment...")
+        progress(_P_SCAFFOLD, _("Configuring server environment..."))
         self._log("[System] Scaffolding server environment...")
         from app.services.scaffolder import pre_boot_scaffold
         port_str = config.get("playit_port")
@@ -394,7 +399,7 @@ class ServerProvisioner:
         from app.services.java_installer import get_release_label
 
         name, version = config["name"], config["version"]
-        progress(_P_ANALYZE, "Analyzing Java requirements from server jar...")
+        progress(_P_ANALYZE, _("Analyzing Java requirements from server jar..."))
         self._log("[System] Analyzing Java requirements from server jar...")
         bytecode_java = self._analyze_jar(os.path.join(self._server_dir(name), "server.jar"))
 
@@ -412,7 +417,7 @@ class ServerProvisioner:
 
         if not self.jdk_manager.get_java_path(final_java):
             label = get_release_label(final_java) or f"Java {final_java}"
-            progress(_P_JDK, f"Installing {label}...")
+            progress(_P_JDK, _("Installing {label}...").format(label=label))
             self._log(f"[System] Installing {label}...")
             try:
                 self._ensure_java(final_java)

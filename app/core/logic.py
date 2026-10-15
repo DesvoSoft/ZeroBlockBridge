@@ -19,6 +19,7 @@ from typing import Optional, Callable, Any
 from app.core.constants import (APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE,
                                  atomic_write_json)
 from app.core import neoforge
+from app.core.i18n import _
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
@@ -285,8 +286,8 @@ def create_server_directory(server_name: str, server_type: str = "Vanilla", vers
             os.makedirs(path)
         except PermissionError as e:
             raise PermissionError(
-                f"Cannot create server directory {path}: permission denied. "
-                f"Check that ZeroBlockBridge has write access to this location."
+                _("Cannot create server directory {path}: permission denied. "
+                  "Check that ZeroBlockBridge has write access to this location.").format(path=path)
             ) from e
     if not os.path.exists(os.path.join(path, "metadata.json")):
         update_server_meta(server_name, {"name": server_name, "ram": 2048, "type": server_type, "version": version})
@@ -298,7 +299,7 @@ def download_server(server_name: str, server_type: str, version: str, progress_c
     url = vm.get_download_url(server_type, version)
 
     if not url:
-        raise ValueError(f"URL not found for {server_type} {version}")
+        raise ValueError(_("URL not found for {engine} {version}").format(engine=server_type, version=version))
 
     server_path = create_server_directory(server_name, server_type, version)
     jar_path = os.path.join(server_path, "server.jar")
@@ -757,7 +758,7 @@ class ServerRunner:
             "server.jar",
         )
         if not os.path.exists(os.path.join(server_path, jar_file)):
-            self._fail_start(f"Server jar not found: {jar_file}")
+            self._fail_start(_("Server jar not found: {jar}").format(jar=jar_file))
         return jar_file, None
 
     def _build_command(self, jar_file: str, forge_args_file: Optional[str]) -> list[str]:
@@ -802,7 +803,8 @@ class ServerRunner:
         except Exception:
             port = 25565
         if _port_in_use(port):
-            self._fail_start(f"Port {port} is already in use by another process. Close it and try again.")
+            self._fail_start(_("Port {port} is already in use by another process. "
+                               "Close it and try again.").format(port=port))
 
     def _spawn(self, cmd: list[str], server_path: str) -> None:
         with self._buffers_lock:
@@ -825,7 +827,7 @@ class ServerRunner:
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             # Used to log and return, leaving ZBBManager in STARTING forever.
             self.running = False
-            self._fail_start(f"Failed to start server: {e}")
+            self._fail_start(_("Failed to start server: {error}").format(error=e))
         from app.core.process_job import assign_to_job
         assign_to_job(self.process.pid)
         self.running = True

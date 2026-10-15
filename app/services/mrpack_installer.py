@@ -18,6 +18,7 @@ import threading
 from typing import Callable, Optional
 
 from app.core.constants import SERVERS_DIR
+from app.core.i18n import _, ngettext
 from app.services.sha1_validator import download_with_verification
 
 logger = logging.getLogger(__name__)
@@ -95,25 +96,25 @@ def install_mrpack(
 
     server_dir = server_dir or os.path.join(SERVERS_DIR, server_name)
     if not os.path.isdir(server_dir):
-        raise ValueError(f"Server directory does not exist: {server_dir}")
+        raise ValueError(_("Server directory does not exist: {path}").format(path=server_dir))
 
     if not zipfile.is_zipfile(mrpack_path):
-        raise ValueError(f"Not a valid ZIP/mrpack file: {mrpack_path}")
+        raise ValueError(_("Not a valid ZIP/mrpack file: {path}").format(path=mrpack_path))
 
-    _progress("Reading modpack manifest…")
+    _progress(_("Reading modpack manifest…"))
 
     summary = {"installed": 0, "skipped_client": 0, "failed": 0}
 
     with zipfile.ZipFile(mrpack_path, "r") as zf:
         # 1. Parse manifest
         if "modrinth.index.json" not in zf.namelist():
-            raise ValueError("Missing modrinth.index.json in modpack archive.")
+            raise ValueError(_("Missing modrinth.index.json in modpack archive."))
 
         with zf.open("modrinth.index.json") as fh:
             try:
                 manifest = json.loads(fh.read().decode("utf-8"))
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid modrinth.index.json: {exc}") from exc
+                raise ValueError(_("Invalid modrinth.index.json: {error}").format(error=exc)) from exc
 
         _validate_manifest(manifest)
 
@@ -121,7 +122,8 @@ def install_mrpack(
         _check_compatibility(manifest, server_type, mc_version)
 
         files_list = manifest.get("files", [])
-        _progress(f"Found {len(files_list)} file(s) in modpack.")
+        _progress(ngettext("Found {count} file in the modpack.", "Found {count} files in the modpack.",
+                           len(files_list)).format(count=len(files_list)))
 
         # 3. Download mod files (skip client-only entries per mrpack spec)
         wanted = [e for e in files_list if e.get("env", {}).get("server") != "unsupported"]
@@ -132,11 +134,15 @@ def install_mrpack(
         for overrides_prefix in ("overrides/", "server-overrides/"):
             _copy_overrides(zf, overrides_prefix, server_dir, _progress)
 
+    installed, skipped, failed = summary["installed"], summary["skipped_client"], summary["failed"]
+    # Complete sentences joined with a space.
     _progress(
-        f"Modpack installed — {summary['installed']} mods"
-        + (f", {summary['skipped_client']} client-only skipped" if summary["skipped_client"] else "")
-        + (f", {summary['failed']} failed" if summary["failed"] else "")
-        + "."
+        ngettext("Modpack installed: {count} mod.", "Modpack installed: {count} mods.",
+                 installed).format(count=installed)
+        + (" " + ngettext("{count} client-only mod skipped.", "{count} client-only mods skipped.",
+                          skipped).format(count=skipped) if skipped else "")
+        + (" " + ngettext("{count} mod failed to download.", "{count} mods failed to download.",
+                          failed).format(count=failed) if failed else "")
     )
     return summary
 
@@ -203,7 +209,7 @@ def _download_all(entries: list, server_dir: str, progress: Callable[[str], None
             ok = results.get()
             installed += ok
             failed += not ok
-            progress(f"Downloading mods {done}/{total}…")
+            progress(_("Downloading mods {done}/{total}…").format(done=done, total=total))
     finally:
         stop.set()  # caller gave up (e.g. the window closed): take no new jobs
     return installed, failed
@@ -213,7 +219,9 @@ def _copy_overrides(zf: zipfile.ZipFile, prefix: str, server_dir: str, progress:
     override_files = [n for n in zf.namelist() if n.startswith(prefix) and not n.endswith("/")]
     if not override_files:
         return
-    progress(f"Copying {len(override_files)} {prefix.rstrip('/')} file(s)…")
+    count = len(override_files)
+    progress(ngettext("Copying {count} file from {folder}…", "Copying {count} files from {folder}…",
+                      count).format(count=count, folder=prefix.rstrip("/")))
     for name in override_files:
         rel = name[len(prefix):]
         if not rel:
@@ -235,31 +243,31 @@ def _check_compatibility(manifest: dict, server_type: Optional[str], mc_version:
         if engine not in required_loaders:
             wanted = "/".join(_ENGINE_DISPLAY.get(e, e.title()) for e in sorted(required_loaders))
             raise MrpackCompatibilityError(
-                f"This modpack requires a {wanted} server, but "
-                f"'{server_type}' cannot load its mods. Create a {wanted} "
-                f"server to use this pack."
+                _("This modpack requires a {loaders} server, but '{server_type}' cannot load its mods. "
+                  "Create a {loaders} server to use this pack.").format(loaders=wanted, server_type=server_type)
             )
         if engine not in _MOD_CAPABLE_ENGINES:
             # e.g. a Quilt pack on a server type ZBB doesn't ship
             raise MrpackCompatibilityError(
-                f"Modpacks for {_ENGINE_DISPLAY.get(engine, engine.title())} are not supported yet."
+                _("Modpacks for {loader} are not supported yet.").format(
+                    loader=_ENGINE_DISPLAY.get(engine, engine.title()))
             )
 
     pack_mc = deps.get("minecraft")
     if mc_version and pack_mc and pack_mc != mc_version:
         raise MrpackCompatibilityError(
-            f"This modpack targets Minecraft {pack_mc}, but the server runs "
-            f"{mc_version}. Versions must match exactly."
+            _("This modpack targets Minecraft {version}, but the server runs {server_version}. "
+              "Versions must match exactly.").format(version=pack_mc, server_version=mc_version)
         )
 
 
 def _validate_manifest(manifest: dict):
     if manifest.get("formatVersion") != 1:
         raise ValueError(
-            f"Unsupported mrpack format version: {manifest.get('formatVersion')}"
+            _("Unsupported mrpack format version: {version}").format(version=manifest.get("formatVersion"))
         )
     if "files" not in manifest:
-        raise ValueError("modrinth.index.json missing 'files' key.")
+        raise ValueError(_("modrinth.index.json missing 'files' key."))
 
 
 def _safe_dest(base_dir: str, rel_path: str) -> str:
@@ -267,7 +275,7 @@ def _safe_dest(base_dir: str, rel_path: str) -> str:
     base = os.path.realpath(base_dir)
     dest = os.path.realpath(os.path.join(base, rel_path.replace("\\", "/")))
     if os.path.commonpath([base, dest]) != base:
-        raise ValueError(f"Unsafe path in modpack archive: {rel_path}")
+        raise ValueError(_("Unsafe path in modpack archive: {path}").format(path=rel_path))
     return dest
 
 

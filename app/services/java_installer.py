@@ -14,6 +14,7 @@ from typing import Optional
 import requests
 
 from app.core.constants import JDK_CACHE_DIR
+from app.core.i18n import _
 from app.services.http_download import stream_to_file
 
 logger = logging.getLogger(__name__)
@@ -129,11 +130,11 @@ def _query_assets(version: int, image_type: str) -> Optional[dict]:
         resp.raise_for_status()
         assets = resp.json()
     except requests.ConnectionError:
-        raise JdkDownloadError("No internet connection — cannot download JDK")
+        raise JdkDownloadError(_("No internet connection — cannot download JDK"))
     except requests.Timeout:
-        raise JdkDownloadError("Adoptium API timed out")
+        raise JdkDownloadError(_("Adoptium API timed out"))
     except requests.RequestException as exc:
-        raise JdkDownloadError(f"Adoptium API request failed: {exc}")
+        raise JdkDownloadError(_("Adoptium API request failed: {error}").format(error=exc))
 
     if not assets:
         return None
@@ -146,7 +147,7 @@ def _query_assets(version: int, image_type: str) -> Optional[dict]:
     checksum = pkg.get("checksum", "").strip()
 
     if not download_url:
-        raise JdkDownloadError("Adoptium response missing package link")
+        raise JdkDownloadError(_("Adoptium response missing package link"))
 
     return {
         "url": download_url,
@@ -166,9 +167,8 @@ def _fetch_asset_info(version: int) -> dict:
             if image_type == "jdk":
                 logger.info("No JRE %d on Adoptium — falling back to full JDK", version)
             return info
-    raise JdkDownloadError(
-        f"No JDK {version} asset found for {_platform_os()}/{_platform_arch()}"
-    )
+    raise JdkDownloadError(_("No JDK {version} asset found for {platform}").format(
+        version=version, platform=f"{_platform_os()}/{_platform_arch()}"))
 
 
 def get_release_label(version: int) -> Optional[str]:
@@ -237,7 +237,8 @@ class JdkManager:
         binary = _find_java_binary(Path(path))
         if binary is None:
             shutil.rmtree(path, ignore_errors=True)
-            raise JdkError(f"JDK {version} extracted but no java binary found in {path}")
+            raise JdkError(_("JDK {version} extracted but no java binary found in {path}").format(
+                version=version, path=path))
         if sys.platform != "win32":
             _chmod_plusx(binary)
 
@@ -282,9 +283,10 @@ class JdkManager:
                     import time
                     time.sleep(RETRY_DELAY)
                 else:
-                    raise JdkDownloadError(f"JDK download failed after {MAX_RETRIES} attempts: {last_error}")
+                    raise JdkDownloadError(_("JDK download failed after {attempts} attempts: {error}").format(
+                        attempts=MAX_RETRIES, error=last_error))
 
-        raise JdkDownloadError(f"JDK download failed: {last_error}")
+        raise JdkDownloadError(_("JDK download failed: {error}").format(error=last_error))
 
     @staticmethod
     def _verify_archive(archive_path: Path, expected_checksum, version: int) -> None:
@@ -293,22 +295,22 @@ class JdkManager:
             return
         if not _verify_checksum(archive_path, expected_checksum):
             archive_path.unlink(missing_ok=True)
-            raise JdkIntegrityError(f"Checksum mismatch for JDK {version}")
+            raise JdkIntegrityError(_("Checksum mismatch for JDK {version}").format(version=version))
 
     def _download_file(self, url: str, dest: Path, cancel_event=None):
         def check_cancel(_fraction):
             if cancel_event is not None and cancel_event.is_set():
-                raise JdkCancelled("JDK download cancelled")
+                raise JdkCancelled(_("JDK download cancelled"))
         try:
             stream_to_file(url, dest, timeout=120, progress_callback=check_cancel if cancel_event else None)
         except requests.ConnectionError:
-            raise JdkDownloadError("No internet connection during JDK download")
+            raise JdkDownloadError(_("No internet connection during JDK download"))
         except requests.Timeout:
-            raise JdkDownloadError("JDK download timed out")
+            raise JdkDownloadError(_("JDK download timed out"))
         except requests.RequestException as exc:
-            raise JdkDownloadError(f"JDK download failed: {exc}")
+            raise JdkDownloadError(_("JDK download failed: {error}").format(error=exc))
         except PermissionError as exc:
-            raise JdkDownloadError(f"Cannot write {dest}: permission denied ({exc})")
+            raise JdkDownloadError(_("Cannot write {path}: permission denied ({error})").format(path=dest, error=exc))
 
     def _extract_archive(self, archive_path: Path, dest_dir: Path):
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -330,7 +332,7 @@ class JdkManager:
                         continue
                     target = dest_dir / rel
                     if not target.resolve().is_relative_to(dest_resolved):
-                        raise JdkIntegrityError(f"Unsafe zip member path: {name}")
+                        raise JdkIntegrityError(_("Unsafe zip member path: {path}").format(path=name))
                     if name.endswith("/"):
                         target.mkdir(parents=True, exist_ok=True)
                     else:
@@ -360,7 +362,7 @@ class JdkManager:
                         continue
                     target = dest_dir / rel
                     if not target.resolve().is_relative_to(dest_resolved):
-                        raise JdkIntegrityError(f"Unsafe tar member path: {member.name}")
+                        raise JdkIntegrityError(_("Unsafe tar member path: {path}").format(path=member.name))
                     if member.isdir():
                         target.mkdir(parents=True, exist_ok=True)
                         continue

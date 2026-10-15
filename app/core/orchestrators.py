@@ -5,6 +5,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Optional
+from app.core.i18n import _
 from app.core.server_events import ServerEvent
 from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
@@ -21,7 +22,7 @@ class ServerOrchestrator:
 
     def start_server(self) -> bool:
         if not check_disk_space(min_gb=1):
-            self.manager.events.emit(ServerEvent.NOTIFICATION, {"msg": "Not enough disk space to start server (>1GB required).", "type": "error"})
+            self.manager.events.emit(ServerEvent.NOTIFICATION, {"msg": _("Not enough disk space to start server (>1GB required)."), "type": "error"})
             self.manager.events.emit(ServerEvent.CONSOLE_LINE, "[Error] Not enough disk space to start server.")
             return False
 
@@ -174,7 +175,7 @@ class BackupOrchestrator:
                 logger.exception("Auto-backup task raised unexpectedly")
                 self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": str(exc), "server": self.manager.current_server})
                 self.manager.events.emit(ServerEvent.NOTIFICATION, {
-                    "msg": f"Auto-backup failed unexpectedly: {exc}",
+                    "msg": _("Auto-backup failed unexpectedly: {error}").format(error=exc),
                     "type": "error",
                 })
         finally:
@@ -195,11 +196,11 @@ class BackupOrchestrator:
         would be a rollback point that silently can't roll back.
         """
         if server_name == self.manager.current_server and self.manager.is_running():
-            return None, "Stop the server before updating mods (running server locks files)."
+            return None, _("Stop the server before updating mods (running server locks files).")
 
         with self.manager._backup_lock:
             if self.manager._backup_in_progress:
-                return None, "Another backup is already in progress. Try again shortly."
+                return None, _("Another backup is already in progress. Try again shortly.")
             self.manager._backup_in_progress = True
         try:
             path, error = BackupManager(server_name).create_backup(reason="pre_update")
@@ -284,7 +285,8 @@ class SchedulerOrchestrator:
                                         self.manager.current_server
                                     )
                                     self.manager.events.emit(ServerEvent.NOTIFICATION, {
-                                        "msg": "Scheduled restart was missed (system was busy). Next attempt tomorrow.",
+                                        "msg": _("Scheduled restart was missed (system was busy). "
+                                                 "Next attempt tomorrow."),
                                         "type": "warning",
                                     })
 
