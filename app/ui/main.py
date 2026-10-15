@@ -24,7 +24,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem, DownloadProgressDialog, ToolTip, ZBBDialog, ScrollableFrame, StackedTabview, hide_until_drawn, themed_menu
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
-from app.ui.formatting import format_duration, format_memory, memory_tooltip
+from app.ui.formatting import engine_name, format_duration, format_memory, memory_tooltip
 from app.services.server_properties import load_server_properties
 
 import app.core.logic as logic
@@ -884,7 +884,7 @@ class MCTunnelApp(ctk.CTk):
             it.set_selected(name == server_name)
 
         meta = logic.get_server_meta(server_name)
-        server_type = str((meta or {}).get("type") or "Vanilla").title()
+        server_type = engine_name((meta or {}).get("type"))
         mc_version = (meta or {}).get("version", "")
         self.lbl_server_info.configure(text=f"{server_type} {mc_version}".strip(), text_color=AppConfig.COLOR_TEXT_PRIMARY)
         try:
