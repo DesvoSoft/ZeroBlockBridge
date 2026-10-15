@@ -2,11 +2,15 @@ import json
 import logging
 import os
 
+from app.core import resources
 from app.core.constants import CONFIG_DIR, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = os.path.join(CONFIG_DIR, "templates")
+# Read-only templates shipped with the app (assets/ is bundled into the exe).
+# A user template with the same name takes precedence.
+BUILTIN_TEMPLATES_DIR = str(resources.assets_dir() / "templates")
 
 # wizard_data keys captured into a template (instance-specific fields like
 # name/location/icon_path are intentionally excluded)
@@ -22,14 +26,15 @@ def _template_path(name: str) -> str:
     return os.path.join(TEMPLATES_DIR, f"{name}.json")
 
 
+def _template_names(folder: str) -> set:
+    if not os.path.isdir(folder):
+        return set()
+    return {f[:-5] for f in os.listdir(folder) if f.endswith(".json")}
+
+
 def list_templates() -> list[dict]:
-    if not os.path.isdir(TEMPLATES_DIR):
-        return []
     templates = []
-    for filename in sorted(os.listdir(TEMPLATES_DIR)):
-        if not filename.endswith(".json"):
-            continue
-        name = filename[:-5]
+    for name in sorted(_template_names(TEMPLATES_DIR) | _template_names(BUILTIN_TEMPLATES_DIR)):
         template = load_template(name)
         if template is not None:
             templates.append({
@@ -43,6 +48,8 @@ def list_templates() -> list[dict]:
 
 def load_template(name: str) -> dict | None:
     path = _template_path(name)
+    if not os.path.exists(path):
+        path = os.path.join(BUILTIN_TEMPLATES_DIR, f"{name}.json")
     if not os.path.exists(path):
         return None
     try:
