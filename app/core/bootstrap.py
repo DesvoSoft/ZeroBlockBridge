@@ -65,7 +65,8 @@ def _marker_path() -> Path:
 def read_marker(marker_path: Path | None = None) -> dict:
     marker_path = marker_path or _marker_path()
     try:
-        with open(marker_path, "r", encoding="utf-8") as f:
+        # utf-8-sig: a marker edited with a Windows tool may start with a BOM.
+        with open(marker_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, ValueError) as e:
         logger.debug("No usable data dir marker at %s: %s", marker_path, e)
