@@ -341,7 +341,7 @@ These rules must never be violated:
 
 ## Language (i18n)
 
-**Files:** `app/core/i18n.py`, `app/core/bootstrap.py`, `assets/locales/`, `tools/i18n.py`
+**Files:** `app/core/i18n.py`, `app/core/bootstrap.py`, `app/core/console_line.py`, `assets/locales/`, `tools/i18n.py`
 
 - Plain gettext. English is the source language; `assets/locales/<lang>/LC_MESSAGES/zbb.po` holds each translation and the compiled `zbb.mo` beside it is committed (no build step; both packaging specs bundle `assets/`). `tools/i18n.py extract|update|compile` wraps Babel (dev dependency). `tests/test_i18n.py` fails when a `.mo` differs from what its `.po` compiles to, a marked string is untranslated or a translation drops a `{placeholder}`.
 - Code uses `_()`, `ngettext()`, `pgettext()` from `app.core.i18n`, with named `str.format` placeholders and whole sentences (no fragments joined in code). Module-level text is marked with `N_()` and translated where it is shown, because the language is set after modules are imported. A function that calls `_()` must not also assign `_` (e.g. `a, _, _ = ...`): Python would make `_` local and the call fails (`test_no_function_shadows_the_translation_function`).
@@ -357,8 +357,10 @@ These rules must never be violated:
 | Settings → General → Language | Saved to `SettingsManager` and to the marker when it belongs to this data folder | `bootstrap.remember_language` |
 
 - Locale-aware formatting lives in `app.core.i18n` (`format_number`, `format_percent`, `format_size`, `format_count`, `format_datetime` with month names from the catalog, never `strftime("%b")`); `app/ui/formatting.py` builds the uptime, relative-time and RAM readouts on them.
+- Keys vs labels: code compares and stores an internal key, the widget shows a translated label. Choice lists are `((key, N_("Label")), ...)` read with `i18n.choice_labels` / `choice_label` / `choice_key` (theme, player filters, Modrinth sort, schedule mode); tab views use `StackedTabview.add_labeled(key, label)` so `get()`/`set()` and `last_console_tab` keep the key. Core values have a label function: `playit_manager.TunnelStatus` (keys stay `"Online"`, `"Starting..."`...) → `tunnel_status_label`; watchdog crash codes (`boot_crash`, `exit_1`..., kept in `crash_history` and Discord) → `watchdog.crash_reason_label`; `sanitizer.BlockedReason` (stable English values) → `describe_blocked`. `JavaInstallation.label` is translated and not unique, so dropdowns use `java_detector.dropdown_labels` (adds the path to look-alikes) and map back by label or index.
+- Console coloring never reads wording: ZBB's own error/warning lines are `console_line.ConsoleLine`s with an explicit kind (`error_line(...)`), a `str` subclass so payloads and tests are unchanged; `"ERROR"`/`"WARN"` matching remains only for Minecraft and playitd log levels.
 - Never translated: logs, ZBB console prefixes (`[Security]`, `[System]`, `[Error]`...), patterns matched against Minecraft or Playit agent output, file contents (server.properties, eula.txt, crash reports), product names. Discord webhook messages stay English for now.
-- Translated so far: the pre-app dialogs, EULA, close dialog, tray menu and notification, single-instance message, installer shortcut failures, the formatting helpers and the few labels built around them (server uptime, player last seen/playtime, shortcut toasts), so no label mixes languages. The CustomTkinter screens are translated as each one is ported to Qt (`docs/ROADMAP.md` 8d).
+- Translated so far: the pre-app dialogs, EULA, close dialog, tray menu and notification, single-instance message, installer shortcut failures, the formatting helpers and the few labels built around them (server uptime, player last seen/playtime, shortcut toasts), so no label mixes languages; the core/services messages (notifications, exception texts shown to the user, progress text, import checks, player action results) and the key/label pairs above. Console-only lines (`[System] ...`, `[Playit] ...`) stay English. The rest of the CustomTkinter screens are translated as each one is ported to Qt (`docs/ROADMAP.md` 8d).
 
 ---
 

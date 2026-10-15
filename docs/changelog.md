@@ -12,6 +12,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Spanish** — the setup, update and uninstall dialogs have a language picker (English / Español, defaulting to the Windows display language) and are fully translated, as are the Minecraft EULA prompt, the close-to-tray dialog, the tray menu and its notification, and the "already running" message. The choice is remembered for the install (or the portable folder) and can be changed in Settings → General → Language (takes effect after a restart). The rest of the app follows as each screen is rebuilt.
 - Uptime, "last seen", RAM, file sizes, backup dates and Modrinth download counts use the chosen language's number and date format (e.g. `2,3 GB`, `hace 5 min`, `02 may 2026`); backup dates no longer depend on the system locale.
 - Translation tooling: gettext catalogs in `assets/locales`, `tools/i18n.py` (Babel) to extract, update and compile them.
+- In Spanish, the app's notifications and messages are translated too: server start and Java problems, crashes (now explained in words: "out of memory", "it stopped while starting"... instead of a code like `boot_crash`), tunnel status and Playit notifications, blocked console commands, player actions (op, whitelist, kick, ban), backups, world and modpack import checks, server creation progress and errors, Modrinth and Java download errors. Counts use proper plurals ("1 mod", "2 mods"). The console and tunnel log stay in English, as do Discord messages.
+- Settings tabs and theme, console tabs, player filters, Modrinth sort order, the restart schedule mode and the property impact hints show in the chosen language.
+
+### Changed
+- The mod auto-install result reads as full sentences ("2 mods were installed. 1 mod failed to install.").
+- The Tunnel Log colors ZBB's own lines red because they are errors, not because they contain the word "failed" or "Error"; a Playit line that merely mentions an earlier failure is no longer red.
+
+### Fixed
+- Two Java installations that look alike (same version, type and source) could not both be chosen in the wizard or the server's Launch settings: picking the second used the first. The second now shows its path.
 
 ---
 
