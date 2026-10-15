@@ -15,7 +15,7 @@ ZBB is built on strict **decoupled architecture**:
 
 - **UI → API → Core → Services** (one-way). Never the reverse.
 - All UI↔Core communication goes through `AppApi` (`app/api`, ARCHITECTURE "API Seam"): commands and queries with plain-Python inputs/outputs, events via `api.events.subscribe()` with the UI's dispatcher, long work as a `Task`. A ported screen never imports `app.core.logic`, `ZBBManager` or a service to act; new behavior goes into a service and is exposed on the API first. `app/api` never imports a GUI toolkit or `app.ui`.
-- Screens not ported yet (players, settings, properties, wizard) still take `AppApi.legacy_manager` and may import services for read-only/stateless helpers (load properties, list templates, disk usage, file dialogs) until 8b part B.
+- A screen imports from `app.api`, `app.ui` and only the presentation modules of the core (`app_config`, `i18n`, `resources`, `logging_setup`) — never `app.services` or other `app.core` modules, even for reads. Startup glue in `main.py`'s `main()` is the documented exception. `tests/test_api_facade.py::TestBoundaries` enforces it.
 - `ZBBManager` is the single orchestrator for server lifecycle. No other component manages lifecycles.
 - **Headless-ready**: every feature must work without a GUI (preparatory for CLI/REST API).
 - Use `events.subscribe()` — `.on()` is banned.

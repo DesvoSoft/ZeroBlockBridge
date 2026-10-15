@@ -26,7 +26,7 @@ from app.ui.icons import icon
 from app.ui.formatting import engine_name, format_duration, format_memory, memory_tooltip
 
 from app.api import AppApi, NoServerJarError, ServerEvent, ServerRunningError, direct
-from app.core.constants import ASSETS_DIR, LOGS_DIR
+from app.core.resources import assets_dir
 from app.core.logging_setup import configure_logging, log_tk_callback_exception
 from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
@@ -34,21 +34,26 @@ from app.core.app_config import AppConfig
 from app.core.i18n import _, N_
 from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
-from app.core.playit_manager import TunnelStatus, tunnel_status_label
+from app.api.areas import TunnelStatus, tunnel_status_label
 
+ASSETS_DIR = assets_dir()
 _theme_path = ASSETS_DIR / "zbb_theme.json"
 ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
 
 class MCTunnelApp(ctk.CTk):
     def __init__(self):
-        from app.services.settings_manager import SettingsManager
-        from app.core.constants import CONFIG_DIR
-        settings_manager = SettingsManager()
-        settings_manager.set_config_dir(str(CONFIG_DIR))
-        theme = settings_manager.get("theme", "Dark")
-        ctk.set_appearance_mode(theme)
-        
+        # The API (and the core behind it) needs no window; the theme must be
+        # set before the window exists.
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
+        api = AppApi(executor=executor)
+        ctk.set_appearance_mode(api.settings.get("theme", "Dark"))
+
         super().__init__()
+        self.executor = executor
+        self.api = api
+        # Core events, task progress and task completion reach this window
+        # through the Tk main loop.
+        api.set_dispatcher(lambda fn: self.after(0, fn))
         # Startup builds a lot of widgets: stay invisible until they're drawn.
         hide_until_drawn(self, max_wait_ms=1500)
         self._init_window_config()
@@ -89,9 +94,8 @@ class MCTunnelApp(ctk.CTk):
         return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
 
     def _restore_window_geometry(self):
-        from app.services.settings_manager import SettingsManager
         from app.ui.window_state import restorable_geometry
-        settings = SettingsManager()
+        settings = self.api.settings
         geometry = restorable_geometry(
             settings.get("window_geometry"), (AppConfig.MIN_WIDTH, AppConfig.MIN_HEIGHT), self._virtual_screen())
         if geometry:
@@ -101,8 +105,7 @@ class MCTunnelApp(ctk.CTk):
             self.after(50, lambda: self.state("zoomed"))
 
     def _save_window_state(self):
-        from app.services.settings_manager import SettingsManager
-        settings = SettingsManager()
+        settings = self.api.settings
         zoomed = self.state() == "zoomed"
         settings.set("window_zoomed", zoomed)
         if not zoomed:
@@ -164,10 +167,6 @@ class MCTunnelApp(ctk.CTk):
         # be selected to browse and configure it.
         self.viewed_server = None
 
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
-        # Core events, task progress and task completion reach this window
-        # through the Tk main loop.
-        self.api = AppApi(executor=self.executor, dispatcher=lambda fn: self.after(0, fn))
 
         # Handlers that marshal on their own (they are also called from
         # worker threads) take the events on the emitting thread.
@@ -1253,8 +1252,7 @@ class MCTunnelApp(ctk.CTk):
     def on_tunnel_status(self, data):
         if not data: return
         if not data.get("skip_debounce"):
-            from app.core.statemanager import schedule_update as _schedule_tunnel_update
-            if not _schedule_tunnel_update(data):
+            if not self.api.tunnel.status_changed(data):
                 return
         status = data.get("status", TunnelStatus.OFFLINE)
         ip = data.get("ip", None)
@@ -1487,6 +1485,9 @@ class MCTunnelApp(ctk.CTk):
         self.after(100, lambda: self._poll_shutdown(deadline))
 
 def main():
+    # Startup glue (logging, language, single instance) runs before any
+    # window or API exists, so it talks to the core directly.
+    from app.core.constants import LOGS_DIR
     log_path = configure_logging(LOGS_DIR)
     logger.info("ZeroBlockBridge %s starting (log file: %s)", AppConfig.APP_VERSION, log_path)
 
