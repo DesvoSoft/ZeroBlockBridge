@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Settings tabs and theme, console tabs, player filters, Modrinth sort order, the restart schedule mode and the property impact hints show in the chosen language.
 
 ### Changed
-- Internal: a UI-independent API (`app/api`) now sits between the screens and the core, so the upcoming Qt interface and today's one share the same tested code. Every screen uses it (main window, Mods, Players, Settings, creation wizard, server properties); nothing changes on screen.
+- Internal: a UI-independent API (`app/api`) now sits between the screens and the core, so the upcoming Qt interface and today's one share the same tested code. The main window, Mods, Players, Settings, the creation wizard and server properties use it; nothing changes on screen.
 - Deleting or uninstalling a mod/plugin only ever removes a file directly inside that server's `mods/` or `plugins/` folder: a damaged `installed_mods.json` entry can no longer point a delete elsewhere. Deleting a server refuses a name that isn't a plain folder name.
 - The mod auto-install result reads as full sentences ("2 mods were installed. 1 mod failed to install.").
 - The Tunnel Log colors ZBB's own error lines red because they are marked as errors, not because they contain the word "failed" or "Error", so they stay red in Spanish.

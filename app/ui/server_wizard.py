@@ -199,7 +199,9 @@ class ServerWizard(ZBBToplevel):
         self.grab_set()
 
     def destroy(self):
-        self._versions_listener.cancel()
+        listener = getattr(self, "_versions_listener", None)  # absent if __init__ failed early
+        if listener is not None:
+            listener.cancel()
         super().destroy()
 
     def update_header(self, title):

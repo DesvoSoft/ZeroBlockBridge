@@ -53,8 +53,8 @@ class ServerPropertiesEditor(ZBBToplevel):
 
         self.server_name = server_name
         self.api = api
-        self.config = api.config
-        self.properties = self.config.properties(server_name)
+        self.server_config = api.config
+        self.properties = self.server_config.properties(server_name)
         
         # Shared Fonts
         self.font_bold = AppConfig.FONT_LABEL
@@ -63,7 +63,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         
         # Layout: header / [running banner] / tabs / buttons
         self.grid_columnconfigure(0, weight=1)
-        meta = self.config.meta(server_name)
+        meta = self.server_config.meta(server_name)
         engine = f"{engine_name(meta.get('type'))} {meta.get('version', '')}".strip()
         header, _, _ = dialog_header(self, "Server Properties", f"{server_name} · {engine}")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 0))
@@ -406,7 +406,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.after(60_000, self._refresh_backup_countdown)
 
     def setup_automation_tab(self):
-        schedule = self.config.restart_schedule(self.server_name)
+        schedule = self.server_config.restart_schedule(self.server_name)
         
         card = self.create_section_frame(self.frame_automation, "Automated Restarts")
 
@@ -488,11 +488,11 @@ class ServerPropertiesEditor(ZBBToplevel):
                 interval = int(self.entry_interval.get())
             except ValueError:
                 logger.warning("Invalid interval input, using default 6")
-            self.config.set_restart_schedule(self.server_name, enabled, interval_hours=interval,
+            self.server_config.set_restart_schedule(self.server_name, enabled, interval_hours=interval,
                                              backup_on_restart=backup)
         else:
             time_val = self.entry_time.get()
-            self.config.set_restart_schedule(self.server_name, enabled, restart_time=time_val,
+            self.server_config.set_restart_schedule(self.server_name, enabled, restart_time=time_val,
                                              backup_on_restart=backup)
 
         # Save auto-backup config
@@ -691,7 +691,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         
         vcmd = (self.register(self.validate_int), '%P')
         self.entry_ram = ctk.CTkEntry(ram_ctrl, height=28, validate="key", validatecommand=vcmd)
-        self.entry_ram.insert(0, str(self.config.ram_mb(self.server_name)))
+        self.entry_ram.insert(0, str(self.server_config.ram_mb(self.server_name)))
         self.entry_ram.pack(fill="x")
 
         # 3. Gameplay Section
@@ -732,7 +732,7 @@ class ServerPropertiesEditor(ZBBToplevel):
                 text=text, text_color=colors.get(kind, AppConfig.COLOR_TEXT_GRAY))
 
     def _on_import_mrpack(self):
-        meta = self.config.meta(self.server_name)
+        meta = self.server_config.meta(self.server_name)
         loader = meta.get("type", "vanilla")
         if loader in (None, "vanilla"):
             ZBBDialog.info(
@@ -761,7 +761,7 @@ class ServerPropertiesEditor(ZBBToplevel):
 
         def _import():
             try:
-                summary = self.config.import_modpack(
+                summary = self.server_config.import_modpack(
                     self.server_name, mrpack_path,
                     on_status=lambda msg: self.after(0, lambda m=msg: self._set_mrpack_status(m)),
                 )
@@ -814,7 +814,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             filetypes=[("Images", "*.png;*.jpg;*.jpeg")]
         )
         if file_path:
-            self.config.set_icon(self.server_name, file_path)
+            self.server_config.set_icon(self.server_name, file_path)
 
     def _update_motd_preview(self, event=None):
         text = self.entry_motd.get()
@@ -846,7 +846,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             
             try:
                 ram = int(ram_input)
-                self.config.set_ram_mb(self.server_name, ram)
+                self.server_config.set_ram_mb(self.server_name, ram)
             except ValueError:
                 logger.warning("Invalid RAM input: %s", ram_input)
 
@@ -871,7 +871,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             elif w_type == "dropdown":
                 new_props[key] = widget.get()
                 
-        self.config.save_properties(self.server_name, new_props)
+        self.server_config.save_properties(self.server_name, new_props)
         if "Launch" in self.loaded_tabs:
             self.save_launch_settings()
         self.destroy()
@@ -901,7 +901,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self._java_label_to_path = {"Auto-Detect": "auto"}
         self._java_path_to_label = {"auto": "Auto-Detect"}
 
-        launch = self.config.launch_settings(self.server_name)
+        launch = self.server_config.launch_settings(self.server_name)
 
         saved_path = launch.java_path
         # Placeholder mapping so a previously saved path stays selectable
@@ -1000,5 +1000,5 @@ class ServerPropertiesEditor(ZBBToplevel):
     def save_launch_settings(self):
         label = self.var_java_path.get()
         path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-        self.config.save_launch_settings(self.server_name, LaunchSettings(
+        self.server_config.save_launch_settings(self.server_name, LaunchSettings(
             path, self.var_use_aikars.get(), self.entry_jvm_flags.get().strip()))

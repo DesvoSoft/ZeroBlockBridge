@@ -361,3 +361,22 @@ class TestPropertyCatalog:
                 for key in keys:
                     assert SETTINGS_METADATA[key]["desc"]
                     assert property_label(key)
+
+
+class TestAreasWithoutManager:
+    """Review nit: an area built without the manager failed with
+    AttributeError on None; it now says what is missing."""
+
+    @pytest.mark.parametrize("call", [
+        lambda: JavaApi().managed(), lambda: JavaApi().purge(21), lambda: JavaApi().purge_unused(),
+        lambda: SettingsApi(MagicMock()).reload_notifications(), lambda: StorageApi().purge_crash_reports(),
+    ])
+    def test_clear_error(self, call):
+        with pytest.raises(RuntimeError, match="needs the ZBBManager"):
+            call()
+
+    def test_snapshot_fields_by_name(self):
+        orch = MagicMock()
+        orch.online_mode.return_value, orch.whitelist_enabled.return_value = True, False
+        snap = PlayersApi(orch).snapshot("srv")
+        assert snap.online_mode is True and snap.whitelist_enabled is False

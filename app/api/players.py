@@ -32,9 +32,9 @@ class PlayersApi:
 
     def snapshot(self, server_name: str) -> PlayersSnapshot:
         p = self._players
-        return PlayersSnapshot(p.roster(server_name), p.online_mode(server_name),
-                               p.whitelist_enabled(server_name), p.is_live(server_name),
-                               p.default_op_level(server_name))
+        return PlayersSnapshot(roster=p.roster(server_name), online_mode=p.online_mode(server_name),
+                               whitelist_enabled=p.whitelist_enabled(server_name),
+                               live=p.is_live(server_name), default_op_level=p.default_op_level(server_name))
 
     def set_whitelist_enabled(self, server_name: str, enabled: bool):
         return self._players.set_whitelist_enabled(server_name, enabled)

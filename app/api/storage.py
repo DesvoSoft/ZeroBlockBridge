@@ -106,6 +106,8 @@ class StorageApi:
 
     def purge_crash_reports(self) -> int:
         """Delete every server's crash reports; returns how many folders had some."""
+        if self._manager is None:
+            raise RuntimeError("StorageApi.purge_crash_reports needs the ZBBManager: build it with StorageApi(manager)")
         return self._manager.purge_crash_reports()
 
     @staticmethod

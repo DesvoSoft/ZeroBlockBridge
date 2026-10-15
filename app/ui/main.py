@@ -160,6 +160,8 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_ram.pack(side="right", padx=(5, 5))
 
     def _init_state_variables(self):
+        # Runs after __init__ set the Tk dispatcher: every subscription below
+        # (and every task) delivers through the main loop.
         self.claim_url = None
         self.server_items = {}
         # The server shown in the dashboard/tabs. Only one server runs at a
