@@ -6,6 +6,8 @@ folder, so a stale or tampered ``installed_mods.json`` entry, or a path
 handed over by a UI, can never remove something else.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import shutil

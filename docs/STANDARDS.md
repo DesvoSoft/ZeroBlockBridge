@@ -42,6 +42,7 @@ ZBB is built on strict **decoupled architecture**:
 - All imports at **module top** (PEP 8). Inline imports only to break confirmed circular dependencies — document why with a comment.
 - No unused imports. `flake8 --select=F401` must return zero violations.
 - `from typing import Dict, List` is dead weight in Python 3.9+. Use `dict[str, ...]` and `list[...]`.
+- CI and release builds run **Python 3.11**, which evaluates annotations when a function is defined; a 3.14 dev machine defers them (PEP 649) and hides mistakes such as a method named `list` breaking a later `-> list[...]` in the same class. Modules in `app/api` start with `from __future__ import annotations`, and `tests/test_api_annotations.py` evaluates every annotation there so the error shows up locally too.
 
 ### 2.2 Exceptions
 

@@ -1,5 +1,7 @@
 """The smaller areas of the API: console, tunnel, players, backups, Java, settings."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional

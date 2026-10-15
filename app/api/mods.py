@@ -2,6 +2,8 @@
 server's content files. Every method blocks (network or disk): call it
 off the UI thread."""
 
+from __future__ import annotations
+
 import os
 import threading
 from typing import Callable, Optional

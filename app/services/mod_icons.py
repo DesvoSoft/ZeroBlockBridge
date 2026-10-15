@@ -4,6 +4,8 @@ Returns PIL images; wrapping them for a toolkit (CTkImage, QPixmap) and any
 in-memory cache of those wrappers belongs to the UI.
 """
 
+from __future__ import annotations
+
 import hashlib
 import io
 import logging

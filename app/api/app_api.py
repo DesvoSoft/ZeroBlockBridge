@@ -5,6 +5,8 @@ nothing here imports a GUI toolkit. A UI creates one AppApi, sets the event
 dispatcher for its main loop, and calls the areas below.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 from typing import Optional

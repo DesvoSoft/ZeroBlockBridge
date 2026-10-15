@@ -1,5 +1,7 @@
 """Servers: list, inspect, create, start/stop, delete, import/export."""
 
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass
