@@ -8,6 +8,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Spanish** — the setup, update and uninstall dialogs have a language picker (English / Español, defaulting to the Windows display language) and are fully translated, as are the Minecraft EULA prompt, the close-to-tray dialog, the tray menu and its notification, and the "already running" message. The choice is remembered for the install (or the portable folder) and can be changed in Settings → General → Language (takes effect after a restart). The rest of the app follows as each screen is rebuilt.
+- Uptime, "last seen", RAM, file sizes, backup dates and Modrinth download counts use the chosen language's number and date format (e.g. `2,3 GB`, `hace 5 min`, `02 may 2026`); backup dates no longer depend on the system locale.
+- Translation tooling: gettext catalogs in `assets/locales`, `tools/i18n.py` (Babel) to extract, update and compile them.
+
 ---
 
 ## [2.3.0] — 2026-10-15
