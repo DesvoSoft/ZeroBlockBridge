@@ -77,7 +77,7 @@ The layer every UI talks to: the CustomTkinter screens today, the Qt screens of 
 
 | Area | Commands | Queries |
 |------|----------|---------|
-| `servers` | `select`, `start`, `stop`, `delete` (refuses the running server and any name that isn't one folder), `export`, `import_pack`, `import_folder` (needs a `.jar`), `update_meta`, `request_mod_install`, `create(config) → Task` | `list`, `exists`, `info(name) → ServerInfo` (engine, version, loader, max players), `is_running`, `active`, `running_server`, `memory() → MemorySample`, `creations()` |
+| `servers` | `select`, `start`, `stop`, `delete` (refuses the running server and any name that isn't one folder), `export`, `import_pack`, `import_folder` (needs a `.jar`), `update_meta`, `request_mod_install`, `create(config) → Task` | `list`, `exists`, `valid_name`, `info(name) → ServerInfo` (engine, version, loader, max players), `is_running`, `active`, `running_server`, `memory() → MemorySample`, `creations()` |
 | `console` | `send(cmd) → bool` (False when nothing runs; the sanitizer stays in `ServerOrchestrator`) | lines arrive as `CONSOLE_LINE` events |
 | `tunnel` | `start`, `stop`, `reset(mode)`, `link(code)` | `is_linked`, `is_running`; status via `TUNNEL_STATUS` |
 | `players` | `PlayerOrchestrator` as is (`roster`, `whitelist_add`, `op`, `ban`, `kick`…) — it already takes and returns plain values | |
@@ -103,7 +103,7 @@ Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (ca
 
 ### Long operations: `Task`
 
-`servers.create(config)` returns a `Task` (`app/api/tasks.py`) instead of blocking: `on_progress(cb)` receives `(fraction, text)`, `on_done(cb)` the finished task (`result()` is a `ProvisionResult`; a crash becomes `ok=False` with the message, so a progress dialog always closes), `cancel()` sets the same `threading.Event` provisioning already polls between steps and download chunks (a running loader installer is killed, the attempt rolled back). Callbacks go through the dispatcher. `api.tasks.cancel_all()` is what the window calls on exit.
+`servers.create(config)` returns a `Task` (`app/api/tasks.py`) instead of blocking: `on_progress(cb)` receives `(fraction, text)`, `on_done(cb)` the finished task (`result()` is a `ProvisionResult`; a crash becomes `ok=False` with the message, so a progress dialog always closes), `cancel()` sets the same `threading.Event` provisioning already polls between steps and download chunks (a running loader installer is killed, the attempt rolled back). Callbacks go through the dispatcher; a task always finishes — a job that raises, an executor that refuses or drops it, or a dispatcher whose window is gone (the job keeps running) all end it with `on_done`. `api.tasks.cancel_all()` is what the window calls on exit.
 
 ### Inventory: what the screens called (2026-10-15, before the seam)
 
