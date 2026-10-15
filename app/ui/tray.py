@@ -7,6 +7,7 @@ import logging
 import sys
 
 from app.core.constants import ASSETS_DIR
+from app.core.i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,9 @@ class TrayIcon:
 
         image = Image.open(ASSETS_DIR / "logo.png")
         menu = pystray.Menu(
-            pystray.MenuItem("Open ZeroBlockBridge", self._marshal(self._on_open), default=True),
+            pystray.MenuItem(_("Open ZeroBlockBridge"), self._marshal(self._on_open), default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Exit", self._marshal(self._on_exit)),
+            pystray.MenuItem(_("Exit"), self._marshal(self._on_exit)),
         )
         title = "ZeroBlockBridge" + (f" - {status}" if status else "")
         self._icon = pystray.Icon("ZeroBlockBridge", image, title, menu)
@@ -75,8 +76,8 @@ class TrayIcon:
         if not self._notified:
             self._notified = True
             try:
-                icon.notify("ZeroBlockBridge is still running here. "
-                            "Right-click the icon to open or exit.", "ZeroBlockBridge")
+                icon.notify(_("ZeroBlockBridge is still running here. "
+                              "Right-click the icon to open or exit."), "ZeroBlockBridge")
             except Exception as e:  # notifications are optional
                 logger.debug("Tray notification failed: %s", e)
 

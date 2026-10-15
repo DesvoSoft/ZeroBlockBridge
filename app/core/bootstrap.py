@@ -23,6 +23,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core import i18n
 from app.core.app_config import AppConfig
 from app.core.atomic_io import atomic_write_json
 from app.core.fs_links import create_junction, is_link, link_target, remove_link
@@ -42,15 +43,19 @@ MODE_MANUAL = "manual"        # user chose to keep running a loose exe
 
 # Files left behind in config/ that must never be carried over.
 _CONFIG_SKIP = {".zbb.lock", "versions_cache.json"}
+# The main app's settings (SettingsManager), relative to the data dir.
+_SETTINGS_FILE = Path("config") / "zbb_settings.json"
 
 
 @dataclass
 class SetupResult:
     """What the setup dialog decided. `mode` is MODE_INSTALLED, MODE_MANUAL
-    or "portable"; `exe_path` is the installed exe for MODE_INSTALLED."""
+    or "portable"; `exe_path` is the installed exe for MODE_INSTALLED;
+    `language` is the one picked on the first page."""
     mode: str
     data_dir: Path
     exe_path: Path | None = None
+    language: str = i18n.DEFAULT_LANGUAGE
 
 
 def _marker_path() -> Path:
@@ -77,6 +82,75 @@ def read_marker(marker_path: Path | None = None) -> dict:
 def write_marker(data: dict, marker_path: Path | None = None) -> None:
     marker_path = marker_path or _marker_path()
     atomic_write_json(marker_path, data)
+
+
+# ----------------------------------------------------------------------
+# Language
+# ----------------------------------------------------------------------
+# Chosen on the first setup page and stored in the marker (portable: in the
+# data folder's settings, since a portable copy has no marker). The main
+# app keeps its own copy in SettingsManager ("language"); the pre-app
+# dialogs read marker -> settings file -> OS language.
+def _read_settings(data_dir) -> dict | None:
+    """The data folder's settings file as plain JSON (SettingsManager needs
+    app.core.constants). {} when there is none, None when it can't be read."""
+    try:
+        with open(Path(data_dir) / _SETTINGS_FILE, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        logger.warning("Could not read settings in %s: %s", data_dir, e)
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def stored_language(marker: dict) -> str | None:
+    """The language saved for this install: the marker's, else the one in
+    its data folder's settings."""
+    data_dir = marker.get("data_dir")
+    settings = _read_settings(data_dir) if data_dir else None
+    return i18n.first_supported(marker.get("language"), (settings or {}).get("language"))
+
+
+def use_stored_language(marker: dict) -> str:
+    """Translate the pre-app dialogs into the saved language (else the OS's)."""
+    return i18n.set_language(stored_language(marker) or i18n.system_language())
+
+
+def _save_settings_language(data_dir: Path, language: str) -> None:
+    settings = _read_settings(data_dir)
+    if settings is None:
+        return  # unreadable: never overwrite the user's settings to add this
+    atomic_write_json(data_dir / _SETTINGS_FILE, dict(settings, language=language))
+
+
+def _marker_language_for(data_dir: Path, marker_path: Path | None = None) -> str | None:
+    marker = read_marker(marker_path)
+    if marker.get("data_dir") and _same_path(marker["data_dir"], data_dir):
+        return i18n.normalize(marker.get("language"))
+    return None
+
+
+def startup_language(settings, data_dir: Path, marker_path: Path | None = None) -> str:
+    """Main-app start: the saved setting; on the first launch, the language
+    picked during setup (copied into `settings`), else the OS language.
+    `settings` is the SettingsManager. Returns the language in use."""
+    language = i18n.normalize(settings.get("language"))
+    if language is None:
+        language = _marker_language_for(data_dir, marker_path) or i18n.system_language()
+        settings.set("language", language)
+    return i18n.set_language(language)
+
+
+def remember_language(language: str, data_dir: Path, marker_path: Path | None = None) -> None:
+    """Settings > General changed the language: keep the marker in step so
+    the update/uninstall dialogs use it too. Only when the marker belongs to
+    this data folder (a portable copy must not change the installed one)."""
+    marker_path = marker_path or _marker_path()
+    marker = read_marker(marker_path)
+    if marker.get("data_dir") and _same_path(marker["data_dir"], data_dir):
+        write_marker(dict(marker, language=language), marker_path)
 
 
 def is_writable_dir(path: Path) -> bool:
@@ -272,8 +346,9 @@ def _apply_setup(result: SetupResult | None, exe: Path, marker: dict, marker_pat
         return _use(data_dir)
     if result.mode == "portable":
         write_portable_flag(exe.parent)
+        _save_settings_language(exe.parent, result.language)
         return _use(exe.parent)
-    marker = dict(marker, data_dir=str(result.data_dir), mode=result.mode)
+    marker = dict(marker, data_dir=str(result.data_dir), mode=result.mode, language=result.language)
     if result.mode == MODE_INSTALLED and result.exe_path is not None:
         marker.update(exe_path=str(result.exe_path), version=AppConfig.APP_VERSION)
     write_marker(marker, marker_path)
@@ -343,6 +418,7 @@ def resolve_data_dir() -> Path:
 
     marker_path = _marker_path()
     marker = read_marker(marker_path)
+    use_stored_language(marker)
     data_dir = Path(marker["data_dir"]) if marker.get("data_dir") else None
     if data_dir is not None and is_writable_dir(data_dir):
         if looks_like_zbb_data(exe_dir) and not _same_path(exe_dir, data_dir) and _is_app_folder(data_dir):

@@ -1,19 +1,23 @@
 """Small pure text formatters for live UI readouts (headless-testable)."""
 
+import datetime
+
+from app.core.i18n import _, format_number
+
 
 def format_duration(seconds: float) -> str:
     """Compact elapsed time: '45s', '12m', '1h 20m', '2d 3h'."""
     seconds = max(0, int(seconds))
     if seconds < 60:
-        return f"{seconds}s"
+        return _("{seconds}s").format(seconds=seconds)
     minutes = seconds // 60
     if minutes < 60:
-        return f"{minutes}m"
+        return _("{minutes}m").format(minutes=minutes)
     hours, minutes = divmod(minutes, 60)
     if hours < 24:
-        return f"{hours}h {minutes}m"
+        return _("{hours}h {minutes}m").format(hours=hours, minutes=minutes)
     days, hours = divmod(hours, 24)
-    return f"{days}d {hours}h"
+    return _("{days}d {hours}h").format(days=days, hours=hours)
 
 
 def clamp_lines(text: str, measure, width: int, max_lines: int = 2, ellipsis: str = "…") -> str:
@@ -45,26 +49,25 @@ def clamp_lines(text: str, measure, width: int, max_lines: int = 2, ellipsis: st
 
 def format_relative(iso_timestamp, now) -> str:
     """'just now', '5m ago', '3h ago', '2d ago', or the date for older times."""
-    import datetime
     try:
         then = datetime.datetime.fromisoformat(iso_timestamp)
     except (TypeError, ValueError):
         return ""
     seconds = (now - then).total_seconds()
     if seconds < 60:
-        return "just now"
+        return _("just now")
     if seconds < 3600:
-        return f"{int(seconds // 60)}m ago"
+        return _("{minutes}m ago").format(minutes=int(seconds // 60))
     if seconds < 86400:
-        return f"{int(seconds // 3600)}h ago"
+        return _("{hours}h ago").format(hours=int(seconds // 3600))
     if seconds < 30 * 86400:
-        return f"{int(seconds // 86400)}d ago"
+        return _("{days}d ago").format(days=int(seconds // 86400))
     return then.strftime("%Y-%m-%d")
 
 
 def format_memory(used_bytes: int) -> str:
     """'RAM 2.3 GB' — resident memory of the server process."""
-    return f"RAM {used_bytes / (1024 ** 3):.1f} GB"
+    return _("RAM {value} GB").format(value=format_number(used_bytes / (1024 ** 3), 1))
 
 
 def memory_tooltip(limit_mb: int) -> str:

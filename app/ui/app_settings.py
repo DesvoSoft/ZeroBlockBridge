@@ -16,7 +16,10 @@ from pathlib import Path
 
 import customtkinter as ctk
 
+from app.core import i18n
 from app.core.app_config import AppConfig
+from app.core.bootstrap import remember_language
+from app.core.i18n import _
 from app.core.constants import BASE_DIR, JDK_CACHE_DIR, LOGS_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
 from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
 from app.services.disk_usage import dir_size, format_size
@@ -157,8 +160,28 @@ class AppSettingsDialog(ZBBToplevel):
         self._theme_selector.set(self._settings.get("theme", "Dark"))
         self._theme_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
 
+        self._build_language_card(scroll)
         self._build_close_behavior_card(scroll)
         self._build_command_safety_card(scroll)
+
+    def _build_language_card(self, parent):
+        card = self._card(parent, _("Language"),
+                          _("Takes effect the next time you open ZeroBlockBridge."))
+        self._language_selector = ctk.CTkSegmentedButton(
+            card, values=list(i18n.LANGUAGES.values()), command=self._on_language_selected,
+            height=32, font=AppConfig.FONT_CAPTION,
+        )
+        saved = i18n.normalize(self._settings.get("language")) or i18n.get_language()
+        self._language_selector.set(i18n.LANGUAGES[saved])
+        self._language_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
+
+    def _on_language_selected(self, name: str):
+        code = i18n.code_for_name(name)
+        if code is None or code == self._settings.get("language"):
+            return
+        self._settings.set("language", code)
+        remember_language(code, BASE_DIR)
+        Toast.show(self, _("Restart ZeroBlockBridge to use the new language."), toast_type="info")
 
     # Labels for the "close_action" setting, in display order.
     _CLOSE_LABELS = (("ask", "Ask every time"), ("tray", "Minimize to tray"), ("exit", "Exit"))

@@ -6,6 +6,8 @@ server dirs can hold tens of thousands of files).
 import logging
 from pathlib import Path
 
+from app.core import i18n
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,12 +29,5 @@ def dir_size(path: Path) -> int:
 
 
 def format_size(num_bytes: int) -> str:
-    """Human-readable size: 1234 -> '1.2 KB', 0 -> '0 B'."""
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            if unit == "B":
-                return f"{int(size)} {unit}"
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"
+    """Human-readable size: 1234 -> '1.2 KB', 0 -> '0 B' (locale decimals)."""
+    return i18n.format_size(num_bytes)

@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 from typing import Callable
 from app.core.app_config import AppConfig
+from app.core.i18n import _
 from app.core.constants import SERVERS_DIR
 from app.ui.formatting import engine_name
 from app.ui.icons import icon
@@ -1131,7 +1132,7 @@ class EulaDialog(ZBBToplevel):
     def __init__(self, master):
         super().__init__(master)
         self.accepted = False
-        self.title("Minecraft EULA")
+        self.title(_("Minecraft EULA"))
         self.resizable(False, False)
         self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.protocol("WM_DELETE_WINDOW", self._decline)
@@ -1140,33 +1141,33 @@ class EulaDialog(ZBBToplevel):
         frame.pack(padx=30, pady=25, fill="both", expand=True)
 
         ctk.CTkLabel(
-            frame, text="Minecraft End User License Agreement",
+            frame, text=_("Minecraft End User License Agreement"),
             font=AppConfig.FONT_HEADING,
         ).pack(anchor="w", pady=(0, 12))
 
         ctk.CTkLabel(
             frame,
-            text=(
-                "Zero Block Bridge downloads and runs Minecraft server software.\n\n"
-                "Running a Minecraft server requires accepting Mojang's End User\n"
-                "License Agreement (EULA). If you accept, ZBB will automatically\n"
-                "set eula=true for the servers you create.\n\n"
-                "If you decline, the application will close."
-            ),
-            font=AppConfig.FONT_BODY, justify="left",
+            text="\n\n".join((
+                _("Zero Block Bridge downloads and runs Minecraft server software."),
+                _("Running a Minecraft server requires accepting Mojang's End User License "
+                  "Agreement (EULA). If you accept, ZBB will automatically set eula=true for "
+                  "the servers you create."),
+                _("If you decline, the application will close."),
+            )),
+            font=AppConfig.FONT_BODY, justify="left", wraplength=440,
         ).pack(anchor="w", pady=(0, 10))
 
         link = ctk.CTkLabel(
-            frame, text="Read the Minecraft EULA (aka.ms/MinecraftEULA)",
+            frame, text=_("Read the Minecraft EULA (aka.ms/MinecraftEULA)"),
             font=AppConfig.FONT_BODY, text_color=AppConfig.COLOR_LINK, cursor="hand2",
         )
         link.pack(anchor="w", pady=(0, 18))
         link.bind("<Button-1>", self._open_eula)
 
-        buttons, _, _ = dialog_buttons(
-            frame, "I Accept the EULA", self._accept, "Decline", self._decline,
+        buttons = dialog_buttons(
+            frame, _("I Accept the EULA"), self._accept, _("Decline"), self._decline,
             primary_width=180, secondary_width=120,
-        )
+        )[0]
         buttons.pack(fill="x")
 
         apply_rounded_corners(self)

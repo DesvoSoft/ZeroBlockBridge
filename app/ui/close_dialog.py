@@ -5,6 +5,7 @@ import logging
 import customtkinter as ctk
 
 from app.core.app_config import AppConfig
+from app.core.i18n import _
 from app.ui.icons import icon
 from app.ui.tray import CLOSE_EXIT, CLOSE_TRAY
 from app.ui.ui_components import ZBBToplevel, center_on_parent, dialog_buttons
@@ -15,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 def close_message(running: list) -> str:
     """Body text; `running` names what exiting would stop (e.g. a server)."""
-    text = ("Keep ZeroBlockBridge running in the system tray, or exit it completely?")
+    text = _("Keep ZeroBlockBridge running in the system tray, or exit it completely?")
     if running:
-        text += "\n\nExiting will stop: " + ", ".join(running) + "."
+        text += "\n\n" + _("Exiting will stop: {items}.").format(items=", ".join(running))
     return text
 
 
@@ -25,7 +26,7 @@ class CloseChoiceDialog(ZBBToplevel):
     def __init__(self, parent, running: list):
         super().__init__(parent)
         self.choice = None  # CLOSE_TRAY / CLOSE_EXIT, None when cancelled
-        self.title("Close ZeroBlockBridge")
+        self.title(_("Close ZeroBlockBridge"))
         self.resizable(False, False)
         self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.protocol("WM_DELETE_WINDOW", self._cancel)
@@ -37,16 +38,16 @@ class CloseChoiceDialog(ZBBToplevel):
         header.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(header, text="", image=icon("dot", 18, AppConfig.COLOR_BTN_PRIMARY), width=18
                      ).pack(side="left", padx=(0, 8))
-        ctk.CTkLabel(header, text="Close ZeroBlockBridge?", font=AppConfig.FONT_HEADING_SMALL).pack(side="left")
+        ctk.CTkLabel(header, text=_("Close ZeroBlockBridge?"), font=AppConfig.FONT_HEADING_SMALL).pack(side="left")
         ctk.CTkLabel(frame, text=close_message(running), font=AppConfig.FONT_BODY, justify="left",
                      wraplength=400, anchor="w").pack(anchor="w", fill="x", pady=(0, 12))
-        ctk.CTkCheckBox(frame, text="Don't ask again (change it in Settings > General)",
+        ctk.CTkCheckBox(frame, text=_("Don't ask again (change it in Settings > General)"),
                         variable=self.var_remember, font=AppConfig.FONT_BODY_SMALL,
                         fg_color=AppConfig.COLOR_BTN_PRIMARY, corner_radius=AppConfig.RADIUS_BADGE,
                         ).pack(anchor="w", pady=(0, 16))
 
-        buttons, btn_tray, _ = dialog_buttons(frame, "Minimize to tray", lambda: self._pick(CLOSE_TRAY),
-                                              "Exit", lambda: self._pick(CLOSE_EXIT), primary_width=150)
+        buttons, btn_tray = dialog_buttons(frame, _("Minimize to tray"), lambda: self._pick(CLOSE_TRAY),
+                                           _("Exit"), lambda: self._pick(CLOSE_EXIT), primary_width=150)[:2]
         buttons.pack(fill="x")
         self.bind("<Escape>", lambda e: self._cancel())
 
