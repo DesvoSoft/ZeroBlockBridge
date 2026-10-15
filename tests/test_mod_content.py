@@ -10,7 +10,7 @@ import pytest
 from app.core.fs_links import create_junction
 from app.services import mod_content, mod_install_tracker
 from app.services.mod_content import ModDownloadError, NoCompatibleVersionError, UnsafePathError
-from app.services.server_paths import check_server_name
+from app.services.server_paths import check_server_name, is_valid_server_name
 
 
 @pytest.fixture
@@ -30,13 +30,36 @@ def _jar(folder, name, content=b"jar"):
 
 
 class TestServerName:
-    @pytest.mark.parametrize("name", ["", " ", ".", "..", "a/b", "a\\b", "../x", "C:x", None])
+    @pytest.mark.parametrize("name", [
+        "", " ", ".", "..", "...", "....", ". ", ".. ", " ..", "x.", "x ", "a/b", "a\\b", "../x",
+        "a\nb", "a\x00b", None])
     def test_rejects_anything_but_one_folder_name(self, name):
         with pytest.raises(UnsafePathError):
             check_server_name(name)
+        assert not is_valid_server_name(name)
+
+    @pytest.mark.parametrize("name", ["C:x", "a|b", "what?", "NUL", "con.txt", "COM1"])
+    def test_rejects_windows_only_names_on_windows(self, name, monkeypatch):
+        monkeypatch.setattr("app.services.server_paths.sys.platform", "win32")
+        with pytest.raises(UnsafePathError):
+            check_server_name(name)
+
+    def test_windows_only_rules_do_not_apply_elsewhere(self, monkeypatch):
+        monkeypatch.setattr("app.services.server_paths.sys.platform", "linux")
+        assert check_server_name("a:b") == "a:b"
+        assert check_server_name("con") == "con"
+
+    @pytest.mark.parametrize("name", ["...", "x.", ". "])
+    def test_names_windows_resolves_elsewhere_never_reach_a_delete(self, servers, name):
+        (servers / "x").mkdir()
+        with pytest.raises(UnsafePathError):
+            mod_content.content_dirs(name)
+        assert (servers / "x").exists()
 
     def test_accepts_plain_names(self):
         assert check_server_name("My Server 1.20") == "My Server 1.20"
+        assert check_server_name(".hidden") == ".hidden"
+        assert is_valid_server_name("survival")
 
 
 class TestResolveContentFile:
