@@ -245,11 +245,14 @@ main        ← Production releases only
 |-----------|-----|-----------|
 | 1.x series | `v1.3.0`, `v1.4` | ✅ Released |
 | F11 UI 2.0 + mod deps/update badges | `v2.0.0` | ✅ Released 2026-07-10 |
-| Data directory + explainable safety + pre-update snapshots | next minor | On `dev`, tracked under `[Unreleased]` in `docs/changelog.md` |
+| Data directory + explainable safety + pre-update snapshots | `v2.1.0` | ✅ Released 2026-09-16 |
+| Live status, Players tab, rendering pass | `v2.2.0` | ✅ Released 2026-09-20 |
+| Installer, modpack/world import, close to tray, NeoForge | `v2.3.0` | ✅ Released 2026-10-15 |
+| i18n (Spanish) and Qt UI migration | next | Planned in `docs/ROADMAP.md` |
 
 Release process: `python tools/bump_version.py X.Y.Z`, fill in the changelog section, merge `dev` → `main`, tag `vX.Y.Z` — the build workflow gates on tests and publishes binaries with release notes taken from the changelog.
 
-**Current dev state:** v2.2.0 + unreleased features tracked in `docs/changelog.md` and `docs/ROADMAP.md`. ~1150 tests; every PR passes `tools/qa_gate.py` (§8).
+**Current dev state:** v2.3.0; new work is tracked under `[Unreleased]` in `docs/changelog.md` and in `docs/ROADMAP.md`. ~1200 tests; every PR passes `tools/qa_gate.py` (§8).
 
 ---
 
