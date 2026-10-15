@@ -128,6 +128,12 @@ class JavaSummary:
         return self.source == "PORTABLE"
 
 
+def _require(manager, what: str):
+    if manager is None:
+        raise RuntimeError(f"{what} needs the ZBBManager: build this area with manager=...")
+    return manager
+
+
 class JavaApi:
     def __init__(self, detector_factory=JavaDetector, manager=None):
         self._detector_factory = detector_factory
@@ -154,14 +160,14 @@ class JavaApi:
     # -- runtimes ZBB downloaded (.zbb_cache/jdks) -------------------------
     def managed(self) -> list:
         """Dicts: version, size_bytes."""
-        return self._manager.list_managed_jdks()
+        return _require(self._manager, "JavaApi.managed").list_managed_jdks()
 
     def purge(self, version: int) -> bool:
         """False while a server runs."""
-        return bool(self._manager.purge_jdk(version))
+        return bool(_require(self._manager, "JavaApi.purge").purge_jdk(version))
 
     def purge_unused(self) -> bool:
-        return bool(self._manager.purge_unused_jdks())
+        return bool(_require(self._manager, "JavaApi.purge_unused").purge_unused_jdks())
 
 
 class SettingsApi:
@@ -193,7 +199,7 @@ class SettingsApi:
 
     def reload_notifications(self) -> None:
         """Apply saved Discord webhook settings to the running app."""
-        self._manager.reload_discord_webhook()
+        _require(self._manager, "SettingsApi.reload_notifications").reload_discord_webhook()
 
     @staticmethod
     def send_test_notification(url: str, username: str = "", avatar_url: str = "") -> tuple:

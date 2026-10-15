@@ -14,7 +14,7 @@ import customtkinter as ctk
 from app.core.app_config import AppConfig
 from app.core import i18n
 from app.core.i18n import _, N_
-from app.api import ServerEvent
+from app.api import ServerEvent, direct
 from app.api.players import OP_LEVELS
 from app.ui.formatting import format_duration, format_relative
 from app.ui.icons import icon
@@ -79,7 +79,7 @@ class PlayersPanel(ctk.CTkFrame):
 
         # _on_server_event marshals itself, so take events on the emitting thread.
         self._subscriptions = [
-            api.events.subscribe(event, self._on_server_event, dispatcher=lambda fn: fn())
+            api.events.subscribe(event, self._on_server_event, dispatcher=direct)
             for event in (ServerEvent.PLAYER_LIST, ServerEvent.READY, ServerEvent.STOPPED)]
         self.refresh()
 

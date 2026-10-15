@@ -119,7 +119,7 @@ Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (ca
 | `players_panel.py` | `zbb.players`, `EventBus` subscribe/unsubscribe, `fetch_head` + PIL decoding | API (part B) |
 | `server_wizard.py` | `VersionManager` (+ callbacks), `JavaDetector`, `get_required_java`, `template_manager`, `content_import`, `PROPERTY_DEFAULTS`, `SERVERS_DIR`, `psutil` | API (part B) |
 
-`AppApi.legacy_manager`, the bridge for unported screens in part A, is gone. Still outside the API: `ui_components.ServerListItem` reads the server icon file from `SERVERS_DIR` (display only).
+`AppApi.legacy_manager`, the bridge for unported screens in part A, is gone. The six screens above are held to API-only imports by `TestBoundaries`. Shared widget modules are not ported yet and still read the core directly, display only: `ui_components` (`ServerListItem` reads the server icon from `SERVERS_DIR` and the engine via `logic.get_server_meta`; console coloring uses `console_line`) and `tray` (`constants.ASSETS_DIR` for the icon). They move with their Qt counterparts in 8d.
 
 ### Mod files behind a guard
 
