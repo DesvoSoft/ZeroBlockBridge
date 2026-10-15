@@ -9,13 +9,13 @@ Disk walks and Java probing run in daemon threads -- UI updates via
 `self.after(0, ...)`.
 """
 import logging
-import subprocess
 import sys
 import threading
 from pathlib import Path
 
 import customtkinter as ctk
 
+from app.api.storage import open_in_file_manager
 from app.core import i18n
 from app.core.app_config import AppConfig
 from app.core.bootstrap import remember_language
@@ -776,14 +776,7 @@ class AppSettingsDialog(ZBBToplevel):
 
     @staticmethod
     def _open_dir(directory: Path):
-        directory.mkdir(parents=True, exist_ok=True)
-        path = str(directory)
-        if sys.platform == "win32":
-            subprocess.run(["explorer", path], check=False)
-        elif sys.platform == "darwin":
-            subprocess.run(["open", path], check=False)
-        else:
-            subprocess.run(["xdg-open", path], check=False)
+        open_in_file_manager(directory, create=True)
 
     def _storage_categories(self) -> list:
         """(label, size_bytes) pairs -- runs on a worker thread."""

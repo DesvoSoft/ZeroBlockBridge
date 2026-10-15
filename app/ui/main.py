@@ -6,7 +6,6 @@ import threading
 import concurrent.futures
 import webbrowser
 import time
-import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +24,16 @@ from app.ui.ui_components import ConsoleWidget, TunnelLogWidget, ServerListItem,
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
 from app.ui.formatting import engine_name, format_duration, format_memory, memory_tooltip
-from app.services.server_properties import load_server_properties
 
-import app.core.logic as logic
-from app.core.constants import SERVERS_DIR, ASSETS_DIR, LOGS_DIR
+from app.api import AppApi, NoServerJarError, ServerEvent, ServerRunningError, direct
+from app.core.constants import ASSETS_DIR, LOGS_DIR
 from app.core.logging_setup import configure_logging, log_tk_callback_exception
 from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
-from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
 from app.core.i18n import _, N_
 from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
-from app.core.core import ZBBManager
 from app.core.playit_manager import TunnelStatus, tunnel_status_label
 
 _theme_path = ASSETS_DIR / "zbb_theme.json"
@@ -168,23 +164,31 @@ class MCTunnelApp(ctk.CTk):
         # be selected to browse and configure it.
         self.viewed_server = None
 
-        self.events = EventBus()
-        self.zbb_manager = ZBBManager(self.events)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix='UI_Worker')
-        
-        self.events.subscribe(ServerEvent.CONSOLE_LINE, self.update_console)
-        self.events.subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
-        self.events.subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, self.update_tunnel_console)
-        self.events.subscribe(ServerEvent.TUNNEL_STATUS, self.on_tunnel_status)
-        self.events.subscribe(ServerEvent.READY, self.on_server_ready)
-        self.events.subscribe(ServerEvent.STARTING, self.on_server_starting)
-        self.events.subscribe(ServerEvent.STOPPED, self.on_server_stopped)
-        self.events.subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
-        # Toast notification for lag spikes
-        self.events.subscribe(ServerEvent.LAG_SPIKE, lambda d: self.after(0, lambda: (
-            self.update_console("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM."),
-            Toast.show(self, "Lag spike threshold exceeded", toast_type="warning"),
-        )))
+        # Core events, task progress and task completion reach this window
+        # through the Tk main loop.
+        self.api = AppApi(executor=self.executor, dispatcher=lambda fn: self.after(0, fn))
+        self.events = self.api.bus
+        # Screens not yet ported to the API (players, settings, properties)
+        # still take the manager; see docs/ROADMAP.md 8b.
+        self.zbb_manager = self.api.legacy_manager
+
+        # Handlers that marshal on their own (they are also called from
+        # worker threads) take the events on the emitting thread.
+        subscribe = self.api.events.subscribe
+        subscribe(ServerEvent.CONSOLE_LINE, self._log_console_line)
+        subscribe(ServerEvent.NOTIFICATION, self._handle_notification)
+        subscribe(ServerEvent.TUNNEL_CONSOLE_LINE, self._log_tunnel_line)
+        subscribe(ServerEvent.TUNNEL_STATUS, self.on_tunnel_status, dispatcher=direct)
+        subscribe(ServerEvent.READY, self.on_server_ready, dispatcher=direct)
+        subscribe(ServerEvent.STARTING, self.on_server_starting, dispatcher=direct)
+        subscribe(ServerEvent.STOPPED, self.on_server_stopped, dispatcher=direct)
+        subscribe(ServerEvent.PLAYER_COUNT, self.on_player_count_update)
+        subscribe(ServerEvent.LAG_SPIKE, self._on_lag_spike)
+
+    def _on_lag_spike(self, _data=None):
+        self.server_console.log("[Watchdog] Lag threshold exceeded. Consider reducing world size or adding more RAM.")
+        Toast.show(self, "Lag spike threshold exceeded", toast_type="warning")
 
     def _build_layout(self):
         self._build_sidebar()
@@ -515,8 +519,7 @@ class MCTunnelApp(ctk.CTk):
             self._ensure_modrinth_browser()
         elif self.console_tabs.get() == "Players":
             self._ensure_players_panel()
-        from app.services.settings_manager import SettingsManager
-        SettingsManager().set("last_console_tab", self.console_tabs.get())
+        self.api.settings.set("last_console_tab", self.console_tabs.get())
 
     def _ensure_players_panel(self):
         if hasattr(self, "players_panel"):
@@ -540,7 +543,7 @@ class MCTunnelApp(ctk.CTk):
         self.modrinth_browser = ModrinthBrowser(
             self.console_tabs.tab("Mods"),
             get_server_info=self._get_current_server_info,
-            create_snapshot=self.zbb_manager.create_pre_update_snapshot,
+            mods=self.api.mods,
             is_server_running=self._viewing_running_server,
             on_installed_count=lambda n: self._refresh_tab_labels(installed=n),
         )
@@ -553,7 +556,7 @@ class MCTunnelApp(ctk.CTk):
     def _init_background_services(self):
         self.check_java_startup()
         self.load_servers()
-        self.zbb_manager.bootstrap()
+        self.api.start_background_services()
         # Pre-warm now handled by ZBBManager.bootstrap() → core.py
 
     def _build_console_search_bar(self, parent, console_attr):
@@ -599,7 +602,7 @@ class MCTunnelApp(ctk.CTk):
         ToolTip(filter_menu, log_class.FILTER_HINT)
 
     def send_server_command(self, event=None):
-        if not self.zbb_manager.is_running():
+        if not self.api.servers.is_running():
             self.server_console.log("[UI] Server is not running.")
             return
         cmd = self.entry_console.get()
@@ -607,7 +610,7 @@ class MCTunnelApp(ctk.CTk):
         # Safety check lives in ServerOrchestrator.send_command -- it owns
         # the single source of truth for blocked-command feedback (console
         # line + toast via EventBus), so this stays a thin passthrough.
-        self.zbb_manager.send_command(cmd)
+        self.api.console.send(cmd)
         if not self._command_history or self._command_history[-1] != cmd:
             self._command_history.append(cmd)
             del self._command_history[:-self._COMMAND_HISTORY_MAX]
@@ -632,8 +635,8 @@ class MCTunnelApp(ctk.CTk):
         otherwise, with a placeholder that says why."""
         if running:
             placeholder = "Type a command (Up/Down: history)"
-        elif self.zbb_manager.is_running() and self.zbb_manager.current_server != self.viewed_server:
-            placeholder = f"{self.zbb_manager.current_server} is running — select it to send commands"
+        elif self.api.servers.is_running() and self.api.servers.active != self.viewed_server:
+            placeholder = f"{self.api.servers.active} is running — select it to send commands"
         elif self.viewed_server:
             placeholder = "Start the server to send commands"
         else:
@@ -651,12 +654,9 @@ class MCTunnelApp(ctk.CTk):
 
     def check_java_startup(self):
         def _check():
-            from app.services.java_detector import JavaDetector
-            detector = JavaDetector()
-            installations = detector.detect_all()
-            if installations:
-                best = installations[0]
-                source_badge = "Portable" if best.source == "PORTABLE" else "System"
+            best = self.api.java.best()
+            if best:
+                source_badge = "Portable" if best.portable else "System"
                 label = f"Java {best.major} ({source_badge})"
                 self.after(0, lambda: self.lbl_java_ver.configure(text=label, text_color=AppConfig.COLOR_BTN_SUCCESS))
                 self.after(0, lambda: setattr(self.status_tooltip, "text", f"Java: {label}"))
@@ -670,9 +670,7 @@ class MCTunnelApp(ctk.CTk):
     def load_servers(self):
         def _scan():
             try:
-                if not os.path.exists(SERVERS_DIR):
-                    os.makedirs(SERVERS_DIR, exist_ok=True)
-                servers = [d for d in os.listdir(SERVERS_DIR) if os.path.isdir(os.path.join(SERVERS_DIR, d))]
+                servers = self.api.servers.list()
             except OSError as e:
                 logger.warning("Failed to scan servers: %s", e)
                 servers = []
@@ -713,8 +711,7 @@ class MCTunnelApp(ctk.CTk):
         if getattr(self, "_selection_restored", False):
             return
         self._selection_restored = True
-        from app.services.settings_manager import SettingsManager
-        settings = SettingsManager()
+        settings = self.api.settings
         last_server = settings.get("last_server")
         if self.viewed_server or last_server not in servers:
             return
@@ -752,7 +749,7 @@ class MCTunnelApp(ctk.CTk):
             self.console_tabs.set("Console")
 
     def on_server_delete(self, server_name):
-        if self.zbb_manager.is_running() and self.zbb_manager.current_server == server_name:
+        if self.api.servers.running_server() == server_name:
             Toast.show(self, "Stop the server before deleting it", toast_type="warning")
             return
         confirmed = ZBBDialog.confirm(
@@ -769,8 +766,8 @@ class MCTunnelApp(ctk.CTk):
 
         def _delete():
             try:
-                logic.delete_server(server_name)
-            except OSError as e:
+                self.api.servers.delete(server_name)
+            except (OSError, ServerRunningError) as e:
                 self.after(0, lambda e=e: Toast.show(self, f"Delete failed: {e}", toast_type="error"))
                 return
             self.after(0, lambda: self._on_server_deleted(server_name))
@@ -778,8 +775,6 @@ class MCTunnelApp(ctk.CTk):
         threading.Thread(target=_delete, daemon=True).start()
 
     def _on_server_deleted(self, server_name):
-        if self.zbb_manager.current_server == server_name:
-            self.zbb_manager.current_server = None
         if self.viewed_server == server_name:
             self.viewed_server = None
             self.lbl_dash_title.configure(text="Select a server")
@@ -794,7 +789,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_export(self, server_name):
         from tkinter import filedialog
-        from app.services.migration import export_server, MigrationError
+        from app.services.migration import MigrationError
 
         dest_path = filedialog.asksaveasfilename(
             defaultextension=".zbbpack",
@@ -808,7 +803,7 @@ class MCTunnelApp(ctk.CTk):
 
         def _export():
             try:
-                export_server(server_name, dest_path)
+                self.api.servers.export(server_name, dest_path)
             except (MigrationError, OSError) as e:
                 self.after(0, lambda e=e: Toast.show(self, f"Export failed: {e}", toast_type="error"))
                 return
@@ -831,7 +826,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_import_zbbpack(self):
         from tkinter import filedialog
-        from app.services.migration import import_server, MigrationError
+        from app.services.migration import MigrationError
 
         src_path = filedialog.askopenfilename(
             filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
@@ -850,7 +845,7 @@ class MCTunnelApp(ctk.CTk):
             if entered is None:
                 return
             entered = entered.strip() or suggested_name
-            if os.path.isdir(os.path.join(SERVERS_DIR, entered)):
+            if self.api.servers.exists(entered):
                 Toast.show(self, f"A server named '{entered}' already exists", toast_type="error")
                 initial = entered
                 continue
@@ -861,7 +856,7 @@ class MCTunnelApp(ctk.CTk):
 
         def _import():
             try:
-                import_server(src_path, new_name)
+                self.api.servers.import_pack(src_path, new_name)
             except (MigrationError, OSError) as e:
                 self.after(0, lambda e=e: Toast.show(self, f"Import failed: {e}", toast_type="error"))
                 return
@@ -876,23 +871,18 @@ class MCTunnelApp(ctk.CTk):
         # Any server can be viewed and configured; only the selection of the
         # server that *runs* is locked while one is running.
         self.viewed_server = server_name
-        if not self.zbb_manager.is_running():
-            self.zbb_manager.select_server(server_name)
-        from app.services.settings_manager import SettingsManager
-        SettingsManager().set("last_server", server_name)
+        self.api.servers.select(server_name)
+        self.api.settings.set("last_server", server_name)
         self.lbl_dash_title.configure(text=f"{server_name}")
 
         for name, it in self.server_items.items():
             it.set_selected(name == server_name)
 
-        meta = logic.get_server_meta(server_name)
-        server_type = engine_name((meta or {}).get("type"))
-        mc_version = (meta or {}).get("version", "")
+        info = self.api.servers.info(server_name)
+        server_type = engine_name(info.engine)
+        mc_version = info.mc_version or ""
         self.lbl_server_info.configure(text=f"{server_type} {mc_version}".strip(), text_color=AppConfig.COLOR_TEXT_PRIMARY)
-        try:
-            self._max_players = int(load_server_properties(server_name).get("max-players", 20))
-        except (TypeError, ValueError):
-            self._max_players = None
+        self._max_players = info.max_players
 
 
         # Tab enabled state first: a new count on a still-disabled tab showed
@@ -903,7 +893,7 @@ class MCTunnelApp(ctk.CTk):
         if hasattr(self, "players_panel"):
             self.players_panel.refresh()
         if not hasattr(self, "modrinth_browser"):
-            self._refresh_tab_labels(installed=len(ModrinthBrowser._installed_jar_files(server_name)))
+            self._refresh_tab_labels(installed=len(self.api.mods.installed_files(server_name)))
 
         self.btn_config.configure(state="normal")
         self.btn_open_folder.configure(state="normal")
@@ -911,17 +901,16 @@ class MCTunnelApp(ctk.CTk):
         self.server_console.log(f"[UI] Selected server: {server_name}")
 
     def _viewing_running_server(self) -> bool:
-        return (self.viewed_server is not None and self.zbb_manager.is_running()
-                and self.zbb_manager.current_server == self.viewed_server)
+        return self.viewed_server is not None and self.api.servers.running_server() == self.viewed_server
 
     def _sync_server_header(self):
         """Header controls for the viewed server: live state when it is the one
         running, plain Offline (start disabled) when another server runs."""
         viewing_running = self._viewing_running_server()
-        other_running = self.zbb_manager.is_running() and not viewing_running
+        other_running = self.api.servers.is_running() and not viewing_running
         self._show_run_stop(self.btn_start, self.btn_stop, running=viewing_running,
                             enabled=bool(self.viewed_server) and not other_running, side="right")
-        self._start_tooltip.text = (f"Stop {self.zbb_manager.current_server} first — one server runs at a time"
+        self._start_tooltip.text = (f"Stop {self.api.servers.active} first — one server runs at a time"
                                     if other_running else "Start server")
         self._set_console_input(viewing_running)
         if viewing_running and self._server_phase is not None:
@@ -932,42 +921,25 @@ class MCTunnelApp(ctk.CTk):
             self._ram_tooltip.text = ""
         self._refresh_players_badge()
 
-    def _open_in_file_manager(self, path) -> None:
-        try:
-            if sys.platform == "win32":
-                subprocess.run(["explorer", str(path)], check=False)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", str(path)], check=False)
-            else:
-                subprocess.run(["xdg-open", str(path)], check=False)
-        except Exception as e:
-            self.server_console.log(f"[Error] Failed to open folder: {e}")
-
     def open_server_folder(self):
-        if not self.viewed_server:
-            self._open_in_file_manager(SERVERS_DIR)
-            return
-        server_path = os.path.join(SERVERS_DIR, self.viewed_server)
-        if os.path.exists(server_path):
-            self._open_in_file_manager(server_path)
+        storage = self.api.storage
+        path = storage.server_dir(self.viewed_server) if self.viewed_server else storage.servers_dir
+        if path.exists() and not storage.open_folder(path):
+            self.server_console.log(f"[Error] Failed to open folder: {path}")
 
     def _get_current_server_info(self):
         """(name, mc_version, loader) of the viewed server, for the Mods tab."""
         if not self.viewed_server:
             return None
-        meta = logic.get_server_meta(self.viewed_server)
-        mc_version = meta.get("version", "1.20.1")
-        from app.services.modrinth import loader_for_server_type
-        loader = loader_for_server_type(meta.get("type", "Vanilla"))
-
-        logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", self.viewed_server, mc_version, loader or 'any')
-        return (self.viewed_server, mc_version, loader)
+        name, mc_version, loader = self.api.servers.info(self.viewed_server).mod_context
+        logger.debug("Server Info for Mod Search: %s | MC: %s | Loader: %s", name, mc_version, loader or 'any')
+        return name, mc_version, loader
 
     def save_advanced_settings(self, *args):
-        if not self.zbb_manager.current_server: return
+        if not self.api.servers.active: return
         label = self.var_java_path.get()
         path = getattr(self, "_java_label_to_path", {}).get(label, "auto")
-        logic.update_server_meta(self.zbb_manager.current_server, {
+        self.api.servers.update_meta(self.api.servers.active, {
             "advanced_mode": self.var_advanced_mode.get(),
             "java_path": path,
             "use_aikars": self.var_use_aikars.get(),
@@ -975,24 +947,24 @@ class MCTunnelApp(ctk.CTk):
 
     def edit_server_properties(self):
         if not self.viewed_server: return
-        ServerPropertiesEditor(self, self.viewed_server, logic, self.zbb_manager)
+        ServerPropertiesEditor(self, self.viewed_server, zbb_manager=self.zbb_manager)
 
-    def update_console(self, text):
+    def _log_console_line(self, text):
         if isinstance(text, str):
-            self.after(0, lambda: self.server_console.log(text))
+            self.server_console.log(text)
 
     def _handle_notification(self, data):
         if data and isinstance(data, dict):
             msg = data.get("msg", "")
             toast_type = Toast.resolve_type(data)
             duration = 6000 if toast_type == "error" else 4000
-            self.after(0, lambda: Toast.show(self, msg, toast_type=toast_type, duration=duration))
+            Toast.show(self, msg, toast_type=toast_type, duration=duration)
             if data.get("action") == "mod_dependency_fix":
-                missing_mod_ids = data.get("missing_mod_ids") or []
-                self.after(0, lambda: self._offer_mod_auto_install(missing_mod_ids))
+                self._offer_mod_auto_install(data.get("missing_mod_ids") or [])
 
     def _offer_mod_auto_install(self, missing_mod_ids):
-        if not missing_mod_ids or not self.zbb_manager.current_server:
+        server = self.api.servers.active
+        if not missing_mod_ids or not server:
             return
         preview = ", ".join(missing_mod_ids[:5]) + ("..." if len(missing_mod_ids) > 5 else "")
         msg = (
@@ -1000,23 +972,17 @@ class MCTunnelApp(ctk.CTk):
             "Attempt to auto-install these from Modrinth into the mods/ folder?"
         )
         if ZBBDialog.confirm(self, "Missing Mod Dependencies", msg, confirm_text="Install"):
-            self.events.emit(ServerEvent.REQUEST_MOD_INSTALL, {
-                "missing_mod_ids": missing_mod_ids,
-                "server_name": self.zbb_manager.current_server,
-            })
+            self.api.servers.request_mod_install(server, missing_mod_ids)
 
-    def update_tunnel_console(self, text):
-        self.after(0, lambda: self.tunnel_console.log(text))
+    def _log_tunnel_line(self, text):
+        self.tunnel_console.log(text)
 
     def start_server_action(self):
-        if self.zbb_manager.is_running():
+        if self.api.servers.is_running():
             return
-        if self.viewed_server and self.zbb_manager.current_server != self.viewed_server:
-            self.zbb_manager.select_server(self.viewed_server)
-
-        def _start():
-            self.zbb_manager.start_server()
-        self.executor.submit(_start)
+        if self.viewed_server:
+            self.api.servers.select(self.viewed_server)
+        self.executor.submit(self.api.servers.start)
 
     def _show_run_stop(self, btn_run, btn_stop, running: bool, enabled: bool = True, side: str = "left"):
         """Show only one of run/stop at a time, matching current state."""
@@ -1033,7 +999,7 @@ class MCTunnelApp(ctk.CTk):
                               fg_color=AppConfig.COLOR_BTN_SUCCESS if enabled else AppConfig.COLOR_BTN_GHOST)
 
     def _set_current_server_pill(self, status: str):
-        item = self.server_items.get(self.zbb_manager.current_server)
+        item = self.server_items.get(self.api.servers.active)
         if item:
             item.set_status(status)
 
@@ -1053,10 +1019,8 @@ class MCTunnelApp(ctk.CTk):
         self.after(0, lambda: self._set_current_server_pill("online"))
 
     def on_player_count_update(self, count):
-        def _apply():
-            self._player_count = count
-            self._refresh_players_badge()
-        self.after(0, _apply)
+        self._player_count = count
+        self._refresh_players_badge()
 
     # Tab keys are internal (compared, persisted as "last_console_tab");
     # the button shows the translated label plus a live count.
@@ -1169,9 +1133,8 @@ class MCTunnelApp(ctk.CTk):
                                       text_color=AppConfig.COLOR_STATUS_ONLINE)
 
     def _sample_server_memory(self):
-        used = self.zbb_manager.server_memory_usage()
-        server = self.zbb_manager.current_server
-        limit = logic.get_server_ram(server) if server else None
+        sample = self.api.servers.memory()
+        used, limit = sample.used_bytes, sample.limit_mb
 
         def _apply():
             if self._server_phase is None or not self._viewing_running_server():
@@ -1197,7 +1160,7 @@ class MCTunnelApp(ctk.CTk):
     def stop_server_action(self):
         # Off the Tk thread: stop() blocks up to ~15s (graceful wait + kill).
         def _stop():
-            self.zbb_manager.stop_server()
+            self.api.servers.stop()
             self.on_server_stopped()
         self.executor.submit(_stop)
 
@@ -1205,34 +1168,28 @@ class MCTunnelApp(ctk.CTk):
         ServerWizard(self, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
-        # Cancel (or closing the app) sets this; provisioning stops at the
-        # next step/download chunk, kills a running installer and rolls back.
-        cancel_event = threading.Event()
-        self._active_provision_cancels = getattr(self, "_active_provision_cancels", set())
-        self._active_provision_cancels.add(cancel_event)
+        # Cancel (or closing the app) stops provisioning at the next
+        # step/download chunk, kills a running installer and rolls back.
+        task = None
         dialog = DownloadProgressDialog(self, title=f"Installing {config['name']}...",
-                                        on_cancel=cancel_event.set)
+                                        on_cancel=lambda: task.cancel())
 
-        def _provision():
-            try:
-                result = self.zbb_manager.provision_server(config, dialog.update_progress, cancel_event)
-            finally:
-                self._active_provision_cancels.discard(cancel_event)
+        def _finished(task):
+            result = task.result()
             if result.cancelled:
-                self.after(0, lambda: self._on_provision_cancelled(dialog))
+                self._on_provision_cancelled(dialog)
             elif result.ok:
-                self.after(0, lambda: self._on_download_complete(
-                    dialog, result.name, config.get("start_after_creation", False), result.warnings))
+                self._on_download_complete(
+                    dialog, result.name, config.get("start_after_creation", False), result.warnings)
             else:
-                self.after(0, lambda: self._on_provision_failed(dialog, result))
+                self._on_provision_failed(dialog, result)
 
-        self.executor.submit(_provision)
+        task = self.api.servers.create(config).on_progress(dialog.update_progress).on_done(_finished)
 
     def cancel_active_tasks(self):
         """Stop every cancellable background task (server creations); used
         when the app exits so none keeps the process alive."""
-        for event in list(getattr(self, "_active_provision_cancels", ())):
-            event.set()
+        self.api.tasks.cancel_all()
 
     def _on_provision_cancelled(self, dialog):
         dialog.close()
@@ -1267,10 +1224,10 @@ class MCTunnelApp(ctk.CTk):
 
     def start_tunnel(self):
         self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
-        self.zbb_manager.start_tunnel()
+        self.api.tunnel.start()
 
     def stop_tunnel(self):
-        self.zbb_manager.stop_tunnel()
+        self.api.tunnel.stop()
         self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)
 
     def reset_tunnel(self):
@@ -1285,7 +1242,7 @@ class MCTunnelApp(ctk.CTk):
         self.tunnel_console.log("[System] Clearing tunnels...")
         
         def _reset_task():
-            self.zbb_manager.reset_tunnel(mode="soft")
+            self.api.tunnel.reset(mode="soft")
             self.after(0, lambda: self.on_tunnel_status({"status": TunnelStatus.OFFLINE, "skip_debounce": True}))
             self.after(0, lambda: self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False))
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use Start Tunnel to create a new tunnel."))
@@ -1312,7 +1269,7 @@ class MCTunnelApp(ctk.CTk):
 
             self.lbl_tunnel_status.configure(text=f"● {tunnel_status_label(status)}", text_color=color)
 
-            is_linked = self.zbb_manager.playit_manager.is_linked
+            is_linked = self.api.tunnel.is_linked
 
             # --- CRITICAL DNS DISPLAY LOGIC (DO NOT TOUCH!) ---
             # DO NOT MODIFY: this section is the final link in the DNS recovery chain.
@@ -1403,7 +1360,7 @@ class MCTunnelApp(ctk.CTk):
         Toast.show(self, "Verifying code with Playit...", toast_type="info")
         
         def _link_task():
-            success = self.zbb_manager.link_playit_manually(code)
+            success = self.api.tunnel.link(code)
             self.after(0, lambda: self.btn_link_code.configure(state="normal"))
             if success:
                 self.after(0, lambda: self.entry_setup_code.delete(0, 'end'))
@@ -1417,17 +1374,12 @@ class MCTunnelApp(ctk.CTk):
         folder = ctk.filedialog.askdirectory(title="Select Existing Server Folder")
         if not folder: return
         
-        # Quick validation: check for any .jar
         try:
-            files = os.listdir(folder)
-            jars = [f for f in files if f.endswith(".jar")]
-            if not jars:
-                Toast.show(self, "No .jar file found in the selected folder.", toast_type="error")
-                return
-                
-            if self.zbb_manager.load_server_manually(folder):
+            if self.api.servers.import_folder(folder):
                 self.load_servers() # Refresh list
                 Toast.show(self, "Server loaded successfully!", toast_type="success")
+        except NoServerJarError:
+            Toast.show(self, "No .jar file found in the selected folder.", toast_type="error")
         except Exception as e:
             Toast.show(self, f"Failed to load server: {e}", toast_type="error")
 
@@ -1436,10 +1388,9 @@ class MCTunnelApp(ctk.CTk):
     # hide to the system tray or exit; exit_app() really ends the process.
     # ------------------------------------------------------------------
     def on_close(self):
-        from app.services.settings_manager import SettingsManager
         from app.ui.tray import CLOSE_ASK, CLOSE_TRAY, resolve_close_action, tray_supported
 
-        settings = SettingsManager()
+        settings = self.api.settings
         action = resolve_close_action(settings.get("close_action", CLOSE_ASK), tray_supported())
         if action == CLOSE_ASK:
             from app.ui.close_dialog import CloseChoiceDialog
@@ -1457,12 +1408,11 @@ class MCTunnelApp(ctk.CTk):
     def _running_summary(self) -> list:
         """What exiting would stop, for the close dialog."""
         running = []
-        if self.zbb_manager.is_running():
-            running.append(f"the server '{self.zbb_manager.current_server}'")
-        playit = getattr(self.zbb_manager, "playit_manager", None)
-        if playit is not None and getattr(playit, "running", False):
+        if self.api.servers.is_running():
+            running.append(f"the server '{self.api.servers.active}'")
+        if self.api.tunnel.is_running:
             running.append("the Playit tunnel")
-        if getattr(self, "_active_provision_cancels", None):
+        if self.api.servers.creations():
             running.append("the server being created")
         return running
 
@@ -1507,8 +1457,7 @@ class MCTunnelApp(ctk.CTk):
         # SettingsManager debounces writes 500ms — a change right before
         # close (e.g. toggling a webhook event in Settings) could otherwise
         # never reach disk since nothing was waiting for that timer to fire.
-        from app.services.settings_manager import SettingsManager
-        SettingsManager().save()
+        self.api.settings.save()
 
         if self._status_tick_job is not None:
             self.after_cancel(self._status_tick_job)
@@ -1522,8 +1471,7 @@ class MCTunnelApp(ctk.CTk):
 
         def _do_shutdown():
             try:
-                self.zbb_manager.shutdown()
-                self._kill_orphan_processes()
+                self.api.shutdown()
             finally:
                 if hasattr(self, '_instance_lock'):
                     self._instance_lock.release()
@@ -1531,29 +1479,6 @@ class MCTunnelApp(ctk.CTk):
 
         threading.Thread(target=_do_shutdown, daemon=True, name="AppShutdown").start()
         self._poll_shutdown(deadline=time.monotonic() + 8.0)
-
-    def _kill_orphan_processes(self):
-        """Force-kill any subprocesses still alive after graceful shutdown."""
-        # Best-effort last resort during app exit: a kill failure here is
-        # unactionable (the Job Object reaps survivors when the app dies).
-        runner = getattr(self.zbb_manager, 'server_runner', None)
-        if runner:
-            proc = getattr(runner, 'process', None)
-            if proc and proc.poll() is None:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=2)
-                except Exception:
-                    pass
-        pm = getattr(self.zbb_manager, 'playit_manager', None)
-        if pm:
-            proc = getattr(pm, 'process', None)
-            if proc and proc.poll() is None:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=2)
-                except Exception:
-                    pass
 
     def _poll_shutdown(self, deadline: float):
         if self._shutdown_event.is_set() or time.monotonic() >= deadline:

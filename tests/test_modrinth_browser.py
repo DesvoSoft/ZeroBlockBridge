@@ -1,8 +1,9 @@
-"""Unit tests for pure-logic helpers in app/ui/modrinth_browser.py (F8)."""
+"""Pre-update snapshot ordering and update selection (app/services/mod_content.py, F8)."""
 
 from pathlib import Path
 
-from app.ui.modrinth_browser import _filter_updates_for_selection, _snapshot_then_apply
+from app.services.mod_content import (filter_updates_for_selection as _filter_updates_for_selection,
+                                       snapshot_then_apply as _snapshot_then_apply)
 
 
 class TestSnapshotThenApply:

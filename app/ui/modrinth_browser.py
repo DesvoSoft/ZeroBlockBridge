@@ -8,26 +8,18 @@ management, and .mrpack modpack import for Modrinth-hosted content.
 
 import customtkinter as ctk
 import hashlib
-import io
 import logging
 import os
-import shutil
-import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Optional
 
-from PIL import Image
-
+from app.api.mods import (MOD_LOADERS, PLUGIN_LOADERS, ModDownloadError, ModrinthException, ModsApi,
+                          MrpackCompatibilityError, NoCompatibleVersionError, UnsafePathError,
+                          filter_updates_for_selection, loader_display)
 from app.core.app_config import AppConfig
 from app.core import i18n
 from app.core.i18n import N_, format_count
-from app.core.constants import BASE_DIR, SERVERS_DIR
-from app.services.modrinth import (MOD_LOADERS, PLUGIN_LOADERS, ModrinthClient, ModrinthException,
-                                   loader_display)
-from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
-from app.services import mod_install_tracker
-from app.core.logic import get_server_meta
 from app.ui.toast import Toast
 from app.ui.ui_components import (
     ToolTip, ZBBDialog, ZBBToplevel, dialog_buttons, dialog_header, ScrollableFrame, themed_menu,
@@ -48,11 +40,6 @@ _ICON_CACHE_MAX = 300
 _ICONS_IN_FLIGHT: set[str] = set()
 _ICONS_LOCK = threading.Lock()
 _ICON_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="modrinth-icon")
-_ICON_DISK_DIR = BASE_DIR / ".zbb_cache" / "modrinth_icons"
-
-
-def _icon_disk_path(icon_url: str):
-    return _ICON_DISK_DIR / (hashlib.md5(icon_url.encode()).hexdigest() + ".png")
 
 
 def _store_icon(icon_url: str, ctk_img: "ctk.CTkImage") -> None:
@@ -67,39 +54,6 @@ def _store_icon(icon_url: str, ctk_img: "ctk.CTkImage") -> None:
 
 _PAGE_SIZE = 20
 _RENDER_BATCH_SIZE = 2
-
-
-def _filter_updates_for_selection(updates: list, selected_filenames: set) -> list:
-    """Return the subset of check_updates() results matching selected filenames."""
-    return [u for u in updates if u.get("filename") in selected_filenames]
-
-
-def _snapshot_then_apply(create_snapshot: Optional[Callable], server_name: str,
-                         updates: list, apply_one: Callable[[dict], bool]) -> tuple[Optional[str], int, int]:
-    """Snapshot the server, then apply each update in order.
-
-    Returns (snapshot_error, updated, failed). When the snapshot fails no
-    update is applied — updating without a rollback point is exactly the
-    false confidence this flow exists to prevent.
-    """
-    if create_snapshot is None:
-        return "Snapshot service unavailable.", 0, 0
-    path, error = create_snapshot(server_name)
-    if not path:
-        return error or "Unknown snapshot error.", 0, 0
-
-    updated, failed = 0, 0
-    for update in updates:
-        try:
-            ok = apply_one(update)
-        except Exception as exc:
-            logger.warning("Update failed for %s: %s", update.get("filename"), exc)
-            ok = False
-        if ok:
-            updated += 1
-        else:
-            failed += 1
-    return None, updated, failed
 
 
 class ModrinthBrowser(ctk.CTkFrame):
@@ -149,7 +103,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     )
 
     def __init__(self, master, get_server_info: Callable = None,
-                 create_snapshot: Callable = None, is_server_running: Callable = None,
+                 mods: Optional[ModsApi] = None, is_server_running: Callable = None,
                  on_installed_count: Callable = None, **kwargs):
         """
         Args:
@@ -157,9 +111,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             get_server_info: Callable returning (server_name, mc_version, loader)
                              for the currently selected server. If None, search
                              still works but install is disabled.
-            create_snapshot: Blocking callable (server_name) -> (path, error)
-                             that takes a pre-update snapshot. If None, mod
-                             updates are refused (no rollback point).
+            mods: The API's mods area (search, installs, file deletes, icons).
+                             Its pre-update snapshot guards every update; a
+                             ModsApi without one refuses updates.
             is_server_running: Callable () -> bool for the currently selected
                              server. If None, running-server checks are skipped
                              (matches prior behavior for any embedder that
@@ -167,10 +121,9 @@ class ModrinthBrowser(ctk.CTkFrame):
         """
         super().__init__(master, fg_color="transparent", **kwargs)
         self.get_server_info = get_server_info
-        self.create_snapshot = create_snapshot
+        self.mods = mods or ModsApi()
         self.is_server_running = is_server_running
         self.on_installed_count = on_installed_count
-        self.client = ModrinthClient()
 
         # Search state
         self._search_query = ""
@@ -750,7 +703,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _search():
             try:
-                results = self.client.search(
+                results = self.mods.search(
                     self._search_query,
                     mc_version=self._search_mc_version,
                     loader=self._search_loader,
@@ -868,7 +821,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _do_load():
             try:
-                results = self.client.search(
+                results = self.mods.search(
                     "", mc_version=mc_version, loader=loader,
                     project_type="mod", limit=_PAGE_SIZE, index="downloads",
                 )
@@ -1006,7 +959,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         ctx = self._resolve_server_context()
         self._installed_slugs_cache = (
-            mod_install_tracker.get_installed_slugs(ctx[0]) if ctx else set()
+            self.mods.installed_slugs(ctx[0]) if ctx else set()
         )
         self._render_cards_batch(list(enumerate(self._current_hits)), gen)
 
@@ -1218,7 +1171,7 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._warn_server_running()
             return
         fname = update.get("filename", "")
-        fpath = next((f for f in self._installed_jar_files(ctx[0]) if os.path.basename(f) == fname), None)
+        fpath = next((f for f in self.mods.installed_files(ctx[0]) if os.path.basename(f) == fname), None)
         if fpath:
             self._apply_single_update(fpath, update)
 
@@ -1273,24 +1226,16 @@ class ModrinthBrowser(ctk.CTkFrame):
                 # Installed view can have changed their state.
                 ctx = self._resolve_server_context()
                 self._installed_slugs_cache = (
-                    mod_install_tracker.get_installed_slugs(ctx[0]) if ctx else set()
+                    self.mods.installed_slugs(ctx[0]) if ctx else set()
                 )
                 self._refresh_installed_state()
-
-    @staticmethod
-    def _installed_jar_files(server_name: str) -> list:
-        files = []
-        for d in (os.path.join(SERVERS_DIR, server_name, "mods"), os.path.join(SERVERS_DIR, server_name, "plugins")):
-            if os.path.isdir(d):
-                files.extend(os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".jar"))
-        return files
 
     def _refresh_installed_counter(self, check_updates: bool = False):
         """Installed (N) on the toggle button, plus an amber dot when the
         background check found updates. check_updates hits Modrinth, so it
         only runs when the target server changes."""
         ctx = self._resolve_server_context()
-        self._installed_count = len(self._installed_jar_files(ctx[0])) if ctx else 0
+        self._installed_count = len(self.mods.installed_files(ctx[0])) if ctx else 0
         self._update_installed_button()
         if not (check_updates and ctx and ctx[2] and self._installed_count):
             return
@@ -1298,7 +1243,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _worker():
             try:
-                updates = self.client.check_updates(ctx[0], ctx[1], ctx[2])
+                updates = self.mods.check_updates(ctx[0], ctx[1], ctx[2])
             except Exception as exc:
                 logger.debug("Background update count failed: %s", exc)
                 return
@@ -1345,7 +1290,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         self.installed_frame._parent_canvas.yview_moveto(0)
 
         ctx = self._resolve_server_context()
-        files = self._installed_jar_files(ctx[0]) if ctx else []
+        files = self.mods.installed_files(ctx[0]) if ctx else []
         self._installed_files = files
         self._installed_count = len(files)
         has_files = bool(files)
@@ -1391,7 +1336,7 @@ class ModrinthBrowser(ctk.CTkFrame):
     def _check_updates_for_badges(self, server_name: str, mc_version: str, loader: str, gen: int):
         def _worker():
             try:
-                updates = self.client.check_updates(server_name, mc_version, loader)
+                updates = self.mods.check_updates(server_name, mc_version, loader)
             except Exception as exc:
                 logger.debug("Background update check failed: %s", exc)
                 return
@@ -1433,13 +1378,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             badge.configure(state="disabled", text="Updating…")
         self._set_status(f"Creating snapshot before updating {fname}…", busy=True)
 
-        def _apply(u):
-            self.after(0, lambda: self._set_status(f"Updating {fname}…", busy=True))
-            return self.client.apply_update(u, server_name, loader)
-
         def _worker():
-            error, updated, _failed = _snapshot_then_apply(
-                self.create_snapshot, server_name, [update], _apply)
+            error, updated, _failed = self.mods.apply_updates(
+                server_name, loader, [update],
+                on_update=lambda _u: self.after(0, lambda: self._set_status(f"Updating {fname}…", busy=True)))
             if error:
                 # Nothing was touched — leave _pending_updates intact so the
                 # badge still reflects a real, retryable update offer.
@@ -1548,26 +1490,17 @@ class ModrinthBrowser(ctk.CTkFrame):
             self._warn_server_running()
             return
         server_name = ctx[0]
-        fname = mod_install_tracker.get_installed_filename(server_name, slug)
-        if not fname:
+        if not self.mods.installed_filename(server_name, slug):
             return
-        filepath = None
-        for subdir in ("mods", "plugins"):
-            candidate = os.path.join(SERVERS_DIR, server_name, subdir, fname)
-            if os.path.isfile(candidate):
-                filepath = candidate
-                break
         if not ZBBDialog.confirm(self.winfo_toplevel(), "Uninstall Mod",
                                   f"Uninstall '{title}'?", confirm_text="Uninstall", danger=True):
             return
         try:
-            if filepath:
-                os.remove(filepath)
-            mod_install_tracker.remove_install(server_name, slug)
+            self.mods.uninstall(server_name, slug)
             self._set_status(f"Uninstalled {title}", kind="success")
             self._installed_slugs_cache.discard(slug)
             self._refresh_installed_state()
-        except OSError as exc:
+        except (OSError, UnsafePathError) as exc:
             self._set_status(f"Failed to uninstall {title}: {exc}", kind="error")
 
     def _confirm_delete_mod(self, filepath: str):
@@ -1578,11 +1511,14 @@ class ModrinthBrowser(ctk.CTkFrame):
         if not ZBBDialog.confirm(self.winfo_toplevel(), "Delete Mod",
                                  f"Delete '{fname}'?", confirm_text="Delete", danger=True):
             return
+        ctx = self._resolve_server_context()
+        if not ctx:
+            return
         try:
-            os.remove(filepath)
+            self.mods.delete_file(ctx[0], filepath)
             self._set_status(f"Deleted {fname}", kind="success")
             self._render_installed()  # refresh inline
-        except OSError as exc:
+        except (OSError, UnsafePathError) as exc:
             self._set_status(f"Failed to delete {fname}: {exc}", kind="error")
 
     def _on_delete_selected(self):
@@ -1599,26 +1535,11 @@ class ModrinthBrowser(ctk.CTkFrame):
             return
 
         ctx = self._resolve_server_context()
-        server_name = ctx[0] if ctx else None
-        filename_to_slug = {}
-        if server_name:
-            for slug in mod_install_tracker.get_installed_slugs(server_name):
-                filename_to_slug[mod_install_tracker.get_installed_filename(server_name, slug)] = slug
-
-        deleted, failed = 0, 0
-        for fpath in selected:
-            try:
-                fname = os.path.basename(fpath)
-                os.remove(fpath)
-                if server_name:
-                    mod_install_tracker.remove_install_by_filename(server_name, fname)
-                    slug = filename_to_slug.get(fname)
-                    if slug:
-                        self._installed_slugs_cache.discard(slug)
-                deleted += 1
-            except OSError as exc:
-                logger.warning("Failed to delete %s: %s", fpath, exc)
-                failed += 1
+        if not ctx:
+            return
+        result = self.mods.delete_files(ctx[0], selected)
+        self._installed_slugs_cache -= result.removed_slugs
+        deleted, failed = len(result.deleted), len(result.failed)
 
         self._set_status(f"Deleted {deleted} file(s)" + (f", {failed} failed" if failed else ""), kind="success")
         self._render_installed()
@@ -1636,22 +1557,20 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _worker():
             try:
-                updates = self.client.check_updates(server_name, mc_version, loader)
+                updates = self.mods.check_updates(server_name, mc_version, loader)
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"Update check failed: {e}", kind="error"))
                 return
 
-            matched = _filter_updates_for_selection(updates, selected_filenames)
+            matched = filter_updates_for_selection(updates, selected_filenames)
             if not matched:
                 self.after(0, lambda: self._set_status("No updates available for the selected mods."))
                 return
 
-            def _apply(u):
-                self.after(0, lambda: self._set_status(f"Updating {u['filename']}…"))
-                return self.client.apply_update(u, server_name, loader)
-
             self.after(0, lambda: self._set_status("Creating snapshot before updating…", busy=True))
-            error, updated, failed = _snapshot_then_apply(self.create_snapshot, server_name, matched, _apply)
+            error, updated, failed = self.mods.apply_updates(
+                server_name, loader, matched,
+                on_update=lambda u: self.after(0, lambda: self._set_status(f"Updating {u['filename']}…")))
             if error:
                 self.after(0, lambda: self._set_status(f"Updates aborted — {error}", kind="error"))
                 return
@@ -1679,7 +1598,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _fetch_versions():
             try:
-                versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
+                versions = self.mods.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
                     self.after(0, lambda: self._set_status(f"No compatible versions of {title} found.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
@@ -1706,18 +1625,16 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _install_one(version, server_name, loader, title, slug) -> bool:
             """Download+record a single mod version. Returns True on success."""
-            path = self.client.download_version(
-                version, server_name, loader,
-                progress_callback=lambda p: self.after(
+            path = self.mods.install_version(
+                version, server_name, loader, slug,
+                progress=lambda p: self.after(
                     0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
                 ),
             )
             if not path:
                 return False
-            fname = os.path.basename(path)
-            mod_install_tracker.record_install(server_name, slug, fname)
 
-            def _mark_installed(slug=slug, fname=fname):
+            def _mark_installed(slug=slug):
                 self._installed_slugs_cache.add(slug)
 
             self.after(0, _mark_installed)
@@ -1753,7 +1670,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         via an Event so the primary install's batch/status bookkeeping
         happens after dependency handling completes."""
         try:
-            dep_result = self.client.get_required_dependencies(
+            dep_result = self.mods.required_dependencies(
                 version, mc_version, loader, self._installed_slugs_cache)
         except Exception as exc:
             logger.debug("Dependency resolution failed for %s: %s", title, exc)
@@ -1805,16 +1722,13 @@ class ModrinthBrowser(ctk.CTkFrame):
             dep_slug = dep_project.get("slug", dep_project.get("id", ""))
             dep_title = dep_project.get("title", dep_slug)
             try:
-                dep_path = self.client.download_version(
-                    dep_version, server_name, loader,
-                    progress_callback=lambda p, t=dep_title: self.after(
+                dep_path = self.mods.install_version(
+                    dep_version, server_name, loader, dep_slug,
+                    progress=lambda p, t=dep_title: self.after(
                         0, lambda: self._set_status(f"Downloading {t}… {int(p * 100)}%")
                     ),
                 )
                 if dep_path:
-                    dep_fname = os.path.basename(dep_path)
-                    mod_install_tracker.record_install(server_name, dep_slug, dep_fname)
-
                     def _mark(dep_slug=dep_slug):
                         self._installed_slugs_cache.add(dep_slug)
 
@@ -1836,7 +1750,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _fetch_versions():
             try:
-                versions = self.client.get_versions(slug, mc_version=mc_version, loader=loader)
+                versions = self.mods.get_versions(slug, mc_version=mc_version, loader=loader)
                 if not versions:
                     self.after(0, lambda: self._set_status(f"No compatible versions of {title} found.", kind="error"))
                     self.after(0, lambda: self._note_batch_result(batch, ok=False))
@@ -1859,30 +1773,21 @@ class ModrinthBrowser(ctk.CTkFrame):
         self._set_status(f"Installing modpack {title}…", busy=True)
 
         def _install():
-            tmp_dir = tempfile.mkdtemp(prefix="zbb_modpack_")
             try:
-                downloaded = self.client.download_version_to(
-                    version, tmp_dir,
-                    progress_callback=lambda p: self.after(
+                summary = self.mods.install_modpack(
+                    version, server_name,
+                    on_download=lambda p: self.after(
                         0, lambda: self._set_status(f"Downloading {title}… {int(p * 100)}%")
                     ),
-                )
-                if not downloaded:
-                    self.after(0, lambda: self._set_status(f"Download failed for {title}.", kind="error"))
-                    self.after(0, lambda: self._note_batch_result(batch, ok=False))
-                    return
-
-                meta = get_server_meta(server_name)
-                summary = install_mrpack(
-                    downloaded, server_name,
-                    progress_callback=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
-                    server_type=meta.get("type"),
-                    mc_version=meta.get("version"),
+                    on_status=lambda msg: self.after(0, lambda m=msg: self._set_status(m)),
                 )
                 self.after(0, lambda: self._set_status(
                     f"Modpack {title}: {self._format_mrpack_summary(summary)}", kind="success"))
                 logger.info("Installed modpack %s to server %s", title, server_name)
                 self.after(0, lambda: self._note_batch_result(batch, ok=True))
+            except ModDownloadError:
+                self.after(0, lambda: self._set_status(f"Download failed for {title}.", kind="error"))
+                self.after(0, lambda: self._note_batch_result(batch, ok=False))
             except MrpackCompatibilityError as exc:
                 self.after(0, lambda e=exc: self._set_status(f"Incompatible: {e}", kind="error"))
                 self.after(0, lambda e=exc: ZBBDialog.info(
@@ -1891,8 +1796,6 @@ class ModrinthBrowser(ctk.CTkFrame):
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"Modpack install failed: {e}", kind="error"))
                 self.after(0, lambda: self._note_batch_result(batch, ok=False))
-            finally:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
 
         threading.Thread(target=_install, daemon=True).start()
 
@@ -1961,15 +1864,10 @@ class ModrinthBrowser(ctk.CTkFrame):
             for mod in bundle:
                 self.after(0, lambda m=mod: self._set_status(f"Installing {m['name']}..."))
                 try:
-                    versions = self.client.get_versions(mod["slug"], mc_version=mc_version, loader=loader)
-                    if not versions:
-                        failed.append(f"{mod['name']} (no build for MC {mc_version} yet)")
-                        continue
-                    path = self.client.download_mod(mod["slug"], server_name, mc_version, loader)
-                    if not path:
+                    if not self.mods.install_latest(mod["slug"], server_name, mc_version, loader):
                         failed.append(mod["name"])
-                    else:
-                        mod_install_tracker.record_install(server_name, mod["slug"], os.path.basename(path))
+                except NoCompatibleVersionError:
+                    failed.append(f"{mod['name']} (no build for MC {mc_version} yet)")
                 except Exception as exc:
                     logger.error("Failed to install %s: %s", mod["name"], exc)
                     failed.append(mod["name"])
@@ -1999,7 +1897,7 @@ class ModrinthBrowser(ctk.CTkFrame):
 
         def _check():
             try:
-                updates = self.client.check_updates(server_name, mc_version, loader)
+                updates = self.mods.check_updates(server_name, mc_version, loader)
                 self.after(0, lambda: self._show_updates_dialog(updates))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._set_status(f"Update check failed: {e}", kind="error"))
@@ -2052,15 +1950,9 @@ class ModrinthBrowser(ctk.CTkFrame):
             _ICONS_IN_FLIGHT.add(icon_url)
         _ICON_EXECUTOR.submit(self._load_icon, icon_url, icon_frame, lbl_initial)
 
-    @staticmethod
-    def _icon_from_disk(icon_url: str) -> Optional[ctk.CTkImage]:
-        disk_path = _icon_disk_path(icon_url)
-        if not disk_path.exists():
-            return None
-        try:
-            img = Image.open(disk_path)
-            img.load()
-        except OSError:
+    def _icon_from_disk(self, icon_url: str) -> Optional[ctk.CTkImage]:
+        img = self.mods.cached_icon(icon_url)
+        if img is None:
             return None
         ctk_img = ctk.CTkImage(img, size=(48, 48))
         _store_icon(icon_url, ctk_img)
@@ -2068,18 +1960,11 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     def _load_icon(self, icon_url: str, icon_frame, lbl_initial):
         try:
-            ctk_img = self._icon_from_disk(icon_url)
-            if ctk_img is None:
-                resp = self.client.session.get(icon_url, timeout=8)
-                resp.raise_for_status()
-                img = Image.open(io.BytesIO(resp.content)).resize((48, 48), Image.LANCZOS)
-                try:
-                    _ICON_DISK_DIR.mkdir(parents=True, exist_ok=True)
-                    img.save(_icon_disk_path(icon_url))
-                except OSError as exc:
-                    logger.debug("Icon disk cache write failed: %s", exc)
-                ctk_img = ctk.CTkImage(img, size=(48, 48))
-                _store_icon(icon_url, ctk_img)
+            img = self.mods.fetch_icon(icon_url)
+            if img is None:
+                return
+            ctk_img = ctk.CTkImage(img, size=(48, 48))
+            _store_icon(icon_url, ctk_img)
             self.after(0, lambda: self._apply_icon(icon_frame, lbl_initial, ctk_img))
         except Exception as exc:
             logger.debug("Image fetch error: %s", exc)
