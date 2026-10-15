@@ -13,9 +13,9 @@ All contributors (human or AI) must adhere to these rules.
 
 ZBB is built on strict **decoupled architecture**:
 
-- **UI → Core → Services** (one-way). Never the reverse.
-- All UI↔Core communication via `EventBus` or `ZBBManager` methods. Mutating flows (start/stop/backup/restart/snapshot) never call services from `app/ui/` — pass the manager method to the widget as a callback when needed (e.g. `ModrinthBrowser(create_snapshot=...)`).
-- Pragmatic exception: UI may import services for read-only/stateless helpers (load properties, list templates, disk usage, file dialogs).
+- **UI → API → Core → Services** (one-way). Never the reverse.
+- All UI↔Core communication goes through `AppApi` (`app/api`, ARCHITECTURE "API Seam"): commands and queries with plain-Python inputs/outputs, events via `api.events.subscribe()` with the UI's dispatcher, long work as a `Task`. A ported screen never imports `app.core.logic`, `ZBBManager` or a service to act; new behavior goes into a service and is exposed on the API first. `app/api` never imports a GUI toolkit or `app.ui`.
+- Screens not ported yet (players, settings, properties, wizard) still take `AppApi.legacy_manager` and may import services for read-only/stateless helpers (load properties, list templates, disk usage, file dialogs) until 8b part B.
 - `ZBBManager` is the single orchestrator for server lifecycle. No other component manages lifecycles.
 - **Headless-ready**: every feature must work without a GUI (preparatory for CLI/REST API).
 - Use `events.subscribe()` — `.on()` is banned.
@@ -292,7 +292,7 @@ python -m py_compile app/core/core.py
 
 ### Testing UI code
 
-UI modules are not driven through Tk in tests. Extract decision logic into module-level pure helpers or static methods and test those (e.g. `modrinth_browser._snapshot_then_apply`, `_filter_updates_for_selection`, `ConsoleWidget._line_tag`).
+UI modules are not driven through Tk in tests. Put decisions and file/network work behind the API (tested with fakes: `tests/test_api_facade.py`, `test_mod_content.py`, `test_api_events_tasks.py`), and test what remains in a screen as module-level pure helpers or static methods (e.g. `ConsoleWidget._line_tag`).
 
 ### Test Standards
 
@@ -364,7 +364,7 @@ pytest tests/ -q
 # 7. Visual pass: screenshot every window/tab in Dark AND Light, plus the main window at 900x580
 ```
 
-**Current score (2026-09-14): 97/100** — F401 clean, no banned patterns, no color/radius literals outside documented exceptions. Known deduction: `_kill_orphan_processes` (`main.py`) swallows `Exception` without logging on app exit (commented as intentional, but still breaks §2.2).
+**Current score (2026-09-14): 97/100** — F401 clean, no banned patterns, no color/radius literals outside documented exceptions. The former deduction (`main._kill_orphan_processes` swallowing exceptions) is gone: the kill moved to `AppApi.shutdown` and logs.
 
 ---
 
