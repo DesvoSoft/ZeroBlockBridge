@@ -151,7 +151,11 @@
 
 // ── Vitra init ─────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  if (typeof Vitra === 'undefined') return;
+  // Without Vitra nothing would ever add .vitra-revealed: show everything.
+  if (typeof Vitra === 'undefined') {
+    document.querySelectorAll('.vitra-reveal').forEach(el => el.classList.add('vitra-revealed'));
+    return;
+  }
   Vitra.theme.init({ defaultTheme: 'emerald', persist: false });
   Vitra.reveal.init({ threshold: 0.1, stagger: 80 });
   Vitra.tooltip.init();
