@@ -176,7 +176,7 @@ class TestServers:
         with patch("app.api.servers.migration") as migration:
             api.servers.export("alpha", "out.zbbpack")
             api.servers.import_pack("in.zbbpack", "beta")
-        migration.export_server.assert_called_once_with("alpha", "out.zbbpack")
+        migration.export_server.assert_called_once_with("alpha", "out.zbbpack", progress_callback=None)
         migration.import_server.assert_called_once_with("in.zbbpack", "beta")
         with pytest.raises(UnsafePathError):
             api.servers.import_pack("in.zbbpack", "../beta")
@@ -259,10 +259,10 @@ class TestSmallAreas:
 
     def test_java_best(self):
         found = SimpleNamespace(major=21, source="PORTABLE", version_string="21.0.4")
-        java = JavaApi(lambda: SimpleNamespace(detect_all=lambda: [found]))
+        java = JavaApi(lambda: SimpleNamespace(detect_all=lambda force_refresh=False: [found]))
         best = java.best()
         assert (best.major, best.portable, best.version_string) == (21, True, "21.0.4")
-        assert JavaApi(lambda: SimpleNamespace(detect_all=lambda: [])).best() is None
+        assert JavaApi(lambda: SimpleNamespace(detect_all=lambda force_refresh=False: [])).best() is None
 
     def test_settings(self):
         store = MagicMock()
@@ -346,7 +346,7 @@ class TestAppApi:
         manager.server_runner = SimpleNamespace(process=alive)
         manager.playit_manager = SimpleNamespace(process=stubborn)
         api, _ = make_api(manager)
-        assert api.legacy_manager is manager and api.players is manager.players
+        assert not hasattr(api, "legacy_manager")
         api.start_background_services()
         api.shutdown()  # the stubborn process doesn't stop the shutdown
         assert manager.calls == [("bootstrap",), ("shutdown",)]

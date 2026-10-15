@@ -3,28 +3,22 @@
 Tabbed layout (F14): General, Notifications, Java, Storage, About.
 Global sections belong here, not in the per-server editor.
 
-Mutating operations (JDK purge, crash-report cleanup) go through
-ZBBManager; this dialog never touches services that change state directly.
+Everything it reads or changes goes through the API (`app/api`): settings,
+Java runtimes, disk usage, crash-report cleanup, shortcuts.
 Disk walks and Java probing run in daemon threads -- UI updates via
 `self.after(0, ...)`.
 """
 import logging
 import sys
 import threading
-from pathlib import Path
 
 import customtkinter as ctk
 
-from app.api.storage import open_in_file_manager
+from app.api.areas import ALLOWLISTED_COMMANDS, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
+from app.api.storage import format_size
 from app.core import i18n
 from app.core.app_config import AppConfig
-from app.core.bootstrap import remember_language
 from app.core.i18n import _, N_
-from app.core.constants import BASE_DIR, JDK_CACHE_DIR, LOGS_DIR, SERVERS_DIR, VERSIONS_CACHE_FILE
-from app.services.discord_webhook import DiscordWebhookService, DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS
-from app.services.disk_usage import dir_size, format_size
-from app.services.sanitizer import ALLOWLISTED_COMMANDS
-from app.services.settings_manager import SettingsManager
 from app.ui.icons import icon
 from app.ui.toast import Toast
 from app.ui.ui_components import ToolTip, ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, StackedTabview, ZBBToplevel
@@ -58,7 +52,7 @@ class AppSettingsDialog(ZBBToplevel):
     # Theme keys are stored as-is and passed to CTk's set_appearance_mode.
     _THEMES = (("Dark", N_("Dark")), ("Light", N_("Light")), ("System", N_("System")))
 
-    def __init__(self, master, zbb_manager, **kwargs):
+    def __init__(self, master, api, **kwargs):
         super().__init__(master, **kwargs)
         self.title("Settings")
         self.geometry("720x540")
@@ -69,8 +63,8 @@ class AppSettingsDialog(ZBBToplevel):
         self.focus_force()
         apply_rounded_corners(self)
 
-        self.zbb_manager = zbb_manager
-        self._settings = SettingsManager()
+        self.api = api
+        self._settings = api.settings
 
         # Init all data attributes before any thread can start.
         self._jdk_rows_frame = None
@@ -185,8 +179,7 @@ class AppSettingsDialog(ZBBToplevel):
         code = i18n.code_for_name(name)
         if code is None or code == self._settings.get("language"):
             return
-        self._settings.set("language", code)
-        remember_language(code, BASE_DIR)
+        self._settings.set_language(code)
         Toast.show(self, _("Restart ZeroBlockBridge to use the new language."), toast_type="info")
 
     # Labels for the "close_action" setting, in display order.
@@ -467,7 +460,7 @@ class AppSettingsDialog(ZBBToplevel):
         self._settings.set("webhook_avatar_url", self.entry_webhook_avatar.get().strip())
         self._settings.set("webhook_crash_mention_role", role)
         self._settings.set("webhook_templates", dict(self._webhook_templates))
-        self.zbb_manager.reload_discord_webhook()
+        self._settings.reload_notifications()
         if url:
             Toast.show(self, "Discord notifications enabled.", toast_type="success")
         else:
@@ -485,7 +478,7 @@ class AppSettingsDialog(ZBBToplevel):
         avatar_url = self.entry_webhook_avatar.get().strip()
 
         def _worker():
-            ok, error = DiscordWebhookService.send_test(url, username=username, avatar_url=avatar_url)
+            ok, error = self._settings.send_test_notification(url, username=username, avatar_url=avatar_url)
             def _apply():
                 if not self.winfo_exists():
                     return
@@ -557,8 +550,8 @@ class AppSettingsDialog(ZBBToplevel):
         loading.grid(row=0, column=0, sticky="w")
 
         def _worker():
-            jdks = self.zbb_manager.list_managed_jdks()
-            running = self.zbb_manager.is_running()
+            jdks = self.api.java.managed()
+            running = self.api.servers.is_running()
             self.after(0, lambda: self._render_jdk_rows(jdks, running))
 
         threading.Thread(target=_worker, daemon=True, name="JdkListScan").start()
@@ -612,7 +605,7 @@ class AppSettingsDialog(ZBBToplevel):
             confirm_text="Delete", danger=True,
         ):
             return
-        if self.zbb_manager.purge_jdk(version):
+        if self.api.java.purge(version):
             Toast.show(self, f"Java {version} deleted.", toast_type="success")
         else:
             Toast.show(self, "Cannot delete while the server is running.", toast_type="warning")
@@ -626,7 +619,7 @@ class AppSettingsDialog(ZBBToplevel):
             confirm_text="Purge", danger=True,
         ):
             return
-        if self.zbb_manager.purge_unused_jdks():
+        if self.api.java.purge_unused():
             Toast.show(self, "Unused runtimes purged.", toast_type="success")
         else:
             Toast.show(self, "Cannot purge while the server is running.", toast_type="warning")
@@ -644,9 +637,8 @@ class AppSettingsDialog(ZBBToplevel):
         loading.grid(row=0, column=0, sticky="w")
 
         def _worker():
-            from app.services.java_detector import JavaDetector
             try:
-                installs = JavaDetector().detect_all(force_refresh=force)
+                installs = self.api.java.installations(force_refresh=force)
             except Exception as exc:
                 logger.warning("Java detection failed: %s", exc)
                 installs = []
@@ -690,7 +682,7 @@ class AppSettingsDialog(ZBBToplevel):
         loc_row.grid(row=2, column=0, sticky="ew", padx=15, pady=(2, 12))
         loc_row.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
-            loc_row, text=str(BASE_DIR), font=AppConfig.FONT_BODY_SMALL,
+            loc_row, text=str(self.api.storage.data_dir), font=AppConfig.FONT_BODY_SMALL,
             text_color=AppConfig.COLOR_TEXT_GRAY, anchor="w",
         ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self._ghost_button(
@@ -720,18 +712,15 @@ class AppSettingsDialog(ZBBToplevel):
         self.btn_clear_reports.pack(side="left", padx=(8, 0))
 
     def _build_install_card(self, parent):
-        from app.core.bootstrap import MODE_INSTALLED, PORTABLE_FLAG, read_marker
-
-        exe = Path(sys.executable).resolve()
-        marker = read_marker()
-        installed = marker.get("exe_path") if marker.get("mode") == MODE_INSTALLED else None
-        if (exe.parent / PORTABLE_FLAG).exists():
-            status = f"Portable copy, running from {exe.parent}"
+        info = self.api.storage.install_info()
+        installed = info.installed_at
+        if info.portable:
+            status = f"Portable copy, running from {info.exe.parent}"
         elif installed:
             status = f"Installed at {installed}"
         else:
-            status = f"Not installed. Running {exe}"
-        self._shortcut_target = Path(installed) if installed else exe
+            status = f"Not installed. Running {info.exe}"
+        self._shortcut_target = info.shortcut_target
 
         card = self._card(parent, "Installation", status)
         row = ctk.CTkFrame(card, fg_color="transparent")
@@ -751,10 +740,8 @@ class AppSettingsDialog(ZBBToplevel):
             ).grid(row=3, column=0, sticky="ew", padx=15, pady=(0, 12))
 
     def _add_shortcut(self, start_menu: bool = False, desktop: bool = False):
-        from app.core import installer
-
         def _work():
-            failures = installer.add_shortcuts(self._shortcut_target, start_menu=start_menu, desktop=desktop)
+            failures = self.api.storage.add_shortcuts(self._shortcut_target, start_menu=start_menu, desktop=desktop)
             done = _("Shortcut added to the Start menu.") if start_menu else _("Shortcut added to the desktop.")
 
             def _report():
@@ -769,32 +756,16 @@ class AppSettingsDialog(ZBBToplevel):
         threading.Thread(target=_work, daemon=True).start()
 
     def _open_data_dir(self):
-        self._open_dir(BASE_DIR)
+        self.api.storage.open_folder(self.api.storage.data_dir, create=True)
 
     def _open_logs_dir(self):
-        self._open_dir(LOGS_DIR)
+        self.api.storage.open_folder(self.api.storage.logs_dir, create=True)
 
-    @staticmethod
-    def _open_dir(directory: Path):
-        open_in_file_manager(directory, create=True)
-
-    def _storage_categories(self) -> list:
-        """(label, size_bytes) pairs -- runs on a worker thread."""
-        backups_dir = BASE_DIR / "backups"
-        crash_total = 0
-        servers_dir = Path(SERVERS_DIR)
-        if servers_dir.exists():
-            for folder in servers_dir.iterdir():
-                crash_total += dir_size(folder / "crash_reports")
-        versions_size = VERSIONS_CACHE_FILE.stat().st_size if VERSIONS_CACHE_FILE.exists() else 0
-        return [
-            ("Servers", dir_size(servers_dir)),
-            ("Backups", dir_size(backups_dir)),
-            ("Java runtimes", dir_size(JDK_CACHE_DIR)),
-            ("Crash reports", crash_total),
-            ("Logs", dir_size(LOGS_DIR)),
-            ("Versions cache", versions_size),
-        ]
+    # api.storage.usage() keys -> row labels
+    _STORAGE_LABELS = {
+        "servers": "Servers", "backups": "Backups", "java": "Java runtimes",
+        "crash_reports": "Crash reports", "logs": "Logs", "versions_cache": "Versions cache",
+    }
 
     def _refresh_storage(self):
         frame = self._storage_rows_frame
@@ -807,7 +778,7 @@ class AppSettingsDialog(ZBBToplevel):
         loading.grid(row=0, column=0, sticky="w")
 
         def _worker():
-            rows = self._storage_categories()
+            rows = [(self._STORAGE_LABELS.get(key, key), size) for key, size in self.api.storage.usage()]
             self.after(0, lambda: self._render_storage_rows(rows))
 
         threading.Thread(target=_worker, daemon=True, name="StorageScan").start()
@@ -842,7 +813,7 @@ class AppSettingsDialog(ZBBToplevel):
             confirm_text="Delete", danger=True,
         ):
             return
-        removed = self.zbb_manager.purge_crash_reports()
+        removed = self.api.storage.purge_crash_reports()
         if removed:
             Toast.show(self, f"Crash reports cleared ({removed} server folders).", toast_type="success")
         else:

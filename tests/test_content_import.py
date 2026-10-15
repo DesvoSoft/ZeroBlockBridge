@@ -546,8 +546,11 @@ def test_scaffold_override_keeps_pack_values_for_untouched_wizard_defaults(tmp_p
 def test_wizard_defaults_come_from_the_scaffolder():
     """One source of truth, so 'did the user change it?' can't drift."""
     import inspect
+    from app.api.creation import CreationApi
+    from app.services.scaffolder import PROPERTY_DEFAULTS
     from app.ui import server_wizard
-    assert "**PROPERTY_DEFAULTS" in inspect.getsource(server_wizard.ServerWizard.__init__)
+    assert "**self.creation.property_defaults()" in inspect.getsource(server_wizard.ServerWizard.__init__)
+    assert CreationApi.property_defaults() == PROPERTY_DEFAULTS
 
 
 def test_same_name_claimed_atomically(tmp_path):

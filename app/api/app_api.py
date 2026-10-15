@@ -12,8 +12,11 @@ import logging
 from typing import Optional
 
 from app.api.areas import BackupsApi, ConsoleApi, JavaApi, SettingsApi, TunnelApi
+from app.api.creation import CreationApi
 from app.api.events import Dispatcher, EventHub, direct
 from app.api.mods import ModsApi
+from app.api.players import PlayersApi
+from app.api.server_config import ServerConfigApi
 from app.api.servers import ServersApi
 from app.api.storage import StorageApi
 from app.api.tasks import TaskRunner
@@ -43,19 +46,13 @@ class AppApi:
         self.console = ConsoleApi(manager)
         self.tunnel = TunnelApi(manager)
         self.backups = BackupsApi(manager)
-        # PlayerOrchestrator already takes and returns plain values.
-        self.players = manager.players
+        self.players = PlayersApi(manager.players)
         self.mods = mods or ModsApi(create_snapshot=self.backups.create_snapshot)
-        self.java = java or JavaApi()
-        self.settings = settings or SettingsApi()
-        self.storage = StorageApi()
-
-    @property
-    def legacy_manager(self):
-        """The ZBBManager, for the CustomTkinter screens not ported to this
-        API yet (players panel, settings, server properties). New code and
-        the Qt UI must not use it."""
-        return self._manager
+        self.java = java or JavaApi(manager=manager)
+        self.settings = settings or SettingsApi(manager=manager)
+        self.storage = StorageApi(manager)
+        self.config = ServerConfigApi()
+        self.creation = CreationApi(lambda: self.events.dispatcher)
 
     def set_dispatcher(self, dispatcher: Dispatcher) -> None:
         """Where event handlers, task progress and completion run from now on."""

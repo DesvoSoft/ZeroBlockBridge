@@ -168,10 +168,6 @@ class MCTunnelApp(ctk.CTk):
         # Core events, task progress and task completion reach this window
         # through the Tk main loop.
         self.api = AppApi(executor=self.executor, dispatcher=lambda fn: self.after(0, fn))
-        self.events = self.api.bus
-        # Screens not yet ported to the API (players, settings, properties)
-        # still take the manager; see docs/ROADMAP.md 8b.
-        self.zbb_manager = self.api.legacy_manager
 
         # Handlers that marshal on their own (they are also called from
         # worker threads) take the events on the emitting thread.
@@ -526,7 +522,7 @@ class MCTunnelApp(ctk.CTk):
             return
         from app.ui.players_panel import PlayersPanel
         self.players_panel = PlayersPanel(
-            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self._submit,
+            self.console_tabs.tab("Players"), self.api, run_async=self._submit,
             get_server=lambda: self.viewed_server)
         self.players_panel.pack(fill="both", expand=True)
         self.players_panel.update_idletasks()
@@ -789,7 +785,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_server_export(self, server_name):
         from tkinter import filedialog
-        from app.services.migration import MigrationError
+        from app.api.servers import MigrationError
 
         dest_path = filedialog.asksaveasfilename(
             defaultextension=".zbbpack",
@@ -826,7 +822,7 @@ class MCTunnelApp(ctk.CTk):
 
     def on_import_zbbpack(self):
         from tkinter import filedialog
-        from app.services.migration import MigrationError
+        from app.api.servers import MigrationError
 
         src_path = filedialog.askopenfilename(
             filetypes=[("ZeroBlockBridge Pack", "*.zbbpack")],
@@ -951,7 +947,7 @@ class MCTunnelApp(ctk.CTk):
 
     def edit_server_properties(self):
         if not self.viewed_server: return
-        ServerPropertiesEditor(self, self.viewed_server, zbb_manager=self.zbb_manager)
+        ServerPropertiesEditor(self, self.viewed_server, self.api)
 
     def _log_console_line(self, text):
         if isinstance(text, str):
@@ -1155,7 +1151,7 @@ class MCTunnelApp(ctk.CTk):
             self.app_settings_window.focus()
         else:
             from app.ui.app_settings import AppSettingsDialog
-            self.app_settings_window = AppSettingsDialog(self, self.zbb_manager)
+            self.app_settings_window = AppSettingsDialog(self, self.api)
 
     def on_server_stopped(self, data=None):
         self.after(0, lambda: self._enter_server_phase(None))
@@ -1169,7 +1165,7 @@ class MCTunnelApp(ctk.CTk):
         self.executor.submit(_stop)
 
     def create_server_dialog(self):
-        ServerWizard(self, on_complete_callback=self.on_wizard_complete)
+        ServerWizard(self, self.api, on_complete_callback=self.on_wizard_complete)
 
     def on_wizard_complete(self, config):
         # Cancel (or closing the app) stops provisioning at the next
