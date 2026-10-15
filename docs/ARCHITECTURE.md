@@ -47,8 +47,7 @@ Rules:
 - Subscribe through `api.events.subscribe()` (core code: `events.subscribe()`) — never `.on()`.
 - Widgets are touched only on the UI thread: the dispatcher given to `AppApi` marshals events and task callbacks there (`self.after(0, fn)` in CustomTkinter).
 - No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the setup dialogs before any window exists). `app/api` imports no GUI toolkit.
-- Ported screens (main window, Modrinth browser) reach the core only through `AppApi`; the others use `AppApi.legacy_manager` until 8b part B.
-- Pragmatic exception (unported screens): read-only/stateless helpers (load properties, list templates, disk usage).
+- Screens reach the core only through `AppApi`; besides `app.api` they may import only presentation modules of the core (`app_config`, `i18n`, `resources`, `logging_setup`). `main()` in `main.py` (logging, language, single instance, before any window or API exists) is the one exception. `tests/test_api_facade.py::TestBoundaries` checks every screen.
 
 ---
 
@@ -67,7 +66,7 @@ Dependency direction is strictly one-way: `ui → api → core → services`. Ne
 
 ## API Seam
 
-**Package:** `app/api/` (`AppApi` in `app_api.py`; areas in `servers.py`, `mods.py`, `storage.py`, `areas.py`; `events.py`, `tasks.py`)
+**Package:** `app/api/` (`AppApi` in `app_api.py`; areas in `servers.py`, `mods.py`, `players.py`, `server_config.py`, `creation.py`, `storage.py`, `areas.py`; `events.py`, `tasks.py`; data in `property_catalog.py`)
 
 The layer every UI talks to: the CustomTkinter screens today, the Qt screens of `docs/ROADMAP.md` 8d (and a pywebview fallback if the 8c spike fails) tomorrow. Inputs and outputs are plain Python — `str`, `dict`, dataclasses (`ServerInfo`, `MemorySample`, `JavaSummary`, `DeleteResult`), PIL images — and the package never imports a GUI toolkit or `app.ui` (`tests/test_api_facade.py::TestBoundaries` fails if it does). Everything is testable with pytest and fakes, without a display or network.
 
@@ -79,13 +78,17 @@ The layer every UI talks to: the CustomTkinter screens today, the Qt screens of 
 |------|----------|---------|
 | `servers` | `select`, `start`, `stop`, `delete` (refuses the running server and any name that isn't one folder), `export`, `import_pack`, `import_folder` (needs a `.jar`), `update_meta`, `request_mod_install`, `create(config) → Task` | `list`, `exists`, `valid_name`, `info(name) → ServerInfo` (engine, version, loader, max players), `is_running`, `active`, `running_server`, `memory() → MemorySample`, `creations()` |
 | `console` | `send(cmd) → bool` (False when nothing runs; the sanitizer stays in `ServerOrchestrator`) | lines arrive as `CONSOLE_LINE` events |
-| `tunnel` | `start`, `stop`, `reset(mode)`, `link(code)` | `is_linked`, `is_running`; status via `TUNNEL_STATUS` |
-| `players` | `PlayerOrchestrator` as is (`roster`, `whitelist_add`, `op`, `ban`, `kick`…) — it already takes and returns plain values | |
-| `backups` | `create_snapshot`, `delete` | |
+| `tunnel` | `start`, `stop`, `reset(mode)`, `link(code)` | `is_linked`, `is_running`, `status_changed(status)` (debounce); status via `TUNNEL_STATUS`; `TunnelStatus` / `tunnel_status_label` |
+| `players` | `set_whitelist_enabled`, `whitelist_add/remove`, `op`, `deop`, `ban`, `pardon`, `kick` → `PlayerResult` (ok, message) | `snapshot(name) → PlayersSnapshot` (roster, online mode, whitelist, live, default op level), `head_image(uuid, size)` (PIL); `OP_LEVELS` |
+| `backups` | `create`, `restore`, `delete` (only a `.zip` in that server's backup folder), `create_snapshot`, `set_auto_config` | `list`, `folder`, `auto_config`, `seconds_until_auto` |
+| `config` (one server) | `save_properties`, `set_ram_mb`, `set_icon`, `save_launch_settings(LaunchSettings)`, `set_restart_schedule`, `import_modpack(path)` | `meta`, `properties`, `worlds`, `ram_mb`, `launch_settings`, `restart_schedule` |
+| `creation` (wizard) | `refresh_versions`, `save_template` | `versions(engine)`, `on_versions_refreshed(cb)` (through the dispatcher, cancellable), `templates`, `load_template`, `normalize_template_name`, `template_exists`, `inspect_modpack`, `inspect_world`, `world_version_check`, `property_defaults`, `default_location`, `system_ram_mb` |
 | `mods` | `install_version`, `install_latest`, `install_modpack`, `apply_updates` (pre-update snapshot first, nothing touched if it fails), `uninstall`, `delete_file(s)` | `search`, `get_versions`, `required_dependencies`, `check_updates`, `installed_files/slugs/filename`, `fetch_icon` / `cached_icon` |
-| `java` | | `best() → JavaSummary` |
-| `settings` | `set`, `save` | `get` |
-| `storage` | `open_folder(path, create=False)` — the only place that launches Explorer/Finder/xdg-open (`open_in_file_manager`) | `data_dir`, `servers_dir`, `logs_dir`, `server_dir(name, sub)` |
+| `java` | `purge(version)`, `purge_unused` (runtimes ZBB downloaded) | `best() → JavaSummary`, `installations(force_refresh)`, `required(mc_version)`, `managed()`; `dropdown_labels` |
+| `settings` | `set`, `save`, `set_language` (settings + install marker), `reload_notifications`, `send_test_notification` | `get`; `DEFAULT_EVENT_PREFS`, `TEMPLATE_PLACEHOLDERS`, `ALLOWLISTED_COMMANDS` |
+| `storage` | `open_folder(path, create=False)` — the only place that launches Explorer/Finder/xdg-open (`open_in_file_manager`), `purge_crash_reports`, `add_shortcuts` | `data_dir`, `servers_dir`, `logs_dir`, `server_dir(name, sub)`, `usage()` (per-category bytes), `install_info()`; `format_size` |
+
+`property_catalog.py` is the server.properties catalog both UIs use: `SETTINGS_METADATA` (description and impact per key), `TAB_LAYOUTS` (tab → section → keys), `property_label`, `property_control` (checkbox / dropdown with options / entry), `IMPACT_LABELS` (marked with `N_`). Descriptions and labels stay English until the properties screen is ported (8d).
 
 Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (cancels tasks, closes subscriptions, `ZBBManager.shutdown()`, then kills a child process that survived — moved out of `main.py`). `mods` methods block on network/disk and are called from the UI's workers; `servers.start/stop` block too.
 
@@ -111,12 +114,12 @@ Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (ca
 |--------|------------------------|-----|
 | `main.py` | ~40 `zbb_manager.*` calls (start/stop/select/send_command/provision/tunnel/link/import/shutdown), `logic.get_server_meta`/`update_server_meta`/`get_server_ram`/`delete_server`, `load_server_properties`, `migration.export/import_server`, `JavaDetector`, `SettingsManager`, `os.makedirs(SERVERS_DIR)`, folder opening via `subprocess`, orphan-process kill, direct `EventBus` subscriptions with `self.after` inside each handler | API (part A) |
 | `modrinth_browser.py` | `ModrinthClient` (search, versions, deps, downloads, updates, icon HTTP via its session), `install_mrpack` + temp folder `shutil.rmtree`, `mod_install_tracker`, `os.remove` of mod files (3 places), `get_server_meta`, PIL decode/resize/disk cache of icons, `SERVERS_DIR` path building | API (part A); icons are wrapped in `CTkImage` and memory-cached in the UI only |
-| `server_properties_editor.py` | `BackupManager`, `logic` module (scheduler, RAM, icon), `save_server_properties`/`list_worlds`, `install_mrpack`, `JavaDetector`, ~61 property descriptions/impact levels as UI data | Part B (folder opening already via `open_in_file_manager`) |
-| `app_settings.py` | `zbb_manager` (JDK purge, crash reports, webhook reload), `JavaDetector`, `DiscordWebhookService`, `dir_size`, `SettingsManager` | Part B (folder opening done) |
-| `players_panel.py` | `zbb.players`, `fetch_head` | Part B |
-| `server_wizard.py` | `VersionManager`, `JavaDetector`, `template_manager`, `content_import` checks | Part B |
+| `server_properties_editor.py` | `BackupManager`, `BackupScheduler`, `logic` module (restart scheduler, RAM, icon, metadata), `load/save_server_properties`, `list_worlds`, `install_mrpack`, `migration.export_server`, `JavaDetector`, the runner's `running` flag, ~61 property descriptions/impact levels and the control-kind rules as UI data | API + `property_catalog` (part B) |
+| `app_settings.py` | `zbb_manager` (JDK list/purge, crash reports, webhook reload), `JavaDetector`, `DiscordWebhookService.send_test`, `dir_size` over `BASE_DIR`/`SERVERS_DIR`/`JDK_CACHE_DIR`…, `SettingsManager`, `remember_language`, `read_marker`, `installer.add_shortcuts` | API (part B) |
+| `players_panel.py` | `zbb.players`, `EventBus` subscribe/unsubscribe, `fetch_head` + PIL decoding | API (part B) |
+| `server_wizard.py` | `VersionManager` (+ callbacks), `JavaDetector`, `get_required_java`, `template_manager`, `content_import`, `PROPERTY_DEFAULTS`, `SERVERS_DIR`, `psutil` | API (part B) |
 
-Until part B lands those screens receive `AppApi.legacy_manager` (the `ZBBManager`); new code and the Qt UI must not use it.
+`AppApi.legacy_manager`, the bridge for unported screens in part A, is gone. Still outside the API: `ui_components.ServerListItem` reads the server icon file from `SERVERS_DIR` (display only).
 
 ### Mod files behind a guard
 
@@ -438,6 +441,10 @@ ZeroBlockBridge/
 │   │   ├── servers.py                 # ServersApi, ServerInfo, MemorySample
 │   │   ├── mods.py                    # ModsApi over Modrinth + mod_content + mod_icons
 │   │   ├── areas.py                   # Console, Tunnel, Backups, Java, Settings
+│   │   ├── players.py                 # PlayersApi: roster snapshot, actions, skin heads
+│   │   ├── server_config.py           # One server: properties, worlds, RAM, icon, launch, restarts, .mrpack
+│   │   ├── creation.py                # Wizard: versions (+ refresh listener), templates, content checks, defaults
+│   │   ├── property_catalog.py        # server.properties descriptions, impact, layout, labels, control kinds
 │   │   ├── storage.py                 # Paths + open_in_file_manager (the only folder opener)
 │   │   ├── events.py                  # EventHub / Subscription / dispatchers
 │   │   └── tasks.py                   # Task handles: progress, done, cancel

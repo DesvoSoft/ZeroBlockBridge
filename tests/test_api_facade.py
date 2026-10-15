@@ -492,12 +492,38 @@ class TestBoundaries:
                    or n.startswith("app.ui")}
             assert not bad, f"{path.name} imports {bad}"
 
-    @pytest.mark.parametrize("screen", ["main.py", "modrinth_browser.py"])
-    def test_ported_screens_reach_the_core_only_through_the_api(self, screen):
-        names = _imports(ROOT / "app" / "ui" / screen)
-        forbidden = {"app.core.logic", "app.core.core", "app.services.mod_install_tracker",
-                     "app.services.mrpack_installer", "app.services.modrinth", "subprocess", "shutil",
-                     "app.services.server_properties", "requests"}
-        assert not names & forbidden
+    # Presentation-only core modules a screen may use: UI tokens, translation,
+    # bundled assets, Tk callback logging.
+    ALLOWED_CORE = {"app.core.app_config", "app.core.i18n", "app.core.resources", "app.core.logging_setup"}
+    SCREENS = ["main.py", "modrinth_browser.py", "players_panel.py", "app_settings.py",
+               "server_wizard.py", "server_properties_editor.py"]
+
+    @pytest.mark.parametrize("screen", SCREENS)
+    def test_screens_reach_the_core_only_through_the_api(self, screen):
+        """Every app.core / app.services import outside the allowed presentation
+        modules is a leak. main() (startup glue before any window or API
+        exists) is the one documented exception."""
+        names = _screen_imports(ROOT / "app" / "ui" / screen)
+        leaks = {n for n in names if n.startswith(("app.core", "app.services"))
+                 and not any(n == a or n.startswith(a + ".") for a in self.ALLOWED_CORE)
+                 and n != "app.core"}
+        assert not leaks, f"{screen} imports {sorted(leaks)}"
+        # `from app.core import i18n` names the package: only i18n is allowed from it.
+        assert names & {"app.core." + x for x in ("logic", "core", "constants", "players")} == set()
+        assert not names & {"subprocess", "shutil", "requests", "psutil"}
         source = (ROOT / "app" / "ui" / screen).read_text(encoding="utf-8")
         assert "os.remove(" not in source and "os.makedirs(" not in source
+
+
+def _screen_imports(path: Path) -> set:
+    """Imports of a screen module, leaving out its module-level main()."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree.body = [n for n in tree.body if not (isinstance(n, ast.FunctionDef) and n.name == "main")]
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            names.update(f"{node.module}.{a.name}" for a in node.names)
+    return names

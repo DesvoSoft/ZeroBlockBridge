@@ -9,7 +9,9 @@ from typing import Any, Optional
 
 from app.core.bootstrap import remember_language
 from app.core.constants import BASE_DIR
+from app.core import statemanager
 from app.core.logic import BackupScheduler
+from app.core.playit_manager import TunnelStatus, tunnel_status_label  # noqa: F401  (re-exported for UIs)
 from app.services.backup_manager import BackupManager
 from app.services.discord_webhook import (  # noqa: F401  (re-exported for UIs)
     DEFAULT_EVENT_PREFS, TEMPLATE_PLACEHOLDERS, DiscordWebhookService,
@@ -63,6 +65,12 @@ class TunnelApi:
     def is_running(self) -> bool:
         playit = getattr(self._manager, "playit_manager", None)
         return bool(playit is not None and getattr(playit, "running", False))
+
+    @staticmethod
+    def status_changed(status: dict) -> bool:
+        """Debounce for TUNNEL_STATUS events: False for a repeat of the shown
+        status or one that arrives within the debounce window."""
+        return statemanager.schedule_update(status)
 
 
 class BackupsApi:
