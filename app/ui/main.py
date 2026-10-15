@@ -521,7 +521,7 @@ class MCTunnelApp(ctk.CTk):
             return
         from app.ui.players_panel import PlayersPanel
         self.players_panel = PlayersPanel(
-            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self.executor.submit,
+            self.console_tabs.tab("Players"), self.zbb_manager, self.events, run_async=self._submit,
             get_server=lambda: self.viewed_server)
         self.players_panel.pack(fill="both", expand=True)
         self.players_panel.update_idletasks()
@@ -1127,6 +1127,18 @@ class MCTunnelApp(ctk.CTk):
         self._status_ticks = 0
         self._sync_server_header()
         self._tick_server_status()
+
+    def _submit(self, fn, *args):
+        """executor.submit for callbacks that can still fire while exiting
+        (e.g. the Players tab refreshing on the STOPPED event of exit's own
+        server stop, after the executor was shut down): the work is dropped."""
+        if getattr(self, "_exiting", False):
+            return None
+        try:
+            return self.executor.submit(fn, *args)
+        except RuntimeError as e:
+            logger.debug("Dropped background work after shutdown: %s", e)
+            return None
 
     def _tick_server_status(self):
         self._status_tick_job = None

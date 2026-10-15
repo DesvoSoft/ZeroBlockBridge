@@ -184,7 +184,8 @@ class ZBBToplevel(ctk.CTkToplevel):
         try:
             super()._windows_set_titlebar_color(color_mode)
         finally:
-            del self.focus_get
+            # A nested re-theme (CTk calls update() inside) may have removed it.
+            self.__dict__.pop("focus_get", None)
 
     def _focus_get_guarded(self):
         widget = ctk.CTkToplevel.focus_get(self)

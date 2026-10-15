@@ -90,3 +90,19 @@ def test_titlebar_retheme_hands_ctk_a_guarded_focus(monkeypatch):
     ZBBToplevel._windows_set_titlebar_color(window, "dark")
     assert isinstance(seen["focus"], _FocusIfAlive)
     assert "focus_get" not in vars(window)  # the override is removed again
+
+
+def test_titlebar_retheme_survives_reentry(monkeypatch):
+    """CTk's re-theme calls update(), which can run another re-theme of the
+    same window; the inner one must not break the outer one's cleanup."""
+    calls = []
+
+    def fake_parent_retheme(self, color_mode):
+        calls.append(color_mode)
+        if len(calls) == 1:
+            ZBBToplevel._windows_set_titlebar_color(self, "light")
+
+    monkeypatch.setattr(ctk.CTkToplevel, "_windows_set_titlebar_color", fake_parent_retheme)
+    window = ZBBToplevel.__new__(ZBBToplevel)
+    ZBBToplevel._windows_set_titlebar_color(window, "dark")  # must not raise
+    assert calls == ["dark", "light"] and "focus_get" not in vars(window)

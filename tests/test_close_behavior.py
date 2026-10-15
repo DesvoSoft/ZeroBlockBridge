@@ -149,3 +149,20 @@ def test_status_tick_keeps_running_normally():
     cls._tick_server_status(app)
     app.executor.submit.assert_called_once()
     app.after.assert_called_once()
+
+
+def test_background_work_is_dropped_once_the_app_is_exiting():
+    """The Players tab refreshes on the server STOPPED event that exit's own
+    server stop emits, after the executor was shut down."""
+    from app.ui.main import MCTunnelApp
+    app = MagicMock(_exiting=True)
+    assert MCTunnelApp._submit(app, lambda: None) is None
+    app.executor.submit.assert_not_called()
+
+    app = MagicMock(_exiting=False)
+    app.executor.submit.side_effect = RuntimeError("cannot schedule new futures after shutdown")
+    assert MCTunnelApp._submit(app, lambda: None) is None
+
+    app = MagicMock(_exiting=False)
+    assert MCTunnelApp._submit(app, print, "x") is app.executor.submit.return_value
+    app.executor.submit.assert_called_once_with(print, "x")
