@@ -7,6 +7,8 @@ where the UI wants it. CustomTkinter passes ``lambda fn: root.after(0, fn)``,
 a Qt UI a queued signal; tests and headless callers use ``direct``.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 from typing import Any, Callable, Optional

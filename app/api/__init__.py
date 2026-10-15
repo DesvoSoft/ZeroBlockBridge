@@ -4,6 +4,8 @@ UIs import from here, never from app.core / app.services directly for
 actions or state. This package never imports a GUI toolkit.
 """
 
+from __future__ import annotations
+
 from app.api.app_api import AppApi
 from app.api.events import Dispatcher, EventHub, Subscription, direct
 from app.api.servers import MemorySample, NoServerJarError, ServerInfo, ServerRunningError

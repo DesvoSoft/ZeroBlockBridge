@@ -1,5 +1,7 @@
 """Folders: where things live and opening them in the system file manager."""
 
+from __future__ import annotations
+
 import logging
 import os
 import subprocess

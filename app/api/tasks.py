@@ -7,6 +7,8 @@ download chunks). Progress and completion callbacks go through the task's
 dispatcher, so a UI receives them on its own thread.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import threading

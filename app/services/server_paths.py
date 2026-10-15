@@ -1,5 +1,7 @@
 """Validation of server names used to build paths under SERVERS_DIR."""
 
+from __future__ import annotations
+
 import os
 import re
 import sys
