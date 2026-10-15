@@ -15,6 +15,7 @@ Modpacks:
 server folder.
 """
 
+import io
 import json
 import logging
 import os
@@ -439,17 +440,40 @@ def _detect_neoforge(names: list):
     return None
 
 
-def _detect_from_files(names: list) -> tuple:
+def _is_neoforge_installer(read: Optional[Callable[[str], bytes]], name: str) -> bool:
+    """True when `name` is NeoForge 1.20.1's installer, which is named like
+    Forge's ("forge-1.20.1-47.1.106-installer.jar"); its install profile
+    points at net.neoforged instead of net.minecraftforge."""
+    if read is None or "installer" not in name:
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(read(name))) as installer:
+            for entry in ("install_profile.json", "version.json"):
+                try:
+                    if b"net.neoforged" in installer.read(entry):
+                        return True
+                except KeyError:
+                    continue
+    except (zipfile.BadZipFile, KeyError, OSError) as e:
+        logger.debug("Couldn't read installer %s: %s", name, e)
+    return False
+
+
+def _detect_from_files(names: list, read: Optional[Callable[[str], bytes]] = None) -> tuple:
     """(loader, mc_version, loader_version) from the pack's files; each part
-    may be None."""
+    may be None. `read` returns an entry's bytes, to look inside installers."""
     # NeoForge first: a NeoForge 1.20.1 pack also contains a "forge-1.20.1-
     # 47.1.x" jar whose build number doesn't exist on Forge's maven.
     neo = _detect_neoforge(names)
     if neo:
         return neo
-    forge = _first_match(_FORGE_LIB_RE, names) or _first_match(_FORGE_JAR_RE, names)
+    forge = _first_match(_FORGE_LIB_RE, names)
     if forge:
         return "Forge", forge.group(1), forge.group(2)
+    forge = _first_match(_FORGE_JAR_RE, names)
+    if forge:
+        loader = "NeoForge" if _is_neoforge_installer(read, forge.string) else "Forge"
+        return loader, forge.group(1), forge.group(2)
     if _first_match(_QUILT_RE, names):
         return "Quilt", None, None
     loader_m = _first_match(_FABRIC_LOADER_RE, names)
@@ -483,7 +507,7 @@ def _inspect_serverpack(path: str, zf: zipfile.ZipFile, names: list) -> ModpackI
 
     info = ModpackInfo(path=path, kind="serverpack", name=_stem(path), mod_count=len(mods), root=root)
     _apply_variables(info, _read_variables(zf, root))
-    loader, mc, loader_version = _detect_from_files(rel_names)
+    loader, mc, loader_version = _detect_from_files(rel_names, lambda name: zf.read(root + name))
     if info.loader is None:
         info.loader, info.loader_version = loader, loader_version
     elif info.loader == loader and not info.loader_version:

@@ -19,6 +19,8 @@ BUILDS = [
     ("26.1.2.117", "26.1.2"),
     ("26.3.0.77", "26.3"),
     ("26.1.0.19-beta", "26.1"),
+    ("47.1.106", "1.20.1"),   # NeoForge 1.20.1 (net.neoforged:forge)
+    ("22.0.1", None),         # three-part builds only exist for 1.20.x/1.21.x
     ("0.25w14craftmine.5-beta", None),
     ("not-a-version", None),
     ("", None),

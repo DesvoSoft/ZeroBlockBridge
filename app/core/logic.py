@@ -18,6 +18,7 @@ from typing import Optional, Callable, Any
 
 from app.core.constants import (APP_CONFIG_PATH, SERVERS_DIR, VANILLA_MANIFEST_URL, subprocess_flags, ANSI_ESCAPE_RE,
                                  atomic_write_json)
+from app.core import neoforge
 from app.core.server_events import ServerEvent
 from app.core.version_manager import VersionManager
 from app.services.java_detector import probe_java
@@ -191,7 +192,6 @@ def _mc_before_dash(name: str) -> str:
 
 def _library_versions():
     """(libraries/ sub-path, folder name -> Minecraft version), checked in order."""
-    from app.core import neoforge
     return (
         (("net", "neoforged", "neoforge"), neoforge.mc_version),   # <build>, e.g. 21.1.77 -> 1.21.1
         (("net", "neoforged", "forge"), _mc_before_dash),          # 1.20.1-47.1.106
@@ -512,7 +512,7 @@ def _try_link_or_copy(src: str, dest: str, debug_name: str) -> bool:
 
 
 _MIN_JAR_BYTES = 100
-_INSTALLER_JARS = ("forge-installer.jar", "fabric-installer.jar")
+_INSTALLER_JARS = ("forge-installer.jar", "fabric-installer.jar", "neoforge-installer.jar")
 
 
 def _is_valid_jar(path: str) -> bool:
@@ -548,7 +548,9 @@ def _forge_modern_candidates(server_dir: str):
             continue
         try:
             with open(os.path.join(root, args_name), "r", encoding="utf-8") as f:
-                match = re.search(r"([^\s]+\.jar)", f.read())
+                # The module path ("-p a.jar;b.jar", ":" on Linux) is one
+                # token: take its first jar.
+                match = re.search(r"([^\s%s]+\.jar)" % re.escape(os.pathsep), f.read())
         except OSError as e:
             logger.debug("Normalize: forge modern detection failed: %s", e)
             return
