@@ -462,3 +462,55 @@ class TestTunnelOrchestrator:
         orch.create_tunnel_for_server("my_server")
 
         mgr.executor.submit.assert_called_once()
+
+
+class TestBackupErrorsStayEnglishOutsideTheUi:
+    """Backup errors are shown translated, but the console line and the
+    BACKUP_FAILED event (which Discord posts) keep the English text."""
+
+    def _failed_backup(self, tmp_path):
+        from app.core import i18n
+        from app.services.backup_manager import BackupManager
+        i18n.set_language("es")
+        with patch("app.services.backup_manager.SERVERS_DIR", tmp_path), \
+                patch("app.services.backup_manager.BASE_DIR", tmp_path), \
+                patch("app.core.constants.check_disk_space", return_value=False):
+            return BackupManager("srv").create_backup()
+
+    def test_create_backup_error_is_translated_with_english_kept(self, tmp_path):
+        from app.core.i18n import english
+        _path, error = self._failed_backup(tmp_path)
+        assert error.startswith("No hay suficiente espacio")
+        assert english(error) == "Not enough disk space to create backup (>1GB required)."
+
+    def test_auto_backup_failure_event_is_english(self, tmp_path):
+        _path, error = self._failed_backup(tmp_path)
+        mgr = _make_manager(_backup_in_progress=True)
+        orch = BackupOrchestrator(mgr)
+        with patch("app.core.orchestrators.BackupManager") as MockBM, \
+                patch("app.core.orchestrators.BackupScheduler"):
+            MockBM.return_value.create_backup.return_value = (None, error)
+            orch._run_auto_backup()
+        failed = [d for e, d in mgr.events.events if e == ServerEvent.BACKUP_FAILED]
+        lines = [d for e, d in mgr.events.events if e == ServerEvent.CONSOLE_LINE]
+        assert failed[0]["error"] == "Not enough disk space to create backup (>1GB required)."
+        assert lines[-1] == "[Error] Auto-backup failed: Not enough disk space to create backup (>1GB required)."
+
+    def test_snapshot_failure_event_is_english(self, tmp_path):
+        _path, error = self._failed_backup(tmp_path)
+        mgr = _make_manager()
+        mgr.is_running = MagicMock(return_value=False)
+        orch = BackupOrchestrator(mgr)
+        with patch("app.core.orchestrators.BackupManager") as MockBM:
+            MockBM.return_value.create_backup.return_value = (None, error)
+            assert orch.create_pre_update_snapshot("srv") == (None, error)
+        failed = [d for e, d in mgr.events.events if e == ServerEvent.BACKUP_FAILED]
+        assert failed[0]["error"].startswith("Not enough disk space")
+
+
+def test_discord_posts_the_english_backup_error():
+    from app.core.i18n import Bilingual
+    from app.services.discord_webhook import DiscordWebhookService
+    error = Bilingual("Sin espacio", "Out of space")
+    svc = DiscordWebhookService.__new__(DiscordWebhookService)
+    assert "Out of space" in svc._format_description(ServerEvent.BACKUP_FAILED, {"error": error})

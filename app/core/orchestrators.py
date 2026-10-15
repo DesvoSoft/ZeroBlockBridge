@@ -5,7 +5,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Optional
-from app.core.i18n import _
+from app.core.i18n import _, english
 from app.core.server_events import ServerEvent
 from app.core.logic import Scheduler, BackupScheduler, get_server_meta
 from app.services.backup_manager import BackupManager
@@ -165,8 +165,9 @@ class BackupOrchestrator:
                     self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {path.name}")
                     self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": self.manager.current_server})
                 else:
-                    self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
-                    self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": self.manager.current_server})
+                    self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {english(error)}")
+                    self.manager.events.emit(ServerEvent.BACKUP_FAILED,
+                                             {"error": english(error), "server": self.manager.current_server})
                 BackupScheduler(self.manager.current_server).mark_run()
             except Exception as exc:
                 # This runs fire-and-forget on the executor — nobody calls .result()
@@ -213,8 +214,8 @@ class BackupOrchestrator:
                 path = None
             if not path:
                 logger.warning("Pre-update snapshot failed for %s: %s", server_name, error)
-                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Pre-update snapshot failed: {error}")
-                self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": error, "server": server_name})
+                self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Pre-update snapshot failed: {english(error)}")
+                self.manager.events.emit(ServerEvent.BACKUP_FAILED, {"error": english(error), "server": server_name})
                 return None, error
             self.manager.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Pre-update snapshot created: {path.name}")
             self.manager.events.emit(ServerEvent.BACKUP_COMPLETED, {"path": str(path), "server": server_name})

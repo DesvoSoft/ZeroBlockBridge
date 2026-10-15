@@ -206,7 +206,7 @@ Roboto is not installed on stock Windows — never use it.
 
 - Wrap user-facing text in `_()` from `app.core.i18n` (`ngettext()` for counts, never `'s' if n != 1`), with named placeholders: `_("Installed at:\n{path}").format(path=p)`. Whole sentences only — never join translated fragments in code.
 - Module-level labels: `N_("...")`, translated with `_()` where shown (the language is set after import).
-- Never compare or persist display text: keep an internal key and map it to a label at display time (`i18n.choice_labels`/`choice_key`, `StackedTabview.add_labeled`). Never decide a console line's color from its wording: emit `console_line.error_line(...)`.
+- Never compare or persist display text: keep an internal key and map it to a label at display time (`i18n.choice_labels`/`choice_key`, `StackedTabview.add_labeled`). Never decide a console line's color from its wording: emit `console_line.error_line(...)`. Text that is both shown and sent somewhere English-only (Discord, console) is `i18n.bilingual(...)`, read there with `i18n.english()`.
 - Don't assign `_` (`a, _, _ = ...`) in a function that calls `_()`.
 - After changing strings: `py tools/i18n.py extract`, `update`, translate each `.po`, `compile`; commit `.po` and `.mo` together. See ARCHITECTURE "Language (i18n)".
 

@@ -326,7 +326,8 @@ def test_every_marked_string_is_translated(lang):
     catalog = _po(lang)
     missing, seen = [], 0
     for _file, _line, message, _comments, context in extract_from_dir(
-            str(ROOT / "app"), keywords={"_": None, "N_": None, "ngettext": (1, 2), "pgettext": ((1, "c"), 2)}):
+            str(ROOT / "app"), keywords={"_": None, "N_": None, "ngettext": (1, 2), "pgettext": ((1, "c"), 2),
+                      "bilingual": None, "bilingual_n": (1, 2)}):
         msgid = message[0] if isinstance(message, (tuple, list)) else message
         entry = catalog.get(msgid, context=context)
         seen += 1

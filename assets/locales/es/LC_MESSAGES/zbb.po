@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 14:12-0600\n"
+"POT-Creation-Date: 2026-10-15 14:28-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -779,7 +779,7 @@ msgstr "El agente de Playit no pudo iniciarse tras varios intentos."
 
 msgid "Playit secret invalid. Use 'Reset Tunnel' to re-link."
 msgstr ""
-"El secreto de Playit no es válido. Use 'Restablecer túnel' para volver a "
+"El secreto de Playit no es válido. Use 'Reset Tunnel' para volver a "
 "vincular."
 
 #, python-brace-format
@@ -979,7 +979,7 @@ msgid ""
 " panel."
 msgstr ""
 "No se pudo configurar el túnel de Playit ({reason}). Inícielo desde el "
-"panel Túnel."
+"panel Tunnel."
 
 #, python-brace-format
 msgid "The archive contains a file name Windows can't create: {name}"
@@ -1070,7 +1070,7 @@ msgid ""
 msgstr ""
 "Este mundo se guardó con Minecraft {version}, más reciente que este "
 "servidor ({server_version}). Una versión anterior puede dañarlo: elija "
-"Minecraft {minimum} o posterior en el paso Motor y versión."
+"Minecraft {minimum} o posterior en el paso Engine & Version."
 
 #, python-brace-format
 msgid ""
@@ -1094,7 +1094,7 @@ msgid "Tunnel pending: no ports available. Check the playit.gg dashboard."
 msgstr "Túnel pendiente: no hay puertos disponibles. Revise el panel de playit.gg."
 
 msgid "Tunnels cleared. Click Start Tunnel to create a new tunnel."
-msgstr "Túneles eliminados. Haga clic en Iniciar túnel para crear un túnel nuevo."
+msgstr "Túneles eliminados. Haga clic en Start Tunnel para crear un túnel nuevo."
 
 #, python-brace-format
 msgid "URL not found for {engine} {version}"

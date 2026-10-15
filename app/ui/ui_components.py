@@ -649,6 +649,7 @@ class ToolTip:
                 logger.debug("ToolTip destroy ignored: %s", e)
             self.tooltip = None
 
+_AGENT_ERROR_RE = re.compile(r"ERROR|Error|[Ff]ailed")
 _AGENT_LINE_RE = re.compile(r"^\[Playit\] (\S+\s+)?(TRACE|DEBUG|INFO)\b")
 
 
@@ -859,10 +860,11 @@ class TunnelLogWidget(ConsoleWidget):
 
     @staticmethod
     def _line_tag(message):
-        # ZBB's own lines say their kind; "ERROR"/"WARN" are playitd's log
-        # levels. Never match wording ("failed"): it is translated.
+        # ZBB's own error lines say their kind (their wording may be
+        # translated). Lines without one are playitd's raw English output,
+        # still matched by its log level or wording.
         kind = kind_of(message)
-        if kind is LineKind.ERROR or "ERROR" in message:
+        if kind is LineKind.ERROR or (kind is None and _AGENT_ERROR_RE.search(message)):
             return "line_error"
         if kind is LineKind.WARNING or "WARN" in message:
             return "line_warn"
