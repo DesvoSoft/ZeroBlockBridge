@@ -137,6 +137,29 @@ def N_(message: str) -> str:
 
 
 # ----------------------------------------------------------------------
+# Choices: an internal key per option, a translated label to show
+# ----------------------------------------------------------------------
+# A choice list is `((key, N_("Label")), ...)`. Widgets show the labels and
+# hand the chosen label back; code compares and stores only the key, so a
+# translation can never change what is saved or matched.
+
+def choice_labels(choices) -> list[str]:
+    """The translated labels, in order."""
+    return [_(label) for _key, label in choices]
+
+
+def choice_label(choices, key) -> str:
+    """The translated label of `key`; the first option's when `key` is unknown."""
+    label = next((label for k, label in choices if k == key), choices[0][1])
+    return _(label)
+
+
+def choice_key(choices, label, default=None):
+    """The key whose translated label is `label`; `default` when none is."""
+    return next((key for key, text in choices if _(text) == label), default)
+
+
+# ----------------------------------------------------------------------
 # Formatting
 # ----------------------------------------------------------------------
 _MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"),

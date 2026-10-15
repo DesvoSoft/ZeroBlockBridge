@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 from typing import Callable
 from app.core.app_config import AppConfig
+from app.core.console_line import LineKind, kind_of
 from app.core.i18n import _
 from app.core.constants import SERVERS_DIR
 from app.ui.formatting import engine_name
@@ -260,6 +261,18 @@ class StackedTabview(ctk.CTkTabview):
 
     def winfo_children(self):
         return [w for w in super().winfo_children() if w is not self._tab_area]
+
+    def add_labeled(self, name: str, label: str):
+        """Add a tab keyed by `name` (what get()/set()/tab() use, safe to
+        compare and persist) whose button shows `label` (translated)."""
+        tab = self.add(name)
+        self.set_tab_text(name, label)
+        return tab
+
+    def set_tab_text(self, name: str, text: str):
+        button = self._segmented_button._buttons_dict.get(name)
+        if button is not None and button.cget("text") != text:
+            button.configure(text=text)
 
     def _grid_forget_all_tabs(self, exclude_name=None):
         pass  # hidden tabs stay mapped beneath the canvas
@@ -698,11 +711,14 @@ class ConsoleWidget(ctk.CTkTextbox):
         # literal text "[Security]" and must not pass as a ZBB alert.
         # Always returns a tag (never None) — "line_plain" for everything
         # else — so the category filter can also hide/show untagged lines.
+        # ZBB's own lines say their kind (kind_of); "ERROR"/"WARN" are the
+        # log levels of Minecraft's output, never translated.
         if message.startswith("[Security]"):
             return "line_security"
-        if "ERROR" in message:
+        kind = kind_of(message)
+        if kind is LineKind.ERROR or "ERROR" in message:
             return "line_error"
-        if "WARN" in message:
+        if kind is LineKind.WARNING or "WARN" in message:
             return "line_warn"
         if "joined the game" in message:
             return "line_join"
@@ -843,9 +859,12 @@ class TunnelLogWidget(ConsoleWidget):
 
     @staticmethod
     def _line_tag(message):
-        if "ERROR" in message or "Error" in message or "failed" in message or "Failed" in message:
+        # ZBB's own lines say their kind; "ERROR"/"WARN" are playitd's log
+        # levels. Never match wording ("failed"): it is translated.
+        kind = kind_of(message)
+        if kind is LineKind.ERROR or "ERROR" in message:
             return "line_error"
-        if "WARN" in message:
+        if kind is LineKind.WARNING or "WARN" in message:
             return "line_warn"
         if _AGENT_LINE_RE.match(message):
             return "line_agent"

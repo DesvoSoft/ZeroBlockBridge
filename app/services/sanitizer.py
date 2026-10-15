@@ -3,11 +3,14 @@ import re
 from enum import Enum
 from typing import Optional
 
+from app.core.i18n import _, N_
+
 logger = logging.getLogger(__name__)
 
 
 class BlockedReason(str, Enum):
-    """Why a console command was blocked. Values are user-facing text."""
+    """Why a console command was blocked. The values are stable keys (logs);
+    describe_blocked() shows the translated text."""
     # str mixin keeps `"empty" in reason` / f-string use working; explicit
     # __str__ because Enum's default renders "BlockedReason.EMPTY" on 3.12+.
     EMPTY = "empty command"
@@ -87,12 +90,23 @@ def is_safe_command(command: str) -> tuple[bool, Optional[BlockedReason]]:
     return True, None
 
 
+_REASON_LABELS = {
+    BlockedReason.EMPTY: N_("empty command"),
+    BlockedReason.SHELL_METACHARACTERS: N_("contains shell metacharacters"),
+    BlockedReason.INJECTION_PATTERN: N_("contains shell injection pattern"),
+    BlockedReason.SUSPICIOUS_UNKNOWN: N_("unknown command with suspicious characters"),
+}
+
+
 def describe_blocked(command: str, reason: BlockedReason, max_len: int = 40) -> str:
     """User-facing explanation, e.g. "Blocked `op x; rm -rf /`: contains shell metacharacters"."""
     shown = " ".join(command.split())  # newlines would break the toast layout
     if len(shown) > max_len:
         shown = shown[:max_len - 1] + "…"
-    return f"Blocked `{shown}`: {reason}" if shown else f"Blocked: {reason}"
+    why = _(_REASON_LABELS[BlockedReason(reason)])
+    if shown:
+        return _("Blocked `{command}`: {reason}").format(command=shown, reason=why)
+    return _("Blocked: {reason}").format(reason=why)
 
 
 def _looks_like_minecraft_command(text: str) -> bool:

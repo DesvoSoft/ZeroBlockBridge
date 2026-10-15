@@ -6,7 +6,7 @@ import webbrowser
 from app.core.constants import SERVERS_DIR
 from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
-from app.services.java_detector import JavaDetector, get_required_java
+from app.services.java_detector import JavaDetector, dropdown_labels, get_required_java
 from app.services.scaffolder import PROPERTY_DEFAULTS
 from app.services.template_manager import (list_templates, load_template, normalize_template_name,
                                             save_template, template_exists)
@@ -772,7 +772,7 @@ class ServerWizard(ZBBToplevel):
                     return
 
                 self.rb_java_detected.configure(state="normal")
-                labels = [inst.label for inst in installations]
+                labels = dropdown_labels(installations)
                 self.java_detected_menu.configure(values=labels, state="normal")
 
                 best_idx = next((i for i, inst in enumerate(installations) if inst.major == required), 0)

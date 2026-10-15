@@ -59,8 +59,10 @@ class TestTunnelLogCategories:
         assert T._line_tag("[System] Clearing tunnels...") == "line_tunnel"
 
     def test_errors_and_warnings_win(self):
+        from app.core.console_line import error_line, warning_line
         from app.ui.ui_components import TunnelLogWidget as T
-        assert T._line_tag("[Playit] Download failed: timeout") == "line_error"
+        assert T._line_tag(error_line("[Playit] Download failed: timeout")) == "line_error"
+        assert T._line_tag(warning_line("[Playit] Tunnel pending")) == "line_warn"
         assert T._line_tag("[Playit] 2026-09-16T20:00:00Z ERROR playitd: lost connection") == "line_error"
         assert T._line_tag("[Playit] 2026-09-16T20:00:00Z  WARN playitd: slow ping") == "line_warn"
 
@@ -70,3 +72,28 @@ class TestTunnelLogCategories:
         assert keys == {None, "errors", "warnings", "tunnel", "agent"}
         m = T._elide_map("agent")
         assert m["line_agent"] is False and m["line_tunnel"] is True
+
+
+class TestExplicitLineKinds:
+    """Red/amber comes from the kind ZBB gives its own lines, never from
+    words in them: translated text must color the same, and wording that
+    merely mentions an error must not turn red."""
+
+    def test_translated_error_line_stays_red(self):
+        from app.core.console_line import error_line
+        from app.ui.ui_components import ConsoleWidget, TunnelLogWidget
+        line = error_line("[Playit] Error al descargar: tiempo agotado")
+        assert TunnelLogWidget._line_tag(line) == "line_error"
+        assert ConsoleWidget._line_tag(error_line("[Error] No se encontró Java")) == "line_error"
+
+    def test_wording_alone_no_longer_colors(self):
+        from app.ui.ui_components import TunnelLogWidget as T
+        assert T._line_tag("[Playit] Retrying after the last attempt failed") == "line_tunnel"
+        assert T._line_tag("[System] Error log cleared") == "line_tunnel"
+
+    def test_kind_survives_as_plain_text(self):
+        from app.core.console_line import ConsoleLine, LineKind, kind_of
+        line = ConsoleLine("[Playit] x", LineKind.ERROR)
+        assert line == "[Playit] x" and isinstance(line, str)
+        assert kind_of(line) is LineKind.ERROR
+        assert kind_of("[Playit] x") is None

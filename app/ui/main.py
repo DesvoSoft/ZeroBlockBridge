@@ -34,10 +34,11 @@ from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
 from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
-from app.core.i18n import _
+from app.core.i18n import _, N_
 from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
+from app.core.playit_manager import TunnelStatus, tunnel_status_label
 
 _theme_path = ASSETS_DIR / "zbb_theme.json"
 ctk.set_default_color_theme(str(_theme_path) if _theme_path.exists() else "green")
@@ -457,21 +458,21 @@ class MCTunnelApp(ctk.CTk):
         ToolTip(self.btn_reset, "Reset tunnels")
 
         # Initial UI State Check
-        self.after(500, lambda: self.on_tunnel_status({"status": "Offline"}))
+        self.after(500, lambda: self.on_tunnel_status({"status": TunnelStatus.OFFLINE}))
 
     def _toggle_setup_section(self):
         self._setup_expanded = not self._setup_expanded
         if self._setup_expanded:
             webbrowser.open(AppConfig.PLAYIT_WIZARD_URL)
             self.tunnel_console.log("[UI] Opening Playit Setup Wizard...")
-        self.on_tunnel_status({"status": "Offline", "skip_debounce": True})
+        self.on_tunnel_status({"status": TunnelStatus.OFFLINE, "skip_debounce": True})
 
     def _build_console_tabs(self):
         self.console_tabs = StackedTabview(self.main_frame, command=self._on_console_tab_changed)
         self.console_tabs.grid(row=2, column=0, padx=15, pady=(0, 15), sticky="nsew")
 
-        self.console_tabs.add("Console")
-        self.console_tabs.add("Tunnel Log")
+        self.console_tabs.add_labeled("Console", _(self._TAB_LABELS["Console"]))
+        self.console_tabs.add_labeled("Tunnel Log", _(self._TAB_LABELS["Tunnel Log"]))
 
         self._build_console_search_bar(self.console_tabs.tab("Console"), "server_console")
         self.server_console = ConsoleWidget(self.console_tabs.tab("Console"), max_lines=500)
@@ -502,8 +503,8 @@ class MCTunnelApp(ctk.CTk):
         # the user never opens this tab. Its own network fetch was already
         # deferred internally (bound to <Visibility>), just not the widgets.
         # Players tab: built on first visit like Mods (_ensure_players_panel).
-        self.console_tabs.add("Players")
-        self.console_tabs.add("Mods")
+        self.console_tabs.add_labeled("Players", _(self._TAB_LABELS["Players"]))
+        self.console_tabs.add_labeled("Mods", _(self._TAB_LABELS["Mods"]))
         self._installed_mods_count = 0
         self._refresh_tab_labels()
         self._update_mods_tab_state()
@@ -1057,7 +1058,10 @@ class MCTunnelApp(ctk.CTk):
             self._refresh_players_badge()
         self.after(0, _apply)
 
-    # tab name -> icon; the button text is the name plus a live count
+    # Tab keys are internal (compared, persisted as "last_console_tab");
+    # the button shows the translated label plus a live count.
+    _TAB_LABELS = {"Console": N_("Console"), "Tunnel Log": N_("Tunnel Log"),
+                   "Players": N_("Players"), "Mods": N_("Mods")}
     _TAB_ICONS = {"Console": "terminal", "Tunnel Log": "link", "Players": "user", "Mods": "package"}
     # Tabs with a count reserve room for a two-digit one up front. A label that
     # grows ("Mods" -> "Mods (9)") widened the whole tab bar, which then
@@ -1085,13 +1089,15 @@ class MCTunnelApp(ctk.CTk):
                 if button is None:
                     continue
                 button.configure(image=icon(icon_name, 13, AppConfig.COLOR_TEXT_PRIMARY), compound="left")
+                label = _(self._TAB_LABELS[name])
                 if name in counts:
-                    button.configure(text=name + self._COUNT_WIDTH_SAMPLE)
+                    button.configure(text=label + self._COUNT_WIDTH_SAMPLE)
                     button.update_idletasks()
-                    button.configure(width=button._reverse_widget_scaling(button.winfo_reqwidth()), text=name)
+                    button.configure(width=button._reverse_widget_scaling(button.winfo_reqwidth()), text=label)
         for name, count in counts.items():
             button = buttons.get(name)
-            text = f"{name} ({count})" if count else name
+            label = _(self._TAB_LABELS[name])
+            text = _("{tab} ({count})").format(tab=label, count=count) if count else label
             if button is not None and button.cget("text") != text:
                 button.configure(text=text)
                 # The centered icon moves with the text; repaint the button now
@@ -1280,7 +1286,7 @@ class MCTunnelApp(ctk.CTk):
         
         def _reset_task():
             self.zbb_manager.reset_tunnel(mode="soft")
-            self.after(0, lambda: self.on_tunnel_status({"status": "Offline", "skip_debounce": True}))
+            self.after(0, lambda: self.on_tunnel_status({"status": TunnelStatus.OFFLINE, "skip_debounce": True}))
             self.after(0, lambda: self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False))
             self.after(0, lambda: self.tunnel_console.log("[System] Tunnels cleared. Use Start Tunnel to create a new tunnel."))
             # Toast is handled by PlayitManager.notification_callback via EventBus
@@ -1293,18 +1299,18 @@ class MCTunnelApp(ctk.CTk):
             from app.core.statemanager import schedule_update as _schedule_tunnel_update
             if not _schedule_tunnel_update(data):
                 return
-        status = data.get("status", "Offline")
+        status = data.get("status", TunnelStatus.OFFLINE)
         ip = data.get("ip", None)
         dns = data.get("dns", None)
 
         def _update():
             # 1. Update Status Label and Colors
             color = AppConfig.COLOR_STATUS_OFFLINE
-            if status == "Online": color = AppConfig.COLOR_STATUS_ONLINE
-            elif status == "Error": color = AppConfig.COLOR_STATUS_ERROR
-            elif status == "Starting...": color = AppConfig.COLOR_STATUS_STARTING
+            if status == TunnelStatus.ONLINE: color = AppConfig.COLOR_STATUS_ONLINE
+            elif status == TunnelStatus.ERROR: color = AppConfig.COLOR_STATUS_ERROR
+            elif status == TunnelStatus.STARTING: color = AppConfig.COLOR_STATUS_STARTING
 
-            self.lbl_tunnel_status.configure(text=f"● {status}", text_color=color)
+            self.lbl_tunnel_status.configure(text=f"● {tunnel_status_label(status)}", text_color=color)
 
             is_linked = self.zbb_manager.playit_manager.is_linked
 
@@ -1318,18 +1324,18 @@ class MCTunnelApp(ctk.CTk):
             self.lbl_dns_display.pack_forget()
             self.btn_copy_ip.pack_forget()
             
-            if status == "Online" and display_dns:
+            if status == TunnelStatus.ONLINE and display_dns:
                 self._last_full_ip = display_dns
                 host = display_dns.split(":")[0] if ":" in display_dns else display_dns
                 self.lbl_dns_display.configure(text=host, text_color=AppConfig.COLOR_ADDRESS)
                 self.lbl_dns_display.pack(side="left", padx=5)
                 self.btn_copy_ip.configure(state="normal")
                 self.btn_copy_ip.pack(side="left", padx=(5, 0))
-            elif status == "Starting...":
+            elif status == TunnelStatus.STARTING:
                 self.lbl_dns_display.configure(text="Waiting for domain...", text_color=AppConfig.COLOR_STATUS_STARTING)
                 self.lbl_dns_display.pack(side="left", padx=5)
-            elif status == "Error":
-                self.lbl_dns_display.configure(text="Error", text_color=AppConfig.COLOR_STATUS_ERROR)
+            elif status == TunnelStatus.ERROR:
+                self.lbl_dns_display.configure(text=tunnel_status_label(status), text_color=AppConfig.COLOR_STATUS_ERROR)
                 self.lbl_dns_display.pack(side="left", padx=5)
             else: # Offline
                 self.lbl_dns_display.configure(text="")
@@ -1360,9 +1366,9 @@ class MCTunnelApp(ctk.CTk):
                 self.btn_link_code.pack_forget()
                 self.btn_claim.pack_forget()
 
-                if status == "Online":
+                if status == TunnelStatus.ONLINE:
                     self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True)
-                elif status == "Starting...":
+                elif status == TunnelStatus.STARTING:
                     self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=True, enabled=False)
                 else:
                     self._show_run_stop(self.btn_tunnel_start, self.btn_tunnel_stop, running=False)

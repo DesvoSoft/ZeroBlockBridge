@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 13:29-0600\n"
+"POT-Creation-Date: 2026-10-15 13:59-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -20,6 +20,12 @@ msgstr ""
 
 msgctxt "decimal separator"
 msgid "."
+msgstr ""
+
+msgid "About"
+msgstr ""
+
+msgid "All"
 msgstr ""
 
 msgid "Already installed"
@@ -42,8 +48,19 @@ msgstr ""
 msgid "Aug"
 msgstr ""
 
+msgid "Banned"
+msgstr ""
+
 #, python-brace-format
 msgid "Banned: {reason}"
+msgstr ""
+
+#, python-brace-format
+msgid "Blocked `{command}`: {reason}"
+msgstr ""
+
+#, python-brace-format
+msgid "Blocked: {reason}"
 msgstr ""
 
 #, python-brace-format
@@ -83,11 +100,20 @@ msgstr ""
 msgid "Close ZeroBlockBridge?"
 msgstr ""
 
+msgid "Console"
+msgstr ""
+
 msgid "Continue"
 msgstr ""
 
 #, python-brace-format
 msgid "Couldn't add the shortcut: {error}"
+msgstr ""
+
+msgid "Daily Time"
+msgstr ""
+
+msgid "Dark"
 msgstr ""
 
 msgid "Dec"
@@ -105,6 +131,12 @@ msgstr ""
 msgid "Don't ask again (change it in Settings > General)"
 msgstr ""
 
+msgid "Downloads"
+msgstr ""
+
+msgid "Error"
+msgstr ""
+
 msgid "Exit"
 msgstr ""
 
@@ -115,16 +147,29 @@ msgstr ""
 msgid "Feb"
 msgstr ""
 
+msgid "Follows"
+msgstr ""
+
 msgid "From now on, open it from the Start menu or the desktop shortcut."
 msgstr ""
 
+msgid "General"
+msgstr ""
+
 msgid "Hasn't joined since ZBB started tracking"
+msgstr ""
+
+msgid "High"
 msgstr ""
 
 msgid "I Accept the EULA"
 msgstr ""
 
 msgid "If you decline, the application will close."
+msgstr ""
+
+#, python-brace-format
+msgid "Impact: {level}"
 msgstr ""
 
 msgid "Install"
@@ -160,7 +205,20 @@ msgstr ""
 msgid "Installing..."
 msgstr ""
 
+msgid "Interval"
+msgstr ""
+
 msgid "Jan"
+msgstr ""
+
+msgid "Java"
+msgstr ""
+
+msgid "Java could not start with these launch settings"
+msgstr ""
+
+#, python-brace-format
+msgid "Java {major} ({kind}) — {source}"
 msgstr ""
 
 msgid "Jul"
@@ -182,10 +240,19 @@ msgstr ""
 msgid "Last seen {when}"
 msgstr ""
 
+msgid "Light"
+msgstr ""
+
+msgid "Low"
+msgstr ""
+
 msgid "Mar"
 msgstr ""
 
 msgid "May"
+msgstr ""
+
+msgid "Medium"
 msgstr ""
 
 msgid "Minecraft EULA"
@@ -197,10 +264,19 @@ msgstr ""
 msgid "Minimize to tray"
 msgstr ""
 
+msgid "Mods"
+msgstr ""
+
+msgid "Newest"
+msgstr ""
+
 msgid "No folder selected yet"
 msgstr ""
 
 msgid "Not now"
+msgstr ""
+
+msgid "Notifications"
 msgstr ""
 
 msgid "Nov"
@@ -210,6 +286,12 @@ msgid "OK"
 msgstr ""
 
 msgid "Oct"
+msgstr ""
+
+msgid "Offline"
+msgstr ""
+
+msgid "Online"
 msgstr ""
 
 msgid "Online now"
@@ -226,6 +308,12 @@ msgid ""
 "That's the one to use."
 msgstr ""
 
+msgid "Ops"
+msgstr ""
+
+msgid "Players"
+msgstr ""
+
 msgid "Portable (next to the app)"
 msgstr ""
 
@@ -237,6 +325,9 @@ msgid "RAM {value} GB"
 msgstr ""
 
 msgid "Read the Minecraft EULA (aka.ms/MinecraftEULA)"
+msgstr ""
+
+msgid "Relevance"
 msgstr ""
 
 msgid "Removes the app, its shortcuts and its entry in Windows Settings."
@@ -271,6 +362,14 @@ msgid "Sep"
 msgstr ""
 
 #, python-brace-format
+msgid "Server crashed: {cause} (attempt {attempt})."
+msgstr ""
+
+#, python-brace-format
+msgid "Server crashed: {cause}."
+msgstr ""
+
+#, python-brace-format
 msgid "Servers and backups: {path}"
 msgstr ""
 
@@ -299,8 +398,17 @@ msgstr ""
 msgid "Start menu shortcut"
 msgstr ""
 
+msgid "Starting..."
+msgstr ""
+
 #, python-brace-format
 msgid "Starting… {elapsed}"
+msgstr ""
+
+msgid "Storage"
+msgstr ""
+
+msgid "System"
 msgstr ""
 
 msgid "Takes effect the next time you open ZeroBlockBridge."
@@ -313,6 +421,9 @@ msgid ""
 msgstr ""
 
 msgid "The installed app is open. Close ZeroBlockBridge and try again."
+msgstr ""
+
+msgid "Tunnel Log"
 msgstr ""
 
 msgid "Uninstall"
@@ -333,10 +444,16 @@ msgstr ""
 msgid "Update to {version}"
 msgstr ""
 
+msgid "Updated"
+msgstr ""
+
 msgid "Updating..."
 msgstr ""
 
 msgid "Welcome to ZeroBlockBridge"
+msgstr ""
+
+msgid "Whitelisted"
 msgstr ""
 
 #, python-brace-format
@@ -381,10 +498,51 @@ msgstr ""
 msgid "ZeroBlockBridge was uninstalled"
 msgstr ""
 
+msgid "contains shell injection pattern"
+msgstr ""
+
+msgid "contains shell metacharacters"
+msgstr ""
+
+msgid "empty command"
+msgstr ""
+
+#, python-brace-format
+msgid "ended by signal {number}"
+msgstr ""
+
+#, python-brace-format
+msgid "exited with code {code}"
+msgstr ""
+
+msgid "it stopped responding"
+msgstr ""
+
+msgid "it stopped while running"
+msgstr ""
+
+msgid "it stopped while starting"
+msgstr ""
+
 msgid "just now"
 msgstr ""
 
+msgid "killed by the system, most likely out of memory"
+msgstr ""
+
+msgid "mods are missing or incompatible"
+msgstr ""
+
+msgid "out of memory"
+msgstr ""
+
 msgid "unknown"
+msgstr ""
+
+msgid "unknown cause"
+msgstr ""
+
+msgid "unknown command with suspicious characters"
 msgstr ""
 
 #, python-brace-format
@@ -431,6 +589,10 @@ msgstr ""
 
 #, python-brace-format
 msgid "{seconds}s"
+msgstr ""
+
+#, python-brace-format
+msgid "{tab} ({count})"
 msgstr ""
 
 #, python-brace-format

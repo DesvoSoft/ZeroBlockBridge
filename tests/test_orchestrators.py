@@ -11,6 +11,7 @@ from app.core.orchestrators import (
     TunnelOrchestrator,
 )
 from app.core.server_events import ServerEvent
+from app.services.sanitizer import BlockedReason
 from app.core.constants import ServerState
 
 
@@ -107,7 +108,8 @@ class TestServerOrchestrator:
         mgr = _make_manager(server_runner=runner)
         orch = ServerOrchestrator(mgr)
 
-        with patch("app.core.orchestrators.is_safe_command", return_value=(False, "injection")):
+        with patch("app.core.orchestrators.is_safe_command",
+                   return_value=(False, BlockedReason.INJECTION_PATTERN)):
             orch.send_command("rm -rf /")
 
         runner.send_command.assert_not_called()

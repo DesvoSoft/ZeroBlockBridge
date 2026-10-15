@@ -5,17 +5,50 @@ import threading
 import re
 import time
 import logging
+from enum import Enum
 
 from app.core.process_job import assign_to_job
 from app.core.constants import BIN_DIR, CONFIG_DIR, PLAYIT_VERSION, PLAYIT_URL_WINDOWS, PLAYIT_URL_LINUX, subprocess_flags
 from app.services.playit_api import PlayitApiClient, PlayitApiException
 from app.services.http_download import stream_to_file
+from app.core.console_line import error_line
+from app.core.i18n import _, N_, ngettext
 
 logger = logging.getLogger(__name__)
 
 from app.core.constants import ANSI_ESCAPE_RE
 
 from typing import Callable, Optional, Any
+
+
+class TunnelStatus(str, Enum):
+    """Tunnel state sent to status_callback. The values are internal keys
+    (compared by the UI and core); show tunnel_status_label() instead."""
+    ONLINE = "Online"
+    ERROR = "Error"
+    STARTING = "Starting..."
+    OFFLINE = "Offline"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+_STATUS_LABELS = {
+    TunnelStatus.ONLINE: N_("Online"),
+    TunnelStatus.ERROR: N_("Error"),
+    TunnelStatus.STARTING: N_("Starting..."),
+    TunnelStatus.OFFLINE: N_("Offline"),
+}
+
+
+def tunnel_status_label(status) -> str:
+    """Translated label for a status key (unknown keys read as Offline)."""
+    try:
+        status = TunnelStatus(status)
+    except ValueError:
+        status = TunnelStatus.OFFLINE
+    return _(_STATUS_LABELS[status])
+
 
 class PlayitManager:
     def __init__(self, console_callback: Callable[[str], None], status_callback: Callable[[str, Optional[str]], None], on_ready_callback: Optional[Callable[[], None]]=None, notification_callback: Optional[Callable[[str, str], None]]=None) -> None:
@@ -157,7 +190,7 @@ class PlayitManager:
             self.console_callback("[Playit] Download complete.")
             return True
         except Exception as e:
-            self.console_callback(f"[Playit] Download failed: {e}")
+            self.console_callback(error_line(f"[Playit] Download failed: {e}"))
             return False
         finally:
             if tmp_path.exists():
@@ -213,11 +246,11 @@ class PlayitManager:
                     "(CPU architecture mismatch?). Not installing it."
                 )
             else:
-                self.console_callback(f"[Playit] Downloaded agent failed to run ({e}). Not installing it.")
+                self.console_callback(error_line(f"[Playit] Downloaded agent failed to run ({e}). Not installing it."))
             return False
 
         if result.returncode != 0 or not (result.stdout + result.stderr).strip():
-            self.console_callback("[Playit] Downloaded agent failed smoke test. Not installing it.")
+            self.console_callback(error_line("[Playit] Downloaded agent failed smoke test. Not installing it."))
             return False
         return True
 
@@ -259,12 +292,12 @@ class PlayitManager:
 
         except PlayitApiException as e:
             if "NotAllowedWithReadOnly" in str(e):
-                self.console_callback("[Playit] ERROR: Account is in Guest mode (Read-Only).")
+                self.console_callback(error_line("[Playit] ERROR: Account is in Guest mode (Read-Only)."))
                 self.console_callback("[Playit] Please use 'Get Code' + 'Link' with a Setup Code to enable tunnel creation.")
                 if self.notification_callback:
                     self.notification_callback("Account Read-Only. Use Setup Code to link.", "error")
             else:
-                self.console_callback(f"[Playit] API Error: {e}")
+                self.console_callback(error_line(f"[Playit] API Error: {e}"))
             return None
 
     def _cleanup_stale_tunnels(self) -> None:
@@ -299,7 +332,7 @@ class PlayitManager:
                         self._api_dns = address
                         self.current_address = address
                     self.console_callback(f"[Playit] Tunnel created: {address}")
-                    self.status_callback("Online", address)
+                    self.status_callback(TunnelStatus.ONLINE, address)
             else:
                 self.console_callback(
                     "[Playit] No tunnels configured. Create one at https://playit.gg/dashboard"
@@ -325,7 +358,7 @@ class PlayitManager:
         if already_running:
             self.console_callback("[Playit] Agent already running.")
             if api_dns:
-                self.status_callback("Online", api_dns)
+                self.status_callback(TunnelStatus.ONLINE, api_dns)
             return
         if already_starting:
             self.console_callback("[Playit] Agent is already starting — ignoring duplicate request.")
@@ -336,7 +369,7 @@ class PlayitManager:
         except Exception as e:
             logger.error("[PlayitManager] Fatal error in start thread: %s", e)
             self.console_callback(f"[Playit] Internal start failure: {e}")
-            self.status_callback("Error", None)
+            self.status_callback(TunnelStatus.ERROR, None)
         finally:
             with self._lock:
                 self._starting_inflight = False
@@ -349,10 +382,10 @@ class PlayitManager:
             self._auth_failed = False
             self._tunnel_create_inflight = False
 
-        self.status_callback("Starting...", None)
+        self.status_callback(TunnelStatus.STARTING, None)
 
         if not self.ensure_binary():
-            self.console_callback("[Playit] Binary check failed.")
+            self.console_callback(error_line("[Playit] Binary check failed."))
             return
 
         if not os.path.exists(CONFIG_DIR):
@@ -419,16 +452,16 @@ class PlayitManager:
                 self.process = process
                 self.running = True
             if not self.current_address:
-                self.status_callback("Starting...", None)
+                self.status_callback(TunnelStatus.STARTING, None)
 
             threading.Thread(target=self._read_output, daemon=True).start()
             threading.Thread(target=self._dns_polling_loop, daemon=True).start()
             threading.Thread(target=self._heartbeat_loop, daemon=True).start()
 
         except OSError as e:
-            self.console_callback(f"[Playit] Failed to start: {e}")
+            self.console_callback(error_line(f"[Playit] Failed to start: {e}"))
             self.running = False
-            self.status_callback("Error", None)
+            self.status_callback(TunnelStatus.ERROR, None)
 
     def _kill_stale_agents(self) -> None:
         """Kill orphaned playit agents left over from a previous app run.
@@ -506,7 +539,7 @@ class PlayitManager:
         if force:
             self._kill_stray_by_name()
 
-        self.status_callback("Offline", None)
+        self.status_callback(TunnelStatus.OFFLINE, None)
 
     def reset(self, mode: str = "full") -> None:
         """"full": delete tunnels + agent, remove playit.toml and unlink.
@@ -534,14 +567,14 @@ class PlayitManager:
                 if self.notification_callback:
                     self.notification_callback("Tunnels cleared. Click Start Tunnel to create a new tunnel.", "success")
         except Exception as e:
-            self.console_callback(f"[Playit] Reset failed: {e}")
+            self.console_callback(error_line(f"[Playit] Reset failed: {e}"))
 
     def _delete_remote_tunnels(self) -> None:
         self.console_callback("[Playit] Cleaning up remote tunnels...")
         try:
             tunnels = self.api_client.list_tunnels()
         except Exception as e:
-            self.console_callback(f"[Playit] Tunnel list failed: {e}")
+            self.console_callback(error_line(f"[Playit] Tunnel list failed: {e}"))
             return
         for tunnel_id in (t.get("id") for t in tunnels):
             if not tunnel_id:
@@ -550,7 +583,7 @@ class PlayitManager:
                 if self.api_client.delete_tunnel(tunnel_id):
                     self.console_callback(f"[Playit] Deleted tunnel: {tunnel_id}")
             except Exception as e:
-                self.console_callback(f"[Playit] Tunnel delete failed: {e}")
+                self.console_callback(error_line(f"[Playit] Tunnel delete failed: {e}"))
 
     def _unlink_account(self) -> None:
         self.console_callback("[Playit] Cleaning up remote agent...")
@@ -560,7 +593,7 @@ class PlayitManager:
             if api_deleted:
                 self.console_callback("[Playit] Remote agent deleted via API.")
         except Exception as e:
-            self.console_callback(f"[Playit] API agent deletion failed (agent may remain in dashboard): {e}")
+            self.console_callback(error_line(f"[Playit] API agent deletion failed (agent may remain in dashboard): {e}"))
         if not api_deleted:
             self.console_callback("[Playit] Agent could not be deleted automatically. If it remains, delete manually at:")
             self.console_callback("[Playit] https://playit.gg/dashboard/agents")
@@ -611,7 +644,7 @@ class PlayitManager:
                 self.start(getattr(self, '_current_port', 25565))
                 return True
         except Exception as e:
-            self.console_callback(f"[Playit] Link failed: {e}")
+            self.console_callback(error_line(f"[Playit] Link failed: {e}"))
             if self.notification_callback:
                 self.notification_callback(f"Link failed: {e}", "error")
         return False
@@ -623,8 +656,8 @@ class PlayitManager:
             if self._auth_failed:
                 return
             self._auth_failed = True
-        self.status_callback("Error", None)
-        self.console_callback(f"[Playit] ERROR: {reason}. Use 'Reset Tunnel' to re-link.")
+        self.status_callback(TunnelStatus.ERROR, None)
+        self.console_callback(error_line(f"[Playit] ERROR: {reason}. Use 'Reset Tunnel' to re-link."))
         # A secret revoked minutes after a successful link means playit killed
         # the agent server-side — almost always an account over its agent/port
         # limit, and re-linking will just create more dead agents.
@@ -687,7 +720,7 @@ class PlayitManager:
                                 continue
                             self.current_address = address
                             self._api_dns = address
-                        self.status_callback("Online", address)
+                        self.status_callback(TunnelStatus.ONLINE, address)
                         self.console_callback(f"[Playit] Public address: {address}")
                         if self.notification_callback:
                             self.notification_callback(f"Tunnel online: {address}", "success")
@@ -785,7 +818,7 @@ class PlayitManager:
                         return
                     self._stdout_dns = address
                     self.current_address = address
-                self.status_callback("Online", address)
+                self.status_callback(TunnelStatus.ONLINE, address)
                 self.console_callback(f"[Playit] Public address: {address}")
                 if self.notification_callback:
                     self.notification_callback(f"Tunnel online: {address}", "success")
@@ -815,8 +848,8 @@ class PlayitManager:
                         self.console_callback(f"[Playit] {clean_line}")
                     if ("AgentDisabledOverLimit" in clean_line or "Account limit reached" in clean_line
                             or "account agent limit" in clean_line):
-                        self.status_callback("Error", None)
-                        self.console_callback("[Playit] ERROR: Account limit reached!")
+                        self.status_callback(TunnelStatus.ERROR, None)
+                        self.console_callback(error_line("[Playit] ERROR: Account limit reached!"))
                         self.console_callback("[Playit] You have too many agents. Delete unused agents at https://playit.gg/dashboard/agents")
                         self._auth_failed = True
                     elif ("Invalid secret" in clean_line or "invalid secret" in clean_line
@@ -847,7 +880,7 @@ class PlayitManager:
                         with self._lock:
                             has_dns = self._api_dns or self._stdout_dns
                         if not has_dns:
-                            self.status_callback("Error", None)
+                            self.status_callback(TunnelStatus.ERROR, None)
                             self.console_callback("[Playit] Agent reported an error before getting an address.")
                             self.console_callback("[Playit] Check tunnels and port quota at https://playit.gg/dashboard")
                     # --- CRITICAL DNS: must call _parse_line on every line ---
@@ -860,6 +893,6 @@ class PlayitManager:
                 self.process = None
                 addr = self._api_dns or self._stdout_dns
                 self.current_address = addr if addr else None
-            self.status_callback("Offline", None)
+            self.status_callback(TunnelStatus.OFFLINE, None)
 
 

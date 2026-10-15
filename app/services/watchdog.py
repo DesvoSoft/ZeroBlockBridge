@@ -4,6 +4,7 @@ import threading
 import time
 from typing import Any
 
+from app.core.i18n import _, N_
 from app.core.server_events import ServerEvent
 from app.core.logic import ServerStartError
 
@@ -33,6 +34,32 @@ MOD_ERROR_PATTERNS = [
     "net.fabricmc.loader.impl.FormattedException",
     "missing a mandatory dependency",
 ]
+
+
+# Crash reason codes (the payload's "reason", kept as-is in crash_history
+# and Discord) -> what the user reads. signal_N / exit_N carry a number.
+_CRASH_LABELS = {
+    "jvm_config_error": N_("Java could not start with these launch settings"),
+    "mod_dependency_error": N_("mods are missing or incompatible"),
+    "out_of_memory": N_("out of memory"),
+    "oom_kill": N_("killed by the system, most likely out of memory"),
+    "boot_crash": N_("it stopped while starting"),
+    "runtime_crash": N_("it stopped while running"),
+    "zombie": N_("it stopped responding"),
+}
+_CRASH_CODE_RE = re.compile(r"^(signal|exit)_(-?\d+)$")
+
+
+def crash_reason_label(code) -> str:
+    """Translated explanation for a crash reason code."""
+    if code in _CRASH_LABELS:
+        return _(_CRASH_LABELS[code])
+    match = _CRASH_CODE_RE.match(str(code))
+    if match and match.group(1) == "signal":
+        return _("ended by signal {number}").format(number=match.group(2))
+    if match:
+        return _("exited with code {code}").format(code=match.group(2))
+    return _("unknown cause")
 
 
 def _make_crash_payload(reason, exit_code=None, uptime=None, retry=None, silence_seconds=None, context=None,
