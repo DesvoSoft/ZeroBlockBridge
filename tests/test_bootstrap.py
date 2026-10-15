@@ -489,3 +489,12 @@ def test_installed_exe_behind_a_junction_still_matches(monkeypatch, tmp_path, en
 
     assert bootstrap.resolve_data_dir() == data
     assert env.already == []
+
+
+def test_marker_written_with_a_bom_is_still_read(tmp_path):
+    """Windows tools (PowerShell 5's Set-Content -Encoding utf8, older
+    Notepad) prepend a BOM; json.load then failed and the installed app
+    was treated as a first run, offering to install again."""
+    marker = tmp_path / "install.json"
+    marker.write_bytes(b"\xef\xbb\xbf" + json.dumps({"mode": "installed", "version": "2.1.0"}).encode())
+    assert bootstrap.read_marker(marker) == {"mode": "installed", "version": "2.1.0"}
