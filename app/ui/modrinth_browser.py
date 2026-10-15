@@ -463,9 +463,7 @@ class ModrinthBrowser(ctk.CTkFrame):
         )
         self.btn_opt.pack(side="right")
         self._opt_tooltip = ToolTip(
-            self.btn_opt,
-            "Fabric: Fabric API, Lithium, FerriteCore, Krypton, Spark\n"
-            "Forge: ModernFix, FerriteCore, Clumps, Spark",
+            self.btn_opt, "\n".join(self.bundle_summary(name) for name in MOD_LOADERS),
         )
 
     # ------------------------------------------------------------------

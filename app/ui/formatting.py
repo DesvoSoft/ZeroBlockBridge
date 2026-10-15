@@ -72,3 +72,15 @@ def memory_tooltip(limit_mb: int) -> str:
     return (f"Memory used by the server process.\n"
             f"Java heap is capped at {limit_mb / 1024:.1f} GB (the server's RAM setting); "
             f"total usage runs higher because Java also needs memory outside the heap.")
+
+
+# Engines whose display name isn't plain title case.
+_ENGINE_NAMES = {"neoforge": "NeoForge"}
+
+
+def engine_name(server_type) -> str:
+    """Display name of a server's engine from its metadata type. Older
+    metadata stored lowercase types ("vanilla"); "NeoForge".title() would
+    give "Neoforge", so known names are looked up first."""
+    raw = str(server_type or "vanilla")
+    return _ENGINE_NAMES.get(raw.lower(), raw if raw[:1].isupper() else raw.title())

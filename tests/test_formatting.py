@@ -1,4 +1,6 @@
-from app.ui.formatting import format_duration, format_memory, memory_tooltip
+import pytest
+
+from app.ui.formatting import engine_name, format_duration, format_memory, memory_tooltip
 
 
 def test_format_duration_seconds():
@@ -60,3 +62,15 @@ def test_format_relative():
     assert format_relative("2026-07-01T10:00:00", now) == "2026-07-01"
     assert format_relative(None, now) == ""
 
+
+
+@pytest.mark.parametrize("raw, shown", [
+    ("NeoForge", "NeoForge"),
+    ("neoforge", "NeoForge"),
+    ("vanilla", "Vanilla"),
+    ("Paper", "Paper"),
+    (None, "Vanilla"),
+    ("", "Vanilla"),
+])
+def test_engine_name(raw, shown):
+    assert engine_name(raw) == shown

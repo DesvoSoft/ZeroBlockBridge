@@ -9,6 +9,7 @@ import tkinter as tk
 from typing import Callable
 from app.core.app_config import AppConfig
 from app.core.constants import SERVERS_DIR
+from app.ui.formatting import engine_name
 from app.ui.icons import icon
 from app.ui.win_effects import apply_rounded_corners
 import os
@@ -950,7 +951,7 @@ class ServerListItem(ctk.CTkFrame):
     def _engine_text(server_name: str) -> str:
         from app.core.logic import get_server_meta
         meta = get_server_meta(server_name) or {}
-        engine = str(meta.get("type") or "vanilla").title()
+        engine = engine_name(meta.get("type"))
         return f"{engine} {meta.get('version', '')}".strip()
 
     def set_status(self, status: str):

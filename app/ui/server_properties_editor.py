@@ -11,6 +11,7 @@ from app.core.constants import SERVERS_DIR
 logger = logging.getLogger(__name__)
 from app.ui.ui_components import ToolTip, center_on_parent, ZBBDialog, dialog_buttons, dialog_header, ScrollableFrame, StackedTabview, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
+from app.ui.formatting import engine_name
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
@@ -173,7 +174,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         # Layout: header / [running banner] / tabs / buttons
         self.grid_columnconfigure(0, weight=1)
         meta = get_server_meta(server_name) or {}
-        engine = f"{str(meta.get('type', 'vanilla')).title()} {meta.get('version', '')}".strip()
+        engine = f"{engine_name(meta.get('type'))} {meta.get('version', '')}".strip()
         header, _, _ = dialog_header(self, "Server Properties", f"{server_name} · {engine}")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 0))
         
@@ -874,7 +875,7 @@ class ServerPropertiesEditor(ZBBToplevel):
             ZBBDialog.info(
                 self, "Vanilla Server",
                 "Vanilla servers can't load mods or plugins.\n\n"
-                "Create a Fabric or Forge server for mods, or Paper/Purpur for plugins.",
+                "Create a Fabric, Forge or NeoForge server for mods, or Paper/Purpur for plugins.",
             )
             return
 
