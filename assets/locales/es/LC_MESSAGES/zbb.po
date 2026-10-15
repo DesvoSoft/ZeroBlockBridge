@@ -1,0 +1,430 @@
+# Spanish translations for ZeroBlockBridge.
+# Copyright (C) 2026 DesvoSoft
+# This file is distributed under the same license as the ZeroBlockBridge
+# project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ZeroBlockBridge VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-10-15 13:11-0600\n"
+"PO-Revision-Date: 2026-10-15 13:10-0600\n"
+"Last-Translator: DesvoSoft\n"
+"Language: es\n"
+"Language-Team: Spanish\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+msgctxt "decimal separator"
+msgid "."
+msgstr ","
+
+msgid "Already installed"
+msgstr "Ya instalado"
+
+msgid "Also delete my servers, backups and settings"
+msgstr "Eliminar también mis servidores, copias de seguridad y ajustes"
+
+#, python-brace-format
+msgid "App: {path}"
+msgstr "Aplicación: {path}"
+
+#, python-brace-format
+msgid "Apps list entry: {error}"
+msgstr "Entrada en la lista de aplicaciones: {error}"
+
+msgid "Apr"
+msgstr "abr"
+
+msgid "Aug"
+msgstr "ago"
+
+#, python-brace-format
+msgid "Can't write to {path}. Move the app to another folder or install it instead."
+msgstr "No se puede escribir en {path}. Mueva la aplicación a otra carpeta o instálela."
+
+#, python-brace-format
+msgid "Can't write to {path}. Pick another folder."
+msgstr "No se puede escribir en {path}. Elija otra carpeta."
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Change data folder..."
+msgstr "Cambiar carpeta de datos..."
+
+msgid "Choose data folder"
+msgstr "Elegir carpeta de datos"
+
+msgid "Choose folder..."
+msgstr "Elegir carpeta..."
+
+msgid "Choose how to set it up on this PC."
+msgstr "Elija cómo configurarlo en este equipo."
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Close ZeroBlockBridge"
+msgstr "Cerrar ZeroBlockBridge"
+
+msgid "Close ZeroBlockBridge first"
+msgstr "Cierre ZeroBlockBridge primero"
+
+msgid "Close ZeroBlockBridge?"
+msgstr "¿Cerrar ZeroBlockBridge?"
+
+msgid "Continue"
+msgstr "Continuar"
+
+msgid "Dec"
+msgstr "dic"
+
+msgid "Decline"
+msgstr "Rechazar"
+
+msgid "Desktop"
+msgstr "Escritorio"
+
+msgid "Desktop shortcut"
+msgstr "Acceso directo en el escritorio"
+
+msgid "Don't ask again (change it in Settings > General)"
+msgstr "No volver a preguntar (se cambia en Settings > General)"
+
+msgid "Exit"
+msgstr "Salir"
+
+#, python-brace-format
+msgid "Exiting will stop: {items}."
+msgstr "Al salir se detendrá: {items}."
+
+msgid "Feb"
+msgstr "feb"
+
+msgid "From now on, open it from the Start menu or the desktop shortcut."
+msgstr "A partir de ahora, ábralo desde el menú Inicio o el acceso directo del escritorio."
+
+msgid "I Accept the EULA"
+msgstr "Acepto el EULA"
+
+msgid "If you decline, the application will close."
+msgstr "Si lo rechaza, la aplicación se cerrará."
+
+msgid "Install"
+msgstr "Instalar"
+
+msgid "Install ZeroBlockBridge?"
+msgstr "¿Instalar ZeroBlockBridge?"
+
+#, python-brace-format
+msgid "Install failed: {error}"
+msgstr "Error al instalar: {error}"
+
+msgid ""
+"Install it on this PC so it opens from the Start menu and always finds your servers. Nothing in "
+"your data folder changes."
+msgstr ""
+"Instálelo en este equipo para abrirlo desde el menú Inicio y que siempre encuentre sus "
+"servidores. Su carpeta de datos no cambia."
+
+msgid "Install on this PC (recommended)"
+msgstr "Instalar en este equipo (recomendado)"
+
+#, python-brace-format
+msgid ""
+"Installed app (version {version}):\n"
+"{path}"
+msgstr ""
+"Aplicación instalada (versión {version}):\n"
+"{path}"
+
+#, python-brace-format
+msgid ""
+"Installed at:\n"
+"{path}"
+msgstr ""
+"Instalado en:\n"
+"{path}"
+
+msgid "Installing..."
+msgstr "Instalando..."
+
+msgid "Jan"
+msgstr "ene"
+
+msgid "Jul"
+msgstr "jul"
+
+msgid "Jun"
+msgstr "jun"
+
+msgid "Keep ZeroBlockBridge running in the system tray, or exit it completely?"
+msgstr "¿Mantener ZeroBlockBridge en la bandeja del sistema o salir por completo?"
+
+msgid "Keep running this file. You won't be asked again."
+msgstr "Seguir usando este archivo. No se le volverá a preguntar."
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Mar"
+msgstr "mar"
+
+msgid "May"
+msgstr "may"
+
+msgid "Minecraft EULA"
+msgstr "EULA de Minecraft"
+
+msgid "Minecraft End User License Agreement"
+msgstr "Contrato de licencia de usuario final de Minecraft"
+
+msgid "Minimize to tray"
+msgstr "Minimizar a la bandeja"
+
+msgid "No folder selected yet"
+msgstr "Aún no hay carpeta elegida"
+
+msgid "Not now"
+msgstr "Ahora no"
+
+msgid "Nov"
+msgstr "nov"
+
+msgid "OK"
+msgstr "Aceptar"
+
+msgid "Oct"
+msgstr "oct"
+
+msgid "Open ZeroBlockBridge"
+msgstr "Abrir ZeroBlockBridge"
+
+msgid "Open installed app"
+msgstr "Abrir la aplicación instalada"
+
+msgid "Open the installed app from the Start menu or the desktop shortcut. That's the one to use."
+msgstr ""
+"Abra la aplicación instalada desde el menú Inicio o el acceso directo del escritorio. Esa es la "
+"que debe usar."
+
+msgid "Portable (next to the app)"
+msgstr "Portable (junto a la aplicación)"
+
+msgid "Portable (no install)"
+msgstr "Portable (sin instalar)"
+
+#, python-brace-format
+msgid "RAM {value} GB"
+msgstr "RAM {value} GB"
+
+msgid "Read the Minecraft EULA (aka.ms/MinecraftEULA)"
+msgstr "Leer el EULA de Minecraft (aka.ms/MinecraftEULA)"
+
+msgid "Removes the app, its shortcuts and its entry in Windows Settings."
+msgstr "Quita la aplicación, sus accesos directos y su entrada en Configuración de Windows."
+
+msgid "Removing..."
+msgstr "Quitando..."
+
+msgid "Restart ZeroBlockBridge to use the new language."
+msgstr "Reinicie ZeroBlockBridge para usar el nuevo idioma."
+
+msgid "Run this copy"
+msgstr "Usar esta copia"
+
+msgid ""
+"Running a Minecraft server requires accepting Mojang's End User License Agreement (EULA). If you "
+"accept, ZBB will automatically set eula=true for the servers you create."
+msgstr ""
+"Para ejecutar un servidor de Minecraft hay que aceptar el Contrato de licencia de usuario final "
+"(EULA) de Mojang. Si lo acepta, ZBB pondrá eula=true automáticamente en los servidores que cree."
+
+#, python-brace-format
+msgid ""
+"Runs from this folder and keeps servers next to the app:\n"
+"{path}"
+msgstr ""
+"Se ejecuta desde esta carpeta y guarda los servidores junto a la aplicación:\n"
+"{path}"
+
+msgid "Sep"
+msgstr "sept"
+
+#, python-brace-format
+msgid "Servers and backups: {path}"
+msgstr "Servidores y copias de seguridad: {path}"
+
+msgid "Setup"
+msgstr "Configuración"
+
+#, python-brace-format
+msgid ""
+"Some shortcuts couldn't be created (you can add them later in Settings > Storage):\n"
+"{failures}"
+msgstr ""
+"No se pudieron crear algunos accesos directos (puede añadirlos después en Settings > Storage):\n"
+"{failures}"
+
+msgid "Standard (recommended)"
+msgstr "Estándar (recomendado)"
+
+msgid "Start menu"
+msgstr "Menú Inicio"
+
+msgid "Start menu shortcut"
+msgstr "Acceso directo en el menú Inicio"
+
+msgid "Takes effect the next time you open ZeroBlockBridge."
+msgstr "Se aplica la próxima vez que abra ZeroBlockBridge."
+
+#, python-brace-format
+msgid ""
+"The file you opened is version {version}, newer than the installed one. Update to keep using the "
+"same shortcuts and servers."
+msgstr ""
+"El archivo que abrió es la versión {version}, más reciente que la instalada. Actualice para "
+"seguir usando los mismos accesos directos y servidores."
+
+msgid "The installed app is open. Close ZeroBlockBridge and try again."
+msgstr "La aplicación instalada está abierta. Cierre ZeroBlockBridge e inténtelo de nuevo."
+
+msgid "Uninstall"
+msgstr "Desinstalar"
+
+msgid "Uninstall ZeroBlockBridge?"
+msgstr "¿Desinstalar ZeroBlockBridge?"
+
+#, python-brace-format
+msgid "Uninstall failed: {error}"
+msgstr "Error al desinstalar: {error}"
+
+#, python-brace-format
+msgid "Update failed: {error}"
+msgstr "Error al actualizar: {error}"
+
+#, python-brace-format
+msgid "Update to {version}"
+msgstr "Actualizar a {version}"
+
+msgid "Updating..."
+msgstr "Actualizando..."
+
+msgid "Welcome to ZeroBlockBridge"
+msgstr "Bienvenido a ZeroBlockBridge"
+
+#, python-brace-format
+msgid ""
+"You can delete the file you downloaded:\n"
+"{path}"
+msgstr ""
+"Puede eliminar el archivo que descargó:\n"
+"{path}"
+
+#, python-brace-format
+msgid ""
+"You opened another copy (version {version}):\n"
+"{path}\n"
+"You can delete it."
+msgstr ""
+"Abrió otra copia (versión {version}):\n"
+"{path}\n"
+"Puede eliminarla."
+
+msgid "Zero Block Bridge downloads and runs Minecraft server software."
+msgstr "Zero Block Bridge descarga y ejecuta software de servidor de Minecraft."
+
+msgid "ZeroBlockBridge is already installed"
+msgstr "ZeroBlockBridge ya está instalado"
+
+msgid ""
+"ZeroBlockBridge is already running.\n"
+"\n"
+"If you don't see its window, look for its icon in the system tray (next to the clock) and choose "
+"Open."
+msgstr ""
+"ZeroBlockBridge ya se está ejecutando.\n"
+"\n"
+"Si no ve su ventana, busque su icono en la bandeja del sistema (junto al reloj) y elija Abrir."
+
+msgid "ZeroBlockBridge is installed"
+msgstr "ZeroBlockBridge está instalado"
+
+msgid "ZeroBlockBridge is running. Close it (and stop any server), then uninstall again."
+msgstr ""
+"ZeroBlockBridge se está ejecutando. Ciérrelo (y detenga cualquier servidor) y vuelva a "
+"desinstalar."
+
+msgid "ZeroBlockBridge is still running here. Right-click the icon to open or exit."
+msgstr "ZeroBlockBridge sigue ejecutándose aquí. Haga clic derecho en el icono para abrirlo o salir."
+
+msgid "ZeroBlockBridge was uninstalled"
+msgstr "ZeroBlockBridge se desinstaló"
+
+msgid "just now"
+msgstr "ahora mismo"
+
+msgid "unknown"
+msgstr "desconocida"
+
+#, python-brace-format
+msgid "{days}d ago"
+msgstr "hace {days} d"
+
+#, python-brace-format
+msgid "{days}d {hours}h"
+msgstr "{days} d {hours} h"
+
+#, python-brace-format
+msgid "{hours}h ago"
+msgstr "hace {hours} h"
+
+#, python-brace-format
+msgid "{hours}h {minutes}m"
+msgstr "{hours} h {minutes} min"
+
+#, python-brace-format
+msgid "{item}: folder not found"
+msgstr "{item}: carpeta no encontrada"
+
+#, python-brace-format
+msgid "{item}: {error}"
+msgstr "{item}: {error}"
+
+#, python-brace-format
+msgid "{minutes}m"
+msgstr "{minutes} min"
+
+#, python-brace-format
+msgid "{minutes}m ago"
+msgstr "hace {minutes} min"
+
+#, python-brace-format
+msgid ""
+"{path}\n"
+"Servers you created in other folders are never deleted."
+msgstr ""
+"{path}\n"
+"Los servidores que creó en otras carpetas nunca se eliminan."
+
+#, python-brace-format
+msgid "{seconds}s"
+msgstr "{seconds} s"
+
+#, python-brace-format
+msgid "{value}%"
+msgstr "{value} %"
+
+#, python-brace-format
+msgid "{value}K"
+msgstr "{value} k"
+
+#, python-brace-format
+msgid "{value}M"
+msgstr "{value} M"
+

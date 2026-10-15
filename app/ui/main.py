@@ -34,6 +34,7 @@ from app.ui.server_wizard import ServerWizard
 from app.ui.server_properties_editor import ServerPropertiesEditor
 from app.core.server_events import ServerEvent, EventBus
 from app.core.app_config import AppConfig
+from app.core.i18n import _
 from app.ui.modrinth_browser import ModrinthBrowser, _ICON_EXECUTOR as MODRINTH_ICON_EXECUTOR
 from app.ui.toast import Toast
 from app.core.core import ZBBManager
@@ -1556,18 +1557,24 @@ def main():
     log_path = configure_logging(LOGS_DIR)
     logger.info("ZeroBlockBridge %s starting (log file: %s)", AppConfig.APP_VERSION, log_path)
 
+    # Language first: everything shown from here on is translated with it.
+    from app.services.settings_manager import SettingsManager
+    from app.core.bootstrap import startup_language
+    from app.core.constants import BASE_DIR, CONFIG_DIR
+    _settings = SettingsManager()
+    logger.info("Language: %s", startup_language(_settings, BASE_DIR))
+
     # Single-instance lock: prevent multiple app instances
     from app.core.single_instance import SingleInstanceLock
-    from app.core.constants import CONFIG_DIR
 
     instance_lock = SingleInstanceLock(CONFIG_DIR / ".zbb.lock")
     if not instance_lock.try_acquire():
         import tkinter.messagebox
         tkinter.messagebox.showwarning(
             "Zero Block Bridge",
-            "ZeroBlockBridge is already running.\n\n"
-            "If you don't see its window, look for its icon in the system tray "
-            "(next to the clock) and choose Open."
+            _("ZeroBlockBridge is already running.\n\n"
+              "If you don't see its window, look for its icon in the system tray "
+              "(next to the clock) and choose Open.")
         )
         sys.exit(1)
 
@@ -1577,8 +1584,6 @@ def main():
 
     # First-run Minecraft EULA consent (shown once; ZBB auto-writes
     # eula=true on created servers, so explicit consent is required).
-    from app.services.settings_manager import SettingsManager
-    _settings = SettingsManager()
     if not _settings.get("eula_accepted", False):
         from app.ui.ui_components import EulaDialog
         eula_dialog = EulaDialog(app)

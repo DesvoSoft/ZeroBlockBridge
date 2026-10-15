@@ -20,6 +20,7 @@ from typing import Callable, Optional
 from PIL import Image
 
 from app.core.app_config import AppConfig
+from app.core.i18n import format_count
 from app.core.constants import BASE_DIR, SERVERS_DIR
 from app.services.modrinth import (MOD_LOADERS, PLUGIN_LOADERS, ModrinthClient, ModrinthException,
                                    loader_display)
@@ -2104,8 +2105,4 @@ class ModrinthBrowser(ctk.CTkFrame):
 
     @staticmethod
     def _format_downloads(count: int) -> str:
-        if count >= 1_000_000:
-            return f"{count / 1_000_000:.1f}M"
-        elif count >= 1_000:
-            return f"{count / 1_000:.1f}K"
-        return str(count)
+        return format_count(count)

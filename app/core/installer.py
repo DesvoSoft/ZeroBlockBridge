@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from app.core.fs_links import is_link, remove_link
+from app.core.i18n import N_, _
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +122,18 @@ def add_shortcuts(target: Path, start_menu: bool = True, desktop: bool = True) -
     failures = []
     wanted = []
     if start_menu:
-        wanted.append(("Start menu", start_menu_shortcut_path()))
+        wanted.append((N_("Start menu"), start_menu_shortcut_path()))
     if desktop:
-        wanted.append(("Desktop", desktop_shortcut_path()))
+        wanted.append((N_("Desktop"), desktop_shortcut_path()))
     for label, path in wanted:
         if path is None:
-            failures.append(f"{label}: folder not found")
+            failures.append(_("{item}: folder not found").format(item=_(label)))
             continue
         try:
             create_shortcut(target, path)
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning("%s shortcut failed: %s", label, e)
-            failures.append(f"{label}: {e}")
+            failures.append(_("{item}: {error}").format(item=_(label), error=e))
     return failures
 
 
@@ -214,7 +215,7 @@ def install(src_exe: Path, version: str, install_dir: Path | None = None,
         register_uninstall(dest, version)
     except OSError as e:
         logger.warning("Could not register uninstall entry: %s", e)
-        failures.append(f"Apps list entry: {e}")
+        failures.append(_("Apps list entry: {error}").format(error=e))
     logger.info("Installed %s %s to %s", APP_NAME, version, dest)
     return dest, failures
 

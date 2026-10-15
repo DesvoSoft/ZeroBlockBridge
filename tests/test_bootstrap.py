@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core import bootstrap, installer
+from app.core import bootstrap, i18n, installer
 from app.core.app_config import AppConfig
 from app.core.bootstrap import MODE_INSTALLED, MODE_MANUAL, PORTABLE_FLAG, SetupResult
 from app.core.fs_links import create_junction, is_link, link_target
@@ -196,7 +196,7 @@ def test_marker_from_older_build_offers_install_keeping_data(monkeypatch, tmp_pa
 
     assert bootstrap.resolve_data_dir() == data
     assert env.setup == [(exe, data)]
-    assert _read_marker(tmp_path) == {"data_dir": str(data), "mode": MODE_MANUAL}
+    assert _read_marker(tmp_path) == {"data_dir": str(data), "mode": MODE_MANUAL, "language": "en"}
 
 
 def test_install_offer_closed_runs_and_asks_again_later(monkeypatch, tmp_path, env):
@@ -252,7 +252,7 @@ def test_fresh_install_records_install_and_opens_installed_copy(monkeypatch, tmp
         bootstrap.resolve_data_dir()
 
     assert _read_marker(tmp_path) == {"data_dir": str(data), "mode": MODE_INSTALLED,
-                                      "exe_path": str(installed), "version": AppConfig.APP_VERSION}
+                                      "exe_path": str(installed), "version": AppConfig.APP_VERSION, "language": "en"}
     assert env.launched == [installed]
 
 
@@ -368,7 +368,9 @@ def test_setup_dialogs_never_import_constants():
     root = Path(bootstrap.__file__).resolve().parent.parent.parent
     code = (
         "import sys\n"
-        "import app.core.bootstrap, app.core.installer, app.ui.first_run_dialog\n"
+        "import app.core.bootstrap, app.core.installer, app.core.i18n, app.ui.first_run_dialog\n"
+        "app.core.i18n.set_language('es')\n"
+        "app.core.bootstrap.use_stored_language({})\n"
         "from app.ui import win_effects\n"
         "class W:\n"
         "    def iconbitmap(self, path): pass\n"
@@ -498,3 +500,194 @@ def test_marker_written_with_a_bom_is_still_read(tmp_path):
     marker = tmp_path / "install.json"
     marker.write_bytes(b"\xef\xbb\xbf" + json.dumps({"mode": "installed", "version": "2.1.0"}).encode())
     assert bootstrap.read_marker(marker) == {"mode": "installed", "version": "2.1.0"}
+
+
+# ----------------------------------------------------------------------
+# Language: picked at setup, stored in the marker / portable settings
+# ----------------------------------------------------------------------
+LOCALES = Path(__file__).resolve().parent.parent / "assets" / "locales"
+
+
+class _Settings:
+    """SettingsManager stand-in (get/set)."""
+    def __init__(self, **values):
+        self.values = dict(values)
+
+    def get(self, key, default=None):
+        return self.values.get(key, default)
+
+    def set(self, key, value):
+        self.values[key] = value
+
+
+@pytest.fixture
+def os_language(monkeypatch):
+    """Pin the OS language instead of reading the test machine's, and find
+    the real catalogs although sys.frozen is faked."""
+    monkeypatch.setattr(i18n, "locale_dir", lambda: LOCALES)
+
+    def _set(code):
+        monkeypatch.setattr(i18n, "system_language", lambda: code)
+    _set("en")
+    return _set
+
+
+def test_setup_result_defaults_to_english():
+    assert SetupResult(MODE_MANUAL, Path("x")).language == "en"
+
+
+def test_chosen_language_is_written_to_the_marker(monkeypatch, tmp_path, env):
+    _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    data = tmp_path / "data"
+    env.setup_result = SetupResult(MODE_MANUAL, data, language="es")
+
+    bootstrap.resolve_data_dir()
+
+    assert _read_marker(tmp_path)["language"] == "es"
+
+
+def test_portable_choice_stores_language_in_its_settings(monkeypatch, tmp_path, env):
+    exe = _run_exe(monkeypatch, tmp_path / "usb" / "ZeroBlockBridge.exe")
+    env.setup_result = SetupResult("portable", exe.parent, language="es")
+
+    bootstrap.resolve_data_dir()
+
+    settings = json.loads((exe.parent / "config" / "zbb_settings.json").read_text(encoding="utf-8"))
+    assert settings == {"language": "es"}
+    assert not _marker_file(tmp_path).exists()
+
+
+def test_portable_language_keeps_existing_settings(tmp_path):
+    exe = tmp_path / "usb" / "ZeroBlockBridge.exe"
+    _zbb_folder(exe.parent)
+    (exe.parent / "config" / "zbb_settings.json").write_text('{"theme": "Light"}', encoding="utf-8")
+
+    bootstrap._apply_setup(SetupResult("portable", exe.parent, language="es"), exe, {}, _marker_file(tmp_path))
+
+    settings = json.loads((exe.parent / "config" / "zbb_settings.json").read_text(encoding="utf-8"))
+    assert settings == {"theme": "Light", "language": "es"}
+
+
+def test_portable_language_never_overwrites_unreadable_settings(tmp_path):
+    exe = tmp_path / "usb" / "ZeroBlockBridge.exe"
+    _zbb_folder(exe.parent)
+    settings_file = exe.parent / "config" / "zbb_settings.json"
+    settings_file.write_text("{broken", encoding="utf-8")
+
+    bootstrap._apply_setup(SetupResult("portable", exe.parent, language="es"), exe, {}, _marker_file(tmp_path))
+
+    assert settings_file.read_text(encoding="utf-8") == "{broken"
+
+
+def test_stored_language_prefers_the_marker(tmp_path):
+    data = _zbb_folder(tmp_path / "data")
+    (data / "config" / "zbb_settings.json").write_text('{"language": "en"}', encoding="utf-8")
+
+    assert bootstrap.stored_language({"data_dir": str(data), "language": "es"}) == "es"
+
+
+def test_stored_language_falls_back_to_the_data_folder_settings(tmp_path):
+    data = _zbb_folder(tmp_path / "data")
+    # A BOM, as a settings file edited with a Windows tool may have.
+    (data / "config" / "zbb_settings.json").write_text('﻿{"language": "es"}', encoding="utf-8")
+
+    assert bootstrap.stored_language({"data_dir": str(data), "language": "xx"}) == "es"
+
+
+def test_stored_language_none_when_nothing_is_saved(tmp_path):
+    assert bootstrap.stored_language({}) is None
+    assert bootstrap.stored_language({"data_dir": str(tmp_path / "missing")}) is None
+    data = _zbb_folder(tmp_path / "data")
+    (data / "config" / "zbb_settings.json").write_text("[1, 2]", encoding="utf-8")
+    assert bootstrap.stored_language({"data_dir": str(data)}) is None
+
+
+def test_use_stored_language_falls_back_to_the_os(os_language):
+    os_language("es")
+    assert bootstrap.use_stored_language({}) == "es"
+    assert i18n.get_language() == "es"
+    assert bootstrap.use_stored_language({"language": "en"}) == "en"
+
+
+def test_pre_app_dialogs_open_in_the_stored_language(monkeypatch, tmp_path, env, os_language):
+    """The update/already-installed dialog reads the marker's language."""
+    installed = _run_exe(monkeypatch, tmp_path / "Programs" / "ZeroBlockBridge.exe")
+    _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    _write_marker(tmp_path, {"data_dir": str(tmp_path / "data"), "mode": MODE_INSTALLED, "language": "es",
+                             "exe_path": str(installed), "version": "1.0.0"})
+    seen = []
+    monkeypatch.setattr("app.ui.first_run_dialog.ask_already_installed",
+                        lambda *a: seen.append(i18n.get_language()) or "run")
+
+    bootstrap.resolve_data_dir()
+
+    assert seen == ["es"]
+
+
+def test_first_run_dialog_opens_in_the_os_language(monkeypatch, tmp_path, env, os_language):
+    _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    os_language("es")
+    seen = []
+    monkeypatch.setattr("app.ui.first_run_dialog.ask_setup", lambda *a, **k: seen.append(i18n.get_language()))
+
+    with pytest.raises(SystemExit):  # closed without choosing
+        bootstrap.resolve_data_dir()
+
+    assert seen == ["es"]
+
+
+def test_startup_language_keeps_the_saved_setting(tmp_path, os_language):
+    settings = _Settings(language="es")
+    _write_marker(tmp_path, {"data_dir": str(tmp_path / "data"), "language": "en"})
+
+    assert bootstrap.startup_language(settings, tmp_path / "data", _marker_file(tmp_path)) == "es"
+    assert settings.values == {"language": "es"}
+
+
+def test_first_launch_copies_the_setup_language_into_settings(tmp_path, os_language):
+    data = tmp_path / "data"
+    data.mkdir()
+    _write_marker(tmp_path, {"data_dir": str(data), "language": "es"})
+    settings = _Settings()
+
+    assert bootstrap.startup_language(settings, data, _marker_file(tmp_path)) == "es"
+    assert settings.values == {"language": "es"}
+    assert i18n.get_language() == "es"
+
+
+def test_first_launch_ignores_another_folders_marker(tmp_path, os_language):
+    """A portable copy must not take the installed copy's language."""
+    _write_marker(tmp_path, {"data_dir": str(tmp_path / "installed-data"), "language": "es"})
+    settings = _Settings(language="xx")
+
+    assert bootstrap.startup_language(settings, tmp_path / "usb", _marker_file(tmp_path)) == "en"
+    assert settings.values == {"language": "en"}
+
+
+def test_first_launch_without_marker_uses_the_os_language(tmp_path, os_language):
+    os_language("es")
+    settings = _Settings()
+
+    assert bootstrap.startup_language(settings, tmp_path / "data", _marker_file(tmp_path)) == "es"
+    assert settings.values == {"language": "es"}
+
+
+def test_remember_language_updates_this_folders_marker(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    _write_marker(tmp_path, {"data_dir": str(data), "mode": MODE_MANUAL, "language": "en"})
+
+    bootstrap.remember_language("es", data, _marker_file(tmp_path))
+
+    assert _read_marker(tmp_path) == {"data_dir": str(data), "mode": MODE_MANUAL, "language": "es"}
+
+
+def test_remember_language_leaves_other_markers_alone(tmp_path):
+    _write_marker(tmp_path, {"data_dir": str(tmp_path / "installed-data"), "language": "en"})
+
+    bootstrap.remember_language("es", tmp_path / "usb", _marker_file(tmp_path))
+    assert _read_marker(tmp_path)["language"] == "en"
+
+    _marker_file(tmp_path).unlink()
+    bootstrap.remember_language("es", tmp_path / "usb", _marker_file(tmp_path))
+    assert not _marker_file(tmp_path).exists()

@@ -20,12 +20,13 @@ from pathlib import Path
 
 import customtkinter as ctk
 
-from app.core import installer
+from app.core import i18n, installer
 from app.core.app_config import AppConfig
 from app.core.bootstrap import (
-    MODE_INSTALLED, MODE_MANUAL, SetupResult, is_writable_dir, read_marker, write_marker,
-    _marker_path,
+    MODE_INSTALLED, MODE_MANUAL, SetupResult, is_writable_dir, read_marker, use_stored_language,
+    write_marker, _marker_path,
 )
+from app.core.i18n import _
 from app.core.resources import assets_dir
 from app.ui.icons import clear_cache, icon
 from app.ui.win_effects import apply_rounded_corners
@@ -57,12 +58,15 @@ class _BootDialog(ctk.CTk):
 
     def __init__(self, title: str):
         super().__init__()
-        self.title(f"Zero Block Bridge - {title}")
+        self.set_title(title)
         self.resizable(False, False)
         self.configure(fg_color=(AppConfig.COLOR_BG_CARD_LIGHT, AppConfig.COLOR_BG_CARD_DARK))
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.page = None
         self._busy = False
+
+    def set_title(self, title: str):
+        self.title(f"Zero Block Bridge - {title}")
 
     # -- layout helpers --------------------------------------------------
     def new_page(self):
@@ -173,7 +177,7 @@ class _BootDialog(ctk.CTk):
 # ----------------------------------------------------------------------
 class _SetupDialog(_BootDialog):
     def __init__(self, exe: Path, data_dir: Path | None):
-        super().__init__("Setup")
+        super().__init__(_("Setup"))
         self.result: SetupResult | None = None
         self._exe = exe
         self._existing_data = data_dir
@@ -185,48 +189,76 @@ class _SetupDialog(_BootDialog):
         self._custom_picked = False
         self._build_choice_page()
 
+    def _language_row(self):
+        """Language picker, top right of the first page: picking one
+        rebuilds the page in it (and it is saved with the setup choice)."""
+        row = ctk.CTkFrame(self.page, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 4))
+        menu = ctk.CTkOptionMenu(
+            row, values=list(i18n.LANGUAGES.values()), command=self._on_language, width=120, height=28,
+            corner_radius=AppConfig.RADIUS_INPUT, font=AppConfig.FONT_BODY_SMALL,
+            fg_color=AppConfig.COLOR_BTN_GHOST, button_color=AppConfig.COLOR_BTN_GHOST,
+            button_hover_color=AppConfig.COLOR_BTN_GHOST_HOVER, text_color=AppConfig.COLOR_TEXT_PRIMARY,
+        )
+        menu.set(i18n.LANGUAGES[i18n.get_language()])
+        menu.pack(side="right")
+        ctk.CTkLabel(row, text=_("Language"), font=AppConfig.FONT_BODY_SMALL,
+                     text_color=AppConfig.COLOR_TEXT_GRAY).pack(side="right", padx=(0, 8))
+
+    def _on_language(self, name: str):
+        code = i18n.code_for_name(name)
+        if code is None or code == i18n.get_language():
+            return
+        i18n.set_language(code)
+        self.set_title(_("Setup"))
+        self._build_choice_page()
+        self.refit()
+
     def _build_choice_page(self):
         self.new_page()
+        self._language_row()
         upgrade = self._existing_data is not None
         if upgrade:
-            self.heading("download", "Install ZeroBlockBridge?",
-                         "Install it on this PC so it opens from the Start menu and always "
-                         "finds your servers. Nothing in your data folder changes.")
+            self.heading("download", _("Install ZeroBlockBridge?"),
+                         _("Install it on this PC so it opens from the Start menu and always "
+                           "finds your servers. Nothing in your data folder changes."))
         else:
-            self.heading("folder", "Welcome to ZeroBlockBridge",
-                         "Choose how to set it up on this PC.")
+            self.heading("folder", _("Welcome to ZeroBlockBridge"),
+                         _("Choose how to set it up on this PC."))
 
         if self._windows:
             install_card = self._option(
-                "install", "Install on this PC (recommended)",
-                f"App: {installer.default_install_dir()}",
+                "install", _("Install on this PC (recommended)"),
+                _("App: {path}").format(path=installer.default_install_dir()),
             )
-            self._data_label = self.body(f"Servers and backups: {self._data_dir}", muted=True,
-                                         pady=(0, 2), parent=install_card)
+            self._data_label = self.body(self._data_text(), muted=True, pady=(0, 2), parent=install_card)
             self._data_label.pack_configure(padx=(28, 0))
             extras = ctk.CTkFrame(install_card, fg_color="transparent")
             extras.pack(anchor="w", padx=(28, 0), pady=(4, 0))
-            ctk.CTkCheckBox(extras, text="Start menu shortcut", variable=self._var_start_menu,
+            ctk.CTkCheckBox(extras, text=_("Start menu shortcut"), variable=self._var_start_menu,
                             font=AppConfig.FONT_BODY_SMALL, fg_color=AppConfig.COLOR_BTN_PRIMARY,
                             corner_radius=AppConfig.RADIUS_BADGE).pack(anchor="w", pady=2)
-            ctk.CTkCheckBox(extras, text="Desktop shortcut", variable=self._var_desktop,
+            ctk.CTkCheckBox(extras, text=_("Desktop shortcut"), variable=self._var_desktop,
                             font=AppConfig.FONT_BODY_SMALL, fg_color=AppConfig.COLOR_BTN_PRIMARY,
                             corner_radius=AppConfig.RADIUS_BADGE).pack(anchor="w", pady=2)
             if not upgrade:
                 ctk.CTkButton(
-                    extras, text="Change data folder...", command=self._pick_data_dir,
+                    extras, text=_("Change data folder..."), command=self._pick_data_dir,
                     height=24, width=10, fg_color="transparent", hover_color=AppConfig.COLOR_BTN_GHOST_HOVER,
                     text_color=AppConfig.COLOR_LINK, font=AppConfig.FONT_BODY_SMALL,
                 ).pack(anchor="w", pady=(2, 0))
             if upgrade:
-                self._option("manual", "Not now", "Keep running this file. You won't be asked again.")
+                self._option("manual", _("Not now"), _("Keep running this file. You won't be asked again."))
             else:
-                self._option("portable", "Portable (no install)",
-                             f"Runs from this folder and keeps servers next to the app:\n{self._exe.parent}")
+                self._option("portable", _("Portable (no install)"),
+                             _("Runs from this folder and keeps servers next to the app:\n{path}").format(
+                                 path=self._exe.parent))
         else:
-            self._option("standard", "Standard (recommended)", str(installer.standard_data_dir()))
-            self._option("portable", "Portable (next to the app)", str(self._exe.parent))
-            self._custom_card = self._option("custom", "Choose folder...", "No folder selected yet")
+            self._option("standard", _("Standard (recommended)"), str(installer.standard_data_dir()))
+            self._option("portable", _("Portable (next to the app)"), str(self._exe.parent))
+            self._custom_card = self._option(
+                "custom", _("Choose folder..."),
+                str(self._data_dir) if self._custom_picked else _("No folder selected yet"))
 
         self._error = self.error_label()
         row = self.button_row()
@@ -253,11 +285,14 @@ class _SetupDialog(_BootDialog):
         self._refresh_button()
 
     def _refresh_button(self):
-        text = "Install" if self._choice.get() == "install" else "Continue"
+        text = _("Install") if self._choice.get() == "install" else _("Continue")
         self._btn_continue.configure(text=text, state="normal")
 
+    def _data_text(self) -> str:
+        return _("Servers and backups: {path}").format(path=self._data_dir)
+
     def _pick_data_dir(self):
-        chosen = tkinter.filedialog.askdirectory(title="Choose data folder", mustexist=False)
+        chosen = tkinter.filedialog.askdirectory(title=_("Choose data folder"), mustexist=False)
         if not chosen:
             if self._choice.get() == "custom" and not self._custom_picked:
                 # Cancelled with nothing picked before: don't leave "custom"
@@ -268,37 +303,38 @@ class _SetupDialog(_BootDialog):
         self._custom_picked = True
         self._data_dir = Path(chosen)
         if self._windows:
-            self._data_label.configure(text=f"Servers and backups: {self._data_dir}")
+            self._data_label.configure(text=self._data_text())
         else:
             self._custom_card.subtitle.configure(text=str(self._data_dir))
 
     def _confirm(self):
         choice = self._choice.get()
+        language = i18n.get_language()
         if choice == "portable":
             if not is_writable_dir(self._exe.parent):
-                self._error.configure(text=f"Can't write to {self._exe.parent}. Move the app "
-                                           "to another folder or install it instead.")
+                self._error.configure(text=_("Can't write to {path}. Move the app to another folder "
+                                             "or install it instead.").format(path=self._exe.parent))
                 return
-            self.result = SetupResult("portable", self._exe.parent)
+            self.result = SetupResult("portable", self._exe.parent, language=language)
             self.destroy()
             return
         if choice == "manual":
-            self.result = SetupResult(MODE_MANUAL, self._data_dir)
+            self.result = SetupResult(MODE_MANUAL, self._data_dir, language=language)
             self.destroy()
             return
         if choice in ("standard", "custom"):
             target = installer.standard_data_dir() if choice == "standard" else self._data_dir
             if not is_writable_dir(target):
-                self._error.configure(text=f"Can't write to {target}. Pick another folder.")
+                self._error.configure(text=_("Can't write to {path}. Pick another folder.").format(path=target))
                 return
-            self.result = SetupResult(MODE_MANUAL, target)
+            self.result = SetupResult(MODE_MANUAL, target, language=language)
             self.destroy()
             return
 
         if not is_writable_dir(self._data_dir):
-            self._error.configure(text=f"Can't write to {self._data_dir}. Pick another folder.")
+            self._error.configure(text=_("Can't write to {path}. Pick another folder.").format(path=self._data_dir))
             return
-        self._btn_continue.configure(text="Installing...", state="disabled")
+        self._btn_continue.configure(text=_("Installing..."), state="disabled")
         start_menu, desktop = self._var_start_menu.get(), self._var_desktop.get()
         self.run_in_background(
             lambda: installer.install(self._exe, AppConfig.APP_VERSION,
@@ -308,11 +344,11 @@ class _SetupDialog(_BootDialog):
 
     def _on_installed(self, error, value):
         if error is not None:
-            self._error.configure(text=f"Install failed: {error}")
+            self._error.configure(text=_("Install failed: {error}").format(error=error))
             self._refresh_button()
             return
         installed, failures = value
-        self.result = SetupResult(MODE_INSTALLED, self._data_dir, installed)
+        self.result = SetupResult(MODE_INSTALLED, self._data_dir, installed, language=i18n.get_language())
         if installer.same_path(installed, self._exe):
             self.destroy()  # already running the installed copy
             return
@@ -320,15 +356,15 @@ class _SetupDialog(_BootDialog):
 
     def _build_done_page(self, installed: Path, failures: list[str]):
         self.new_page()
-        self.heading("check", "ZeroBlockBridge is installed",
-                     "From now on, open it from the Start menu or the desktop shortcut.")
-        self.body(f"Installed at:\n{installed}", muted=True)
-        self.body(f"You can delete the file you downloaded:\n{self._exe}", muted=True)
+        self.heading("check", _("ZeroBlockBridge is installed"),
+                     _("From now on, open it from the Start menu or the desktop shortcut."))
+        self.body(_("Installed at:\n{path}").format(path=installed), muted=True)
+        self.body(_("You can delete the file you downloaded:\n{path}").format(path=self._exe), muted=True)
         if failures:
-            self.body("Some shortcuts couldn't be created (you can add them later in "
-                      "Settings > Storage):\n" + "\n".join(failures), muted=True)
+            self.body(_("Some shortcuts couldn't be created (you can add them later in "
+                        "Settings > Storage):\n{failures}").format(failures="\n".join(failures)), muted=True)
         row = self.button_row()
-        self.primary(row, "Open ZeroBlockBridge", self.destroy, width=200).pack(side="right")
+        self.primary(row, _("Open ZeroBlockBridge"), self.destroy, width=200).pack(side="right")
         self.refit()
 
 
@@ -346,7 +382,7 @@ def ask_setup(exe: Path, data_dir: Path | None) -> SetupResult | None:
 # ----------------------------------------------------------------------
 class _AlreadyInstalledDialog(_BootDialog):
     def __init__(self, exe: Path, installed: Path, installed_version: str | None):
-        super().__init__("Already installed")
+        super().__init__(_("Already installed"))
         self.result = "cancel"
         self._exe = exe
         self._installed = installed
@@ -354,26 +390,31 @@ class _AlreadyInstalledDialog(_BootDialog):
         newer = is_newer(this_version, installed_version)
 
         self.new_page()
-        self.heading("check", "ZeroBlockBridge is already installed",
-                     "Open the installed app from the Start menu or the desktop shortcut. "
-                     "That's the one to use.")
-        self.body(f"Installed app (version {installed_version or 'unknown'}):\n{installed}", muted=True)
+        self.heading("check", _("ZeroBlockBridge is already installed"),
+                     _("Open the installed app from the Start menu or the desktop shortcut. "
+                       "That's the one to use."))
+        self.body(_("Installed app (version {version}):\n{path}").format(
+            version=installed_version or _("unknown"), path=installed), muted=True)
         if newer:
-            self.body(f"The file you opened is version {this_version}, newer than the "
-                      "installed one. Update to keep using the same shortcuts and servers.",
+            self.body(_("The file you opened is version {version}, newer than the installed one. "
+                        "Update to keep using the same shortcuts and servers.").format(version=this_version),
                       pady=(6, 8))
         else:
-            self.body(f"You opened another copy (version {this_version}):\n{exe}\n"
-                      "You can delete it.", muted=True)
+            self.body(_("You opened another copy (version {version}):\n{path}\nYou can delete it.").format(
+                version=this_version, path=exe), muted=True)
         self._error = self.error_label()
 
         row = self.button_row()
         if newer:
-            self._btn_main = self.primary(row, f"Update to {this_version}", self._update)
+            self._btn_main = self.primary(row, self._update_text(), self._update)
         else:
-            self._btn_main = self.primary(row, "Open installed app", self._open)
+            self._btn_main = self.primary(row, _("Open installed app"), self._open)
         self._btn_main.pack(side="right")
-        self.ghost(row, "Run this copy", self._run, width=130).pack(side="right", padx=(0, 8))
+        self.ghost(row, _("Run this copy"), self._run, width=130).pack(side="right", padx=(0, 8))
+
+    @staticmethod
+    def _update_text() -> str:
+        return _("Update to {version}").format(version=AppConfig.APP_VERSION)
 
     def _open(self):
         self.result = "open"
@@ -386,7 +427,7 @@ class _AlreadyInstalledDialog(_BootDialog):
         self.destroy()
 
     def _update(self):
-        self._btn_main.configure(text="Updating...", state="disabled")
+        self._btn_main.configure(text=_("Updating..."), state="disabled")
         self.run_in_background(
             lambda: installer.update(self._exe, self._installed, AppConfig.APP_VERSION),
             self._on_updated,
@@ -398,11 +439,11 @@ class _AlreadyInstalledDialog(_BootDialog):
             self.destroy()
             return
         if isinstance(error, PermissionError):
-            msg = "The installed app is open. Close ZeroBlockBridge and try again."
+            msg = _("The installed app is open. Close ZeroBlockBridge and try again.")
         else:
-            msg = f"Update failed: {error}"
+            msg = _("Update failed: {error}").format(error=error)
         self._error.configure(text=msg)
-        self._btn_main.configure(text=f"Update to {AppConfig.APP_VERSION}", state="normal")
+        self._btn_main.configure(text=self._update_text(), state="normal")
 
 
 def ask_already_installed(exe: Path, installed: Path, installed_version: str | None) -> str:
@@ -438,7 +479,7 @@ def uninstall_target(running_exe: Path, marker: dict) -> Path:
 
 class _UninstallDialog(_BootDialog):
     def __init__(self, exe: Path, marker: dict):
-        super().__init__("Uninstall")
+        super().__init__(_("Uninstall"))
         self.exit_code = 1
         self.remove_on_exit: Path | None = None
         self._exe = uninstall_target(exe, marker)
@@ -448,33 +489,33 @@ class _UninstallDialog(_BootDialog):
 
         self.new_page()
         if _app_is_running(self._data_dir):
-            self.heading("warning", "Close ZeroBlockBridge first",
-                         "ZeroBlockBridge is running. Close it (and stop any server), "
-                         "then uninstall again.", color=AppConfig.COLOR_ACCENT_AMBER)
+            self.heading("warning", _("Close ZeroBlockBridge first"),
+                         _("ZeroBlockBridge is running. Close it (and stop any server), "
+                           "then uninstall again."), color=AppConfig.COLOR_ACCENT_AMBER)
             row = self.button_row()
-            self.primary(row, "OK", self.destroy, width=120).pack(side="right")
+            self.primary(row, _("OK"), self.destroy, width=120).pack(side="right")
             return
 
-        self.heading("trash", "Uninstall ZeroBlockBridge?",
-                     "Removes the app, its shortcuts and its entry in Windows Settings.",
+        self.heading("trash", _("Uninstall ZeroBlockBridge?"),
+                     _("Removes the app, its shortcuts and its entry in Windows Settings."),
                      color=AppConfig.COLOR_BTN_DANGER)
         if self._data_dir is not None:
             ctk.CTkCheckBox(
-                self.page, text="Also delete my servers, backups and settings",
+                self.page, text=_("Also delete my servers, backups and settings"),
                 variable=self._var_delete_data, font=AppConfig.FONT_BODY,
                 fg_color=AppConfig.COLOR_BTN_DANGER, corner_radius=AppConfig.RADIUS_BADGE,
             ).pack(anchor="w", pady=(0, 4))
-            self.body(f"{self._data_dir}\nServers you created in other folders are never deleted.",
-                      muted=True)
+            self.body(_("{path}\nServers you created in other folders are never deleted.").format(
+                path=self._data_dir), muted=True)
         self._error = self.error_label()
         row = self.button_row()
-        self._btn_uninstall = self.primary(row, "Uninstall", self._uninstall, danger=True, width=140)
+        self._btn_uninstall = self.primary(row, _("Uninstall"), self._uninstall, danger=True, width=140)
         self._btn_uninstall.pack(side="right")
         # Through _on_close: ignored while removing, like the window's X.
-        self.ghost(row, "Cancel", self._on_close, width=100).pack(side="right", padx=(0, 8))
+        self.ghost(row, _("Cancel"), self._on_close, width=100).pack(side="right", padx=(0, 8))
 
     def _uninstall(self):
-        self._btn_uninstall.configure(text="Removing...", state="disabled")
+        self._btn_uninstall.configure(text=_("Removing..."), state="disabled")
         delete_data = self._var_delete_data.get()
         self.run_in_background(lambda: self._do_uninstall(delete_data), self._on_done)
 
@@ -494,20 +535,22 @@ class _UninstallDialog(_BootDialog):
 
     def _on_done(self, error, _value):
         if error is not None:
-            self._error.configure(text=f"Uninstall failed: {error}")
-            self._btn_uninstall.configure(text="Uninstall", state="normal")
+            self._error.configure(text=_("Uninstall failed: {error}").format(error=error))
+            self._btn_uninstall.configure(text=_("Uninstall"), state="normal")
             return
         self.exit_code = 0
         self.new_page()
-        self.heading("check", "ZeroBlockBridge was uninstalled")
+        self.heading("check", _("ZeroBlockBridge was uninstalled"))
         row = self.button_row()
-        self.primary(row, "Close", self.destroy, width=120).pack(side="right")
+        self.primary(row, _("Close"), self.destroy, width=120).pack(side="right")
         self.refit()
 
 
 def run_uninstall() -> int:
     _init_theme()
-    dialog = _UninstallDialog(Path(sys.executable).resolve(), read_marker())
+    marker = read_marker()
+    use_stored_language(marker)
+    dialog = _UninstallDialog(Path(sys.executable).resolve(), marker)
     dialog.show()
     if dialog.remove_on_exit is not None:
         installer.schedule_removal(dialog.remove_on_exit)

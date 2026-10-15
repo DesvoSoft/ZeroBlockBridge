@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.constants import SERVERS_DIR, BASE_DIR
+from app.core.i18n import format_datetime, format_number
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ class BackupManager:
             if f.is_file() and f.suffix == ".zip":
                 timestamp_part, _, reason = f.stem.partition("__")
                 try:
-                    date_str = datetime.datetime.strptime(timestamp_part, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M")
+                    date_str = format_datetime(datetime.datetime.strptime(timestamp_part, "%Y-%m-%d_%H-%M-%S"))
                 except ValueError:
                     logger.warning("Skipping non-timestamp backup file: %s", f.name)
                     continue
@@ -133,7 +134,7 @@ class BackupManager:
                 backups.append({
                     "name": f.name,
                     "path": str(f),
-                    "size": f"{size_mb:.2f} MB",
+                    "size": f"{format_number(size_mb, 2)} MB",
                     "date": date_str,
                     "reason": reason or "manual",
                 })
@@ -180,7 +181,7 @@ class BackupManager:
         return {
             "name": latest.name,
             "path": str(latest),
-            "date": datetime.datetime.strptime(latest_timestamp, "%Y-%m-%d_%H-%M-%S").strftime("%d %b %Y %H:%M"),
+            "date": format_datetime(datetime.datetime.strptime(latest_timestamp, "%Y-%m-%d_%H-%M-%S")),
         }
 
     def restore_backup(self, backup_path_str: str) -> bool:

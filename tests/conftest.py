@@ -1,6 +1,20 @@
 import os
 import shutil
 
+import pytest
+
+from app.core import i18n
+
+
+@pytest.fixture(autouse=True)
+def english_ui():
+    """Tests assert English text: run each one in English whatever the OS
+    language (bootstrap sets the language from the OS), and never let a
+    test that switches language leak it into the next one."""
+    i18n.set_language(i18n.DEFAULT_LANGUAGE)
+    yield
+    i18n.set_language(i18n.DEFAULT_LANGUAGE)
+
 
 def pytest_sessionfinish(session):
     cache_dir = os.path.join(os.path.dirname(__file__), "..", ".pytest_cache")
