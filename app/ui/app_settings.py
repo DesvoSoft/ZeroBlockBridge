@@ -746,15 +746,16 @@ class AppSettingsDialog(ZBBToplevel):
 
         def _work():
             failures = installer.add_shortcuts(self._shortcut_target, start_menu=start_menu, desktop=desktop)
-            where = "Start menu" if start_menu else "desktop"
+            done = _("Shortcut added to the Start menu.") if start_menu else _("Shortcut added to the desktop.")
 
             def _report():
                 if not self.winfo_exists():
                     return
                 if failures:
-                    Toast.show(self, f"Couldn't add the shortcut: {failures[0]}", toast_type="error")
+                    Toast.show(self, _("Couldn't add the shortcut: {error}").format(error=failures[0]),
+                               toast_type="error")
                 else:
-                    Toast.show(self, f"Shortcut added to the {where}.", toast_type="success")
+                    Toast.show(self, done, toast_type="success")
             self.after(0, _report)
         threading.Thread(target=_work, daemon=True).start()
 

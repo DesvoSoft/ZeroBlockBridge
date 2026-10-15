@@ -1156,9 +1156,11 @@ class MCTunnelApp(ctk.CTk):
     def _render_status_label(self):
         elapsed = format_duration(time.monotonic() - self._phase_since)
         if self._server_phase == "starting":
-            self.lbl_status.configure(text=f"● Starting… {elapsed}", text_color=AppConfig.COLOR_STATUS_STARTING)
+            self.lbl_status.configure(text="● " + _("Starting… {elapsed}").format(elapsed=elapsed),
+                                      text_color=AppConfig.COLOR_STATUS_STARTING)
         else:
-            self.lbl_status.configure(text=f"● Running · {elapsed}", text_color=AppConfig.COLOR_STATUS_ONLINE)
+            self.lbl_status.configure(text="● " + _("Running · {elapsed}").format(elapsed=elapsed),
+                                      text_color=AppConfig.COLOR_STATUS_ONLINE)
 
     def _sample_server_memory(self):
         used = self.zbb_manager.server_memory_usage()
@@ -1559,10 +1561,11 @@ def main():
 
     # Language first: everything shown from here on is translated with it.
     from app.services.settings_manager import SettingsManager
-    from app.core.bootstrap import startup_language
+    from app.core.bootstrap import keep_language, startup_language
     from app.core.constants import BASE_DIR, CONFIG_DIR
     _settings = SettingsManager()
-    logger.info("Language: %s", startup_language(_settings, BASE_DIR))
+    language = startup_language(_settings, BASE_DIR)
+    logger.info("Language: %s", language)
 
     # Single-instance lock: prevent multiple app instances
     from app.core.single_instance import SingleInstanceLock
@@ -1577,6 +1580,7 @@ def main():
               "(next to the clock) and choose Open.")
         )
         sys.exit(1)
+    keep_language(_settings, language)
 
     app = MCTunnelApp()
     app._instance_lock = instance_lock

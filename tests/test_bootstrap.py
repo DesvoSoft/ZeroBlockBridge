@@ -636,11 +636,18 @@ def test_first_run_dialog_opens_in_the_os_language(monkeypatch, tmp_path, env, o
     assert seen == ["es"]
 
 
+def _start(settings, data_dir, tmp_path):
+    """What main() does: pick the language, then (after the lock) keep it."""
+    language = bootstrap.startup_language(settings, data_dir, _marker_file(tmp_path))
+    bootstrap.keep_language(settings, language)
+    return language
+
+
 def test_startup_language_keeps_the_saved_setting(tmp_path, os_language):
     settings = _Settings(language="es")
     _write_marker(tmp_path, {"data_dir": str(tmp_path / "data"), "language": "en"})
 
-    assert bootstrap.startup_language(settings, tmp_path / "data", _marker_file(tmp_path)) == "es"
+    assert _start(settings, tmp_path / "data", tmp_path) == "es"
     assert settings.values == {"language": "es"}
 
 
@@ -650,9 +657,18 @@ def test_first_launch_copies_the_setup_language_into_settings(tmp_path, os_langu
     _write_marker(tmp_path, {"data_dir": str(data), "language": "es"})
     settings = _Settings()
 
-    assert bootstrap.startup_language(settings, data, _marker_file(tmp_path)) == "es"
+    assert _start(settings, data, tmp_path) == "es"
     assert settings.values == {"language": "es"}
     assert i18n.get_language() == "es"
+
+
+def test_startup_language_never_writes_settings(tmp_path, os_language):
+    """A second instance exits right after this (single-instance lock): it
+    must not schedule a write of its stale copy of the settings."""
+    settings = _Settings()
+
+    assert bootstrap.startup_language(settings, tmp_path / "data", _marker_file(tmp_path)) == "en"
+    assert settings.values == {}
 
 
 def test_first_launch_ignores_another_folders_marker(tmp_path, os_language):
@@ -660,7 +676,7 @@ def test_first_launch_ignores_another_folders_marker(tmp_path, os_language):
     _write_marker(tmp_path, {"data_dir": str(tmp_path / "installed-data"), "language": "es"})
     settings = _Settings(language="xx")
 
-    assert bootstrap.startup_language(settings, tmp_path / "usb", _marker_file(tmp_path)) == "en"
+    assert _start(settings, tmp_path / "usb", tmp_path) == "en"
     assert settings.values == {"language": "en"}
 
 
@@ -668,8 +684,33 @@ def test_first_launch_without_marker_uses_the_os_language(tmp_path, os_language)
     os_language("es")
     settings = _Settings()
 
-    assert bootstrap.startup_language(settings, tmp_path / "data", _marker_file(tmp_path)) == "es"
+    assert _start(settings, tmp_path / "data", tmp_path) == "es"
     assert settings.values == {"language": "es"}
+
+
+def test_install_offer_updates_the_language_in_existing_settings(monkeypatch, tmp_path, env):
+    """The main app reads its settings first: an install offer answered in
+    Spanish must not leave them saying English."""
+    _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    data = _zbb_folder(tmp_path / "data")
+    (data / "config" / "zbb_settings.json").write_text('{"language": "en", "theme": "Light"}', encoding="utf-8")
+    _write_marker(tmp_path, {"data_dir": str(data)})
+    env.setup_result = SetupResult(MODE_MANUAL, data, language="es")
+
+    bootstrap.resolve_data_dir()
+
+    settings = json.loads((data / "config" / "zbb_settings.json").read_text(encoding="utf-8"))
+    assert settings == {"language": "es", "theme": "Light"}
+
+
+def test_fresh_setup_creates_no_settings_file_in_the_data_folder(monkeypatch, tmp_path, env):
+    _run_exe(monkeypatch, tmp_path / "Downloads" / "ZeroBlockBridge.exe")
+    data = tmp_path / "data"
+    env.setup_result = SetupResult(MODE_MANUAL, data, language="es")
+
+    bootstrap.resolve_data_dir()
+
+    assert not (data / "config" / "zbb_settings.json").exists()
 
 
 def test_remember_language_updates_this_folders_marker(tmp_path):
@@ -691,3 +732,19 @@ def test_remember_language_leaves_other_markers_alone(tmp_path):
     _marker_file(tmp_path).unlink()
     bootstrap.remember_language("es", tmp_path / "usb", _marker_file(tmp_path))
     assert not _marker_file(tmp_path).exists()
+
+
+def test_remember_language_survives_a_locked_marker(monkeypatch, tmp_path, caplog):
+    """Runs in a Tk callback: a marker held open by OneDrive/antivirus must
+    not raise there."""
+    data = tmp_path / "data"
+    data.mkdir()
+    _write_marker(tmp_path, {"data_dir": str(data), "language": "en"})
+
+    def _locked(*_args):
+        raise PermissionError("in use")
+    monkeypatch.setattr(bootstrap, "write_marker", _locked)
+
+    bootstrap.remember_language("es", data, _marker_file(tmp_path))
+
+    assert "Could not save the language" in caplog.text

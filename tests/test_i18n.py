@@ -1,7 +1,7 @@
 import ast
 import ctypes
 import datetime
-import gettext
+import io
 import re
 import sys
 from pathlib import Path
@@ -59,7 +59,7 @@ def test_english_is_the_source_language():
 
 def test_spanish_catalog_translates(spanish):
     assert i18n.get_language() == "es"
-    assert i18n._("Setup") == "Configuración"
+    assert i18n._("Setup") == "Instalación"
     assert i18n.pgettext("decimal separator", ".") == ","
 
 
@@ -88,6 +88,18 @@ def test_corrupt_catalog_falls_back_to_english(monkeypatch, tmp_path):
 
     assert i18n.set_language("es") == "en"
     assert i18n._("Setup") == "Setup"
+
+
+@pytest.mark.parametrize("size", [6, 20, 100])
+def test_truncated_catalog_falls_back_to_english(monkeypatch, tmp_path, size):
+    """A cut-off .mo raises struct.error, not OSError: it must not crash the
+    app before any window exists."""
+    real = (LOCALES / "es" / "LC_MESSAGES" / "zbb.mo").read_bytes()
+    (tmp_path / "es" / "LC_MESSAGES").mkdir(parents=True)
+    (tmp_path / "es" / "LC_MESSAGES" / "zbb.mo").write_bytes(real[:size])
+    monkeypatch.setattr(i18n, "locale_dir", lambda: tmp_path)
+
+    assert i18n.set_language("es") == "en"
 
 
 def test_switching_back_to_english_drops_the_catalog(spanish):
@@ -298,19 +310,12 @@ def _languages():
 
 @pytest.mark.parametrize("lang", _languages())
 def test_compiled_catalog_matches_po(lang):
-    """The committed .mo must be compiled from the committed .po
-    (py tools/i18n.py compile)."""
-    with open(LOCALES / lang / "LC_MESSAGES" / "zbb.mo", "rb") as f:
-        compiled = gettext.GNUTranslations(f)
-    for message in _po(lang):
-        if not message.id or not message.string:
-            continue
-        if message.pluralizable:
-            assert compiled.ngettext(message.id[0], message.id[1], 1) == message.string[0]
-        elif message.context:
-            assert compiled.pgettext(message.context, message.id) == message.string, message.id
-        else:
-            assert compiled.gettext(message.id) == message.string, message.id
+    """The committed .mo must be exactly what the committed .po compiles to
+    (py tools/i18n.py compile) -- also catches translations removed from
+    the .po but still in the .mo."""
+    compiled = io.BytesIO()
+    write_mo(compiled, _po(lang))
+    assert (LOCALES / lang / "LC_MESSAGES" / "zbb.mo").read_bytes() == compiled.getvalue()
 
 
 @pytest.mark.parametrize("lang", _languages())
@@ -354,33 +359,86 @@ def _module_imports_translate(tree) -> bool:
                for node in ast.walk(tree))
 
 
-def _own_nodes(func):
-    """Nodes of `func` excluding nested functions/classes/lambdas/comprehensions."""
-    stack = list(func.body)
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+
+
+def _scope_nodes(scope, stop):
+    """Nodes inside `scope`, not descending into nested nodes of type `stop`."""
+    stack = list(ast.iter_child_nodes(scope))
     while stack:
         node = stack.pop()
         yield node
-        for child in ast.iter_child_nodes(node):
-            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda,
-                                      ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
-                stack.append(child)
+        if not isinstance(node, stop):
+            stack.extend(ast.iter_child_nodes(node))
+
+
+def _binds_underscore(scope) -> bool:
+    """`_` is local to this function/lambda: assigned, a parameter, or an
+    `except ... as _` name (comprehension targets have their own scope)."""
+    args = scope.args
+    params = args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a]
+    if any(a.arg == "_" for a in params):
+        return True
+    comprehensions = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    for node in _scope_nodes(scope, _SCOPES + (ast.ClassDef,) + comprehensions):
+        if isinstance(node, ast.Name) and node.id == "_" and isinstance(node.ctx, ast.Store):
+            return True
+        if isinstance(node, ast.ExceptHandler) and node.name == "_":
+            return True
+    return False
+
+
+def _shadowing_offenders(source: str) -> list[int]:
+    """Line numbers of functions/lambdas where `_` is local but `_()` is
+    called in them or in a nested lambda/comprehension that doesn't rebind it."""
+    tree = ast.parse(source)
+    offenders = []
+    for scope in ast.walk(tree):
+        if not isinstance(scope, _SCOPES) or not _binds_underscore(scope):
+            continue
+        nested = [n for n in _scope_nodes(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                  if isinstance(n, ast.Lambda) and n is not scope]
+        rebinding = {id(n) for n in nested if _binds_underscore(n)}
+        for node in _scope_nodes(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if isinstance(node, ast.Lambda) and id(node) in rebinding:
+                continue
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_":
+                offenders.append(scope.lineno)
+                break
+    return offenders
+
+
+@pytest.mark.parametrize("source", [
+    "def f():\n    a, _, _ = g()\n    return _('x')\n",
+    "def f():\n    a, _ = g()\n    btn(command=lambda: _('x'))\n",
+    "def f(_):\n    return _('x')\n",
+    "f = lambda _: _('x')\n",
+    "def f():\n    try:\n        g()\n    except OSError as _:\n        pass\n    return _('x')\n",
+    "def f():\n    for _ in range(3):\n        h(_('x'))\n",
+])
+def test_shadowing_check_catches(source):
+    assert _shadowing_offenders(source)
+
+
+@pytest.mark.parametrize("source", [
+    "def f():\n    return _('x')\n",
+    "def f():\n    return [_('x') for _y in ()]\n",
+    "def f():\n    a = [1 for _ in ()]\n    return _('x')\n",
+    "def f():\n    a, _ = g()\n    return a\n",
+    "def f():\n    btn(command=lambda _v: _('x'))\n",
+])
+def test_shadowing_check_allows(source):
+    assert _shadowing_offenders(source) == []
 
 
 def test_no_function_shadows_the_translation_function():
     """`buttons, _, _ = ...` in a function that also calls `_()` makes `_`
-    local to it and the call fails with UnboundLocalError."""
+    local to it and the call fails with UnboundLocalError (or calls the
+    tuple element)."""
     offenders = []
     for path in (ROOT / "app").rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        if not _module_imports_translate(tree):
+        source = path.read_text(encoding="utf-8")
+        if not _module_imports_translate(ast.parse(source)):
             continue
-        for func in ast.walk(tree):
-            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            nodes = list(_own_nodes(func))
-            assigns = any(isinstance(n, ast.Name) and n.id == "_" and isinstance(n.ctx, ast.Store) for n in nodes)
-            calls = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_"
-                        for n in nodes)
-            if assigns and calls:
-                offenders.append(f"{path.relative_to(ROOT)}:{func.lineno} {func.name}")
+        offenders += [f"{path.relative_to(ROOT)}:{line}" for line in _shadowing_offenders(source)]
     assert offenders == []
