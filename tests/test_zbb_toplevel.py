@@ -7,7 +7,9 @@ import pytest
 
 ctk = pytest.importorskip("customtkinter")
 
-from app.ui.ui_components import ZBBToplevel  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+from app.ui.ui_components import ZBBToplevel, _FocusIfAlive  # noqa: E402
 
 
 @pytest.fixture
@@ -49,3 +51,42 @@ def test_destroy_withdraws_first(root):
     win.withdraw = lambda: (states.append("withdrawn"), original())
     win.destroy()
     assert states == ["withdrawn"]
+
+
+# ----------------------------------------------------------------------
+# Deferred focus after a titlebar re-theme. CTk focuses the previously
+# focused widget 10ms after re-showing the window; found testing the
+# packaged exe, closing the wizard inside that window logged a TclError.
+# ----------------------------------------------------------------------
+def test_focus_goes_to_a_live_widget():
+    widget = MagicMock()
+    widget.winfo_exists.return_value = True
+    _FocusIfAlive(widget).focus()
+    widget.focus_set.assert_called_once()
+
+
+def test_focus_on_a_destroyed_widget_is_dropped():
+    widget = MagicMock()
+    widget.winfo_exists.return_value = False
+    _FocusIfAlive(widget).focus()
+    widget.focus_set.assert_not_called()
+
+
+def test_focus_error_from_tk_is_swallowed():
+    widget = MagicMock()
+    widget.winfo_exists.side_effect = tk.TclError('bad window path name ".!serverwizard"')
+    _FocusIfAlive(widget).focus()  # must not raise
+
+
+def test_titlebar_retheme_hands_ctk_a_guarded_focus(monkeypatch):
+    seen = {}
+
+    def fake_parent_retheme(self, color_mode):
+        seen["focus"] = self.focus_get()
+
+    monkeypatch.setattr(ctk.CTkToplevel, "_windows_set_titlebar_color", fake_parent_retheme)
+    monkeypatch.setattr(ctk.CTkToplevel, "focus_get", lambda self: "button")
+    window = ZBBToplevel.__new__(ZBBToplevel)
+    ZBBToplevel._windows_set_titlebar_color(window, "dark")
+    assert isinstance(seen["focus"], _FocusIfAlive)
+    assert "focus_get" not in vars(window)  # the override is removed again

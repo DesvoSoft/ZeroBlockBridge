@@ -125,3 +125,27 @@ def test_icon_hidden_before_it_was_up_is_stopped_when_ready():
     t._on_ready(icon)
     icon.stop.assert_called_once()
     icon.notify.assert_not_called()
+
+
+def _status_app(exiting):
+    from app.ui.main import MCTunnelApp
+    app = MagicMock()
+    app._server_phase, app._status_ticks, app._exiting = "running", 0, exiting
+    app._MEMORY_EVERY_TICKS = MCTunnelApp._MEMORY_EVERY_TICKS
+    return MCTunnelApp, app
+
+
+def test_status_tick_stops_once_the_app_is_exiting():
+    """Found testing the packaged exe: a tick that fired after exit_app shut
+    the executor down logged 'cannot schedule new futures after shutdown'."""
+    cls, app = _status_app(exiting=True)
+    cls._tick_server_status(app)
+    app.executor.submit.assert_not_called()
+    app.after.assert_not_called()
+
+
+def test_status_tick_keeps_running_normally():
+    cls, app = _status_app(exiting=False)
+    cls._tick_server_status(app)
+    app.executor.submit.assert_called_once()
+    app.after.assert_called_once()
