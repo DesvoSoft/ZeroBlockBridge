@@ -172,3 +172,52 @@ class TestTask:
         assert isinstance(task.exception(timeout=1), RuntimeError)
         with pytest.raises(RuntimeError):
             task.result(timeout=1)
+
+
+class TestTaskEndsAreAlwaysReported:
+    """Regressions: a task must finish (and say so) whatever happens to its
+    job, its executor or the UI it reports to — or a progress dialog stays
+    open and the task counts as running forever."""
+
+    def test_base_exception_still_completes_the_task(self):
+        done = []
+        task = Task().on_done(done.append)
+        with pytest.raises(KeyboardInterrupt):
+            task._run(lambda t: (_ for _ in ()).throw(KeyboardInterrupt()))
+        assert done == [task] and task.done()
+
+    def test_submit_to_a_shut_down_executor_fails_the_task(self):
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        executor.shutdown()
+        runner = TaskRunner(executor, lambda: direct)
+        done = []
+        task = runner.start("x", lambda t: 1).on_done(done.append)
+        assert done == [task]
+        assert isinstance(task.exception(timeout=1), RuntimeError)
+        assert runner.active() == []
+
+    def test_job_dropped_from_the_queue_fails_the_task(self):
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        runner = TaskRunner(executor, lambda: direct)
+        release = threading.Event()
+        first = runner.start("busy", lambda t: release.wait(timeout=5))
+        queued = runner.start("queued", lambda t: "never")
+        executor.shutdown(wait=False, cancel_futures=True)
+        release.set()
+        assert first.result(timeout=5) is True
+        with pytest.raises(concurrent.futures.CancelledError):
+            queued.result(timeout=5)
+        assert runner.active() == []
+
+    def test_dead_dispatcher_does_not_abort_the_job(self):
+        def gone(_fn):
+            raise RuntimeError("main thread is not in main loop")
+
+        task = Task(dispatcher=gone)
+        task.on_progress(lambda *a: None)
+
+        def job(t):
+            t.report(0.5, "rolling back")
+            return "rolled back"
+        task._run(job)
+        assert task.result(timeout=1) == "rolled back"

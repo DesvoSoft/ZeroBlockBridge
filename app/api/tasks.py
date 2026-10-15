@@ -41,7 +41,7 @@ class Task:
             if not finished:
                 self._done.append(callback)
         if finished:
-            self._dispatcher(lambda: callback(self))
+            self._dispatch(lambda: callback(self))
         return self
 
     def cancel(self) -> bool:
@@ -69,18 +69,39 @@ class Task:
         with self._lock:
             listeners = list(self._progress)
         for callback in listeners:
-            self._dispatcher(lambda cb=callback: cb(*args))
+            self._dispatch(lambda cb=callback: cb(*args))
+
+    def _dispatch(self, fn: Callable[[], None]) -> None:
+        # A dispatcher whose UI is gone (window destroyed during exit) must
+        # not abort the job that reports to it, e.g. a creation rolling back.
+        try:
+            self._dispatcher(fn)
+        except Exception as exc:
+            logger.debug("Task %s: callback dropped: %s", self.name, exc)
 
     def _run(self, job: Callable[["Task"], Any]) -> None:
         try:
             self._future.set_result(job(self))
-        except Exception as exc:
+        except BaseException as exc:
             logger.exception("Task %s failed", self.name or job)
             self._future.set_exception(exc)
+            self._finish()
+            if not isinstance(exc, Exception):
+                raise
+            return
+        self._finish()
+
+    def _fail(self, exc: BaseException) -> None:
+        """Finish without running (the executor refused or dropped the job)."""
+        if not self._future.done():
+            self._future.set_exception(exc)
+        self._finish()
+
+    def _finish(self) -> None:
         with self._lock:
             callbacks, self._done = self._done, []
         for callback in callbacks:
-            self._dispatcher(lambda cb=callback: cb(self))
+            self._dispatch(lambda cb=callback: cb(self))
 
 
 class TaskRunner:
@@ -102,11 +123,24 @@ class TaskRunner:
             try:
                 task._run(job)
             finally:
-                with self._lock:
-                    self._active.discard(task)
+                self._forget(task)
 
-        self._executor.submit(run)
+        def dropped(future):
+            # Cancelled while queued (executor shutdown with cancel_futures).
+            if future.cancelled():
+                self._forget(task)
+                task._fail(concurrent.futures.CancelledError())
+
+        try:
+            self._executor.submit(run).add_done_callback(dropped)
+        except RuntimeError as exc:  # executor already shut down
+            self._forget(task)
+            task._fail(exc)
         return task
+
+    def _forget(self, task: Task) -> None:
+        with self._lock:
+            self._active.discard(task)
 
     def active(self, name: Optional[str] = None) -> list[Task]:
         with self._lock:
