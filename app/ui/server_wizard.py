@@ -8,7 +8,8 @@ from app.core.version_manager import VersionManager
 from app.core.app_config import AppConfig
 from app.services.java_detector import JavaDetector, get_required_java
 from app.services.scaffolder import PROPERTY_DEFAULTS
-from app.services.template_manager import list_templates, load_template, save_template
+from app.services.template_manager import (list_templates, load_template, normalize_template_name,
+                                            save_template, template_exists)
 from app.ui.ui_components import ZBBDialog, center_on_parent, dialog_header, ScrollableFrame, ZBBToplevel
 from app.ui.win_effects import apply_rounded_corners
 from app.ui.icons import icon
@@ -698,12 +699,23 @@ class ServerWizard(ZBBToplevel):
             self, "Save as Template", "Template name:",
             placeholder="my-template", confirm_text="Save",
         )
-        if not name:
+        if not name or not name.strip():
             return
-        name = name.strip().lower().replace(" ", "-")
-        if not name:
+        safe_name = normalize_template_name(name)
+        if safe_name is None:
+            ZBBDialog.info(self, "Save as Template",
+                           "Use letters, numbers, dashes, dots or underscores (up to 64), "
+                           "starting with a letter or number.", kind="error")
             return
-        save_template(name, {k: v for k, v in self.wizard_data.items() if k not in _CONTENT_KEYS})
+        if template_exists(safe_name) and not ZBBDialog.confirm(
+                self, "Save as Template",
+                f"A template named \"{safe_name}\" already exists. Replace it?",
+                confirm_text="Replace"):
+            return
+        try:
+            save_template(safe_name, {k: v for k, v in self.wizard_data.items() if k not in _CONTENT_KEYS})
+        except OSError as e:
+            ZBBDialog.info(self, "Save as Template", f"Couldn't save the template: {e}", kind="error")
 
     def _on_template_selected(self, template_name):
         if template_name == "None":

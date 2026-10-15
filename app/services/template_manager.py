@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from app.core import resources
 from app.core.constants import CONFIG_DIR, atomic_write_json
@@ -22,7 +23,20 @@ _TEMPLATE_FIELDS = (
 )
 
 
+# A template name is a file name: no separators, drive letters or dot-files.
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def normalize_template_name(raw: str) -> str | None:
+    """The file-safe name for what the user typed ("My Template" ->
+    "my-template"), or None if it can't be one."""
+    name = (raw or "").strip().lower().replace(" ", "-")
+    return name if _NAME_RE.match(name) else None
+
+
 def _template_path(name: str) -> str:
+    if not _NAME_RE.match(name or ""):
+        raise ValueError(f"Invalid template name: {name!r}")
     return os.path.join(TEMPLATES_DIR, f"{name}.json")
 
 
@@ -46,10 +60,7 @@ def list_templates() -> list[dict]:
     return templates
 
 
-def load_template(name: str) -> dict | None:
-    path = _template_path(name)
-    if not os.path.exists(path):
-        path = os.path.join(BUILTIN_TEMPLATES_DIR, f"{name}.json")
+def _read_template(path: str, name: str) -> dict | None:
     if not os.path.exists(path):
         return None
     try:
@@ -60,10 +71,25 @@ def load_template(name: str) -> dict | None:
         return None
 
 
+def load_template(name: str) -> dict | None:
+    """The user's template, else the built-in one (also when the user's
+    file is unreadable)."""
+    if not _NAME_RE.match(name or ""):
+        return None
+    return (_read_template(_template_path(name), name)
+            or _read_template(os.path.join(BUILTIN_TEMPLATES_DIR, f"{name}.json"), name))
+
+
+def template_exists(name: str) -> bool:
+    return name in _template_names(TEMPLATES_DIR) | _template_names(BUILTIN_TEMPLATES_DIR)
+
+
 def save_template(name: str, wizard_data: dict, description: str = "") -> None:
+    """Raises ValueError for an unsafe name, OSError if it can't be written."""
+    path = _template_path(name)
     data = {key: wizard_data[key] for key in _TEMPLATE_FIELDS if key in wizard_data}
     data["_description"] = description
-    atomic_write_json(_template_path(name), data, indent=2)
+    atomic_write_json(path, data, indent=2)
     logger.info("Saved template: %s", name)
 
 
