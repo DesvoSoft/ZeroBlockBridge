@@ -107,7 +107,7 @@ def test_world_version_messages_spanish(spanish):
     newer = world_version_check(WorldInfo("w", "w", False, "w", mc_version="1.21.4"), "1.20.1")
     assert newer == ("error", "Este mundo se guardó con Minecraft 1.21.4, más reciente que este servidor "
                               "(1.20.1). Una versión anterior puede dañarlo: elija Minecraft "
-                              "1.21.4 o posterior en el paso Motor y versión.")
+                              "1.21.4 o posterior en el paso Engine & Version.")
     same = world_version_check(WorldInfo("w", "w", False, "w", mc_version="1.20.1"), "1.20.1")
     assert same == ("info", "Guardado con Minecraft 1.20.1, la misma versión que este servidor.")
     snap = world_version_check(WorldInfo("w", "w", False, "w", mc_version="24w14a", snapshot=True), "1.20.4")

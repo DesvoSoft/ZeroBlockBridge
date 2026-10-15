@@ -137,6 +137,36 @@ def N_(message: str) -> str:
 
 
 # ----------------------------------------------------------------------
+# Text shown to the user that must also reach an English-only place
+# ----------------------------------------------------------------------
+class Bilingual(str):
+    """Translated text that remembers its English source. It is a plain
+    `str` (the translation) for toasts and dialogs; `english()` gives what
+    the console, logs and Discord use."""
+    english: str
+
+    def __new__(cls, translated: str, english: str):
+        text = super().__new__(cls, translated)
+        text.english = english
+        return text
+
+
+def bilingual(message: str, **fields) -> Bilingual:
+    """`_(message).format(**fields)`, keeping the English rendering."""
+    return Bilingual(_(message).format(**fields), message.format(**fields))
+
+
+def bilingual_n(singular: str, plural: str, n: int, **fields) -> Bilingual:
+    english = singular if n == 1 else plural
+    return Bilingual(ngettext(singular, plural, n).format(**fields), english.format(**fields))
+
+
+def english(text) -> str:
+    """The English form of a `Bilingual`; any other text as it is."""
+    return getattr(text, "english", text)
+
+
+# ----------------------------------------------------------------------
 # Choices: an internal key per option, a translated label to show
 # ----------------------------------------------------------------------
 # A choice list is `((key, N_("Label")), ...)`. Widgets show the labels and

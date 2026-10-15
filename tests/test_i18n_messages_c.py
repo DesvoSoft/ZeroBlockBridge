@@ -73,7 +73,7 @@ def test_secret_invalid_toast(spanish, playit):
     m, _api, notify = playit
     m._handle_auth_failure("Agent secret invalid")
     assert _toast(notify) == ("El secreto de Playit no es válido. "
-                              "Use 'Restablecer túnel' para volver a vincular.")
+                              "Use 'Reset Tunnel' para volver a vincular.")
 
 
 def test_tunnel_online_toast(spanish, playit):
@@ -88,7 +88,7 @@ def test_reset_toasts(spanish, playit, tmp_path):
     api.delete_agent.return_value = True
     with patch.object(m, "stop"):
         m.reset(mode="tunnel")
-        assert _toast(notify) == ("Túneles eliminados. Haga clic en Iniciar túnel "
+        assert _toast(notify) == ("Túneles eliminados. Haga clic en Start Tunnel "
                                   "para crear un túnel nuevo.")
         with patch.object(m, "toml_path", str(tmp_path / "playit.toml")):
             m.reset(mode="full")

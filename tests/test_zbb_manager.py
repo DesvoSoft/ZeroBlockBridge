@@ -292,3 +292,29 @@ def test_bytecode_java_requirement_is_cached(manager):
     assert result is not None and result[1] == 21
     mock_meta.assert_any_call("test_server", {"required_java": 21})
 
+
+
+class TestCrashNotification:
+    """The toast explains the crash code in words; crash_history keeps the code."""
+
+    def _crash(self, manager, event_bus, payload, lang="en"):
+        from app.core import i18n
+        i18n.set_language(lang)
+        toasts = []
+        event_bus.subscribe(ServerEvent.NOTIFICATION, toasts.append)
+        manager.current_server = "alpha"
+        with patch("app.core.core.get_server_meta", return_value={"crash_history": []}), \
+                patch("app.core.core.update_server_meta") as update:
+            manager._on_server_crashed(payload)
+        return toasts[-1], update.call_args[0][1]["crash_history"][-1]
+
+    def test_label_with_attempt_and_detail(self, manager, event_bus):
+        toast, entry = self._crash(manager, event_bus,
+                                   {"reason": "out_of_memory", "retry": 2, "detail": "OutOfMemoryError"})
+        assert toast["msg"] == "Server crashed: out of memory (attempt 2).\nOutOfMemoryError"
+        assert entry["reason"] == "out_of_memory"
+
+    def test_spanish_label_keeps_the_code(self, manager, event_bus):
+        toast, entry = self._crash(manager, event_bus, {"reason": "boot_crash"}, lang="es")
+        assert toast["msg"] == "El servidor falló: se detuvo durante el arranque."
+        assert entry["reason"] == "boot_crash"

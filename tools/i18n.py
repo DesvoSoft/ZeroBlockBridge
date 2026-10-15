@@ -30,7 +30,7 @@ def pybabel(*args: str) -> None:
 
 def extract() -> None:
     pybabel("extract", "--no-location", "--sort-output", "--project=ZeroBlockBridge",
-            "--copyright-holder=DesvoSoft", "-k", "N_", "-o", str(TEMPLATE), str(ROOT / "app"))
+            "--copyright-holder=DesvoSoft", "-k", "N_", "-k", "bilingual", "-k", "bilingual_n:1,2", "-o", str(TEMPLATE), str(ROOT / "app"))
 
 
 def update() -> None:

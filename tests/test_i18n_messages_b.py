@@ -78,7 +78,7 @@ def test_tunnel_warning_in_spanish(tmp_path, spanish):
         result = _provision(env, [])
     assert result.ok
     assert result.warnings == [
-        "No se pudo configurar el túnel de Playit (playit down). Inícielo desde el panel Túnel."]
+        "No se pudo configurar el túnel de Playit (playit down). Inícielo desde el panel Tunnel."]
 
 
 @pytest.mark.parametrize("failed, expected", [

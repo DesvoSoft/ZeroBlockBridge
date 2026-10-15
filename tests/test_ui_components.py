@@ -86,10 +86,17 @@ class TestExplicitLineKinds:
         assert TunnelLogWidget._line_tag(line) == "line_error"
         assert ConsoleWidget._line_tag(error_line("[Error] No se encontró Java")) == "line_error"
 
-    def test_wording_alone_no_longer_colors(self):
+    def test_raw_agent_output_still_matched_by_wording(self):
+        # playitd's own output is never translated; a fatal "Error: ..." or
+        # "failed to connect" without a level token stays red.
         from app.ui.ui_components import TunnelLogWidget as T
-        assert T._line_tag("[Playit] Retrying after the last attempt failed") == "line_tunnel"
-        assert T._line_tag("[System] Error log cleared") == "line_tunnel"
+        assert T._line_tag("[Playit] Error: invalid secret") == "line_error"
+        assert T._line_tag("[Playit] failed to connect to control") == "line_error"
+
+    def test_warning_kind_is_never_red(self):
+        from app.core.console_line import warning_line
+        from app.ui.ui_components import TunnelLogWidget as T
+        assert T._line_tag(warning_line("[Playit] Aviso: falló el primer intento")) == "line_warn"
 
     def test_kind_survives_as_plain_text(self):
         from app.core.console_line import ConsoleLine, LineKind, kind_of

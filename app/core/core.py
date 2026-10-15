@@ -5,7 +5,7 @@ import os
 from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 
-from app.core.i18n import _, ngettext
+from app.core.i18n import _, english, ngettext
 from app.core.server_events import EventBus, ServerEvent
 from app.core.constants import ServerState, SERVERS_DIR
 from app.services.backup_manager import BackupManager
@@ -565,7 +565,7 @@ class ZBBManager:
                         if path:
                             self.events.emit(ServerEvent.CONSOLE_LINE, f"[System] Auto-backup completed: {os.path.basename(path)}")
                         else:
-                            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {error}")
+                            self.events.emit(ServerEvent.CONSOLE_LINE, f"[Error] Auto-backup failed: {english(error)}")
 
                     # Dedicated thread, not the shared executor: _restart already
                     # occupies a pool worker, and blocking on a future from the

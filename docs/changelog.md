@@ -17,7 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 - The mod auto-install result reads as full sentences ("2 mods were installed. 1 mod failed to install.").
-- The Tunnel Log colors ZBB's own lines red because they are errors, not because they contain the word "failed" or "Error"; a Playit line that merely mentions an earlier failure is no longer red.
+- The Tunnel Log colors ZBB's own error lines red because they are marked as errors, not because they contain the word "failed" or "Error", so they stay red in Spanish.
 
 ### Fixed
 - Two Java installations that look alike (same version, type and source) could not both be chosen in the wizard or the server's Launch settings: picking the second used the first. The second now shows its path.

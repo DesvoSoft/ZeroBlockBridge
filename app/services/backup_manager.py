@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.constants import SERVERS_DIR, BASE_DIR
-from app.core.i18n import _, format_datetime, format_number, ngettext
+from app.core.i18n import _, bilingual, bilingual_n, format_datetime, format_number
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class BackupManager:
     def create_backup(self, retention_count: int | None = None, reason: str = "manual") -> tuple[Path | None, str | None]:
         from app.core.constants import check_disk_space
         if not check_disk_space(min_gb=1, target_dir=self.server_path):
-            return None, _("Not enough disk space to create backup (>1GB required).")
+            return None, bilingual("Not enough disk space to create backup (>1GB required).")
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{timestamp}.zip" if reason == "manual" else f"{timestamp}__{reason}.zip"
@@ -66,10 +66,12 @@ class BackupManager:
             replace_with_retry(str(part_path), str(backup_path))
             self._apply_retention(self._resolve_retention(retention_count, reason), reason=reason)
             if skipped_files:
-                return backup_path, ngettext(
+                # Bilingual: the toast shows it translated, Discord and the
+                # console get the English form (i18n.english).
+                return backup_path, bilingual_n(
                     "Backup created with warnings. Skipped {count} locked file.",
                     "Backup created with warnings. Skipped {count} locked files.",
-                    len(skipped_files)).format(count=len(skipped_files))
+                    len(skipped_files), count=len(skipped_files))
             return backup_path, None
         except Exception as e:
             self._discard(part_path, backup_path)

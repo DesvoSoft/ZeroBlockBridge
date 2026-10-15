@@ -7,6 +7,7 @@ from typing import Callable, Optional
 
 import requests
 
+from app.core.i18n import english
 from app.core.server_events import EventBus, ServerEvent
 
 logger = logging.getLogger(__name__)
@@ -326,7 +327,7 @@ class DiscordWebhookService:
             path = data.get("path", "")
             return f"Backup saved: `{path}`" if path else "Backup completed successfully."
         if event_type == ServerEvent.BACKUP_FAILED and isinstance(data, dict):
-            return f"Error: {data.get('error', 'unknown')}"
+            return f"Error: {english(data.get('error', 'unknown'))}"
         return ""
 
     def _format_players_flush(self, data: dict) -> str:
@@ -368,7 +369,7 @@ class DiscordWebhookService:
         elif event_type == ServerEvent.BACKUP_COMPLETED:
             vars_["path"] = d.get("path", "")
         elif event_type == ServerEvent.BACKUP_FAILED:
-            vars_["error"] = d.get("error", "unknown")
+            vars_["error"] = english(d.get("error", "unknown"))
         return vars_
 
     def _render_template(self, template: str, event_type: str, data, server_name: str) -> str:
