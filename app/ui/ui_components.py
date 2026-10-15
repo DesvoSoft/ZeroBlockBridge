@@ -140,6 +140,22 @@ def hide_until_drawn(window, max_wait_ms: int = _REVEAL_MAX_WAIT_MS, ready: Call
     window.after_idle(wait_until_drawn)
 
 
+class _FocusIfAlive:
+    """Stands in for the focused widget CTk restores 10ms after re-theming a
+    titlebar (`after(10, widget.focus)`): a window closed in between, like the
+    wizard on Create Server, left Tk focusing a destroyed widget."""
+
+    def __init__(self, widget):
+        self._widget = widget
+
+    def focus(self):
+        try:
+            if self._widget.winfo_exists():
+                self._widget.focus_set()
+        except tk.TclError as e:
+            logger.debug("Deferred focus dropped: %s", e)
+
+
 class ZBBToplevel(ctk.CTkToplevel):
     """CTkToplevel that only becomes visible once its content is drawn (no
     white flash, no widgets popping in) — see hide_until_drawn — and hides
@@ -163,7 +179,16 @@ class ZBBToplevel(ctk.CTkToplevel):
 
     def _windows_set_titlebar_color(self, color_mode: str):
         self._zbb_titlebar_refresh_pending = False
-        super()._windows_set_titlebar_color(color_mode)
+        # CTk saves focus_get() and focuses it 10ms later; hand it a guard.
+        self.focus_get = self._focus_get_guarded
+        try:
+            super()._windows_set_titlebar_color(color_mode)
+        finally:
+            del self.focus_get
+
+    def _focus_get_guarded(self):
+        widget = ctk.CTkToplevel.focus_get(self)
+        return _FocusIfAlive(widget) if widget is not None else None
 
     def destroy(self):
         # Tearing down a few hundred widgets takes a while (~200ms for the

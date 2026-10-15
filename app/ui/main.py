@@ -1130,7 +1130,8 @@ class MCTunnelApp(ctk.CTk):
 
     def _tick_server_status(self):
         self._status_tick_job = None
-        if self._server_phase is None:
+        # Exiting shuts the executor down; a late tick must not submit to it.
+        if self._server_phase is None or getattr(self, "_exiting", False):
             return
         if self._viewing_running_server():
             self._render_status_label()
@@ -1487,6 +1488,10 @@ class MCTunnelApp(ctk.CTk):
         # never reach disk since nothing was waiting for that timer to fire.
         from app.services.settings_manager import SettingsManager
         SettingsManager().save()
+
+        if self._status_tick_job is not None:
+            self.after_cancel(self._status_tick_job)
+            self._status_tick_job = None
 
         # Cancel in-flight UI tasks immediately (downloads, link checks, etc.)
         self.executor.shutdown(wait=False, cancel_futures=True)
