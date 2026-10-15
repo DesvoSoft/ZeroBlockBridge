@@ -10,6 +10,7 @@ This document covers the internal architecture, auto-healing system, technical d
 
 1. [Event-Driven Architecture](#event-driven-architecture)
 2. [Layer Separation](#layer-separation)
+   - [API Seam](#api-seam)
 3. [Central Orchestrator: ZBBManager](#central-orchestrator-zbbmanager)
 4. [Sub-Orchestrators](#sub-orchestrators)
 5. [EventBus & ServerEvent](#eventbus--serverevent)
@@ -35,19 +36,19 @@ This document covers the internal architecture, auto-healing system, technical d
 
 ## Event-Driven Architecture
 
-The core and UI are **fully decoupled** via `EventBus`. `ZBBManager` is the single orchestrator; the UI subscribes to events and never performs blocking I/O or calls services directly.
+The core and UI are **fully decoupled**: the UI calls the [API seam](#api-seam) (`app/api`) and receives core events through it; `ZBBManager` is the single orchestrator behind it. The UI never performs blocking I/O on its thread.
 
 ```
-UI emits event → ZBBManager receives → delegates to orchestrator/service
-                                          → service emits result → UI updates
+UI → AppApi (commands/queries) → ZBBManager / services
+UI ← dispatcher ← AppApi.events ← EventBus ← core/services emit
 ```
 
 Rules:
-- Use `events.subscribe()` — never `.on()`.
-- UI updates only via `self.after(0, callback)` (Tkinter thread safety).
-- No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the setup dialogs before any window exists).
-- Mutating flows (start/stop/backup/restart/snapshot) go through `ZBBManager`. When a UI widget needs one, it receives the manager method as an injected callback (e.g. `ModrinthBrowser(create_snapshot=zbb_manager.create_pre_update_snapshot)`) instead of importing the service.
-- Pragmatic exception: UI may import services for read-only/stateless helpers (load properties, list templates, disk usage).
+- Subscribe through `api.events.subscribe()` (core code: `events.subscribe()`) — never `.on()`.
+- Widgets are touched only on the UI thread: the dispatcher given to `AppApi` marshals events and task callbacks there (`self.after(0, fn)` in CustomTkinter).
+- No service or core module imports from `app/ui/` (one documented exception: `bootstrap.resolve_data_dir()` opens the setup dialogs before any window exists). `app/api` imports no GUI toolkit.
+- Ported screens (main window, Modrinth browser) reach the core only through `AppApi`; the others use `AppApi.legacy_manager` until 8b part B.
+- Pragmatic exception (unported screens): read-only/stateless helpers (load properties, list templates, disk usage).
 
 ---
 
@@ -55,11 +56,71 @@ Rules:
 
 ```
 app/ui/        → Presentation only. No business logic. No direct service calls.
+app/api/       → UI-agnostic facade: commands, queries, events, tasks (plain Python).
 app/core/      → Orchestration, EventBus, business logic.
 app/services/  → Specialized services (auto-healing, API clients, utilities).
 ```
 
-Dependency direction is strictly one-way: `ui → core → services`. Never the reverse.
+Dependency direction is strictly one-way: `ui → api → core → services`. Never the reverse.
+
+---
+
+## API Seam
+
+**Package:** `app/api/` (`AppApi` in `app_api.py`; areas in `servers.py`, `mods.py`, `storage.py`, `areas.py`; `events.py`, `tasks.py`)
+
+The layer every UI talks to: the CustomTkinter screens today, the Qt screens of `docs/ROADMAP.md` 8d (and a pywebview fallback if the 8c spike fails) tomorrow. Inputs and outputs are plain Python — `str`, `dict`, dataclasses (`ServerInfo`, `MemorySample`, `JavaSummary`, `DeleteResult`), PIL images — and the package never imports a GUI toolkit or `app.ui` (`tests/test_api_facade.py::TestBoundaries` fails if it does). Everything is testable with pytest and fakes, without a display or network.
+
+**Why a package, not one more module in `app/core`:** it is a layer of its own (`ui → api → core → services`) with a boundary a test can check, and it keeps `app/core` free of presentation-shaped helpers ("open folder", icon thumbnails). `app/core/bootstrap.py` is untouched: the API is imported only after the data directory is resolved (it reads `constants`).
+
+### Areas
+
+| Area | Commands | Queries |
+|------|----------|---------|
+| `servers` | `select`, `start`, `stop`, `delete` (refuses the running server and any name that isn't one folder), `export`, `import_pack`, `import_folder` (needs a `.jar`), `update_meta`, `request_mod_install`, `create(config) → Task` | `list`, `exists`, `info(name) → ServerInfo` (engine, version, loader, max players), `is_running`, `active`, `running_server`, `memory() → MemorySample`, `creations()` |
+| `console` | `send(cmd) → bool` (False when nothing runs; the sanitizer stays in `ServerOrchestrator`) | lines arrive as `CONSOLE_LINE` events |
+| `tunnel` | `start`, `stop`, `reset(mode)`, `link(code)` | `is_linked`, `is_running`; status via `TUNNEL_STATUS` |
+| `players` | `PlayerOrchestrator` as is (`roster`, `whitelist_add`, `op`, `ban`, `kick`…) — it already takes and returns plain values | |
+| `backups` | `create_snapshot`, `delete` | |
+| `mods` | `install_version`, `install_latest`, `install_modpack`, `apply_updates` (pre-update snapshot first, nothing touched if it fails), `uninstall`, `delete_file(s)` | `search`, `get_versions`, `required_dependencies`, `check_updates`, `installed_files/slugs/filename`, `fetch_icon` / `cached_icon` |
+| `java` | | `best() → JavaSummary` |
+| `settings` | `set`, `save` | `get` |
+| `storage` | `open_folder(path, create=False)` — the only place that launches Explorer/Finder/xdg-open (`open_in_file_manager`) | `data_dir`, `servers_dir`, `logs_dir`, `server_dir(name, sub)` |
+
+Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (cancels tasks, closes subscriptions, `ZBBManager.shutdown()`, then kills a child process that survived — moved out of `main.py`). `mods` methods block on network/disk and are called from the UI's workers; `servers.start/stop` block too.
+
+### Events: the UI chooses the thread
+
+`api.events.subscribe(event, handler, dispatcher=None) → Subscription` sits on the existing `EventBus` (`ServerEvent` names unchanged). A *dispatcher* is `Callable[[Callable[[], None]], None]`: the core emits on whatever thread did the work, and the dispatcher decides where the handler runs. `AppApi(dispatcher=...)` / `set_dispatcher()` set the default; one subscription can pass its own.
+
+| UI | Dispatcher |
+|----|-----------|
+| CustomTkinter | `lambda fn: root.after(0, fn)` (`MCTunnelApp`) |
+| Qt (8d) | emit a queued signal / `QMetaObject.invokeMethod(..., Qt.QueuedConnection)` |
+| Tests, headless | `direct` (run on the emitting thread) |
+
+`Subscription.cancel()` also drops calls already queued in the dispatcher, so a closed screen never receives a late event. `EventHub.close()` cancels all of them (done by `shutdown()`).
+
+### Long operations: `Task`
+
+`servers.create(config)` returns a `Task` (`app/api/tasks.py`) instead of blocking: `on_progress(cb)` receives `(fraction, text)`, `on_done(cb)` the finished task (`result()` is a `ProvisionResult`; a crash becomes `ok=False` with the message, so a progress dialog always closes), `cancel()` sets the same `threading.Event` provisioning already polls between steps and download chunks (a running loader installer is killed, the attempt rolled back). Callbacks go through the dispatcher. `api.tasks.cancel_all()` is what the window calls on exit.
+
+### Inventory: what the screens called (2026-10-15, before the seam)
+
+| Screen | Direct core/service use | Now |
+|--------|------------------------|-----|
+| `main.py` | ~40 `zbb_manager.*` calls (start/stop/select/send_command/provision/tunnel/link/import/shutdown), `logic.get_server_meta`/`update_server_meta`/`get_server_ram`/`delete_server`, `load_server_properties`, `migration.export/import_server`, `JavaDetector`, `SettingsManager`, `os.makedirs(SERVERS_DIR)`, folder opening via `subprocess`, orphan-process kill, direct `EventBus` subscriptions with `self.after` inside each handler | API (part A) |
+| `modrinth_browser.py` | `ModrinthClient` (search, versions, deps, downloads, updates, icon HTTP via its session), `install_mrpack` + temp folder `shutil.rmtree`, `mod_install_tracker`, `os.remove` of mod files (3 places), `get_server_meta`, PIL decode/resize/disk cache of icons, `SERVERS_DIR` path building | API (part A); icons are wrapped in `CTkImage` and memory-cached in the UI only |
+| `server_properties_editor.py` | `BackupManager`, `logic` module (scheduler, RAM, icon), `save_server_properties`/`list_worlds`, `install_mrpack`, `JavaDetector`, ~61 property descriptions/impact levels as UI data | Part B (folder opening already via `open_in_file_manager`) |
+| `app_settings.py` | `zbb_manager` (JDK purge, crash reports, webhook reload), `JavaDetector`, `DiscordWebhookService`, `dir_size`, `SettingsManager` | Part B (folder opening done) |
+| `players_panel.py` | `zbb.players`, `fetch_head` | Part B |
+| `server_wizard.py` | `VersionManager`, `JavaDetector`, `template_manager`, `content_import` checks | Part B |
+
+Until part B lands those screens receive `AppApi.legacy_manager` (the `ZBBManager`); new code and the Qt UI must not use it.
+
+### Mod files behind a guard
+
+`app/services/mod_content.py` holds what the Modrinth browser did itself: listing jars, installs that record the Modrinth slug, modpack install in a temporary folder that is always removed, the snapshot-then-update order (`snapshot_then_apply`), and deletes. Every delete goes through `resolve_content_file`: the entry must sit directly in that server's `mods/` or `plugins/` (parent compared after resolving links, so junction-imported servers work; the entry itself is not followed, so a link is removed, never its target). A tampered `installed_mods.json` filename like `../server.properties` is refused. Server names used to build paths are checked by `server_paths.check_server_name` (one folder name: no separators, `..` or drive). `app/services/mod_icons.py` downloads (http/https only), scales to 48 px and disk-caches icons as PIL images.
 
 ---
 
@@ -240,9 +301,9 @@ Subscribes to `CRASHED` event. On each crash:
 
 ### Pre-Update Snapshots
 
-**File:** `app/core/orchestrators.py` (`BackupOrchestrator.create_pre_update_snapshot`), `app/services/backup_manager.py`, `app/ui/modrinth_browser.py`
+**File:** `app/core/orchestrators.py` (`BackupOrchestrator.create_pre_update_snapshot`), `app/services/backup_manager.py`, `app/services/mod_content.py`, `app/api/mods.py`
 
-- Mod updates (single-badge and bulk "Update Selected") call `ZBBManager.create_pre_update_snapshot(server_name)` — injected into `ModrinthBrowser` as the `create_snapshot` callback, so the UI never touches `BackupManager` — before any file changes. Ordering lives in the pure helper `_snapshot_then_apply`: snapshot failure aborts the update rather than proceeding without a rollback point.
+- Mod updates (single-badge and bulk "Update Selected") go through `api.mods.apply_updates`, which calls `ZBBManager.create_pre_update_snapshot(server_name)` (via `api.backups`) before any file changes. Ordering lives in `mod_content.snapshot_then_apply`: snapshot failure aborts the update rather than proceeding without a rollback point.
 - The orchestrator refuses a snapshot when the target is the active, running server (locked files), when another backup holds `_backup_in_progress`, and **discards** a snapshot that skipped locked files instead of reporting it as a usable rollback point. Emits `BACKUP_COMPLETED` / `BACKUP_FAILED` like scheduled backups.
 - Backup reasons: `manual` (untagged filename, "Create Backup"), `auto` (scheduled auto-backups and the optional backup before a scheduled restart — both honor the user's "keep last N"), `pre_update` (default cap: 5). Tagged backups (`{timestamp}__{reason}.zip`) are retention-scoped by `reason`, so no rotation ever deletes another reason's backups — in particular the auto-backup rotation never touches manual backups (it did before `auto` existed).
 - Rollback reuses the Backups tab restore flow (`server_properties_editor.py`): one row per backup with a reason chip (Manual / Auto / Pre-update), size chip, per-row **Restore** (blocked while the server runs) and **Delete** (via `ZBBManager.delete_backup`), and **Open Folder** for the backup directory.
@@ -278,7 +339,7 @@ All auto-healing events surface via the **Toast** system (`app/ui/toast.py`):
 ## Threading Model
 
 - All background threads: `daemon=True`.
-- UI updates: always via `self.after(0, callback)`.
+- UI updates: always on the UI thread — event handlers and `Task` callbacks arrive through the dispatcher passed to `AppApi` (`self.after(0, fn)` in CustomTkinter); a worker that touches widgets itself still uses `self.after(0, callback)`.
 - `ServerRunner.running`: property backed by `_state_lock` (threading.Lock) — prevents TOCTOU race in Watchdog `_do_restart()`.
 - `ServerRunner.connected_players`: all join/leave mutations inside `_players_lock`; cleared in `start()` to prevent stale player data after restart.
 - `EventBus`: `threading.RLock` for subscribe/emit.
@@ -372,6 +433,15 @@ ZeroBlockBridge/
 ├── app/
 │   ├── launcher.py                    # Entry point: resolve data dir, then start UI (~17 LOC)
 │   │
+│   ├── api/                           # UI-agnostic facade (see "API Seam"); no GUI imports
+│   │   ├── app_api.py                 # AppApi: areas, dispatcher, lifecycle (shutdown + orphan kill)
+│   │   ├── servers.py                 # ServersApi, ServerInfo, MemorySample
+│   │   ├── mods.py                    # ModsApi over Modrinth + mod_content + mod_icons
+│   │   ├── areas.py                   # Console, Tunnel, Backups, Java, Settings
+│   │   ├── storage.py                 # Paths + open_in_file_manager (the only folder opener)
+│   │   ├── events.py                  # EventHub / Subscription / dispatchers
+│   │   └── tasks.py                   # Task handles: progress, done, cancel
+│   │
 │   ├── ui/                            # Presentation Layer — no business logic
 │   │   ├── main.py                    # MCTunnelApp: main window, sidebar, hero status bar, console tabs (~1201 LOC)
 │   │   ├── server_wizard.py           # 6-step creation wizard (~826 LOC)
@@ -439,6 +509,9 @@ ZeroBlockBridge/
 │       ├── nbt.py                     # Minimal NBT reader for level.dat (size/depth capped)
 │       ├── mrpack_installer.py        # Modrinth modpack (.mrpack) install (~215 LOC)
 │       ├── mod_install_tracker.py     # Installed Modrinth slugs per server (~73 LOC)
+│       ├── mod_content.py             # A server's mod/plugin files: installs, guarded deletes, modpacks, update order
+│       ├── mod_icons.py               # Modrinth icon download + 48px disk cache (PIL)
+│       ├── server_paths.py            # Server-name validation for paths under servers/
 │       ├── mod_id_resolver.py         # Crash-log mod IDs → Modrinth slugs (~26 LOC)
 │       ├── sha1_validator.py          # SHA1-verified download with retry (~113 LOC)
 │       ├── disk_usage.py              # Folder size helpers for Settings → Storage/Java (~38 LOC)
