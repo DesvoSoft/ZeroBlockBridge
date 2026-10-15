@@ -2,9 +2,8 @@ import customtkinter as ctk
 from tkinter import filedialog
 import logging
 import os
-import subprocess
-import sys
 import threading
+from app.api.storage import open_in_file_manager
 from app.core.app_config import AppConfig
 from app.core import i18n
 from app.core.constants import SERVERS_DIR
@@ -17,6 +16,7 @@ from app.ui.formatting import engine_name
 from app.ui.icons import icon
 from app.services.backup_manager import BackupManager
 from app.services.server_properties import load_server_properties, save_server_properties, list_worlds
+from app.core import logic
 from app.core.logic import BackupScheduler, get_server_meta, update_server_meta
 from app.services.mrpack_installer import install_mrpack, MrpackCompatibilityError
 
@@ -160,7 +160,7 @@ def property_label(key: str) -> str:
 
 
 class ServerPropertiesEditor(ZBBToplevel):
-    def __init__(self, parent, server_name, logic_module, zbb_manager=None):
+    def __init__(self, parent, server_name, logic_module=None, zbb_manager=None):
         super().__init__(parent)
         self.title(f"Edit Properties - {server_name}")
         self.geometry("700x600")
@@ -168,7 +168,7 @@ class ServerPropertiesEditor(ZBBToplevel):
         self.resizable(True, True)
 
         self.server_name = server_name
-        self.logic = logic_module
+        self.logic = logic_module or logic
         self.zbb_manager = zbb_manager
         self.properties = load_server_properties(server_name)
         
@@ -1147,12 +1147,7 @@ class ServerPropertiesEditor(ZBBToplevel):
                            "That folder does not exist yet - it is created the first time it is needed.",
                            kind="info")
             return
-        if sys.platform == "win32":
-            subprocess.run(["explorer", server_path], check=False)
-        elif sys.platform == "darwin":
-            subprocess.run(["open", server_path], check=False)
-        else:
-            subprocess.run(["xdg-open", server_path], check=False)
+        open_in_file_manager(server_path)
 
     def save_launch_settings(self):
         meta_path = os.path.join(str(SERVERS_DIR), self.server_name, "metadata.json")
