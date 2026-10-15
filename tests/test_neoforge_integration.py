@@ -79,6 +79,47 @@ def test_unrecognised_neoforge_build_asks_the_user(tmp_path):
     assert info.loader == "NeoForge" and info.mc_version is None and info.notes
 
 
+def _installer(profile_path: str) -> bytes:
+    """An installer jar whose install_profile.json names its maven artifact."""
+    import io as _io
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("install_profile.json", json.dumps({"path": profile_path}))
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("folder", ["", "installer/"])
+def test_neoforge_1_20_1_installer_only_pack_is_not_pinned_to_forge(tmp_path, folder):
+    """NeoForge 1.20.1's installer is named forge-1.20.1-47.1.x-installer.jar,
+    but 47.1.106 isn't a Forge build: pinning it makes the download 404."""
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        f"{folder}forge-1.20.1-47.1.106-installer.jar": _installer("net.neoforged:forge:1.20.1-47.1.106"),
+    })
+    info = inspect_modpack(archive)
+    assert (info.loader, info.mc_version, info.pinned_loader_version) == ("Forge", "1.20.1", None)
+
+
+def test_real_forge_installer_is_still_pinned(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "forge-1.20.1-47.2.0-installer.jar": _installer("net.minecraftforge:forge:1.20.1-47.2.0"),
+    })
+    info = inspect_modpack(archive)
+    assert (info.loader, info.mc_version, info.pinned_loader_version) == ("Forge", "1.20.1", "47.2.0")
+
+
+def test_variables_with_a_neoforge_1_20_1_build_go_to_forge(tmp_path):
+    archive = _zip(tmp_path / "pack.zip", {
+        "mods/a.jar": "a",
+        "variables.txt": "MODLOADER=NeoForge\nMODLOADER_VERSION=47.1.106\n",
+        "libraries/net/neoforged/forge/1.20.1-47.1.106/forge-1.20.1-47.1.106-server.jar": "s",
+    })
+    info = inspect_modpack(archive)
+    assert (info.loader, info.mc_version) == ("Forge", "1.20.1")
+    assert modpack_mismatch(info, "Forge", "1.20.1") is None
+
+
 def test_modpack_mismatch_for_neoforge():
     info = ModpackInfo(path="p", kind="mrpack", name="P", mc_version="1.21.1", loader="NeoForge")
     assert modpack_mismatch(info, "NeoForge", "1.21.1") is None

@@ -6,8 +6,9 @@ NeoForge numbers its builds after the Minecraft version they target:
                                                20.4.251 -> MC 1.20.4
   * 26.x era: "<year>.<drop>.<patch>.<build>"  26.1.2.117 -> MC 26.1.2
                                                26.3.0.77  -> MC 26.3
-Builds may end in "-beta"; NeoForge for MC 1.20.1 was published as
-net/neoforged/forge (Forge-compatible) and isn't covered here.
+Builds may end in "-beta". NeoForge for MC 1.20.1 was published as
+net/neoforged/forge with Forge-style builds (47.1.106); those map to 1.20.1
+but never appear in this artifact's listing.
 Source: https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge
 """
 
@@ -16,6 +17,9 @@ from typing import Iterable, Optional
 
 MAVEN = "https://maven.neoforged.net/releases/net/neoforged/neoforge"
 VERSIONS_API = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge"
+
+# The 47.x line is NeoForge for MC 1.20.1 (net.neoforged:forge).
+LEGACY_1201_MAJOR = 47
 
 _BUILD_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(-beta)?$")
 
@@ -36,7 +40,9 @@ def mc_version(build: str) -> Optional[str]:
         return None
     major, minor, third, fourth, _beta = parts
     if fourth is None:
-        if major < 20:
+        if major == LEGACY_1201_MAJOR:
+            return "1.20.1"
+        if major not in (20, 21):  # the only three-part lines: 1.20.x, 1.21.x
             return None
         return f"1.{major}" if minor == 0 else f"1.{major}.{minor}"
     return f"{major}.{minor}" if third == 0 else f"{major}.{minor}.{third}"

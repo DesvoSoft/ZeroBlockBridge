@@ -176,6 +176,39 @@ def test_normalize_finds_the_neoforge_entry_jar(tmp_path):
     assert (tmp_path / "server.jar").exists()
 
 
+def _write_jar(path, marker):
+    import zipfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("marker.txt", marker + "x" * 2048)
+
+
+def test_normalize_with_a_real_module_path_never_uses_the_installer(tmp_path):
+    """Real args files join the module path with the OS path separator; the
+    installer left in the server folder must never become server.jar."""
+    import sys
+    import zipfile
+    args_name = "win_args.txt" if sys.platform == "win32" else "unix_args.txt"
+    sep = ";" if sys.platform == "win32" else ":"
+    boot = "libraries/cpw/mods/bootstraplauncher/2.0.2/bootstraplauncher-2.0.2.jar"
+    other = "libraries/cpw/mods/securejarhandler/3.0.8/securejarhandler-3.0.8.jar"
+    _write_jar(tmp_path / boot, "boot")
+    _write_jar(tmp_path / other, "other")
+    _write_jar(tmp_path / "neoforge-installer.jar", "installer")
+    lib = tmp_path / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.77"
+    lib.mkdir(parents=True)
+    (lib / args_name).write_text(f"-p {boot}{sep}{other}\n--add-modules ALL-MODULE-PATH\n", encoding="utf-8")
+
+    assert logic.normalize_server_jar(str(tmp_path)) is True
+    with zipfile.ZipFile(tmp_path / "server.jar") as zf:
+        assert zf.read("marker.txt").startswith(b"boot")
+
+
+def test_normalize_skips_a_lone_neoforge_installer(tmp_path):
+    _write_jar(tmp_path / "neoforge-installer.jar", "installer")
+    assert logic.normalize_server_jar(str(tmp_path)) is False
+
+
 # ----------------------------------------------------------------------
 # Wizard
 # ----------------------------------------------------------------------
