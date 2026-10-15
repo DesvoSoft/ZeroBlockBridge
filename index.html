@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ZeroBlockBridge — Minecraft Server Manager</title>
-  <meta name="description" content="Your Minecraft server deserves better than babysitting. Auto-healing, tunneling, backups, Java management, players and safe mod updates — all in one place.">
+  <title>ZeroBlockBridge · Minecraft Server Manager</title>
+  <meta name="description" content="A desktop app that creates and runs Minecraft servers for you and your friends. Import a modpack or a world, get a public address without port forwarding, and let it restart itself after a crash.">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/DesvoSoft/Vitra@v1.13.5/dist/vitra.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -32,7 +32,7 @@
         <span class="title-zero">Zero</span><span class="title-block">Block</span><span class="title-bridge">Bridge</span>
       </h1>
 
-      <p class="hero-sub">Self-host your Minecraft server — crash detection, tunneling, backups and Java management, all without complex or time-consuming setups.</p>
+      <p class="hero-sub">Host a Minecraft server for your friends from your own PC. Bring a modpack or a world, and share an address that works without port forwarding.</p>
 
       <div class="hero-actions">
         <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest/download/ZeroBlockBridge.exe"
@@ -54,164 +54,216 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════
-       SECTIONS WRAP (particle backdrop)
-  ══════════════════════════════════════ -->
+  <!-- Line icons, same style as the app's own set (2px stroke, round caps) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="m2 13 10 5 10-5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3v3M12 3v3"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></symbol>
+    <symbol id="i-package" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6l-8-3z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+  </svg>
+
   <div id="sections-wrap">
-    <canvas id="section-particles"></canvas>
+
+    <!-- BRING YOUR OWN -->
+    <section id="create" class="section">
+      <div class="wrap">
+        <div class="byo-head vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">Server creation</p>
+          <h2 class="section-title">Start from a modpack or a world you already have</h2>
+          <p class="lede">
+            The creation wizard reads a Modrinth <code>.mrpack</code> or a modpack's Server Pack and sets the engine,
+            the Minecraft version and the exact loader build for you. Mods and configs install while the server is built.
+            On the world step, bring a save from <code>.minecraft/saves</code> or a world <code>.zip</code> downloaded from CurseForge.
+          </p>
+        </div>
+
+        <div class="byo-grid">
+          <figure class="shot vitra-reveal vitra-reveal-up vitra-delay-100">
+            <img src="assets/wizard-modpack.png" width="650" height="370" loading="lazy"
+                 alt="Creation wizard, Engine and Version step, with an Import modpack button and the six server engines">
+            <figcaption>
+              <strong>Import a modpack</strong>
+              <span>The pack is checked before anything is created: loader, Minecraft version, file names and free disk space. If creation fails anyway, the half-built server is removed and you see why.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="shot vitra-reveal vitra-reveal-up vitra-delay-200">
+            <img src="assets/wizard-world.png" width="650" height="370" loading="lazy"
+                 alt="Creation wizard, World and Network step, with Import existing world selected and a link to browse worlds on CurseForge">
+            <figcaption>
+              <strong>Bring an existing world</strong>
+              <span>ZBB reads the version the world was last saved with. A world newer than the server is refused, because an older server can corrupt it. Older worlds are upgraded on first start and the original stays untouched.</span>
+            </figcaption>
+          </figure>
+        </div>
+
+        <ul class="engines vitra-reveal vitra-reveal-up" aria-label="Supported server engines">
+          <li>Engines</li>
+          <li>Vanilla</li>
+          <li>Paper</li>
+          <li>Purpur</li>
+          <li>Fabric</li>
+          <li>Forge</li>
+          <li class="is-new">NeoForge</li>
+        </ul>
+      </div>
+    </section>
 
     <!-- FEATURES -->
     <section id="features" class="section">
-      <div class="vitra-container">
-        <h2 class="section-title vitra-reveal vitra-reveal-up">Everything your server needs</h2>
-        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
-          From first boot to a running multiplayer world — ZBB handles it so you don't have to.
-        </p>
-        <div class="features-grid">
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
-            <div class="feature-icon">⚡</div>
-            <h3 class="vitra-card-title">Auto-Healing Watchdog</h3>
-            <p class="vitra-card-body">Detects crashes, zombie processes, and TPS lag spikes. Exponential backoff restarts keep your server alive — even when you're offline.</p>
-            <div class="mc-tag-pill">Watchdog · Heartbeat · Lag Monitor</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
-            <div class="feature-icon">🌐</div>
-            <h3 class="vitra-card-title">Instant Public Tunnel</h3>
-            <p class="vitra-card-body">Integrated Playit.gg agent gives your server a permanent public address. No router config, no DynDNS — friends just type the address and join.</p>
-            <div class="mc-tag-pill">Playit.gg · No Port Forwarding</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
-            <div class="feature-icon">☕</div>
-            <h3 class="vitra-card-title">Smart Java Management</h3>
-            <p class="vitra-card-body">Reads bytecode from your server JAR to pick the exact Java version and tells you why. Downloads the matching runtime on its own — never touches your system installation.</p>
-            <div class="mc-tag-pill">Java 8 · 16 · 17 · 21 · 25 · Auto-detect</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-100">
-            <div class="feature-icon">🧩</div>
-            <h3 class="vitra-card-title">Safe Mod Updates</h3>
-            <p class="vitra-card-body">Search, install and update mods and plugins from Modrinth, with dependency resolution and update badges. Every update takes a full snapshot first — a bad update is one restore away from undone.</p>
-            <div class="mc-tag-pill">Modrinth · Fabric · Forge · Paper</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-200">
-            <div class="feature-icon">🛡️</div>
-            <h3 class="vitra-card-title">Visible Command Safety</h3>
-            <p class="vitra-card-body">Console commands are checked against an explicit allowlist before they reach the server. Anything blocked shows exactly what was rejected and why — no shell injection, no silent failures.</p>
-            <div class="mc-tag-pill">Allowlist · shell=False · Explained blocks</div>
-          </div>
-
-          <div class="vitra-card vitra-spotlight vitra-reveal vitra-reveal-up vitra-delay-300">
-            <div class="feature-icon">👥</div>
-            <h3 class="vitra-card-title">Players &amp; Live Status</h3>
-            <p class="vitra-card-body">One Players tab for whitelist, operators, bans and kicks, with skin heads, last seen and playtime. The header shows uptime, RAM use and players online at a glance.</p>
-            <div class="mc-tag-pill">Uptime · RAM · Players online · Playtime</div>
-          </div>
-
+      <div class="wrap">
+        <div class="vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">Running it</p>
+          <h2 class="section-title">The server keeps itself up while you play</h2>
+          <p class="lede">Everything a small server needs day to day, in one window and without a terminal.</p>
         </div>
 
-        <ul class="more-features vitra-reveal vitra-reveal-up">
-          <li><span class="mf-icon">💾</span> <strong>Backups Tab</strong> — scheduled, manual &amp; pre-update backups, one-click restore</li>
-          <li><span class="mf-icon">📦</span> <strong>Templates &amp; .zbbpack</strong> — reusable configs, move a server between PCs</li>
-          <li><span class="mf-icon">💬</span> <strong>Discord Webhooks</strong> — crash, ready, backup &amp; player events</li>
-          <li><span class="mf-icon">🗂️</span> <strong>Browse While Running</strong> — view or configure any server while another one plays</li>
-          <li><span class="mf-icon">🎨</span> <strong>Themes</strong> — light, dark or follow the system</li>
-          <li><span class="mf-icon">📁</span> <strong>Your Data, Your Folder</strong> — standard, portable or custom location</li>
-        </ul>
+        <div class="features">
+          <div class="feature vitra-reveal vitra-reveal-up">
+            <svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg>
+            <h3>Friends join without port forwarding</h3>
+            <p>A built-in Playit.gg tunnel gives the server a permanent public address. Share it and your friends can join.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-100">
+            <svg class="ico" aria-hidden="true"><use href="#i-cup"/></svg>
+            <h3>The right Java, installed for you</h3>
+            <p>ZBB works out which Java the server needs, from Java 8 up to Java 25 for Minecraft 26.x, and installs it next to the app. Your system Java is left alone.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-200">
+            <svg class="ico" aria-hidden="true"><use href="#i-pulse"/></svg>
+            <h3>Restarts after a crash</h3>
+            <p>A watchdog restarts a crashed server with backoff, detects a frozen one and flags lag spikes. Each crash is saved as a report.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-300">
+            <svg class="ico" aria-hidden="true"><use href="#i-package"/></svg>
+            <h3>Mods that update safely</h3>
+            <p>Search and install mods and plugins from Modrinth with their dependencies. Every update takes a full snapshot first, so a bad one is a single restore away.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up">
+            <svg class="ico" aria-hidden="true"><use href="#i-users"/></svg>
+            <h3>One list of players</h3>
+            <p>Whitelist, operators, bans and kicks in one Players tab, with skin heads, last seen and playtime. The header shows uptime, RAM use and who is online.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-100">
+            <svg class="ico" aria-hidden="true"><use href="#i-archive"/></svg>
+            <h3>Backups on a schedule</h3>
+            <p>Scheduled, manual and pre-update backups are kept apart, so rotating automatic ones never deletes yours. Restore or delete each one with a click.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-200">
+            <svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg>
+            <h3>Console commands are checked</h3>
+            <p>Commands are matched against an allowlist before they reach the server. If one is blocked, a notice says which command and why.</p>
+          </div>
+          <div class="feature vitra-reveal vitra-reveal-up vitra-delay-300">
+            <svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg>
+            <h3>Several servers, one at a time</h3>
+            <p>Keep a server per modpack or per group of friends. You can open and configure any of them while another one is running.</p>
+          </div>
+        </div>
 
-        <div class="coming-next vitra-reveal vitra-reveal-up">
-          <span class="vitra-badge vitra-badge-info">Coming in the next release</span>
-          <ul>
-            <li><strong>NeoForge</strong> servers, mods and modpacks</li>
-            <li><strong>Import a modpack</strong> (<code>.mrpack</code> or Server Pack) and an existing <strong>world</strong> right in the wizard</li>
-            <li><strong>Install on this PC</strong> — Start menu shortcuts, Apps entry and a proper uninstaller</li>
-            <li><strong>Close to tray</strong>, a real cancel for server creation, crash-safe downloads and saves</li>
-          </ul>
+        <p class="also vitra-reveal vitra-reveal-up">
+          <strong>Also included:</strong> server templates, <code>.zbbpack</code> export to move a server to another PC,
+          Discord notifications, closing to the system tray while servers keep running, and light, dark or system theme.
+        </p>
+      </div>
+    </section>
+
+    <!-- SCREENS -->
+    <section id="screens" class="section">
+      <div class="wrap">
+        <div class="vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">The app</p>
+          <h2 class="section-title">What it looks like</h2>
+        </div>
+        <div class="screens">
+          <figure class="shot vitra-reveal vitra-reveal-up vitra-delay-100">
+            <img src="assets/screenshot-dashboard.png" width="897" height="709" loading="lazy"
+                 alt="ZeroBlockBridge dashboard with the server list, live console and tunnel address">
+            <figcaption>
+              <strong>Dashboard</strong>
+              <span>Server list, live console with search and filters, and the address to share.</span>
+            </figcaption>
+          </figure>
+          <figure class="shot vitra-reveal vitra-reveal-up vitra-delay-200">
+            <img src="assets/screenshot-mods.png" width="894" height="703" loading="lazy"
+                 alt="Mods tab browsing Modrinth with install and update buttons">
+            <figcaption>
+              <strong>Mods</strong>
+              <span>Modrinth search filtered to the server's loader and version, with update badges on installed mods.</span>
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>
 
-    <!-- SCREENSHOT -->
-    <section id="screenshot" class="section screenshot-section">
-      <div class="vitra-container">
-        <h2 class="section-title vitra-reveal vitra-reveal-up">See it in action</h2>
-        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
-          The real dashboard — server list, live console, and tunnel status at a glance.
-        </p>
-        <div class="screenshot-frame vitra-reveal vitra-reveal-up vitra-delay-200">
-          <img src="assets/screenshot-dashboard.png" alt="ZeroBlockBridge dashboard showing server list, console output, and tunnel status" loading="lazy">
+    <!-- STEPS -->
+    <section id="how" class="section">
+      <div class="wrap">
+        <div class="vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">Getting started</p>
+          <h2 class="section-title">From download to a server your friends can join</h2>
         </div>
-      </div>
-    </section>
-
-    <!-- HOW IT WORKS -->
-    <section id="how" class="section how-section">
-      <div class="vitra-container">
-        <h2 class="section-title vitra-reveal vitra-reveal-up">Up and running in 3 steps</h2>
-        <div class="steps-grid">
-
-          <div class="step vitra-reveal vitra-reveal-up vitra-delay-100">
-            <div class="step-num">01</div>
-            <div class="step-block">⬜</div>
-            <h3>Pick your server type</h3>
-            <p>Vanilla, Paper, Fabric, Forge, Purpur — choose version and loader. ZBB downloads the JAR and scaffolds <code>server.properties</code> automatically.</p>
-          </div>
-
-          <div class="step vitra-reveal vitra-reveal-up vitra-delay-200">
-            <div class="step-num">02</div>
-            <div class="step-block">🟩</div>
-            <h3>Hit Start</h3>
-            <p>Java is resolved, eula.txt accepted, and the server launches with Aikar's GC flags — optimized out of the box. No terminal needed.</p>
-          </div>
-
-          <div class="step vitra-reveal vitra-reveal-up vitra-delay-300">
-            <div class="step-num">03</div>
-            <div class="step-block">🌐</div>
-            <h3>Share the link</h3>
-            <p>Playit tunnel activates. Copy the address, send it to friends. <code>server.log</code> streams live while ZBB keeps everything alive.</p>
-          </div>
-
-        </div>
+        <ol class="steps">
+          <li class="step vitra-reveal vitra-reveal-up vitra-delay-100">
+            <h3>Install</h3>
+            <p>Run the download and choose <strong>Install on this PC</strong>. No admin rights needed. You get Start menu and Desktop shortcuts and an uninstaller in Windows Settings. Prefer a single folder? Pick Portable.</p>
+          </li>
+          <li class="step vitra-reveal vitra-reveal-up vitra-delay-200">
+            <h3>Create a server</h3>
+            <p>Pick an engine and a version, or import a modpack. Set RAM, game rules and the world, then review everything on one summary page before ZBB builds it.</p>
+          </li>
+          <li class="step vitra-reveal vitra-reveal-up vitra-delay-300">
+            <h3>Start and share</h3>
+            <p>Press Start. ZBB accepts the EULA, launches with tuned JVM flags and opens the tunnel. Copy the address and send it to your friends.</p>
+          </li>
+        </ol>
       </div>
     </section>
 
     <!-- DOWNLOAD -->
-    <section id="download" class="section download-section">
-      <div class="vitra-container">
-        <div class="download-card vitra-glass vitra-reveal vitra-reveal-up">
-          <div class="download-left">
-            <h2>Get ZeroBlockBridge</h2>
-            <p class="dl-meta">Windows 10/11 · Linux (experimental) · No Python needed</p>
-            <p class="dl-release" data-release-info>
-              <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest" target="_blank" rel="noopener">Latest release &amp; changelog →</a>
-            </p>
-            <div class="download-badges">
-              <span class="vitra-badge">Open Source</span>
-              <span class="vitra-badge vitra-badge-ghost">AGPL-3.0</span>
-              <span class="vitra-badge vitra-badge-ghost">Active Development</span>
-            </div>
-          </div>
-          <div class="download-right">
-            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest/download/ZeroBlockBridge.exe"
-               class="hero-btn-primary" data-release-asset="windows" download>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download for Windows
-            </a>
+    <section id="download" class="section">
+      <div class="wrap download">
+        <div class="vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">Download</p>
+          <h2 class="section-title">Get ZeroBlockBridge</h2>
+          <p class="lede">Free and open source under AGPL-3.0. Windows 10 and 11, with an experimental Linux build. No Python needed.</p>
+          <ul class="notes">
+            <li><strong>Updating</strong> is running a newer download: it offers to update the installed app and keeps your servers.</li>
+            <li><strong>Windows SmartScreen</strong> warns about the file because it is not code-signed yet. Choose More info, then Run anyway, or build it from source yourself.</li>
+            <li><strong>Checksums</strong> for every file are published next to it on the release page as <code>.sha256</code>.</li>
+          </ul>
+        </div>
+
+        <div class="dl-actions vitra-reveal vitra-reveal-up vitra-delay-100">
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest/download/ZeroBlockBridge.exe"
+             class="hero-btn-primary" data-release-asset="windows" download>
+            <svg class="ico" style="width:18px;height:18px" aria-hidden="true"><use href="#i-download"/></svg>
+            Download for Windows
+          </a>
+          <p class="dl-release" data-release-info>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest" target="_blank" rel="noopener">Latest release and changelog</a>
+          </p>
+          <div class="dl-secondary">
             <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases/latest/download/ZeroBlockBridge-linux"
-               class="hero-btn-ghost" data-release-asset="linux" download>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download for Linux <span class="mc-tag-pill linux-tag-pill">Experimental</span>
-            </a>
-            <p class="dl-note">Windows may show a SmartScreen warning — the .exe isn't code-signed yet (indie dev, no budget for a cert). Click "More info" → "Run anyway", or check the source yourself first.</p>
-            <div class="install-block">
-              <span class="install-label">Or clone &amp; run</span>
-              <code>git clone https://github.com/DesvoSoft/ZeroBlockBridge.git</code>
-              <code>cd ZeroBlockBridge &amp;&amp; pip install -r requirements.txt</code>
-              <code>py app/launcher.py</code>
-            </div>
+               data-release-asset="linux" download>Linux build <small>(experimental)</small></a>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases" target="_blank" rel="noopener">All releases</a>
+          </div>
+          <div class="source">
+            <span class="source-label">Or run from source with Python 3.10+</span>
+            <pre>git clone https://github.com/DesvoSoft/ZeroBlockBridge.git
+cd ZeroBlockBridge
+pip install -r requirements.txt
+py app/launcher.py</pre>
           </div>
         </div>
       </div>
@@ -219,63 +271,53 @@
 
     <!-- DOCS -->
     <section id="docs" class="section">
-      <div class="vitra-container">
-        <h2 class="section-title vitra-reveal vitra-reveal-up">Documentation</h2>
-        <p class="section-sub vitra-reveal vitra-reveal-up vitra-delay-100">
-          Everything you need to get a server running and keep it running.
-        </p>
-        <div class="docs-grid">
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme" target="_blank" rel="noopener"
-             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-100">
-            <span class="doc-icon">📖</span>
-            <div>
-              <h4>Getting Started</h4>
-              <p>Install, create your first server, and get online in minutes.</p>
-            </div>
-            <span class="doc-arrow">→</span>
-          </a>
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener"
-             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-200">
-            <span class="doc-icon">⚙️</span>
-            <div>
-              <h4>Architecture</h4>
-              <p>How the watchdog, tunnel, Java resolver and backups fit together.</p>
-            </div>
-            <span class="doc-arrow">→</span>
-          </a>
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/blob/main/docs/changelog.md" target="_blank" rel="noopener"
-             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-300">
-            <span class="doc-icon">📝</span>
-            <div>
-              <h4>Changelog</h4>
-              <p>What changed in every release.</p>
-            </div>
-            <span class="doc-arrow">→</span>
-          </a>
-          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues" target="_blank" rel="noopener"
-             class="doc-card vitra-card vitra-reveal vitra-reveal-up vitra-delay-300">
-            <span class="doc-icon">🐛</span>
-            <div>
-              <h4>Report an Issue</h4>
-              <p>Found a bug? Open an issue on GitHub.</p>
-            </div>
-            <span class="doc-arrow">→</span>
-          </a>
+      <div class="wrap">
+        <div class="vitra-reveal vitra-reveal-up">
+          <p class="eyebrow">Documentation</p>
+          <h2 class="section-title">Read more</h2>
         </div>
+        <ul class="doc-links">
+          <li>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge#readme" target="_blank" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-book"/></svg>
+              <div><strong>Getting started</strong><span>Install, create your first server and get it online.</span></div>
+              <svg class="ico arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/blob/main/docs/changelog.md" target="_blank" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-list"/></svg>
+              <div><strong>Changelog</strong><span>What changed in every release.</span></div>
+              <svg class="ico arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-grid"/></svg>
+              <div><strong>Architecture</strong><span>How the watchdog, tunnel, Java and backups fit together.</span></div>
+              <svg class="ico arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues" target="_blank" rel="noopener">
+              <svg class="ico" aria-hidden="true"><use href="#i-alert"/></svg>
+              <div><strong>Report a problem</strong><span>Open an issue on GitHub and attach the log from Settings, About.</span></div>
+              <svg class="ico arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+          </li>
+        </ul>
       </div>
     </section>
 
-    <!-- FOOTER -->
     <footer class="site-footer">
-      <div class="vitra-container footer-inner">
-        <img src="assets/logo.png" alt="" aria-hidden="true" height="22" class="footer-logo">
-        <span class="footer-brand">ZeroBlockBridge</span>
-        <span class="footer-sep">·</span>
-        <span>Developed by <a href="https://github.com/DesvoSoft" target="_blank" rel="noopener">DesvoSoft</a></span>
-        <span class="footer-sep">·</span>
-        <a href="https://github.com/DesvoSoft/ZeroBlockBridge" target="_blank" rel="noopener">GitHub</a>
-        <span class="footer-sep">·</span>
-        <span>AGPL-3.0</span>
+      <div class="wrap footer-inner">
+        <span class="footer-brand"><img src="assets/logo.png" alt="" class="footer-logo">ZeroBlockBridge</span>
+        <span>by <a href="https://github.com/DesvoSoft" target="_blank" rel="noopener">DesvoSoft</a> · AGPL-3.0</span>
+        <nav aria-label="Footer">
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/releases" target="_blank" rel="noopener">Releases</a>
+          <a href="https://github.com/DesvoSoft/ZeroBlockBridge/issues" target="_blank" rel="noopener">Issues</a>
+        </nav>
       </div>
     </footer>
 
