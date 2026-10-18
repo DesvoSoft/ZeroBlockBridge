@@ -260,6 +260,8 @@ So the spike offers two clean combinations:
 | ![](assets/qt-spike/visual/widgets_titlebar_es_dark.png) | ![](assets/qt-spike/visual/widgets_es_dark_100_window.png) |
 | ![](assets/qt-spike/visual/widgets_titlebar_es_light.png) | ![](assets/qt-spike/visual/widgets_es_light_100_window.png) |
 
+**Decision (owner, 2026-10-18):** the 8d design kit uses the custom title bar with opaque theme backgrounds. Mica is not used.
+
 **Effort:** about 150 lines and half a day. Moving the title bar into the 8d design kit (step 1) is included in its +2 days.
 
 **What the custom bar allows:** content in the title bar, such as a server switcher, search, or the status pill.
@@ -283,7 +285,7 @@ Variant A already reaches a modern Windows 11 look: Mica, real shadows, animated
 **Changes to the 8d plan:**
 - **+2 days in step 1** for a small Widgets design kit, reusing `widgets_main.py`:
   - `AnimatedButton`, `StatusPill`, `Chip`, `Skeleton`, `ServerList`;
-  - Mica/backdrop helpers and cached SVG icons;
+  - the custom title bar (`titlebar.py`, opaque backgrounds, as decided) and cached SVG icons;
   - a card helper that keeps shadows off frequently repainted content.
 
   Every later screen then uses the kit instead of plain QSS. This adds no time to steps 2–8, because they get the kit instead of styling themselves.
