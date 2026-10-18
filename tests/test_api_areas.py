@@ -130,7 +130,7 @@ class TestJavaAndSettings:
         manager.reload_discord_webhook.assert_called_once()
         with patch("app.api.areas.DiscordWebhookService.send_test", return_value=(True, "")) as send:
             assert SettingsApi.send_test_notification("https://x", "ZBB", "") == (True, "")
-        send.assert_called_once_with("https://x", username="ZBB", avatar_url="")
+        send.assert_called_once_with("https://x", username="ZBB", avatar_url="", language="auto")
 
     def test_default_store_is_the_settings_singleton(self):
         with patch("app.api.areas.SettingsManager") as sm:
