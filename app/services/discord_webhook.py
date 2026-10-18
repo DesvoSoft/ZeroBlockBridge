@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 import requests
 
-from app.core.i18n import english
+from app.core.i18n import N_, catalog, english, format_number, resolve_language
 from app.core.server_events import EventBus, ServerEvent
 
 logger = logging.getLogger(__name__)
@@ -25,16 +25,16 @@ _MAX_QUEUE = 50
 _PLAYERS_FLUSH = "_players_flush"
 
 _EVENT_LABELS = {
-    ServerEvent.CRASHED: ("Server Crashed", 0xFF0000),
-    ServerEvent.READY: ("Server Ready", 0x57F287),
-    ServerEvent.STOPPED: ("Server Stopped", 0x99AAB5),
-    ServerEvent.RESTARTED: ("Server Restarted", 0xF1C40F),
-    ServerEvent.ZOMBIE_DETECTED: ("Server Unresponsive", 0xE74C3C),
-    ServerEvent.LAG_SPIKE: ("Lag Detected", 0xE67E22),
-    ServerEvent.TUNNEL_STATUS: ("Tunnel Online", 0x9B59B6),
-    ServerEvent.PLAYER_LIST: ("Players", 0x3498DB),
-    ServerEvent.BACKUP_COMPLETED: ("Backup Completed", 0x3498DB),
-    ServerEvent.BACKUP_FAILED: ("Backup Failed", 0xE67E22),
+    ServerEvent.CRASHED: (N_("Server Crashed"), 0xFF0000),
+    ServerEvent.READY: (N_("Server Ready"), 0x57F287),
+    ServerEvent.STOPPED: (N_("Server Stopped"), 0x99AAB5),
+    ServerEvent.RESTARTED: (N_("Server Restarted"), 0xF1C40F),
+    ServerEvent.ZOMBIE_DETECTED: (N_("Server Unresponsive"), 0xE74C3C),
+    ServerEvent.LAG_SPIKE: (N_("Lag Detected"), 0xE67E22),
+    ServerEvent.TUNNEL_STATUS: (N_("Tunnel Online"), 0x9B59B6),
+    ServerEvent.PLAYER_LIST: (N_("Players"), 0x3498DB),
+    ServerEvent.BACKUP_COMPLETED: (N_("Backup Completed"), 0x3498DB),
+    ServerEvent.BACKUP_FAILED: (N_("Backup Failed"), 0xE67E22),
 }
 
 # Settings key (webhook_events dict) -> ServerEvent
@@ -86,15 +86,16 @@ TEMPLATE_PLACEHOLDERS = {
 _EVENT_SETTING_KEYS = {v: k for k, v in SETTING_EVENT_KEYS.items()}
 
 
-def _fmt_duration(seconds: float) -> str:
+def _fmt_duration(seconds: float, language: str = "en") -> str:
+    _ = catalog(language).gettext
     seconds = int(seconds)
     h, rem = divmod(seconds, 3600)
     m, s = divmod(rem, 60)
     if h:
-        return f"{h}h {m}m"
+        return _("{h}h {m}m").format(h=h, m=m)
     if m:
-        return f"{m}m {s}s"
-    return f"{s}s"
+        return _("{m}m {s}s").format(m=m, s=s)
+    return _("{s}s").format(s=s)
 
 
 class DiscordWebhookService:
@@ -103,8 +104,12 @@ class DiscordWebhookService:
                  enabled_events: Optional[set] = None,
                  username: str = "", avatar_url: str = "",
                  crash_mention_role: str = "",
-                 templates: Optional[dict] = None):
+                 templates: Optional[dict] = None,
+                 language: str = "auto"):
         self._url = webhook_url
+        # "auto" follows the app's language, "en"/"es" pin the channel's.
+        # Only the built-in wording is translated, never custom templates.
+        self._language = language
         self._events = events
         # Getter, not a snapshot: the active server can change after the
         # service is created (it lives for the whole app session).
@@ -246,22 +251,23 @@ class DiscordWebhookService:
 
     def _post(self, event_type: str, data) -> None:
         server_name = self._get_server()
+        lang = resolve_language(self._language)
         if event_type == _PLAYERS_FLUSH:
             label, color = _EVENT_LABELS[ServerEvent.PLAYER_LIST]
             template = self._templates.get("player_joins")
             if template:
                 description = self._render_template(template, ServerEvent.PLAYER_LIST, data, server_name)
             else:
-                description = self._format_players_flush(data)
+                description = self._format_players_flush(data, lang)
         else:
-            label, color = _EVENT_LABELS.get(event_type, ("Event", 0x99AAB5))
+            label, color = _EVENT_LABELS.get(event_type, (N_("Event"), 0x99AAB5))
             template = self._templates.get(_EVENT_SETTING_KEYS.get(event_type, ""))
             if template:
                 description = self._render_template(template, event_type, data, server_name)
             else:
-                description = self._format_description(event_type, data)
+                description = self._format_description(event_type, data, lang)
         embed = {
-            "title": label,
+            "title": catalog(lang).gettext(label),
             "description": description,
             "color": color,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -299,46 +305,70 @@ class DiscordWebhookService:
                 logger.warning("Discord webhook returned %s", resp.status_code)
             return
 
-    def _format_description(self, event_type: str, data) -> str:
+    def _format_description(self, event_type: str, data, language: str = "en") -> str:
+        """The built-in wording, rendered in `language` whatever language the
+        UI runs in (the webhook's channel is shared, so it is chosen apart)."""
+        t = catalog(language)
+        _ = t.gettext
         if event_type == ServerEvent.CRASHED and isinstance(data, dict):
             reason = data.get("reason", "unknown")
-            attempt = data.get("retry", 0)
-            return f"Reason: `{reason}` — Retry attempt {attempt}"
+            attempt = format_number(data.get("retry") or 0, language=language)
+            return _("Reason: `{reason}` — Retry attempt {attempt}").format(reason=reason, attempt=attempt)
         if event_type == ServerEvent.STOPPED and isinstance(data, dict):
             uptime = data.get("uptime")
             if uptime:
-                return f"Clean shutdown after {_fmt_duration(uptime)}."
-            return "Server stopped."
+                return _("Clean shutdown after {duration}.").format(duration=_fmt_duration(uptime, language))
+            return _("Server stopped.")
         if event_type == ServerEvent.RESTARTED and isinstance(data, dict):
-            attempt = data.get("retry", 0)
+            attempt = format_number(data.get("retry") or 0, language=language)
             context = data.get("context", "crash")
-            return f"Automatic restart (attempt {attempt}, cause: {context})."
+            return _("Automatic restart (attempt {attempt}, cause: {context}).").format(
+                attempt=attempt, context=context)
         if event_type == ServerEvent.ZOMBIE_DETECTED and isinstance(data, dict):
-            silence = int(data.get("silence_seconds", 0))
-            return f"No console output for {silence}s. Watchdog is restarting the server."
+            silence = format_number(int(data.get("silence_seconds", 0)), language=language)
+            return _("No console output for {seconds}s. Watchdog is restarting the server.").format(seconds=silence)
         if event_type == ServerEvent.LAG_SPIKE and isinstance(data, dict):
-            count = data.get("count", 0)
+            count = int(data.get("count", 0))
             window_min = int(data.get("window_seconds", 300) // 60)
-            return f"{count} TPS warnings in the last {window_min} min. Server may be lagging."
+            return t.ngettext(
+                "{count} TPS warning in the last {minutes} min. Server may be lagging.",
+                "{count} TPS warnings in the last {minutes} min. Server may be lagging.",
+                count,
+            ).format(count=format_number(count, language=language),
+                     minutes=format_number(window_min, language=language))
+        return self._format_infra_description(event_type, data, language)
+
+    @staticmethod
+    def _format_infra_description(event_type: str, data, language: str) -> str:
+        """Tunnel and backup events (split from `_format_description` for size)."""
+        _ = catalog(language).gettext
         if event_type == ServerEvent.TUNNEL_STATUS and isinstance(data, dict):
             addr = data.get("dns") or data.get("ip") or ""
-            return f"Server address: `{addr}`"
+            return _("Server address: `{address}`").format(address=addr)
         if event_type == ServerEvent.BACKUP_COMPLETED and isinstance(data, dict):
             path = data.get("path", "")
-            return f"Backup saved: `{path}`" if path else "Backup completed successfully."
+            if path:
+                return _("Backup saved: `{path}`").format(path=path)
+            return _("Backup completed successfully.")
         if event_type == ServerEvent.BACKUP_FAILED and isinstance(data, dict):
-            return f"Error: {english(data.get('error', 'unknown'))}"
+            # The error was translated for the UI's language; only its English form is kept.
+            return _("Error: {error}").format(error=english(data.get("error", "unknown")))
         return ""
 
-    def _format_players_flush(self, data: dict) -> str:
+    def _format_players_flush(self, data: dict, language: str = "en") -> str:
+        t = catalog(language)
+        _ = t.gettext
         joins = data.get("joined") or []
         leaves = data.get("left") or []
         parts = []
         if joins:
-            parts.append("Joined: " + ", ".join(f"**{p}**" for p in joins))
+            parts.append(t.ngettext("Joined: {players}", "Joined: {players}", len(joins)).format(
+                players=", ".join(f"**{p}**" for p in joins)))
         if leaves:
-            parts.append("Left: " + ", ".join(f"**{p}**" for p in leaves))
-        parts.append(f"Online now: **{data.get('online', 0)}**")
+            parts.append(t.ngettext("Left: {players}", "Left: {players}", len(leaves)).format(
+                players=", ".join(f"**{p}**" for p in leaves)))
+        parts.append(_("Online now: **{count}**").format(
+            count=format_number(data.get("online", 0), language=language)))
         return "\n".join(parts)
 
     def _template_vars(self, event_type: str, data, server_name: str) -> dict:
@@ -393,12 +423,14 @@ class DiscordWebhookService:
         self._subscriptions.clear()
 
     @staticmethod
-    def send_test(webhook_url: str, username: str = "", avatar_url: str = "") -> tuple[bool, str]:
+    def send_test(webhook_url: str, username: str = "", avatar_url: str = "",
+                  language: str = "auto") -> tuple[bool, str]:
         """Post a test embed synchronously. Returns (ok, error_detail)."""
         payload = {
             "embeds": [{
                 "title": "ZeroBlockBridge",
-                "description": "Webhook test successful. Notifications will appear here.",
+                "description": catalog(resolve_language(language)).gettext(
+                    "Webhook test successful. Notifications will appear here."),
                 "color": 0x57F287,
             }]
         }

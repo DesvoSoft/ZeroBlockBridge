@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-18 13:27-0600\n"
+"POT-Creation-Date: 2026-10-18 13:56-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -101,6 +101,19 @@ msgid "Auto-backup failed unexpectedly: {error}"
 msgstr "La copia de seguridad automática falló de forma inesperada: {error}"
 
 #, python-brace-format
+msgid "Automatic restart (attempt {attempt}, cause: {context})."
+msgstr "Reinicio automático (intento {attempt}, causa: {context})."
+
+msgid "Backup Completed"
+msgstr "Copia de seguridad completada"
+
+msgid "Backup Failed"
+msgstr "Falló la copia de seguridad"
+
+msgid "Backup completed successfully."
+msgstr "La copia de seguridad se completó correctamente."
+
+#, python-brace-format
 msgid "Backup created with warnings. Skipped {count} locked file."
 msgid_plural "Backup created with warnings. Skipped {count} locked files."
 msgstr[0] ""
@@ -109,6 +122,10 @@ msgstr[0] ""
 msgstr[1] ""
 "Copia de seguridad creada con advertencias. Se omitieron {count} archivos"
 " bloqueados."
+
+#, python-brace-format
+msgid "Backup saved: `{path}`"
+msgstr "Copia de seguridad guardada: `{path}`"
 
 msgid "Banned"
 msgstr "Baneados"
@@ -206,6 +223,10 @@ msgstr "Elegir carpeta..."
 msgid "Choose how to set it up on this PC."
 msgstr "Elija cómo configurarlo en este equipo."
 
+#, python-brace-format
+msgid "Clean shutdown after {duration}."
+msgstr "Apagado normal tras {duration}."
+
 msgid "Close"
 msgstr "Cerrar"
 
@@ -296,6 +317,13 @@ msgstr "Motor y versión"
 
 msgid "Error"
 msgstr "Error"
+
+#, python-brace-format
+msgid "Error: {error}"
+msgstr "Error: {error}"
+
+msgid "Event"
+msgstr "Evento"
 
 msgid "Exit"
 msgstr "Salir"
@@ -539,6 +567,12 @@ msgstr ""
 msgid "Java {major} ({kind}) — {source}"
 msgstr "Java {major} ({kind}) — {source}"
 
+#, python-brace-format
+msgid "Joined: {players}"
+msgid_plural "Joined: {players}"
+msgstr[0] "Se unió: {players}"
+msgstr[1] "Se unieron: {players}"
+
 msgid "Jul"
 msgstr "jul"
 
@@ -555,12 +589,28 @@ msgstr "Seguir usando este archivo. No se le volverá a preguntar."
 msgid "Kicked {name}."
 msgstr "Se expulsó a {name}."
 
+msgid "Lag Detected"
+msgstr "Lag detectado"
+
 msgid "Language"
 msgstr "Idioma"
+
+msgid ""
+"Language of the default messages posted to Discord. Custom templates are "
+"posted as written."
+msgstr ""
+"Idioma de los mensajes predeterminados que se publican en Discord. Las "
+"plantillas personalizadas se publican tal como las escribió."
 
 #, python-brace-format
 msgid "Last seen {when}"
 msgstr "Visto por última vez {when}"
+
+#, python-brace-format
+msgid "Left: {players}"
+msgid_plural "Left: {players}"
+msgstr[0] "Salió: {players}"
+msgstr[1] "Salieron: {players}"
 
 msgid "Light"
 msgstr "Claro"
@@ -607,6 +657,9 @@ msgstr "may"
 
 msgid "Medium"
 msgstr "Medio"
+
+msgid "Message language"
+msgstr "Idioma de los mensajes"
 
 msgid "Minecraft EULA"
 msgstr "EULA de Minecraft"
@@ -706,6 +759,12 @@ msgstr ""
 "level.dat). Seleccione la carpeta del propio mundo, p. ej. "
 ".minecraft/saves/<mundo>."
 
+#, python-brace-format
+msgid "No console output for {seconds}s. Watchdog is restarting the server."
+msgstr ""
+"Sin salida de consola durante {seconds} s. El vigilante está reiniciando "
+"el servidor."
+
 msgid "No folder selected yet"
 msgstr "Aún no hay carpeta elegida"
 
@@ -785,6 +844,10 @@ msgstr "En línea"
 msgid "Online now"
 msgstr "En línea ahora"
 
+#, python-brace-format
+msgid "Online now: **{count}**"
+msgstr "En línea ahora: **{count}**"
+
 msgid "Open ZeroBlockBridge"
 msgstr "Abrir ZeroBlockBridge"
 
@@ -852,6 +915,10 @@ msgstr "Leyendo el manifiesto del modpack…"
 msgid "Reading modpack…"
 msgstr "Leyendo modpack…"
 
+#, python-brace-format
+msgid "Reason: `{reason}` — Retry attempt {attempt}"
+msgstr "Motivo: `{reason}` — Intento de reintento {attempt}"
+
 msgid "Refresh"
 msgstr "Actualizar"
 
@@ -905,6 +972,9 @@ msgstr ""
 "aplicación:\n"
 "{path}"
 
+msgid "Same as the app"
+msgstr "El mismo de la aplicación"
+
 #, python-brace-format
 msgid "Saved with Minecraft {version}, the same version as this server."
 msgstr "Guardado con Minecraft {version}, la misma versión que este servidor."
@@ -944,8 +1014,27 @@ msgstr "El servidor '{name}' ya existe."
 msgid "Server '{name}' does not exist"
 msgstr "El servidor '{name}' no existe"
 
+msgid "Server Crashed"
+msgstr "Servidor caído"
+
 msgid "Server Engine:"
 msgstr "Motor del servidor:"
+
+msgid "Server Ready"
+msgstr "Servidor listo"
+
+msgid "Server Restarted"
+msgstr "Servidor reiniciado"
+
+msgid "Server Stopped"
+msgstr "Servidor detenido"
+
+msgid "Server Unresponsive"
+msgstr "Servidor sin respuesta"
+
+#, python-brace-format
+msgid "Server address: `{address}`"
+msgstr "Dirección del servidor: `{address}`"
 
 #, python-brace-format
 msgid "Server crashed: {cause} (attempt {attempt})."
@@ -965,6 +1054,9 @@ msgstr "No se encontró el jar del servidor: {jar}"
 
 msgid "Server ready!"
 msgstr "¡Servidor listo!"
+
+msgid "Server stopped."
+msgstr "El servidor se detuvo."
 
 msgid "Servers"
 msgstr "Servidores"
@@ -1158,6 +1250,9 @@ msgstr ""
 msgid "Tunnel Log"
 msgstr "Registro del túnel"
 
+msgid "Tunnel Online"
+msgstr "Túnel en línea"
+
 msgid "Tunnel creation returned success but no ID."
 msgstr "La creación del túnel se completó, pero no devolvió un ID."
 
@@ -1234,6 +1329,9 @@ msgstr "Use letras, números y puntuación básica en el motivo (máx. 100)."
 
 msgid "Version:"
 msgstr "Versión:"
+
+msgid "Webhook test successful. Notifications will appear here."
+msgstr "La prueba del webhook fue exitosa. Las notificaciones aparecerán aquí."
 
 msgid "Welcome to ZeroBlockBridge"
 msgstr "Bienvenido a ZeroBlockBridge"
@@ -1380,6 +1478,16 @@ msgstr ""
 "playit.gg/dashboard"
 
 #, python-brace-format
+msgid "{count} TPS warning in the last {minutes} min. Server may be lagging."
+msgid_plural "{count} TPS warnings in the last {minutes} min. Server may be lagging."
+msgstr[0] ""
+"{count} advertencia de TPS en los últimos {minutes} min. Es posible que "
+"el servidor tenga lag."
+msgstr[1] ""
+"{count} advertencias de TPS en los últimos {minutes} min. Es posible que "
+"el servidor tenga lag."
+
+#, python-brace-format
 msgid "{count} client-only mod skipped."
 msgid_plural "{count} client-only mods skipped."
 msgstr[0] "Se omitió {count} mod solo para cliente."
@@ -1456,6 +1564,10 @@ msgid "{hours}h {minutes}m"
 msgstr "{hours} h {minutes} min"
 
 #, python-brace-format
+msgid "{h}h {m}m"
+msgstr "{h} h {m} min"
+
+#, python-brace-format
 msgid "{item}: folder not found"
 msgstr "{item}: carpeta no encontrada"
 
@@ -1472,6 +1584,10 @@ msgid "{minutes}m ago"
 msgstr "hace {minutes} min"
 
 #, python-brace-format
+msgid "{m}m {s}s"
+msgstr "{m} min {s} s"
+
+#, python-brace-format
 msgid "{name} is no longer an operator."
 msgstr "{name} ya no es operador."
 
@@ -1486,6 +1602,10 @@ msgstr ""
 #, python-brace-format
 msgid "{seconds}s"
 msgstr "{seconds} s"
+
+#, python-brace-format
+msgid "{s}s"
+msgstr "{s} s"
 
 #, python-brace-format
 msgid "{tab} ({count})"

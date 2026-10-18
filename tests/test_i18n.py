@@ -1,6 +1,7 @@
 import ast
 import ctypes
 import datetime
+import gettext
 import io
 import re
 import sys
@@ -310,12 +311,20 @@ def _languages():
 
 @pytest.mark.parametrize("lang", _languages())
 def test_compiled_catalog_matches_po(lang):
-    """The committed .mo must be exactly what the committed .po compiles to
-    (py tools/i18n.py compile) -- also catches translations removed from
-    the .po but still in the .mo."""
+    """The committed .mo holds exactly the messages the committed .po compiles
+    to (py tools/i18n.py compile) -- also catches translations removed from
+    the .po but still in the .mo. Compared as messages, not bytes: Babel
+    versions lay the file out differently and stamp their own version in
+    the header entry ("")."""
     compiled = io.BytesIO()
     write_mo(compiled, _po(lang))
-    assert (LOCALES / lang / "LC_MESSAGES" / "zbb.mo").read_bytes() == compiled.getvalue()
+    compiled.seek(0)
+    expected = gettext.GNUTranslations(compiled)._catalog
+    with open(LOCALES / lang / "LC_MESSAGES" / "zbb.mo", "rb") as committed:
+        actual = gettext.GNUTranslations(committed)._catalog
+    actual.pop("", None)
+    expected.pop("", None)
+    assert actual == expected
 
 
 @pytest.mark.parametrize("lang", _languages())

@@ -229,6 +229,13 @@ def check_changelog(base, files) -> Result:
                   else "app/ changed but docs/changelog.md was not updated")
 
 
+# Bots allowed as commit authors (dependency PRs); their messages are still
+# checked for conventional subjects and attribution text.
+TRUSTED_BOT_AUTHORS = {
+    ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com"),
+}
+
+
 def check_commits(base) -> Result:
     problems = []
     for line in git("log", "--no-merges", "--format=%H%x1f%an%x1f%ae%x1f%s%x1f%b%x1e", f"{base}..HEAD").split("\x1e"):
@@ -236,7 +243,7 @@ def check_commits(base) -> Result:
             continue
         sha, name, email, subject, body = (line.strip("\n").split("\x1f") + [""] * 5)[:5]
         short = sha[:7]
-        if (name, email) != (GIT_NAME, GIT_EMAIL):
+        if (name, email) != (GIT_NAME, GIT_EMAIL) and (name, email) not in TRUSTED_BOT_AUTHORS:
             problems.append(f"{short}: author {name} <{email}>")
         if not CONVENTIONAL.match(subject):
             problems.append(f"{short}: subject not conventional: {subject}")
