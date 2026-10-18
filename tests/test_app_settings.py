@@ -18,7 +18,8 @@ def _entry(value=""):
     return MagicMock(get=MagicMock(return_value=value))
 
 
-def _dialog(url=VALID_URL, role="", name="ZBB", avatar="", templates=None, template_text="", event_label=None):
+def _dialog(url=VALID_URL, role="", name="ZBB", avatar="", templates=None, template_text="", event_label=None,
+            language_label="Same as the app"):
     d = SimpleNamespace(
         entry_webhook=_entry(url),
         entry_webhook_role=_entry(role),
@@ -28,12 +29,14 @@ def _dialog(url=VALID_URL, role="", name="ZBB", avatar="", templates=None, templ
         opt_template_event=_entry(event_label or "Server crashed"),
         _event_vars={"crashed": MagicMock(get=MagicMock(return_value=True)),
                      "ready": MagicMock(get=MagicMock(return_value=False))},
+        _discord_language_selector=_entry(language_label),
         _webhook_templates=dict(templates or {}),
         _settings=MagicMock(),
         api=MagicMock(),
     )
     d._current_url = lambda: AppSettingsDialog._current_url(d)
     d._validate = lambda u: AppSettingsDialog._validate(d, u)
+    d._selected_discord_language = lambda: AppSettingsDialog._selected_discord_language(d)
     d._current_template_key = lambda: AppSettingsDialog._current_template_key(d)
     return d
 
@@ -56,6 +59,17 @@ class TestSaveNotifications:
         assert saved["webhook_crash_mention_role"] == "987654321"
         d._settings.reload_notifications.assert_called_once()
         assert ui.toast.call_args.kwargs["toast_type"] == "success"
+
+    @pytest.mark.parametrize("label,stored", [("Same as the app", "auto"), ("English", "en"), ("Español", "es")])
+    def test_message_language_is_saved_by_key_not_label(self, ui, label, stored):
+        d = _dialog(language_label=label)
+        AppSettingsDialog._save_notifications(d)
+        d._settings.set.assert_any_call("discord_language", stored)
+
+    def test_unknown_language_label_falls_back_to_auto(self, ui):
+        d = _dialog(language_label="Klingon")
+        AppSettingsDialog._save_notifications(d)
+        d._settings.set.assert_any_call("discord_language", "auto")
 
     def test_empty_url_disables_notifications(self, ui):
         d = _dialog(url="")

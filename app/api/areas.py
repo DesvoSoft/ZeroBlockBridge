@@ -202,6 +202,8 @@ class SettingsApi:
         _require(self._manager, "SettingsApi.reload_notifications").reload_discord_webhook()
 
     @staticmethod
-    def send_test_notification(url: str, username: str = "", avatar_url: str = "") -> tuple:
-        """(ok, error). Blocking network call."""
-        return DiscordWebhookService.send_test(url, username=username, avatar_url=avatar_url)
+    def send_test_notification(url: str, username: str = "", avatar_url: str = "",
+                               language: str = "auto") -> tuple:
+        """(ok, error). Blocking network call. `language` is a
+        `discord_language` value ("auto", "en", "es")."""
+        return DiscordWebhookService.send_test(url, username=username, avatar_url=avatar_url, language=language)

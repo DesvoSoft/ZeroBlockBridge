@@ -39,6 +39,8 @@ class SettingsManager:
             "webhook_avatar_url": "",
             "webhook_crash_mention_role": "",
             "webhook_templates": {},
+            # Language of the built-in Discord messages: "auto" (the app's) | "en" | "es"
+            "discord_language": "auto",
             # Window X: "ask" | "tray" | "exit" (see app.ui.tray)
             "close_action": "ask",
         }

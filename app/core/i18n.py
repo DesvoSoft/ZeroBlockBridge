@@ -118,6 +118,34 @@ def get_language() -> str:
     return _language
 
 
+_catalogs: dict = {}
+
+
+def catalog(code) -> gettext.NullTranslations:
+    """The catalog for `code`, independent of the language the app runs in
+    (`_()` and friends always use the app's). For text rendered for another
+    audience than the UI, e.g. a Discord channel. Unsupported or unreadable
+    -> English. Cached, and safe to call from any thread."""
+    lang = normalize(code) or DEFAULT_LANGUAGE
+    cached = _catalogs.get(lang)
+    if cached is not None:
+        return cached
+    translations = gettext.NullTranslations()
+    if lang != DEFAULT_LANGUAGE:
+        try:
+            translations = gettext.translation(DOMAIN, localedir=str(locale_dir()), languages=[lang])
+        except (OSError, ValueError, struct.error) as e:
+            logger.warning("No usable %s catalog, using English: %s", lang, e)
+    _catalogs[lang] = translations
+    return translations
+
+
+def resolve_language(preference) -> str:
+    """A language preference ("auto", "en", "es", anything else) -> a code.
+    "auto" and unknown values follow the app's language."""
+    return normalize(preference) or _language
+
+
 def _(message: str) -> str:
     return _translations.gettext(message)
 
@@ -196,10 +224,13 @@ _MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"),
            N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"), N_("Nov"), N_("Dec"))
 
 
-def format_number(value: float, decimals: int = 0) -> str:
+def format_number(value: float, decimals: int = 0, language=None) -> str:
     """2.5 -> '2.5' in English, '2,5' in Spanish. No digit grouping: the
-    numbers shown are sizes and compact counts, never long figures."""
-    return f"{value:.{decimals}f}".replace(".", pgettext("decimal separator", "."))
+    numbers shown are sizes and compact counts, never long figures.
+    `language` renders for that language instead of the app's."""
+    separator = (catalog(language).pgettext("decimal separator", ".") if language
+                 else pgettext("decimal separator", "."))
+    return f"{value:.{decimals}f}".replace(".", separator)
 
 
 def format_percent(value: float, decimals: int = 0) -> str:

@@ -131,6 +131,7 @@ class ZBBManager:
                 avatar_url=settings.get("webhook_avatar_url", ""),
                 crash_mention_role=settings.get("webhook_crash_mention_role", ""),
                 templates=settings.get("webhook_templates", {}),
+                language=settings.get("discord_language", "auto"),
             )
             logger.info("Discord webhook active (%d events)", len(enabled))
 

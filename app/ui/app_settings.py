@@ -51,6 +51,8 @@ class AppSettingsDialog(ZBBToplevel):
              ("Storage", N_("Storage")), ("About", N_("About")))
     # Theme keys are stored as-is and passed to CTk's set_appearance_mode.
     _THEMES = (("Dark", N_("Dark")), ("Light", N_("Light")), ("System", N_("System")))
+    # Stored in "discord_language"; language names are shown in their own language.
+    _DISCORD_LANGUAGES = (("auto", N_("Same as the app")), ("en", "English"), ("es", "Español"))
 
     def __init__(self, master, api, **kwargs):
         super().__init__(master, **kwargs)
@@ -271,6 +273,18 @@ class AppSettingsDialog(ZBBToplevel):
         if current:
             self.entry_webhook.insert(0, current)
 
+        language_card = self._card(
+            scroll, _("Message language"),
+            _("Language of the default messages posted to Discord. Custom templates are posted as written."),
+        )
+        self._discord_language_selector = ctk.CTkSegmentedButton(
+            language_card, values=i18n.choice_labels(self._DISCORD_LANGUAGES), height=32,
+            font=AppConfig.FONT_CAPTION,
+        )
+        self._discord_language_selector.set(
+            i18n.choice_label(self._DISCORD_LANGUAGES, self._settings.get("discord_language", "auto")))
+        self._discord_language_selector.grid(row=2, column=0, sticky="w", padx=15, pady=(4, 14))
+
         events_card = self._card(scroll, "Events", "Which events get posted to the webhook.")
         prefs = self._settings.get("webhook_events", {}) or {}
         self._event_vars = {}
@@ -424,6 +438,9 @@ class AppSettingsDialog(ZBBToplevel):
         self._webhook_templates.pop(key, None)
         self.entry_template.delete(0, "end")
 
+    def _selected_discord_language(self) -> str:
+        return i18n.choice_key(AppSettingsDialog._DISCORD_LANGUAGES, self._discord_language_selector.get(), "auto")
+
     def _current_url(self) -> str:
         return self.entry_webhook.get().strip()
 
@@ -460,6 +477,7 @@ class AppSettingsDialog(ZBBToplevel):
         self._settings.set("webhook_avatar_url", self.entry_webhook_avatar.get().strip())
         self._settings.set("webhook_crash_mention_role", role)
         self._settings.set("webhook_templates", dict(self._webhook_templates))
+        self._settings.set("discord_language", self._selected_discord_language())
         self._settings.reload_notifications()
         if url:
             Toast.show(self, "Discord notifications enabled.", toast_type="success")
@@ -476,9 +494,11 @@ class AppSettingsDialog(ZBBToplevel):
         self.btn_test.configure(state="disabled", text="Sending...")
         username = self.entry_webhook_name.get().strip()
         avatar_url = self.entry_webhook_avatar.get().strip()
+        language = self._selected_discord_language()
 
         def _worker():
-            ok, error = self._settings.send_test_notification(url, username=username, avatar_url=avatar_url)
+            ok, error = self._settings.send_test_notification(
+                url, username=username, avatar_url=avatar_url, language=language)
             def _apply():
                 if not self.winfo_exists():
                     return
