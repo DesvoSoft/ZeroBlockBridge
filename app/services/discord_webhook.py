@@ -312,7 +312,7 @@ class DiscordWebhookService:
         _ = t.gettext
         if event_type == ServerEvent.CRASHED and isinstance(data, dict):
             reason = data.get("reason", "unknown")
-            attempt = format_number(data.get("retry", 0), language=language)
+            attempt = format_number(data.get("retry") or 0, language=language)
             return _("Reason: `{reason}` — Retry attempt {attempt}").format(reason=reason, attempt=attempt)
         if event_type == ServerEvent.STOPPED and isinstance(data, dict):
             uptime = data.get("uptime")
@@ -320,7 +320,7 @@ class DiscordWebhookService:
                 return _("Clean shutdown after {duration}.").format(duration=_fmt_duration(uptime, language))
             return _("Server stopped.")
         if event_type == ServerEvent.RESTARTED and isinstance(data, dict):
-            attempt = format_number(data.get("retry", 0), language=language)
+            attempt = format_number(data.get("retry") or 0, language=language)
             context = data.get("context", "crash")
             return _("Automatic restart (attempt {attempt}, cause: {context}).").format(
                 attempt=attempt, context=context)
