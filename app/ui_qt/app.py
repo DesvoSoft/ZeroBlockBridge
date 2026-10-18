@@ -71,6 +71,19 @@ def main() -> None:
         lock.release()
         sys.exit(0)
 
+    variant = _arg("variant")
+    if variant in ("widgets", "qml"):
+        # Visual-ceiling spike: the main screen only (docs/QT-SPIKE.md).
+        from app.ui_qt.visual.launch import create
+        window, backend = create(app, variant, _arg("theme") or settings.get("theme", "Dark"))
+        app.setQuitOnLastWindowClosed(True)
+        app.aboutToQuit.connect(backend.shutdown)
+        window.show()
+        backend.api.start_background_services()
+        code = app.exec()
+        backend.api.shutdown()
+        lock.release()
+        sys.exit(code)
     window = create_window(app)
     window.show()
     window.api.start_background_services()

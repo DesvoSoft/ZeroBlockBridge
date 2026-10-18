@@ -10,7 +10,7 @@ import pytest
 from tests import test_api_facade as facade
 
 ROOT = Path(__file__).resolve().parent.parent
-QT_MODULES = sorted(p.name for p in (ROOT / "app" / "ui_qt").glob("*.py"))
+QT_MODULES = sorted(p.relative_to(ROOT / "app" / "ui_qt").as_posix() for p in (ROOT / "app" / "ui_qt").rglob("*.py"))
 # Pure presentation helpers shared with the CustomTkinter UI (no toolkit import).
 ALLOWED_UI = {"app.ui.formatting"}
 

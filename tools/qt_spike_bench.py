@@ -193,9 +193,10 @@ def inproc(out: Path) -> dict:  # noqa: C901 - one linear measurement script
 
 
 # -- flash check -------------------------------------------------------------
-def print_window(hwnd: int):
-    """The window's client area as DWM has it (PW_CLIENTONLY |
-    PW_RENDERFULLCONTENT), as a grayscale PIL image; None before it has a size."""
+def print_window(hwnd: int, color: bool = False, whole: bool = False):
+    """The window's client area (``whole``: with its frame) as DWM has it
+    (PW_RENDERFULLCONTENT: includes the Mica backdrop), as a PIL image
+    (grayscale unless ``color``); None before it has a size."""
     import ctypes
     from ctypes import wintypes
     from PIL import Image
@@ -205,6 +206,7 @@ def print_window(hwnd: int):
             (user32.ReleaseDC, ctypes.c_int, [wintypes.HWND, wintypes.HDC]),
             (user32.PrintWindow, wintypes.BOOL, [wintypes.HWND, wintypes.HDC, wintypes.UINT]),
             (user32.GetClientRect, wintypes.BOOL, [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]),
+            (user32.GetWindowRect, wintypes.BOOL, [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]),
             (gdi32.CreateCompatibleDC, wintypes.HDC, [wintypes.HDC]),
             (gdi32.CreateCompatibleBitmap, wintypes.HBITMAP, [wintypes.HDC, ctypes.c_int, ctypes.c_int]),
             (gdi32.SelectObject, wintypes.HGDIOBJ, [wintypes.HDC, wintypes.HGDIOBJ]),
@@ -214,15 +216,15 @@ def print_window(hwnd: int):
                                              ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT])):
         fn.restype, fn.argtypes = res, args
     rect = wintypes.RECT()
-    user32.GetClientRect(hwnd, ctypes.byref(rect))
-    w, h = rect.right, rect.bottom
+    (user32.GetWindowRect if whole else user32.GetClientRect)(hwnd, ctypes.byref(rect))
+    w, h = rect.right - rect.left, rect.bottom - rect.top
     if w <= 0 or h <= 0:
         return None
     wdc = user32.GetDC(hwnd)
     mdc = gdi32.CreateCompatibleDC(wdc)
     bmp = gdi32.CreateCompatibleBitmap(wdc, w, h)
     old = gdi32.SelectObject(mdc, bmp)
-    user32.PrintWindow(hwnd, mdc, 3)
+    user32.PrintWindow(hwnd, mdc, 2 if whole else 3)
     header = (ctypes.c_uint32 * 10)(40, w, (-h) & 0xFFFFFFFF, 1 | (32 << 16), 0, 0, 0, 0, 0, 0)
     buf = ctypes.create_string_buffer(w * h * 4)
     gdi32.GetDIBits(mdc, bmp, 0, h, buf, header, 0)
@@ -230,7 +232,8 @@ def print_window(hwnd: int):
     gdi32.DeleteObject(bmp)
     gdi32.DeleteDC(mdc)
     user32.ReleaseDC(hwnd, wdc)
-    return Image.frombuffer("RGBA", (w, h), buf, "raw", "BGRA", 0, 1).convert("L")
+    img = Image.frombuffer("RGBA", (w, h), buf, "raw", "BGRA", 0, 1)
+    return img.convert("RGB") if color else img.convert("L")
 
 
 def class_brush(hwnd: int) -> int:

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-18 13:56-0600\n"
+"POT-Creation-Date: 2026-10-18 14:37-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -17,7 +17,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.17.0\n"
+"Generated-By: Babel 2.18.0\n"
 
 #, python-brace-format
 msgid "'{name}' isn't a valid player name (3-16 letters, numbers or _)."
@@ -238,6 +238,9 @@ msgstr "Cierre ZeroBlockBridge primero"
 
 msgid "Close ZeroBlockBridge?"
 msgstr "¿Cerrar ZeroBlockBridge?"
+
+msgid "Command"
+msgstr "Comando"
 
 msgid "Configuring server environment..."
 msgstr "Configurando el entorno del servidor..."

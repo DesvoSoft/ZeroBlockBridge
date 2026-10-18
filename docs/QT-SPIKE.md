@@ -136,4 +136,119 @@ Each step is one PR behind `--ui=qt`, with its Spanish strings, CustomTkinter st
 | 8 | Modrinth browser (search, icons, versions, installs, updates) | 4 days |
 | 9 | Parity pass, make Qt the default, remove CustomTkinter/pystray/win_effects, release build | 2 days |
 
-**Total: about 24 working days (~5 weeks)** of focused work, plus review time. Steps 3 and 6–8 are independent of each other once step 1 has landed, so they can run in parallel sessions.
+**Total: about 24 working days (~5 weeks)** of focused work, plus review time. Steps 3 and 6–8 are independent of each other once step 1 has landed, so they can run in parallel sessions. The [visual-ceiling follow-up](#visual-ceiling) adds 2 days to step 1.
+
+---
+
+## Visual ceiling
+
+Follow-up spike on branch `spike/qt-visual`, run 2026-10-18 on the same machine (60 Hz display).
+
+The first spike proved speed. This one asks a different question: can Qt reach today's look and go well beyond it? To find out, the same main screen was built twice: a sidebar with the server list, a header with status pills and Start/Stop, the console and the command bar. Each variant was pushed as far as its toolkit goes:
+
+- **A: Qt Widgets + QSS** (`--ui=qt --variant=widgets`)
+- **B: Qt Quick/QML** (`--ui=qt --variant=qml`)
+
+Both variants have the same foundation:
+- **Backend:** one QObject backend over `app/api` (`app/ui_qt/visual/backend.py`), with Qt properties, signals, slots and a capped console list model. QML binds to it; the Widgets variant connects to the same signals.
+- **Look:** the `AppConfig` tokens, the website's line icons (2 px stroke, round caps, rendered with QtSvg at the device pixel ratio), and the Windows 11 Mica backdrop through `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` with a dark or light title bar.
+- **Text:** Spanish from the same gettext catalog. QML has no gettext, so its labels are translated in Python and passed in; pybabel still extracts them.
+
+### What each variant does
+
+| | A: Widgets | B: QML |
+|---|---|---|
+| **Cards** | `QGraphicsDropShadowEffect`, 14 px radius, translucent over Mica | `MultiEffect` shadow (GPU), translucent over Mica |
+| **Buttons** | Painted `QAbstractButton`: hover, press and role colours animated with `QVariantAnimation`; Start→Stop cross-fades green→red; focus ring | `Behavior on color` plus a press scale; focus ring |
+| **Status pill** | Painted; pulsing ring; colour cross-fade between phases | Pulsing ring plus a glow (`MultiEffect` shadow in the tone colour); `ColorAnimation` |
+| **Sidebar** | `QListWidget` (keeps native keyboard and accessibility) with a painted indicator that slides 240 ms OutCubic | `ListView` with `highlightMoveDuration`; animated add, remove and displaced transitions; frosted glass (live `MultiEffect` blur of the background) over Mica |
+| **Server switch** | The title fades and slides in 260 ms. A `QGraphicsOpacityEffect` can't be nested inside the shadowed card, so text colour alpha is animated instead | Out → swap → in sequence: opacity plus slide |
+| **Loading** | Shimmer skeletons for the engine line and the console | Same, with a gradient and `NumberAnimation` |
+| **Background** | Mica only | Mica plus slowly drifting radial-gradient light spots (`QtQuick.Shapes`) that the glass sidebar blurs |
+
+Screenshots (Spanish). Each capture is of the app's own window only, through `PrintWindow` of that one window, so Mica and the title bar are included. 150 % uses `QWidget.grab` / `QQuickWindow.grabWindow`. The running state is simulated.
+
+| | A: Widgets | B: QML |
+|---|---|---|
+| Dark | ![](assets/qt-spike/visual/widgets_es_dark_100_window.png) | ![](assets/qt-spike/visual/qml_es_dark_100_window.png) |
+| Light | ![](assets/qt-spike/visual/widgets_es_light_100_window.png) | ![](assets/qt-spike/visual/qml_es_light_100_window.png) |
+| Dark, 150 % | ![](assets/qt-spike/visual/widgets_es_dark_150.png) | ![](assets/qt-spike/visual/qml_es_dark_150.png) |
+
+### Measurements
+
+Measured with `tools/qt_visual_bench.py`. Each figure is 3 runs, unless marked otherwise; raw data is in [`assets/qt-spike/visual/results.json`](assets/qt-spike/visual/results.json).
+
+| | A: Widgets | A without shadows | B: QML | First-spike slice (reference) |
+|---|---|---|---|---|
+| **Screen open to first frame** | 264 / 296 / 392 ms | 312–326 ms | 446–471 ms | — |
+| **Frame intervals during server-switch transitions** (11 switches, intervals inside each 300 ms transition) | p50 14.4–15.5 ms, p95 18.5–20.3 ms, max 31.8–32.9 ms (an occasional doubled frame) | p95 17.3–17.7, max 19.6–20.7 ms | p50 ~17.0, p95 18.2–18.3, max 19.3–20.6 ms: **locked to 60 Hz**, never a dropped frame | — |
+| **CPU, % of the whole machine** | idle 0.2 · running (pulse) 1.3–1.5 · transitions 3.1–3.7 | 0.1–0.2 · 0.2–0.4 · 1.2–2.2 | 0.6–0.8 · 0.6–0.7 · 0.8–0.9 | — |
+| **GPU 3D engine** (WMI) | none (raster on CPU) | none | idle 1.5–2.5 % · running 3.0–3.2 % · transitions 2.8–5.0 % | — |
+| **Memory, RSS in process** | 100–104 → 110–112 MB | 99–101 → 107–108 MB | 139–140 → 155 MB | 93–99 MB |
+| **2,000-line console burst**, worst GUI-loop stall | 22–24 ms | 17–19 ms | 29–34 ms | 21 ms |
+| **One-file exe**, trimmed PyInstaller | **31.4 MiB** (+0.5: QtSvg) | — | **46.1 MiB** (+15.2) | 30.9 MiB |
+| **Packaged cold start**, median of 5 | 1,725 ms | — | 2,053 ms | 1,521 ms (CustomTkinter 2,410) |
+| **Packaged memory**, USS 3 s after shown | 49 MB | — | 66 MB | 48 MB |
+| **Lines of code** | 547 (`widgets_main.py`) | | 412 QML + 76 Python | |
+| **Shared code** | 391 lines: backend 261, icons 62, backdrop 43, launch 25 | | (same) | |
+
+How these were measured:
+- **Screen open:** construction of the screen until the first frame, with the API already created.
+- **Frame intervals:** for A, the paint times of the animated title (repaints are per widget); for B, `QQuickWindow.frameSwapped`.
+- **CPU:** psutil, averaged over 4 s.
+- **GPU:** `Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine` sampled every second. The usual performance-counter names are localized on this Spanish Windows, so WMI was used instead.
+- **QML idle:** the drifting background and the pulse keep it rendering frames at idle.
+
+What the numbers say:
+- **Smoothness.** QML stays at vsync during transitions, effects included, because the scene graph renders on its own thread on the GPU. Widgets is smooth too (p95 under 21 ms). Its real shadows cost about 2× CPU, and a pulse inside a shadowed card makes Qt re-render the whole card's effect. Widgets never touches the GPU.
+- **Cost of B.** It brings +15 MiB of exe, +17 MB of memory and +0.5 s of startup over Widgets. It is still under the 60 MB limit, and it still starts faster than CustomTkinter today.
+- **Exe trimming.** A trimmed QML build has to keep QtNetwork and QtOpenGL: importing `PySide6.QtQuick` loads both (checked with `sys.modules`). Every Controls style, Dialogs, 3D, Pdf, Particles and the VirtualKeyboard module can go.
+
+### How hard it was, accessibility, limits
+
+- **Widgets (A):**
+  - Most of the polish has to be painted by hand: the button, the pill, the chips and the list indicator.
+  - QSS is not enough. Inside a widget that has a graphics effect, QSS `border-radius` on a QLabel was lost, and nested graphics effects render children at a wrong offset.
+  - Only one effect per widget, and no blur-behind of the app's own content. Mica works when the window is translucent.
+  - Accessibility and keyboard come for free from `QListWidget`, `QLineEdit` and `QPlainTextEdit`. Painted controls need `setAccessibleName`; `QAbstractButton` keeps its button role.
+  - Effort: about 0.5 day.
+- **QML (B):**
+  - Effects, transitions and list animations are declarative and cheap to add: the GPU blur, glow and shadows are a few lines each.
+  - **Costs:**
+    - A second language (QML/JS) with runtime errors instead of import errors.
+    - There is no gettext in QML, so every string goes through Python.
+    - Every value QML reads needs a Qt property with a notify signal; that is how the Python↔QML binding works. The binding itself is cheap: CPU stayed under 1 %.
+    - Accessibility is manual: `Accessible.role`/`name`, `activeFocusOnTab`, key handlers. A plain `Item` is invisible to screen readers until that is done.
+    - Text renders soft and mis-kerned at body sizes by default (distance field); `NativeTextRendering` fixes it.
+    - **Deployment.** Pitfalls hit:
+      - The QML plugin paths exceed Windows' 260-character limit from a deep venv, so the dev venv must sit in a short path.
+      - The plugin set has to be trimmed by hand; every wrong cut is found only at runtime, as happened twice in this spike.
+    - **Form-heavy screens.** These (properties editor, settings, wizard) would need Qt Quick Controls. That means more size, a style that must be themed to match, and more accessibility work.
+  - Effort: about 0.5 day, plus the packaging iterations.
+- **Both:**
+  - Mica shows through only where the UI is translucent.
+  - The look of Mica depends on the wallpaper, so screenshots under-represent it.
+  - HiDPI was crisp in both at 150 % (`QT_SCALE_FACTOR`): the icons are rendered from SVG at the device pixel ratio.
+  - A custom frameless title bar was not built. The native Windows 11 caption, tinted with Mica and following dark/light, already looks modern and keeps snap layouts.
+
+### Recommendation: Widgets-first hybrid
+
+**Use Qt Widgets for the whole app and keep one door open for QML.**
+
+Variant A already reaches a modern Windows 11 look: Mica, real shadows, animated controls, line icons and skeletons. It does this within the size, start and memory budgets, with native accessibility and with forms that Widgets does best. Variant B is visibly smoother and richer: GPU glass, glow and locked 60 fps. But it costs +15 MiB, +0.5 s of start, +17 MB of memory and a second language. Its benefit is concentrated on "showcase" surfaces, while most of ZBB is forms and lists.
+
+**The hybrid:**
+- Widgets for every screen.
+- The server dashboard (header plus console) can later be hosted as a `QQuickWidget`/QML island if the owner wants the GPU effects there. The shared QObject backend from this spike makes that a view swap, not a rewrite.
+- Decide that after the migration, not before.
+
+**Changes to the 8d plan:**
+- **+2 days in step 1** for a small Widgets design kit, reusing `widgets_main.py`:
+  - `AnimatedButton`, `StatusPill`, `Chip`, `Skeleton`, `ServerList`;
+  - Mica/backdrop helpers and cached SVG icons;
+  - a card helper that keeps shadows off frequently repainted content.
+
+  Every later screen then uses the kit instead of plain QSS. This adds no time to steps 2–8, because they get the kit instead of styling themselves.
+- **Total ≈ 26 working days (~5½ weeks).**
+- **Optional, after step 9:** a QML dashboard island, about 3–4 days. It would need the QML deployment work (trimmed plugin set, short build paths) added to CI first.
+- **All-QML, not recommended:** it would add an estimated 6–8 days for Quick Controls theming and manual accessibility on the form screens, plus the +15 MiB.
