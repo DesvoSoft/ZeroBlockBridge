@@ -37,11 +37,11 @@ jobs:
             ASSET_NAME: ZeroBlockBridge
     steps:
       # 1. Checkout code
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 2. Set up Python
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -113,7 +113,7 @@ jobs:
 
       # 8. Upload artifacts
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ZeroBlockBridge-${{ matrix.TARGET }}
           path: dist/*
@@ -126,15 +126,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: ZeroBlockBridge-*
           merge-multiple: true
@@ -148,7 +148,7 @@ jobs:
         run: python tools/extract_changelog_section.py "$TAG_NAME" --strict > release_notes.md
 
       - name: Create Release and Upload Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release_notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}
