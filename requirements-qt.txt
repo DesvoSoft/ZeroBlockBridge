@@ -1,0 +1,3 @@
+-r requirements.txt
+# Roadmap 8c spike only (py app/launcher.py --ui=qt); not part of the release build.
+PySide6-Essentials==6.12.0

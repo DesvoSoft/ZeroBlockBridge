@@ -1,0 +1,437 @@
+{
+ "inproc": {
+  "en_1.5": {
+   "lang": "en",
+   "scale": "1.5",
+   "window_shown_ms": 801.5,
+   "rss_mb_idle": 97.4,
+   "dialog_engine_version_ms": {
+    "first": 74.2,
+    "median_warm": 28.9,
+    "max": 74.2,
+    "runs": [
+     74.2,
+     28.1,
+     33.3,
+     27.3,
+     26.5,
+     30.0,
+     26.5,
+     36.2,
+     29.9,
+     28.9
+    ]
+   },
+   "dialog_close_choice_ms": {
+    "first": 18.5,
+    "median_warm": 17.7,
+    "max": 20.1,
+    "runs": [
+     18.5,
+     18.0,
+     19.4,
+     17.2,
+     17.5,
+     16.7,
+     17.7,
+     20.1,
+     18.5,
+     17.1
+    ]
+   },
+   "flash_check": [
+    {
+     "frames": 24,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 30,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 29,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    }
+   ],
+   "console_burst_2000": {
+    "all_shown_ms": 66.6,
+    "max_loop_stall_ms": 18.9,
+    "blocks_kept": 1000
+   },
+   "console_burst_20000": {
+    "all_shown_ms": 487.2,
+    "max_loop_stall_ms": 54.6,
+    "blocks_kept": 1000
+   },
+   "rss_mb_after_bursts": 116.9
+  },
+  "en_1": {
+   "lang": "en",
+   "scale": "1",
+   "window_shown_ms": 838.1,
+   "rss_mb_idle": 93.1,
+   "dialog_engine_version_ms": {
+    "first": 71.9,
+    "median_warm": 36.9,
+    "max": 71.9,
+    "runs": [
+     71.9,
+     40.6,
+     37.2,
+     39.2,
+     38.4,
+     36.3,
+     36.7,
+     36.9,
+     26.8,
+     30.2
+    ]
+   },
+   "dialog_close_choice_ms": {
+    "first": 14.2,
+    "median_warm": 16.6,
+    "max": 21.4,
+    "runs": [
+     14.2,
+     21.3,
+     13.6,
+     15.8,
+     14.1,
+     14.2,
+     18.4,
+     21.4,
+     18.0,
+     16.6
+    ]
+   },
+   "flash_check": [
+    {
+     "frames": 31,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 26,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 30,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    }
+   ],
+   "console_burst_2000": {
+    "all_shown_ms": 65.0,
+    "max_loop_stall_ms": 18.5,
+    "blocks_kept": 1000
+   },
+   "console_burst_20000": {
+    "all_shown_ms": 653.2,
+    "max_loop_stall_ms": 83.7,
+    "blocks_kept": 1000
+   },
+   "rss_mb_after_bursts": 108.9
+  },
+  "es_1.5": {
+   "lang": "es",
+   "scale": "1.5",
+   "window_shown_ms": 683.6,
+   "rss_mb_idle": 99.2,
+   "dialog_engine_version_ms": {
+    "first": 65.3,
+    "median_warm": 28.5,
+    "max": 65.3,
+    "runs": [
+     65.3,
+     32.4,
+     36.0,
+     31.8,
+     28.5,
+     26.9,
+     27.1,
+     30.2,
+     27.4,
+     26.7
+    ]
+   },
+   "dialog_close_choice_ms": {
+    "first": 32.3,
+    "median_warm": 26.0,
+    "max": 35.1,
+    "runs": [
+     32.3,
+     35.1,
+     29.5,
+     32.6,
+     20.1,
+     20.0,
+     29.9,
+     23.1,
+     26.0,
+     22.8
+    ]
+   },
+   "flash_check": [
+    {
+     "frames": 26,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 27,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 25,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    }
+   ],
+   "console_burst_2000": {
+    "all_shown_ms": 80.3,
+    "max_loop_stall_ms": 20.0,
+    "blocks_kept": 1000
+   },
+   "console_burst_20000": {
+    "all_shown_ms": 480.9,
+    "max_loop_stall_ms": 41.7,
+    "blocks_kept": 1000
+   },
+   "rss_mb_after_bursts": 120.0
+  },
+  "es_1": {
+   "lang": "es",
+   "scale": "1",
+   "window_shown_ms": 655.1,
+   "rss_mb_idle": 93.3,
+   "dialog_engine_version_ms": {
+    "first": 63.0,
+    "median_warm": 26.3,
+    "max": 63.0,
+    "runs": [
+     63.0,
+     26.3,
+     23.9,
+     23.5,
+     32.6,
+     32.9,
+     24.0,
+     24.6,
+     29.6,
+     33.1
+    ]
+   },
+   "dialog_close_choice_ms": {
+    "first": 16.1,
+    "median_warm": 17.1,
+    "max": 18.4,
+    "runs": [
+     16.1,
+     18.4,
+     17.2,
+     15.7,
+     18.4,
+     17.1,
+     17.6,
+     13.7,
+     13.6,
+     17.1
+    ]
+   },
+   "flash_check": [
+    {
+     "frames": 31,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 27,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 31,
+     "final_white_share": 0.0,
+     "max_white_share": 0.0,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    }
+   ],
+   "console_burst_2000": {
+    "all_shown_ms": 90.1,
+    "max_loop_stall_ms": 20.4,
+    "blocks_kept": 1000
+   },
+   "console_burst_20000": {
+    "all_shown_ms": 568.0,
+    "max_loop_stall_ms": 46.4,
+    "blocks_kept": 1000
+   },
+   "rss_mb_after_bursts": 108.1
+  },
+  "light": {
+   "lang": "es",
+   "scale": "1",
+   "window_shown_ms": 713.3,
+   "rss_mb_idle": 94.9,
+   "dialog_engine_version_ms": {
+    "first": 62.1,
+    "median_warm": 29.5,
+    "max": 62.1,
+    "runs": [
+     62.1,
+     29.6,
+     27.2,
+     27.6,
+     25.0,
+     27.1,
+     31.7,
+     29.5,
+     31.0,
+     38.2
+    ]
+   },
+   "dialog_close_choice_ms": {
+    "first": 19.8,
+    "median_warm": 14.9,
+    "max": 24.4,
+    "runs": [
+     19.8,
+     14.9,
+     17.1,
+     24.4,
+     14.7,
+     15.6,
+     14.7,
+     14.4,
+     15.4,
+     13.8
+    ]
+   },
+   "flash_check": [
+    {
+     "frames": 27,
+     "final_white_share": 0.866,
+     "max_white_share": 0.867,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 29,
+     "final_white_share": 0.866,
+     "max_white_share": 0.866,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    },
+    {
+     "frames": 31,
+     "final_white_share": 0.866,
+     "max_white_share": 0.866,
+     "frames_whiter_than_final_by_20pct": 0,
+     "class_background_brush": 0
+    }
+   ],
+   "console_burst_2000": {
+    "all_shown_ms": 80.0,
+    "max_loop_stall_ms": 16.6,
+    "blocks_kept": 1000
+   },
+   "console_burst_20000": {
+    "all_shown_ms": 501.6,
+    "max_loop_stall_ms": 57.9,
+    "blocks_kept": 1000
+   },
+   "rss_mb_after_bursts": 109.7
+  }
+ },
+ "ctk_flash": {
+  "ctk_toplevel_flash_check": [
+   {
+    "frames": 22,
+    "final_white_share": 0.0,
+    "max_white_share": 1.0,
+    "frames_whiter_than_final_by_20pct": 1,
+    "class_background_brush": 0
+   },
+   {
+    "frames": 28,
+    "final_white_share": 0.0,
+    "max_white_share": 1.0,
+    "frames_whiter_than_final_by_20pct": 1,
+    "class_background_brush": 0
+   },
+   {
+    "frames": 28,
+    "final_white_share": 0.0,
+    "max_white_share": 1.0,
+    "frames_whiter_than_final_by_20pct": 1,
+    "class_background_brush": 0
+   }
+  ]
+ },
+ "startup": {
+  "ZeroBlockBridge.exe": {
+   "runs_ms": [
+    2410,
+    2315,
+    2643,
+    2553,
+    2154
+   ],
+   "median_ms": 2410,
+   "uss_mb_3s_after_shown": [
+    47.8,
+    48.2,
+    48.3,
+    48.2,
+    47.9
+   ],
+   "size_mb": 23.0
+  },
+  "ZeroBlockBridge-qt-spike.exe": {
+   "runs_ms": [
+    1450,
+    1447,
+    1538,
+    1855,
+    1669
+   ],
+   "median_ms": 1538,
+   "uss_mb_3s_after_shown": [
+    48.3,
+    48.2,
+    48.1,
+    48.7,
+    48.2
+   ],
+   "size_mb": 30.9
+  }
+ }
+}

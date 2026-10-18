@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ZeroBlockBridge VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 14:28-0600\n"
+"POT-Creation-Date: 2026-10-18 13:27-0600\n"
 "PO-Revision-Date: 2026-10-15 13:10-0600\n"
 "Last-Translator: DesvoSoft\n"
 "Language: es\n"
@@ -33,6 +33,13 @@ msgstr "Ya existe un servidor llamado '{name}'."
 
 msgid "About"
 msgstr "Acerca de"
+
+msgid ""
+"Accept the Minecraft EULA in the regular window first (start without "
+"--ui=qt)."
+msgstr ""
+"Acepte primero el EULA de Minecraft en la ventana habitual (inicie sin "
+"--ui=qt)."
 
 #, python-brace-format
 msgid "Added {name} to the whitelist."
@@ -284,6 +291,9 @@ msgstr "Descargando el jar del servidor {engine} {version}..."
 msgid "Downloads"
 msgstr "Descargas"
 
+msgid "Engine & Version"
+msgstr "Motor y versión"
+
 msgid "Error"
 msgstr "Error"
 
@@ -359,6 +369,16 @@ msgstr "Si lo rechaza, la aplicación se cerrará."
 #, python-brace-format
 msgid "Impact: {level}"
 msgstr "Impacto: {level}"
+
+msgid ""
+"Import a Modrinth .mrpack or a modpack's Server Pack .zip. Engine and "
+"version are set for you."
+msgstr ""
+"Importe un .mrpack de Modrinth o el .zip del Server Pack de un modpack. "
+"El motor y la versión se configuran automáticamente."
+
+msgid "Import modpack…"
+msgstr "Importar modpack…"
 
 #, python-brace-format
 msgid "Importing world '{name}'..."
@@ -557,6 +577,9 @@ msgstr ""
 "Se vinculó correctamente, pero no se pudo escribir {path}: {error}. "
 "Cierre cualquier programa que use este archivo e inténtelo de nuevo."
 
+msgid "Loading versions..."
+msgstr "Cargando versiones..."
+
 msgid "Low"
 msgstr "Bajo"
 
@@ -597,11 +620,17 @@ msgstr "Minimizar a la bandeja"
 msgid "Missing modrinth.index.json in modpack archive."
 msgstr "Falta modrinth.index.json en el archivo del modpack."
 
+msgid "Modpack (optional)"
+msgstr "Modpack (opcional)"
+
 #, python-brace-format
 msgid "Modpack installed: {count} mod."
 msgid_plural "Modpack installed: {count} mods."
 msgstr[0] "Modpack instalado: {count} mod."
 msgstr[1] "Modpack instalado: {count} mods."
+
+msgid "Modpacks"
+msgstr "Modpacks"
 
 #, python-brace-format
 msgid "Modpacks for {loader} are not supported yet."
@@ -630,8 +659,14 @@ msgstr "Error de red al reintentar: {error}"
 msgid "Network error: {error}"
 msgstr "Error de red: {error}"
 
+msgid "New server…"
+msgstr "Nuevo servidor…"
+
 msgid "Newest"
 msgstr "Más nuevos"
+
+msgid "Next"
+msgstr "Siguiente"
 
 #, python-brace-format
 msgid "No JDK {version} asset found for {platform}"
@@ -685,6 +720,12 @@ msgstr "No se instaló ningún mod."
 
 msgid "No secret key loaded. Cannot authenticate."
 msgstr "No hay una clave secreta cargada. No se puede autenticar."
+
+msgid "No servers yet."
+msgstr "Aún no hay servidores."
+
+msgid "No versions found."
+msgstr "No se encontraron versiones."
 
 msgid "Not a backup of this server."
 msgstr "No es una copia de seguridad de este servidor."
@@ -768,6 +809,10 @@ msgid "Players"
 msgstr "Jugadores"
 
 #, python-brace-format
+msgid "Players: {count}"
+msgstr "Jugadores: {count}"
+
+#, python-brace-format
 msgid "Playit API returned HTTP {status}: {detail}"
 msgstr "La API de Playit devolvió HTTP {status}: {detail}"
 
@@ -804,8 +849,17 @@ msgstr "Leer el EULA de Minecraft (aka.ms/MinecraftEULA)"
 msgid "Reading modpack manifest…"
 msgstr "Leyendo el manifiesto del modpack…"
 
+msgid "Reading modpack…"
+msgstr "Leyendo modpack…"
+
+msgid "Refresh"
+msgstr "Actualizar"
+
 msgid "Relevance"
 msgstr "Relevancia"
+
+msgid "Remove"
+msgstr "Quitar"
 
 #, python-brace-format
 msgid "Removed {name} from the whitelist."
@@ -869,6 +923,12 @@ msgstr ""
 "Se omitió el reinicio programado (el sistema estaba ocupado). El próximo "
 "intento será mañana."
 
+msgid "Select a server"
+msgstr "Seleccione un servidor"
+
+msgid "Send"
+msgstr "Enviar"
+
 msgid "Sep"
 msgstr "sept"
 
@@ -883,6 +943,9 @@ msgstr "El servidor '{name}' ya existe."
 #, python-brace-format
 msgid "Server '{name}' does not exist"
 msgstr "El servidor '{name}' no existe"
+
+msgid "Server Engine:"
+msgstr "Motor del servidor:"
 
 #, python-brace-format
 msgid "Server crashed: {cause} (attempt {attempt})."
@@ -902,6 +965,9 @@ msgstr "No se encontró el jar del servidor: {jar}"
 
 msgid "Server ready!"
 msgstr "¡Servidor listo!"
+
+msgid "Servers"
+msgstr "Servidores"
 
 #, python-brace-format
 msgid "Servers and backups: {path}"
@@ -932,6 +998,9 @@ msgstr ""
 msgid "Standard (recommended)"
 msgstr "Estándar (recomendado)"
 
+msgid "Start"
+msgstr "Iniciar"
+
 msgid "Start menu"
 msgstr "Menú Inicio"
 
@@ -944,6 +1013,9 @@ msgstr "Iniciando..."
 #, python-brace-format
 msgid "Starting… {elapsed}"
 msgstr "Iniciando… {elapsed}"
+
+msgid "Stop"
+msgstr "Detener"
 
 msgid "Stop the server before updating mods (running server locks files)."
 msgstr ""
@@ -1010,6 +1082,9 @@ msgstr ""
 #, python-brace-format
 msgid "The modpack manifest is unreadable: {error}"
 msgstr "No se puede leer el manifiesto del modpack: {error}"
+
+msgid "The server is not running."
+msgstr "El servidor no está en marcha."
 
 msgid "The server isn't running."
 msgstr "El servidor no está en ejecución."
@@ -1096,6 +1171,9 @@ msgstr "Túnel pendiente: no hay puertos disponibles. Revise el panel de playit.
 msgid "Tunnels cleared. Click Start Tunnel to create a new tunnel."
 msgstr "Túneles eliminados. Haga clic en Start Tunnel para crear un túnel nuevo."
 
+msgid "Type a command (e.g. say hello)…"
+msgstr "Escriba un comando (p. ej. say hola)…"
+
 #, python-brace-format
 msgid "URL not found for {engine} {version}"
 msgstr "No se encontró la URL para {engine} {version}"
@@ -1153,6 +1231,9 @@ msgstr "Actualizando..."
 
 msgid "Use letters, numbers and basic punctuation in the reason (max 100)."
 msgstr "Use letras, números y puntuación básica en el motivo (máx. 100)."
+
+msgid "Version:"
+msgstr "Versión:"
 
 msgid "Welcome to ZeroBlockBridge"
 msgstr "Bienvenido a ZeroBlockBridge"
@@ -1227,6 +1308,9 @@ msgstr "contiene un patrón de inyección de shell"
 msgid "contains shell metacharacters"
 msgstr "contiene metacaracteres de shell"
 
+msgid "e.g. 1.20.1"
+msgstr "p. ej. 1.20.1"
+
 msgid "empty command"
 msgstr "comando vacío"
 
@@ -1261,6 +1345,16 @@ msgstr "faltan mods o son incompatibles"
 
 msgid "out of memory"
 msgstr "se quedó sin memoria"
+
+msgid "the Playit tunnel"
+msgstr "el túnel de Playit"
+
+#, python-brace-format
+msgid "the server '{name}'"
+msgstr "el servidor '{name}'"
+
+msgid "the server being created"
+msgstr "el servidor en creación"
 
 msgid "unknown"
 msgstr "desconocida"
