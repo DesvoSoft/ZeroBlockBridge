@@ -162,3 +162,8 @@ class TestCatalogForAnotherLanguage:
         assert i18n.resolve_language("auto") == "es"
         assert i18n.resolve_language("en") == "en"
         assert i18n.resolve_language(None) == "es"
+
+
+def test_missing_retry_count_does_not_break_the_message():
+    e = _render(ServerEvent.CRASHED, {"reason": "x", "retry": None}, language="es")
+    assert e["description"].endswith("reintento 0")
