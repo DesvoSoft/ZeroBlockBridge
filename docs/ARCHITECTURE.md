@@ -99,7 +99,7 @@ Lifecycle: `start_background_services()` (tick loop, pre-warm), `shutdown()` (ca
 | UI | Dispatcher |
 |----|-----------|
 | CustomTkinter | `lambda fn: root.after(0, fn)` (`MCTunnelApp`) |
-| Qt (8d) | emit a queued signal / `QMetaObject.invokeMethod(..., Qt.QueuedConnection)` |
+| Qt (8c spike, 8d) | `app/ui_qt/dispatcher.py::QtDispatcher`: a signal connected with `Qt.QueuedConnection` |
 | Tests, headless | `direct` (run on the emitting thread) |
 
 `Subscription.cancel()` also drops calls already queued in the dispatcher, so a closed screen never receives a late event. `EventHub.close()` cancels all of them (done by `shutdown()`).

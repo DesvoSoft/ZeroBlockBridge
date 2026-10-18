@@ -18,7 +18,11 @@ if UNINSTALL_ARG in sys.argv:
 from app.core.bootstrap import resolve_data_dir
 resolve_data_dir()
 
-from app.ui.main import main
+if "--ui=qt" in sys.argv:
+    # Roadmap 8c spike: the PySide6 UI (needs requirements-qt.txt).
+    from app.ui_qt.app import main
+else:
+    from app.ui.main import main
 
 if __name__ == "__main__":
     main()

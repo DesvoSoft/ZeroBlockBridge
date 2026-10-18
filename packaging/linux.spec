@@ -36,7 +36,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['app.ui_qt', 'PySide6', 'shiboken6'],  # the Qt spike has its own spec
     cipher=block_cipher,
     noarchive=False,
 )
