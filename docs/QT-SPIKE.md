@@ -229,7 +229,45 @@ What the numbers say:
   - Mica shows through only where the UI is translucent.
   - The look of Mica depends on the wallpaper, so screenshots under-represent it.
   - HiDPI was crisp in both at 150 % (`QT_SCALE_FACTOR`): the icons are rendered from SVG at the device pixel ratio.
-  - A custom frameless title bar was not built. The native Windows 11 caption, tinted with Mica and following dark/light, already looks modern and keeps snap layouts.
+  - The title bar is a choice between Mica and a custom bar; see the next section.
+
+### Custom title bar (Widgets)
+
+`app/ui_qt/visual/titlebar.py` is used by variant A by default. The window keeps its native styles: `WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX`, set back after Qt's `FramelessWindowHint`. That way Windows still provides the shadow, the rounded corners, the minimize/maximize animations, Aero Snap and edge resizing. Two native messages are handled:
+- **`WM_NCCALCSIZE`** removes the caption. When the window is maximized, it pulls the client area back inside the monitor.
+- **`WM_NCHITTEST`** classifies each point:
+
+  | Where | Returns | Effect |
+  |---|---|---|
+  | The caption strip, including over the sidebar's brand | `HTCAPTION` | Drag, and double-click to maximize |
+  | The edges and corners | `HTLEFT`/`HTTOPLEFT`/… | Resize |
+  | The maximize button | `HTMAXBUTTON` | Windows 11 shows its Snap Layouts flyout on hover; hover, press and click arrive as non-client messages and are handled there |
+  | Everything else | `HTCLIENT` | Qt handles it |
+
+The buttons are Windows 11 style: 46×40, Segoe Fluent Icons glyphs, a red close button, and dimmed when the window is inactive. The sidebar runs up to the top edge.
+
+Verified on this machine:
+- **Hit tests:** `WM_NCHITTEST` sent at 10 points returned the expected value for each (caption, brand, maximize, minimize, close, top-left corner, right edge, bottom-right corner, server list, console).
+- **Maximize button:** a non-client click maximizes, filling exactly the work area (1920×1032), and a second click restores 1180×760.
+- **Minimize** works.
+
+**The limit found:** Mica plus a removed caption leaves a seam. In the band where the native caption was (~26 px), DWM does not draw Mica. Measured with on-screen captures of the app's rectangle only, with the window topmost, that band shows the plain frame colour, and a visible seam appears. These were tried without success: `DWMWA_CAPTION_COLOR = none`, Mica Alt, acrylic, and frame margins of 0 or 1. Screenshot of the seam: [`widgets_titlebar_mica_seam.png`](assets/qt-spike/visual/widgets_titlebar_mica_seam.png).
+
+So the spike offers two clean combinations:
+
+| Custom title bar, opaque theme background (default) | Native Windows 11 title bar with Mica |
+|---|---|
+| ![](assets/qt-spike/visual/widgets_titlebar_es_dark.png) | ![](assets/qt-spike/visual/widgets_es_dark_100_window.png) |
+| ![](assets/qt-spike/visual/widgets_titlebar_es_light.png) | ![](assets/qt-spike/visual/widgets_es_light_100_window.png) |
+
+**Effort:** about 150 lines and half a day. Moving the title bar into the 8d design kit (step 1) is included in its +2 days.
+
+**What the custom bar allows:** content in the title bar, such as a server switcher, search, or the status pill.
+
+**Untested:**
+- Windows 10, where the top border needs extra handling.
+- Mixed-DPI monitors while dragging between screens.
+- Keyboard access to the system menu (`Alt+Space`). `WS_SYSMENU` is dropped because with it DWM paints its own caption buttons behind ours; the menu would need to be re-added by hand.
 
 ### Recommendation: Widgets-first hybrid
 

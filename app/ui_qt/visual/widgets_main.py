@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 from app.core.app_config import AppConfig as C
 from app.core.i18n import _
 from app.ui_qt import theme
-from app.ui_qt.visual import backdrop, icons
+from app.ui_qt.visual import backdrop, icons, titlebar
 
 
 def _mix(a: QColor, b: QColor, t: float) -> QColor:
@@ -359,7 +359,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 
 class WidgetsMainWindow(QMainWindow):
-    def __init__(self, backend, dark: bool, use_backdrop: bool = True):
+    def __init__(self, backend, dark: bool, use_backdrop: bool = True, custom_titlebar: bool = True):
         super().__init__()
         self.backend = backend
         self.dark = dark
@@ -367,6 +367,20 @@ class WidgetsMainWindow(QMainWindow):
         self.setWindowTitle("ZeroBlockBridge")
         self.resize(1180, 760)
         self.mica = False
+        self._frameless = None
+        self.caption_buttons = None
+        self.caption_interactive: list = []
+        if custom_titlebar and titlebar.supported():
+            # Qt must see no frame (so its geometry matches the client area);
+            # FramelessHelper puts the native styles back for snap/resize.
+            self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
+            self._frameless = titlebar.FramelessHelper(self)
+            # Mica + a removed caption: DWM leaves the old caption band
+            # (~26 px) without Mica, a visible seam that no DWM setting
+            # tried here removed. The custom title bar uses opaque theme
+            # backgrounds instead (docs/QT-SPIKE.md, Visual ceiling).
+            use_backdrop = False
+            backdrop.set_dark_frame(int(self.winId()), dark)
         if use_backdrop:
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self.mica = backdrop.apply(int(self.winId()), dark)
@@ -393,7 +407,7 @@ class WidgetsMainWindow(QMainWindow):
         side = QWidget(objectName="vside")
         side.setFixedWidth(250)
         sl = QVBoxLayout(side)
-        sl.setContentsMargins(12, 18, 12, 14)
+        sl.setContentsMargins(12, 10 if self._frameless else 18, 12, 14)
         sl.setSpacing(10)
         brand_row = QHBoxLayout()
         logo = QLabel()
@@ -412,8 +426,18 @@ class WidgetsMainWindow(QMainWindow):
 
         main = QWidget()
         ml = QVBoxLayout(main)
-        ml.setContentsMargins(22, 20, 22, 18)
+        ml.setContentsMargins(22, 0 if self._frameless else 20, 22, 18)
         ml.setSpacing(16)
+        if self._frameless:
+            # The caption strip: draggable empty space plus the window buttons
+            # in the corner (the sidebar runs up to the top edge).
+            caption = QHBoxLayout()
+            caption.setContentsMargins(0, 0, -22, 0)
+            caption.addStretch(1)
+            self.caption_buttons = titlebar.CaptionButtons(self, t)
+            caption.addWidget(self.caption_buttons, 0, Qt.AlignmentFlag.AlignTop)
+            ml.addLayout(caption)
+            ml.addSpacing(-8)
 
         self.header = _card(t, self.dark)
         hl = QHBoxLayout(self.header)
@@ -486,6 +510,21 @@ class WidgetsMainWindow(QMainWindow):
                                        easingCurve=QEasingCurve.Type.OutCubic)
         self._fade.valueChanged.connect(self._fade_step)
         self._render_header()
+
+    # -- native frame ----------------------------------------------------------
+    def nativeEvent(self, event_type, message):  # noqa: N802 - Qt API
+        if getattr(self, "_frameless", None) is not None and event_type == b"windows_generic_MSG":
+            handled, result = self._frameless.handle(message)
+            if handled:
+                return True, result
+        return super().nativeEvent(event_type, message)
+
+    def changeEvent(self, e) -> None:
+        super().changeEvent(e)
+        buttons = getattr(self, "caption_buttons", None)  # also called during __init__
+        if buttons is not None:  # active/inactive tint, max/restore glyph
+            for b in (buttons.btn_min, buttons.btn_max, buttons.btn_close):
+                b.update()
 
     # -- rendering -----------------------------------------------------------
     def _render_servers(self) -> None:

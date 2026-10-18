@@ -24,6 +24,18 @@ class _Margins(ctypes.Structure):
                 ("top", ctypes.c_int), ("bottom", ctypes.c_int)]
 
 
+def set_dark_frame(hwnd: int, dark: bool) -> None:
+    """Dark or light window border and shadow tint, without a backdrop."""
+    if sys.platform != "win32":
+        return
+    try:
+        value = ctypes.c_int(1 if dark else 0)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(ctypes.c_void_p(hwnd), DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                                   ctypes.byref(value), ctypes.sizeof(value))
+    except (AttributeError, OSError) as exc:
+        logger.debug("DWM dark mode failed: %s", exc)
+
+
 def apply(hwnd: int, dark: bool, kind: str = "mica") -> bool:
     if sys.platform != "win32" or sys.getwindowsversion().build < 22621:
         return False
